@@ -14,7 +14,6 @@ dist/
 downloads/
 eggs/
 .eggs/
-lib/
 lib64/
 parts/
 sdist/
@@ -216,3 +215,18 @@ __marimo__/
 
 # Streamlit
 .streamlit/secrets.toml
+
+# Local web game dependencies and build artifacts
+/node_modules/
+/.next/
+/.vinext/
+/dist/
+/.wrangler/
+/coverage/
+/outputs/
+/work/
+.env*
+npm-debug.log*
+.codex-dev*.log
+next-env.d.ts
+*.tsbuildinfo
