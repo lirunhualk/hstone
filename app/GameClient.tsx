@@ -34,6 +34,16 @@ import {
   TRIBE_NAMES,
   getMinionDefinition,
 } from "../lib/game/content";
+import {
+  COMBAT_START_INTRO_DURATION_MS,
+  combatIntroOpponent,
+  initialCombatPlayback,
+  isCombatPlaybackEvent,
+} from "../lib/game/combat-presentation";
+import {
+  createBoardDragPreview,
+  nearestBoardSlotIndex,
+} from "../lib/game/drag-preview";
 import { projectCombatBoard } from "../lib/game/playback";
 
 const SAVE_KEY = "hearthstone-battlegrounds-local.save.v5";
@@ -90,6 +100,8 @@ type DragPointerHandlers = {
 };
 
 type BattleSpeed = 1 | 2;
+
+type CombatPresentationStage = "intro" | "playback" | "result";
 
 type BattlePlaybackState = {
   battle: BattleSummary | null;
@@ -374,10 +386,6 @@ function combatRewardSummaryText(
     parts.push(`随从池无候选 ${summary.noCandidateCount} 次`);
   }
   return parts.join(" · ");
-}
-
-function isPlaybackEvent(event: BattleEvent): boolean {
-  return event.type !== "battleEnd";
 }
 
 function battleEventDelay(
@@ -779,18 +787,30 @@ function BoardRow({
   onEmptyClick?: (index: number) => void;
   interactionLocked?: boolean;
 }) {
-  const draggingMagneticFromHand =
+  const boardDragPreview =
     side === "friendly" &&
     dragSession?.active === true &&
-    dragSession.zone === "hand" &&
-    isMagneticMinion(dragSession.unit);
+    (dragSession.zone === "hand" || dragSession.zone === "board")
+    ? createBoardDragPreview({
+        unitCount: units.length,
+        boardLimit: BOARD_LIMIT,
+        sourceZone: dragSession.zone,
+        sourceIndex: dragSession.index,
+        targetIndex:
+          dragSession.target?.kind === "board"
+            ? dragSession.target.index
+            : null,
+      })
+    : null;
+  const draggingHandWithOpenSlot =
+    boardDragPreview !== null &&
+    dragSession?.zone === "hand" &&
+    units.length < BOARD_LIMIT;
   const slotCount =
     side === "enemy"
       ? units.length
-      : dragSession?.active && dragSession.zone === "hand"
-        ? draggingMagneticFromHand
-          ? Math.max(1, units.length)
-          : Math.min(BOARD_LIMIT, units.length + 1)
+      : boardDragPreview
+        ? boardDragPreview.slotCount
         : canDeploy && units.length < BOARD_LIMIT
           ? units.length + 1
           : units.length;
@@ -808,9 +828,11 @@ function BoardRow({
       data-magnetic-ready={
         side === "friendly" && Boolean(magneticTargetIds?.length)
       }
+      data-board-drop-zone={side === "friendly" ? "true" : undefined}
     >
       {Array.from({ length: slotCount }, (_, index) => {
         const unit = units[index];
+        const previewSlot = boardDragPreview?.slots[index];
         const isChoiceTarget =
           unit !== undefined &&
           choiceTargetIds?.includes(unit.instanceId) === true;
@@ -829,118 +851,110 @@ function BoardRow({
               ? index < units.length
               : false);
         const isDropTarget =
-          isValidDragTarget &&
-          dragSession?.target?.kind === "board" &&
-          dragSession.target.index === index;
-        const isAfterDropTarget =
-          draggingMagneticFromHand &&
-          dragSession?.target?.kind === "board" &&
-          dragSession.target.index === units.length;
+          isValidDragTarget && previewSlot?.isGap === true;
         const slotProps = {
           "data-board-slot-index":
             side === "friendly" ? index : undefined,
           "data-valid": isValidDragTarget || (unit === undefined && canDeploy),
           "data-target": isDropTarget,
+          "data-preview-gap": previewSlot?.isGap || undefined,
         };
         if (unit) {
           return (
             <div className="slot" key={unit.instanceId} {...slotProps}>
-              {side === "friendly" &&
-                dragSession?.active === true &&
-                dragSession.zone === "hand" &&
-                units.length < BOARD_LIMIT && (
-                  <span
-                    className="board-insert-target"
-                    aria-hidden="true"
-                    data-board-slot-index={index}
-                    data-target={isDropTarget}
-                  />
-                )}
-              {draggingMagneticFromHand &&
-                units.length < BOARD_LIMIT &&
-                index === units.length - 1 && (
-                  <span
-                    className="board-insert-target is-after"
-                    aria-hidden="true"
-                    data-board-slot-index={units.length}
-                    data-target={isAfterDropTarget}
-                  />
-                )}
-              <UnitCard
-                unit={unit}
-                compact
-                selected={
-                  side === "friendly" &&
-                  selection?.zone === "board" &&
-                  selection.index === index
-                }
-                testId={`${side}-unit-${index}`}
-                dragEnabled={
-                  side === "friendly" && getDragHandlers !== undefined
-                }
-                dragging={
-                  dragSession?.active === true &&
-                  dragSession.unit.instanceId === unit.instanceId
-                }
-                combatActor={unit.instanceId === actorInstanceId}
-                combatTarget={unit.instanceId === targetInstanceId}
-                combatBuffTarget={
-                  unit.instanceId === buffTargetInstanceId
-                }
-                combatBuffLabel={
-                  unit.instanceId === buffTargetInstanceId
-                    ? buffLabel
-                    : undefined
-                }
-                combatDebuffTarget={
-                  unit.instanceId === debuffTargetInstanceId
-                }
-                combatDebuffLabel={
-                  unit.instanceId === debuffTargetInstanceId
-                    ? debuffLabel
-                    : undefined
-                }
-                combatSummoned={
-                  unit.instanceId === summonedInstanceId
-                }
-                combatSummonLabel={
-                  unit.instanceId === summonedInstanceId
-                    ? summonLabel
-                    : undefined
-                }
-                choiceTarget={isChoiceTarget}
-                magneticTarget={isMagneticTarget}
-                magneticDropTarget={isMagneticDropTarget}
-                disabled={interactionLocked && !isChoiceTarget}
-                dragHandlers={
-                  side === "friendly" && getDragHandlers
-                    ? getDragHandlers({ zone: "board", index }, unit)
-                    : undefined
-                }
-                onClick={
-                  isChoiceTarget && onChoiceTarget
-                    ? () => onChoiceTarget(unit.instanceId)
-                    : isMagneticTarget && onMagneticTarget
-                      ? () => onMagneticTarget(unit.instanceId)
-                    : onUnitClick
-                      ? () => onUnitClick(index)
+              {draggingHandWithOpenSlot && (
+                <span
+                  className="board-insert-target"
+                  aria-hidden="true"
+                  data-board-insert-index={index}
+                  data-target={isDropTarget}
+                />
+              )}
+              <div
+                className="board-card-motion"
+                data-preview-shift={previewSlot?.shift ?? undefined}
+                data-preview-source={previewSlot?.isSource || undefined}
+              >
+                <UnitCard
+                  unit={unit}
+                  compact
+                  selected={
+                    side === "friendly" &&
+                    selection?.zone === "board" &&
+                    selection.index === index
+                  }
+                  testId={`${side}-unit-${index}`}
+                  dragEnabled={
+                    side === "friendly" &&
+                    getDragHandlers !== undefined
+                  }
+                  dragging={
+                    dragSession?.active === true &&
+                    dragSession.unit.instanceId === unit.instanceId
+                  }
+                  combatActor={unit.instanceId === actorInstanceId}
+                  combatTarget={unit.instanceId === targetInstanceId}
+                  combatBuffTarget={
+                    unit.instanceId === buffTargetInstanceId
+                  }
+                  combatBuffLabel={
+                    unit.instanceId === buffTargetInstanceId
+                      ? buffLabel
                       : undefined
-                }
-                onKeyDown={
-                  isMagneticTarget && onMagneticTarget
-                    ? (event) => {
-                        if (
-                          event.key !== "Enter" &&
-                          event.key !== " "
-                        ) {
-                          return;
+                  }
+                  combatDebuffTarget={
+                    unit.instanceId === debuffTargetInstanceId
+                  }
+                  combatDebuffLabel={
+                    unit.instanceId === debuffTargetInstanceId
+                      ? debuffLabel
+                      : undefined
+                  }
+                  combatSummoned={
+                    unit.instanceId === summonedInstanceId
+                  }
+                  combatSummonLabel={
+                    unit.instanceId === summonedInstanceId
+                      ? summonLabel
+                      : undefined
+                  }
+                  choiceTarget={isChoiceTarget}
+                  magneticTarget={isMagneticTarget}
+                  magneticDropTarget={isMagneticDropTarget}
+                  disabled={interactionLocked && !isChoiceTarget}
+                  dragHandlers={
+                    side === "friendly" && getDragHandlers
+                      ? getDragHandlers(
+                          { zone: "board", index },
+                          unit,
+                        )
+                      : undefined
+                  }
+                  onClick={
+                    isChoiceTarget && onChoiceTarget
+                      ? () => onChoiceTarget(unit.instanceId)
+                      : isMagneticTarget && onMagneticTarget
+                        ? () => onMagneticTarget(unit.instanceId)
+                      : onUnitClick
+                        ? () => onUnitClick(index)
+                        : undefined
+                  }
+                  onKeyDown={
+                    isMagneticTarget && onMagneticTarget
+                      ? (event) => {
+                          if (
+                            event.key !== "Enter" &&
+                            event.key !== " "
+                          ) {
+                            return;
+                          }
+                          event.preventDefault();
+                          onMagneticTarget(unit.instanceId);
                         }
-                        event.preventDefault();
-                        onMagneticTarget(unit.instanceId);
-                      }
-                    : undefined
-                }
-              />
+                      : undefined
+                  }
+                />
+              </div>
             </div>
           );
         }
@@ -959,7 +973,16 @@ function BoardRow({
                 : undefined
             }
             disabled={!canDeploy}
-          />
+          >
+            {draggingHandWithOpenSlot && (
+              <span
+                className="board-insert-target"
+                aria-hidden="true"
+                data-board-insert-index={index}
+                data-target={isDropTarget}
+              />
+            )}
+          </button>
         );
       })}
     </div>
@@ -1026,10 +1049,13 @@ export default function GameClient() {
       revealedCount: 0,
       complete: false,
     });
+  const [combatIntroCompletedBattle, setCombatIntroCompletedBattle] =
+    useState<BattleSummary | null>(null);
   const dragSessionRef = useRef<DragSession | null>(null);
   const dragCaptureElementRef = useRef<HTMLButtonElement | null>(null);
   const suppressCardClickRef = useRef(false);
   const battlePlaybackTimerRef = useRef<number | null>(null);
+  const combatIntroTimerRef = useRef<number | null>(null);
   const interactionReturnFocusRef = useRef<HTMLElement | null>(null);
   const previousInteractionIdRef = useRef<string | null>(null);
   const magneticFocusTargetRef = useRef<string | null>(null);
@@ -1045,6 +1071,12 @@ export default function GameClient() {
     if (battlePlaybackTimerRef.current === null) return;
     window.clearTimeout(battlePlaybackTimerRef.current);
     battlePlaybackTimerRef.current = null;
+  }, []);
+
+  const clearCombatIntroTimer = useCallback(() => {
+    if (combatIntroTimerRef.current === null) return;
+    window.clearTimeout(combatIntroTimerRef.current);
+    combatIntroTimerRef.current = null;
   }, []);
 
   const clearCombatRewardFeedback = useCallback(() => {
@@ -1241,6 +1273,14 @@ export default function GameClient() {
   );
 
   const battle = game.lastBattle;
+  const combatIntroActive =
+    started &&
+    game.phase === "combat" &&
+    battle !== null &&
+    combatIntroCompletedBattle !== battle;
+  const introOpponent = battle
+    ? combatIntroOpponent(battle, game.humanPlayerId)
+    : null;
   const humanCombatRewards = useMemo(
     () => summarizeCombatRewards(battle?.events ?? [], human.id),
     [battle, human.id],
@@ -1264,7 +1304,7 @@ export default function GameClient() {
         ).filter(isBoardMinionInstance)
       : opponent?.board ?? [];
   const playbackEvents = useMemo(
-    () => battle?.events.filter(isPlaybackEvent) ?? [],
+    () => battle?.events.filter(isCombatPlaybackEvent) ?? [],
     [battle],
   );
   const playbackEventCount = playbackEvents.length;
@@ -1274,7 +1314,9 @@ export default function GameClient() {
     battlePlayback.battle === battle;
   const revealedBattleEventCount =
     game.phase === "combat" && battle
-      ? playbackIsCurrent
+      ? combatIntroActive
+        ? 0
+        : playbackIsCurrent
         ? Math.min(battlePlayback.revealedCount, playbackEventCount)
         : playbackEventCount > 0
           ? 1
@@ -1282,10 +1324,20 @@ export default function GameClient() {
       : 0;
   const battlePlaybackComplete =
     game.phase === "combat" && battle
-      ? playbackIsCurrent
+      ? combatIntroActive
+        ? false
+        : playbackIsCurrent
         ? battlePlayback.complete
         : playbackEventCount === 0
       : false;
+  const combatPresentationStage: CombatPresentationStage | null =
+    game.phase === "combat" && battle
+      ? combatIntroActive
+        ? "intro"
+        : battlePlaybackComplete
+          ? "result"
+          : "playback"
+      : null;
   const currentBattleEvent =
     revealedBattleEventCount > 0
       ? playbackEvents[revealedBattleEventCount - 1]
@@ -1473,10 +1525,39 @@ export default function GameClient() {
   }, [selectedMagneticSource, selectedMagneticTargetIds]);
 
   useEffect(() => {
+    clearCombatIntroTimer();
+    if (
+      !battle ||
+      game.phase !== "combat" ||
+      combatIntroCompletedBattle === battle
+    ) {
+      return clearCombatIntroTimer;
+    }
+
+    combatIntroTimerRef.current = window.setTimeout(() => {
+      combatIntroTimerRef.current = null;
+      setBattlePlayback({
+        battle,
+        ...initialCombatPlayback(playbackEventCount),
+      });
+      setCombatIntroCompletedBattle(battle);
+    }, COMBAT_START_INTRO_DURATION_MS);
+
+    return clearCombatIntroTimer;
+  }, [
+    battle,
+    clearCombatIntroTimer,
+    combatIntroCompletedBattle,
+    game.phase,
+    playbackEventCount,
+  ]);
+
+  useEffect(() => {
     clearBattlePlaybackTimer();
     if (
       !battle ||
       game.phase !== "combat" ||
+      combatIntroActive ||
       battlePlaybackComplete
     ) {
       return clearBattlePlaybackTimer;
@@ -1519,11 +1600,14 @@ export default function GameClient() {
     playbackEventCount,
     playbackEvents,
     revealedBattleEventCount,
+    combatIntroActive,
   ]);
 
   const skipBattlePlayback = useCallback(() => {
     clearBattlePlaybackTimer();
-    if (!battle || game.phase !== "combat") return;
+    if (!battle || game.phase !== "combat" || combatIntroActive) {
+      return;
+    }
     setBattlePlayback({
       battle,
       revealedCount: playbackEventCount,
@@ -1532,6 +1616,7 @@ export default function GameClient() {
   }, [
     battle,
     clearBattlePlaybackTimer,
+    combatIntroActive,
     game.phase,
     playbackEventCount,
   ]);
@@ -1569,6 +1654,8 @@ export default function GameClient() {
   ]);
 
   const startFreshGame = useCallback(() => {
+    clearBattlePlaybackTimer();
+    clearCombatIntroTimer();
     const next = createGame(newSeed());
     window.localStorage.setItem(SAVE_KEY, JSON.stringify(next));
     setGame(next);
@@ -1578,10 +1665,20 @@ export default function GameClient() {
     setShowRestart(false);
     setInfoTab("details");
     setMagneticAnnouncement("");
+    setBattlePlayback({
+      battle: null,
+      revealedCount: 0,
+      complete: false,
+    });
+    setCombatIntroCompletedBattle(null);
     clearCombatRewardFeedback();
     magneticFocusTargetRef.current = null;
     preCombatHandIdsRef.current = null;
-  }, [clearCombatRewardFeedback]);
+  }, [
+    clearBattlePlaybackTimer,
+    clearCombatIntroTimer,
+    clearCombatRewardFeedback,
+  ]);
 
   const deploySelected = useCallback(
     (boardIndex?: number) => {
@@ -1699,9 +1796,53 @@ export default function GameClient() {
         }
       }
 
-      const slot = hit.closest<HTMLElement>("[data-board-slot-index]");
-      if (!slot) return null;
-      const index = Number(slot.dataset.boardSlotIndex);
+      const insertionTarget = hit.closest<HTMLElement>(
+        "[data-board-insert-index]",
+      );
+      if (source.zone === "hand" && insertionTarget) {
+        const insertionIndex = Number(
+          insertionTarget.dataset.boardInsertIndex,
+        );
+        if (
+          Number.isInteger(insertionIndex) &&
+          human.board.length < BOARD_LIMIT &&
+          insertionIndex >= 0 &&
+          insertionIndex <= human.board.length
+        ) {
+          return { kind: "board", index: insertionIndex };
+        }
+      }
+
+      const boardDropZone = document.querySelector<HTMLElement>(
+        '[data-board-drop-zone="true"]',
+      );
+      if (!boardDropZone) return null;
+      const dropZoneRect = boardDropZone.getBoundingClientRect();
+      const dropZoneSlop = 20;
+      if (
+        clientX < dropZoneRect.left - dropZoneSlop ||
+        clientX > dropZoneRect.right + dropZoneSlop ||
+        clientY < dropZoneRect.top - dropZoneSlop ||
+        clientY > dropZoneRect.bottom + dropZoneSlop
+      ) {
+        return null;
+      }
+      const slots = Array.from(
+        boardDropZone.querySelectorAll<HTMLElement>(
+          ":scope > [data-board-slot-index]",
+        ),
+      );
+      const nearestSlotPosition = nearestBoardSlotIndex(
+        clientX,
+        slots.map((slot) => {
+          const rect = slot.getBoundingClientRect();
+          return rect.left + rect.width / 2;
+        }),
+      );
+      if (nearestSlotPosition === null) return null;
+      const index = Number(
+        slots[nearestSlotPosition]?.dataset.boardSlotIndex,
+      );
       if (!Number.isInteger(index)) return null;
 
       if (source.zone === "hand") {
@@ -2123,10 +2264,14 @@ export default function GameClient() {
       data-phase={game.phase}
       data-loaded={loaded}
       data-dragging={dragSession?.active === true}
+      data-combat-stage={combatPresentationStage ?? "none"}
       data-pending-interaction={humanInteraction?.kind ?? "none"}
       data-testid="game-shell"
     >
-      <header className="top-hud" inert={interactionLocked}>
+      <header
+        className="top-hud"
+        inert={interactionLocked || combatIntroActive}
+      >
         <div className="brand">
           酒馆战棋 · 单机版
           <small
@@ -2182,7 +2327,10 @@ export default function GameClient() {
         </div>
       </header>
 
-      <div className="main-grid">
+      <div
+        className="main-grid"
+        inert={interactionLocked || combatIntroActive}
+      >
         <section className="play-column" aria-label="游戏区域">
           <section
             className={`panel shop-panel${
@@ -2357,6 +2505,7 @@ export default function GameClient() {
               )}
               {game.phase === "combat" &&
                 battle &&
+                !combatIntroActive &&
                 !battlePlaybackComplete && (
                   <div
                     className="combat-playback"
@@ -2419,6 +2568,7 @@ export default function GameClient() {
                 )}
               {game.phase === "combat" &&
                 battle &&
+                !combatIntroActive &&
                 battlePlaybackComplete && (
                   <div className="combat-banner" role="status">
                     <div className="combat-banner-copy">
@@ -2941,6 +3091,48 @@ export default function GameClient() {
           </section>
         </aside>
       </div>
+
+      {combatIntroActive && battle && introOpponent && (
+        <section
+          className="combat-start-intro"
+          role="status"
+          aria-live="polite"
+          aria-atomic="true"
+          aria-label={`第 ${battle.round} 回合，开始战斗，对阵${
+            introOpponent.opponentIsGhost ? "幽灵" : ""
+          }${introOpponent.opponentName}`}
+          data-testid="combat-start-intro"
+        >
+          <div className="combat-start-stage">
+            <span className="combat-start-round">
+              第 {battle.round} 回合
+            </span>
+            {/* eslint-disable-next-line @next/next/no-img-element */}
+            <img
+              className="combat-start-emblem"
+              src="/ui/battle-crossed-weapons.webp"
+              alt=""
+              draggable={false}
+            />
+            <div className="combat-start-banner">
+              <strong>开始战斗</strong>
+              <span>
+                对阵{" "}
+                {introOpponent.opponentIsGhost ? "幽灵 · " : ""}
+                {introOpponent.opponentName}
+              </span>
+              {introOpponent.opponentIsGhost && (
+                <small>
+                  幽灵不会受到伤害
+                </small>
+              )}
+            </div>
+            <span className="combat-start-status">
+              正在切换至战斗阵型
+            </span>
+          </div>
+        </section>
+      )}
 
       <span className="sr-only" id="drag-instructions">
         可按住并拖动。商店随从拖到手牌区域购买；普通手牌拖到战场插位线上场；磁力随从拖到标有“可吸附”的友方随从进行吸附，拖到插位线则普通上场；场上随从可拖动换位，或拖到鲍勃的酒馆出售。也可点击卡牌后使用详情面板中的按钮。
