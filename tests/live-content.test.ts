@@ -65,7 +65,7 @@ function expectedPlainText(html: string): string {
 test("exports the pinned current roster version through the legacy alias", () => {
   assert.equal(
     CURRENT_ROSTER_VERSION,
-    "battlegrounds-36.0.3-247416-v8",
+    "battlegrounds-36.0.3-247416-v9",
   );
   assert.equal(CLASSIC_ROSTER_VERSION, CURRENT_ROSTER_VERSION);
 });
@@ -326,6 +326,20 @@ test("maps Magnetic targets, generation, and the first complete live Magnetic ef
       goldenMode: "doubleStats",
     },
   ]);
+  assert.deepEqual(getMinionDefinition("BG34_140").rally, [
+    {
+      kind: "summonFromHand",
+      selection: "highestAttack",
+      count: 1,
+      goldenMode: "doubleCount",
+    },
+  ]);
+  assert.deepEqual(getMinionDefinition("BG25_016").rally, [
+    {
+      kind: "removeTargetKeywords",
+      keywords: ["reborn", "taunt"],
+    },
+  ]);
   assert.deepEqual(getMinionDefinition("BG31_859").magnetic, {
     targetTribes: ["mech", "elemental"],
   });
@@ -410,6 +424,7 @@ test("marks every live card honestly as complete or partial", () => {
     [
       "BG25_001",
       "BG25_010",
+      "BG25_016",
       "BG25_022",
       "BG25_354",
       "BG26_146",
@@ -429,6 +444,7 @@ test("marks every live card honestly as complete or partial", () => {
       "BG32_235",
       "BG33_156",
       "BG33_241",
+      "BG34_140",
       "BG34_175",
       "BG34_523",
       "BG34_630",
@@ -453,13 +469,13 @@ test("marks every live card honestly as complete or partial", () => {
     LIVE_MINION_DEFINITIONS.filter(
       (definition) => definition.effectSupport === "partial",
     ).length,
-    198,
+    196,
   );
   assert.equal(
     LIVE_MINION_DEFINITIONS.filter(
       (definition) => definition.effectSupport === "complete",
     ).length,
-    39,
+    41,
   );
   assert.deepEqual(getMinionDefinition("BG35_702").interactiveBattlecry, {
     kind: "targetedBuff",

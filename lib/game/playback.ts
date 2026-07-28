@@ -16,7 +16,7 @@ function asBoardMinion(
 /**
  * Projects structured combat snapshots onto the opening board without parsing
  * localized event messages. Deaths remain visible for their own event, then
- * structured summon positions and buff snapshots update later replay frames.
+ * structured summon positions and effect snapshots update later replay frames.
  */
 export function projectCombatBoard(
   initialBoard: readonly BoardMinionInstance[],
@@ -65,7 +65,8 @@ export function projectCombatBoard(
     }
 
     if (
-      event.type === "buff" &&
+      (event.type === "buff" ||
+        event.type === "keywordRemoved") &&
       event.targetPlayerId === playerId &&
       event.targetInstanceId &&
       event.minion

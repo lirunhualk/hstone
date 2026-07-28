@@ -227,7 +227,7 @@
 .hud-stat > span:first-child,
 .hud-stat .label {
   color: var(--muted);
-  font-size: 10px;
+  font-size: 11px;
   font-weight: 650;
   letter-spacing: 0.08em;
   text-transform: uppercase;
@@ -345,6 +345,53 @@
     radial-gradient(circle at 16% 52%, rgb(246 190 85 / 9%), transparent 24%),
     linear-gradient(145deg, rgb(255 255 255 / 2.5%), transparent 45%),
     rgb(14 27 43 / 96%);
+  transition:
+    border-color 180ms ease,
+    background 180ms ease,
+    box-shadow 180ms ease;
+}
+
+.shop-panel.is-frozen {
+  border-color: rgb(117 214 255 / 72%);
+  background:
+    radial-gradient(circle at 18% 48%, rgb(117 214 255 / 15%), transparent 28%),
+    linear-gradient(145deg, rgb(215 247 255 / 7%), transparent 48%),
+    rgb(10 27 46 / 97%);
+  box-shadow:
+    0 12px 30px rgb(0 0 0 / 18%),
+    inset 0 0 32px rgb(117 214 255 / 9%),
+    0 0 0 2px rgb(117 214 255 / 12%),
+    0 0 28px rgb(91 184 255 / 16%);
+}
+
+.shop-panel.is-frozen .panel-title > span:last-child {
+  padding: 3px 8px;
+  border: 1px solid rgb(205 244 255 / 42%);
+  border-radius: 999px;
+  color: #ddf8ff;
+  background: rgb(91 184 255 / 14%);
+}
+
+.shop-panel.is-frozen .card-row .unit-card {
+  border-color: rgb(174 232 255 / 78%);
+  filter: saturate(0.78) contrast(1.06) brightness(1.04);
+  box-shadow:
+    0 8px 18px rgb(0 0 0 / 24%),
+    inset 0 0 22px rgb(214 246 255 / 10%),
+    0 0 0 2px rgb(117 214 255 / 18%),
+    0 0 18px rgb(91 184 255 / 20%);
+}
+
+.shop-panel.is-frozen .card-row .unit-card::before {
+  position: absolute;
+  z-index: 3;
+  inset: 0;
+  border-radius: inherit;
+  pointer-events: none;
+  content: "";
+  background:
+    linear-gradient(128deg, rgb(231 250 255 / 20%), transparent 34%),
+    linear-gradient(310deg, rgb(117 214 255 / 14%), transparent 42%);
 }
 
 .shop-layout {
@@ -630,6 +677,17 @@
   transform: translateY(-3px) scale(1.025);
 }
 
+.unit-card.is-combat-debuff-target {
+  z-index: 8;
+  border-color: var(--violet);
+  filter: brightness(1.1) saturate(1.2);
+  box-shadow:
+    0 14px 30px rgb(0 0 0 / 34%),
+    0 0 0 3px rgb(155 140 255 / 78%),
+    0 0 32px rgb(155 140 255 / 48%);
+  transform: translateY(2px) scale(0.99);
+}
+
 .combat-buff-label {
   position: absolute;
   z-index: 28;
@@ -650,6 +708,42 @@
   line-height: 1;
   transform: translateX(-50%);
   animation: combat-buff-pop 300ms ease both;
+}
+
+.combat-debuff-label,
+.combat-summon-label {
+  position: absolute;
+  z-index: 28;
+  top: 7px;
+  left: 50%;
+  padding: 4px 8px;
+  border-radius: 999px;
+  pointer-events: none;
+  box-shadow:
+    0 5px 14px rgb(0 0 0 / 38%),
+    0 0 20px rgb(155 140 255 / 50%);
+  font-size: 10px;
+  font-weight: 950;
+  letter-spacing: 0.03em;
+  line-height: 1;
+  white-space: nowrap;
+  transform: translateX(-50%);
+  animation: combat-buff-pop 300ms ease both;
+}
+
+.combat-debuff-label {
+  border: 1px solid rgb(248 237 255 / 90%);
+  color: #24113c;
+  background: linear-gradient(135deg, #f8edff, #b99cff);
+}
+
+.combat-summon-label {
+  border: 1px solid rgb(228 249 255 / 90%);
+  color: #071f32;
+  background: linear-gradient(135deg, #e6fbff, #75d6ff);
+  box-shadow:
+    0 5px 14px rgb(0 0 0 / 38%),
+    0 0 20px rgb(91 184 255 / 52%);
 }
 
 .unit-card.is-combat-actor.is-combat-target {
@@ -2599,6 +2693,10 @@
   animation: card-buff 300ms ease;
 }
 
+.unit-card.is-debuffed {
+  animation: card-debuff 300ms ease;
+}
+
 .unit-card.is-summoned {
   animation: card-summon 240ms cubic-bezier(0.2, 0.9, 0.3, 1);
 }
@@ -2641,6 +2739,19 @@
     box-shadow:
       0 0 0 4px rgb(50 215 196 / 68%),
       0 0 26px rgb(50 215 196 / 35%);
+  }
+}
+
+@keyframes card-debuff {
+  0%,
+  100% {
+    filter: none;
+  }
+  50% {
+    filter: brightness(1.3) saturate(1.25);
+    box-shadow:
+      0 0 0 4px rgb(155 140 255 / 72%),
+      0 0 28px rgb(155 140 255 / 42%);
   }
 }
 
@@ -3197,11 +3308,13 @@
   .unit-card.is-attacking,
   .unit-card.is-hit,
   .unit-card.is-buffed,
+  .unit-card.is-debuffed,
   .unit-card.is-summoned,
   .unit-card.is-dead,
   .unit-card.is-combat-actor,
   .unit-card.is-combat-target,
   .unit-card.is-combat-buff-target,
+  .unit-card.is-combat-debuff-target,
   .unit-card.is-choice-target,
   .unit-card.is-magnetic-target,
   .unit-card.is-magnetic-drop-target,
@@ -3210,7 +3323,9 @@
     transform: none;
   }
 
-  .combat-buff-label {
+  .combat-buff-label,
+  .combat-debuff-label,
+  .combat-summon-label {
     animation: none;
   }
 }

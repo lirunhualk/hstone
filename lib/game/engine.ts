@@ -22,6 +22,9 @@ import type {
   PendingDiscoverInteraction,
   PlayerId,
   PlayerState,
+  RallyRemoveTargetKeywordsEffect,
+  RallyRemovedKeyword,
+  RallySummonFromHandEffect,
   TavernTier,
   Tribe,
   TripleRewardSpellInstance,
@@ -2068,8 +2071,7 @@ function summonCombatMinion(
   golden = false,
   taunt = false,
 ): MinionInstance | null {
-  const board = context.boards[ownerId];
-  if (board.length >= MAX_BOARD_SIZE) {
+  if (context.boards[ownerId].length >= MAX_BOARD_SIZE) {
     return null;
   }
   const summoned = createMinionInstance(context.state, definitionId, 0);
@@ -2078,6 +2080,29 @@ function summonCombatMinion(
   }
   if (taunt) {
     summoned.taunt = true;
+  }
+  return insertCombatMinion(
+    context,
+    ownerId,
+    summoned,
+    insertAt,
+    source,
+    `${source.name}召唤了${summoned.name}。`,
+  );
+}
+
+function insertCombatMinion(
+  context: CombatContext,
+  ownerId: PlayerId,
+  summoned: BoardMinionInstance,
+  insertAt: number,
+  source: MinionInstance,
+  message: string,
+  summonReason?: BattleEvent["summonReason"],
+): MinionInstance | null {
+  const board = context.boards[ownerId];
+  if (board.length >= MAX_BOARD_SIZE) {
+    return null;
   }
   applyPersistentTribeBuff(context, ownerId, summoned);
   applyExistingAurasToSummoned(board, summoned);
@@ -2093,7 +2118,8 @@ function summonCombatMinion(
     targetInstanceId: summoned.instanceId,
     boardIndex,
     minion: cloneMinion(summoned),
-    message: `${source.name}召唤了${summoned.name}。`,
+    summonReason,
+    message,
   });
   return summoned;
 }
@@ -2300,10 +2326,138 @@ function resolveCombatGetRandomMinion(
   }
 }
 
+function selectHighestAttackHandMinions(
+  state: GameState,
+  owner: PlayerState,
+  count: number,
+): BoardMinionInstance[] {
+  const candidates = owner.hand.filter(
+    (card): card is BoardMinionInstance => card.kind === "minion",
+  );
+  const selected: BoardMinionInstance[] = [];
+  while (selected.length < count && candidates.length > 0) {
+    const highestAttack = Math.max(
+      ...candidates.map((candidate) => candidate.attack),
+    );
+    const highestCandidates = candidates.filter(
+      (candidate) => candidate.attack === highestAttack,
+    );
+    const choice =
+      highestCandidates.length === 1
+        ? highestCandidates[0]
+        : highestCandidates[randomIndex(state, highestCandidates.length)];
+    selected.push(choice);
+    candidates.splice(candidates.indexOf(choice), 1);
+  }
+  return selected;
+}
+
+function cloneOwnedMinionForCombat(
+  state: GameState,
+  minion: BoardMinionInstance,
+): BoardMinionInstance {
+  const combatCopy = cloneMinion(minion);
+  combatCopy.instanceId = `minion-${state.nextInstanceId}`;
+  combatCopy.poolCopies = 0;
+  combatCopy.grantsTripleReward = false;
+  combatCopy.attachments = combatCopy.attachments.map(
+    clearAttachmentPoolCopies,
+  );
+  state.nextInstanceId += 1;
+  return combatCopy;
+}
+
+function resolveRallySummonFromHand(
+  context: CombatContext,
+  ownerId: PlayerId,
+  attacker: MinionInstance,
+  component: MinionEffectSource,
+  effect: RallySummonFromHandEffect,
+): void {
+  const owner = findPlayer(context.state, ownerId);
+  const board = context.boards[ownerId];
+  if (!owner || board.length >= MAX_BOARD_SIZE) {
+    return;
+  }
+  const count =
+    effect.count *
+    (component.golden && effect.goldenMode === "doubleCount" ? 2 : 1);
+  const selections = selectHighestAttackHandMinions(
+    context.state,
+    owner,
+    Math.min(count, MAX_BOARD_SIZE - board.length),
+  );
+  const definition = getMinionDefinition(component.definitionId);
+  for (const [selectionIndex, selected] of selections.entries()) {
+    const attackerIndex = board.findIndex(
+      (minion) => minion.instanceId === attacker.instanceId,
+    );
+    if (attackerIndex < 0 || board.length >= MAX_BOARD_SIZE) {
+      break;
+    }
+    const summoned = cloneOwnedMinionForCombat(
+      context.state,
+      selected,
+    );
+    insertCombatMinion(
+      context,
+      ownerId,
+      summoned,
+      attackerIndex + 1 + selectionIndex,
+      attacker,
+      `${definition.name}的进击从手牌召唤了${summoned.name}（仅限本场战斗）。`,
+      "rallyFromHand",
+    );
+  }
+}
+
+function removedKeywordLabel(
+  keywords: readonly RallyRemovedKeyword[],
+): string {
+  return keywords
+    .map((keyword) => (keyword === "reborn" ? "复生" : "嘲讽"))
+    .join("和");
+}
+
+function resolveRallyKeywordRemoval(
+  context: CombatContext,
+  ownerId: PlayerId,
+  attacker: MinionInstance,
+  target: MinionInstance,
+  component: MinionEffectSource,
+  effect: RallyRemoveTargetKeywordsEffect,
+): void {
+  const removedKeywords: RallyRemovedKeyword[] = [];
+  for (const keyword of effect.keywords) {
+    if (keyword === "reborn" && target.reborn) {
+      target.reborn = false;
+      removedKeywords.push(keyword);
+    } else if (keyword === "taunt" && target.taunt) {
+      target.taunt = false;
+      removedKeywords.push(keyword);
+    }
+  }
+  if (removedKeywords.length === 0) {
+    return;
+  }
+  const definition = getMinionDefinition(component.definitionId);
+  pushBattleEvent(context.events, {
+    type: "keywordRemoved",
+    actorPlayerId: ownerId,
+    actorInstanceId: attacker.instanceId,
+    targetPlayerId: opponentId(context, ownerId),
+    targetInstanceId: target.instanceId,
+    removedKeywords,
+    minion: cloneMinion(target),
+    message: `${definition.name}的进击移除了${target.name}的${removedKeywordLabel(removedKeywords)}。`,
+  });
+}
+
 function triggerRally(
   context: CombatContext,
   ownerId: PlayerId,
   attacker: MinionInstance,
+  attackTarget: MinionInstance,
 ): void {
   for (const component of minionEffectSources(attacker)) {
     const definition = getMinionDefinition(component.definitionId);
@@ -2317,6 +2471,29 @@ function triggerRally(
           component,
           effect,
           "进击",
+        );
+        continue;
+      }
+
+      if (effect.kind === "summonFromHand") {
+        resolveRallySummonFromHand(
+          context,
+          ownerId,
+          attacker,
+          component,
+          effect,
+        );
+        continue;
+      }
+
+      if (effect.kind === "removeTargetKeywords") {
+        resolveRallyKeywordRemoval(
+          context,
+          ownerId,
+          attacker,
+          attackTarget,
+          component,
+          effect,
         );
         continue;
       }
@@ -2399,7 +2576,7 @@ function performAttackStrike(
     amount: attacker.attack,
     message: `${attacker.name}${options.immediate ? "立即攻击" : "攻击"}${target.name}${options.windfuryStrike ? "（风怒）" : ""}。`,
   });
-  triggerRally(context, ownerId, attacker);
+  triggerRally(context, ownerId, attacker, target);
 
   dealCombatDamage(
     context,

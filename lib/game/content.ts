@@ -3,7 +3,7 @@ import liveRosterSnapshot from "./generated/battlegrounds-36.0.3-247416.zhCN.jso
 };
 import type { MinionDefinition, Tribe } from "./types.ts";
 
-export const CURRENT_ROSTER_VERSION = "battlegrounds-36.0.3-247416-v8";
+export const CURRENT_ROSTER_VERSION = "battlegrounds-36.0.3-247416-v9";
 /** Compatibility alias for existing save and engine imports. */
 export const CLASSIC_ROSTER_VERSION = CURRENT_ROSTER_VERSION;
 
@@ -846,6 +846,14 @@ const LEGACY_RULE_BY_CARD_ID = new Map(
 const LIVE_RULE_OVERRIDES: Readonly<
   Record<string, Partial<MinionDefinition>>
 > = {
+  BG25_016: {
+    rally: [
+      {
+        kind: "removeTargetKeywords",
+        keywords: ["reborn", "taunt"],
+      },
+    ],
+  },
   BG29_503: {
     interactiveBattlecry: {
       kind: "targetedDiscoverMagnetize",
@@ -903,6 +911,16 @@ const LIVE_RULE_OVERRIDES: Readonly<
         attack: 2,
         health: 2,
         goldenMode: "doubleStats",
+      },
+    ],
+  },
+  BG34_140: {
+    rally: [
+      {
+        kind: "summonFromHand",
+        selection: "highestAttack",
+        count: 1,
+        goldenMode: "doubleCount",
       },
     ],
   },
@@ -1123,6 +1141,7 @@ const FULLY_SUPPORTED_LIVE_CARD_IDS = new Set([
   "BG21_014",
   "BG25_001",
   "BG25_010",
+  "BG25_016",
   "BG25_022",
   "BG25_354",
   "BG26_146",
@@ -1141,6 +1160,7 @@ const FULLY_SUPPORTED_LIVE_CARD_IDS = new Set([
   "BG32_172",
   "BG33_156",
   "BG33_241",
+  "BG34_140",
   "BG34_175",
   "BG34_523",
   "BG34_630",

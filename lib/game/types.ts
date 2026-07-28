@@ -108,7 +108,25 @@ export interface RallyBuffEffect {
   goldenMode?: "doubleStats";
 }
 
-export type RallyEffect = GetRandomMinionEffect | RallyBuffEffect;
+export interface RallySummonFromHandEffect {
+  kind: "summonFromHand";
+  selection: "highestAttack";
+  count: number;
+  goldenMode?: "doubleCount";
+}
+
+export type RallyRemovedKeyword = "reborn" | "taunt";
+
+export interface RallyRemoveTargetKeywordsEffect {
+  kind: "removeTargetKeywords";
+  keywords: readonly RallyRemovedKeyword[];
+}
+
+export type RallyEffect =
+  | GetRandomMinionEffect
+  | RallyBuffEffect
+  | RallySummonFromHandEffect
+  | RallyRemoveTargetKeywordsEffect;
 
 export interface DamageAllMinionsEffect {
   kind: "damageAllMinions";
@@ -353,6 +371,7 @@ export type BattleEventType =
   | "battleStart"
   | "attack"
   | "buff"
+  | "keywordRemoved"
   | "shieldBroken"
   | "death"
   | "summon"
@@ -380,7 +399,8 @@ export interface BattleEvent {
   healthDelta?: number;
   boardIndex?: number;
   minion?: MinionInstance;
-  summonReason?: "reborn";
+  summonReason?: "reborn" | "rallyFromHand";
+  removedKeywords?: RallyRemovedKeyword[];
   cardGainResult?: CardGainResult;
 }
 

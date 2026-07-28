@@ -391,17 +391,19 @@ function battleEventDelay(
         ? 800
         : event?.type === "buff"
           ? 620
-        : event?.type === "shieldBroken"
-          ? 500
-          : event?.type === "death"
-            ? 600
-            : event?.type === "summon"
-              ? 650
-              : event?.type === "cardGain"
-                ? 720
-              : event?.type === "heroDamage"
-                ? 850
-                : 650;
+          : event?.type === "keywordRemoved"
+            ? 620
+            : event?.type === "shieldBroken"
+              ? 500
+              : event?.type === "death"
+                ? 600
+                : event?.type === "summon"
+                  ? 650
+                  : event?.type === "cardGain"
+                    ? 720
+                    : event?.type === "heroDamage"
+                      ? 850
+                      : 650;
   return Math.max(180, Math.round(baseDelay / speed));
 }
 
@@ -468,6 +470,10 @@ function UnitCard({
   combatTarget = false,
   combatBuffTarget = false,
   combatBuffLabel,
+  combatDebuffTarget = false,
+  combatDebuffLabel,
+  combatSummoned = false,
+  combatSummonLabel,
   choiceTarget = false,
   magneticTarget = false,
   magneticDropTarget = false,
@@ -488,6 +494,10 @@ function UnitCard({
   combatTarget?: boolean;
   combatBuffTarget?: boolean;
   combatBuffLabel?: string;
+  combatDebuffTarget?: boolean;
+  combatDebuffLabel?: string;
+  combatSummoned?: boolean;
+  combatSummonLabel?: string;
   choiceTarget?: boolean;
   magneticTarget?: boolean;
   magneticDropTarget?: boolean;
@@ -500,6 +510,23 @@ function UnitCard({
     event: ReactKeyboardEvent<HTMLButtonElement>,
   ) => void;
 }) {
+  const combatRole = combatActor
+    ? combatBuffTarget
+      ? "actor buff-target"
+      : combatDebuffTarget
+        ? "actor debuff-target"
+        : combatTarget
+          ? "actor target"
+          : "actor"
+    : combatBuffTarget
+      ? "buff-target"
+      : combatDebuffTarget
+        ? "debuff-target"
+        : combatSummoned
+          ? "summoned"
+          : combatTarget
+            ? "target"
+            : undefined;
   return (
     <button
       type="button"
@@ -512,6 +539,10 @@ function UnitCard({
       }${combatTarget ? " is-combat-target" : ""}${
         combatBuffTarget ? " is-combat-buff-target is-buffed" : ""
       }${
+        combatDebuffTarget
+          ? " is-combat-debuff-target is-debuffed"
+          : ""
+      }${combatSummoned ? " is-summoned" : ""}${
         choiceTarget ? " is-choice-target" : ""
       }${magneticTarget ? " is-magnetic-target" : ""}${
         magneticDropTarget ? " is-magnetic-drop-target" : ""
@@ -535,19 +566,7 @@ function UnitCard({
           .filter(Boolean)
           .join(" ") || undefined
       }
-      data-combat-role={
-        combatActor && combatBuffTarget
-          ? "actor buff-target"
-          : combatActor && combatTarget
-            ? "actor target"
-          : combatActor
-            ? "actor"
-            : combatBuffTarget
-              ? "buff-target"
-            : combatTarget
-              ? "target"
-              : undefined
-      }
+      data-combat-role={combatRole}
       data-drag-enabled={dragEnabled}
       data-magnetic-target={magneticTarget || undefined}
       data-magnetic-drop-target={magneticDropTarget || undefined}
@@ -564,6 +583,16 @@ function UnitCard({
       {combatBuffTarget && combatBuffLabel && (
         <span className="combat-buff-label" aria-hidden="true">
           {combatBuffLabel}
+        </span>
+      )}
+      {combatDebuffTarget && combatDebuffLabel && (
+        <span className="combat-debuff-label" aria-hidden="true">
+          {combatDebuffLabel}
+        </span>
+      )}
+      {combatSummoned && combatSummonLabel && (
+        <span className="combat-summon-label" aria-hidden="true">
+          {combatSummonLabel}
         </span>
       )}
       {magneticTarget && (
@@ -710,6 +739,10 @@ function BoardRow({
   targetInstanceId,
   buffTargetInstanceId,
   buffLabel,
+  debuffTargetInstanceId,
+  debuffLabel,
+  summonedInstanceId,
+  summonLabel,
   choiceTargetIds,
   magneticTargetIds,
   magneticDropTargetId,
@@ -729,6 +762,10 @@ function BoardRow({
   targetInstanceId?: string;
   buffTargetInstanceId?: string;
   buffLabel?: string;
+  debuffTargetInstanceId?: string;
+  debuffLabel?: string;
+  summonedInstanceId?: string;
+  summonLabel?: string;
   choiceTargetIds?: readonly string[];
   magneticTargetIds?: readonly string[];
   magneticDropTargetId?: string;
@@ -853,6 +890,22 @@ function BoardRow({
                 combatBuffLabel={
                   unit.instanceId === buffTargetInstanceId
                     ? buffLabel
+                    : undefined
+                }
+                combatDebuffTarget={
+                  unit.instanceId === debuffTargetInstanceId
+                }
+                combatDebuffLabel={
+                  unit.instanceId === debuffTargetInstanceId
+                    ? debuffLabel
+                    : undefined
+                }
+                combatSummoned={
+                  unit.instanceId === summonedInstanceId
+                }
+                combatSummonLabel={
+                  unit.instanceId === summonedInstanceId
+                    ? summonLabel
                     : undefined
                 }
                 choiceTarget={isChoiceTarget}
@@ -1266,6 +1319,23 @@ export default function GameClient() {
     currentBattleEvent.attackDelta !== undefined &&
     currentBattleEvent.healthDelta !== undefined
       ? `+${currentBattleEvent.attackDelta}/+${currentBattleEvent.healthDelta}`
+      : undefined;
+  const currentDebuffLabel =
+    currentBattleEvent?.type === "keywordRemoved" &&
+    currentBattleEvent.removedKeywords?.length
+      ? `移除 ${currentBattleEvent.removedKeywords
+          .map((keyword) =>
+            keyword === "reborn" ? "复生" : "嘲讽",
+          )
+          .join(" · ")}`
+      : undefined;
+  const currentSummonLabel =
+    currentBattleEvent?.type === "summon"
+      ? currentBattleEvent.summonReason === "rallyFromHand"
+        ? "仅本场"
+        : currentBattleEvent.summonReason === "reborn"
+          ? "复生"
+          : "召唤"
       : undefined;
   const revealedBattleLogEvents = battle
     ? game.phase !== "combat" || battlePlaybackComplete
@@ -2116,6 +2186,8 @@ export default function GameClient() {
         <section className="play-column" aria-label="游戏区域">
           <section
             className={`panel shop-panel${
+              human.frozen ? " is-frozen" : ""
+            }${
               dragSession?.active && dragSession.zone === "board"
                 ? " is-sell-ready"
                 : ""
@@ -2126,6 +2198,7 @@ export default function GameClient() {
             aria-hidden={game.phase !== "recruit"}
             inert={interactionLocked || game.phase !== "recruit"}
             data-sell-drop-zone="true"
+            data-frozen={human.frozen}
             data-testid="sell-drop-zone"
           >
             <div className="sell-drop-feedback" aria-hidden="true">
@@ -2183,6 +2256,7 @@ export default function GameClient() {
                     human.frozen ? " is-active" : ""
                   }`}
                   data-testid="freeze-shop"
+                  aria-pressed={human.frozen}
                   disabled={
                     game.phase !== "recruit" || interactionLocked
                   }
@@ -2251,6 +2325,8 @@ export default function GameClient() {
                   targetInstanceId={
                     currentBattleEvent &&
                     currentBattleEvent.type !== "buff" &&
+                    currentBattleEvent.type !== "keywordRemoved" &&
+                    currentBattleEvent.type !== "summon" &&
                     currentBattleEvent.targetPlayerId === opponentId
                       ? currentBattleEvent.targetInstanceId
                       : undefined
@@ -2262,6 +2338,21 @@ export default function GameClient() {
                       : undefined
                   }
                   buffLabel={currentBuffLabel}
+                  debuffTargetInstanceId={
+                    currentBattleEvent?.type ===
+                      "keywordRemoved" &&
+                    currentBattleEvent.targetPlayerId === opponentId
+                      ? currentBattleEvent.targetInstanceId
+                      : undefined
+                  }
+                  debuffLabel={currentDebuffLabel}
+                  summonedInstanceId={
+                    currentBattleEvent?.type === "summon" &&
+                    currentBattleEvent.targetPlayerId === opponentId
+                      ? currentBattleEvent.targetInstanceId
+                      : undefined
+                  }
+                  summonLabel={currentSummonLabel}
                 />
               )}
               {game.phase === "combat" &&
@@ -2404,6 +2495,8 @@ export default function GameClient() {
                 }
                 targetInstanceId={
                   currentBattleEvent?.type !== "buff" &&
+                  currentBattleEvent?.type !== "keywordRemoved" &&
+                  currentBattleEvent?.type !== "summon" &&
                   currentBattleEvent?.targetPlayerId === human.id
                     ? currentBattleEvent.targetInstanceId
                     : undefined
@@ -2415,6 +2508,20 @@ export default function GameClient() {
                     : undefined
                 }
                 buffLabel={currentBuffLabel}
+                debuffTargetInstanceId={
+                  currentBattleEvent?.type === "keywordRemoved" &&
+                  currentBattleEvent.targetPlayerId === human.id
+                    ? currentBattleEvent.targetInstanceId
+                    : undefined
+                }
+                debuffLabel={currentDebuffLabel}
+                summonedInstanceId={
+                  currentBattleEvent?.type === "summon" &&
+                  currentBattleEvent.targetPlayerId === human.id
+                    ? currentBattleEvent.targetInstanceId
+                    : undefined
+                }
+                summonLabel={currentSummonLabel}
                 choiceTargetIds={
                   boardChoiceInteraction?.optionInstanceIds
                 }
