@@ -19,15 +19,22 @@ const RENDER_CARD_ID_FALLBACKS = {
   BG_LOE_077: "LOE_077",
 };
 const RENDER_UNAVAILABLE = new Set(["BGS_034", "BG31_803"]);
+const CORE_SPELL_CARD_IDS = ["TB_BaconShop_Triples_01"];
 
 const allCardIds = [
-  ...new Set(MINION_DEFINITIONS.map((definition) => definition.cardId)),
+  ...new Set([
+    ...MINION_DEFINITIONS.map((definition) => definition.cardId),
+    ...CORE_SPELL_CARD_IDS,
+  ]),
 ].sort();
 const startupCardIds = STARTUP
   ? new Set(
-      createGame(0x53544152)
-        .players.find((player) => player.isHuman)
-        ?.shop.map((minion) => minion.cardId) ?? [],
+      [
+        ...CORE_SPELL_CARD_IDS,
+        ...(createGame(0x53544152)
+          .players.find((player) => player.isHuman)
+          ?.shop.map((minion) => minion.cardId) ?? []),
+      ],
     )
   : null;
 const cardIds = startupCardIds

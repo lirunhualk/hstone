@@ -5,10 +5,11 @@ import {
   createGame,
   gameReducer,
   getUpgradeCost,
+  type BoardMinionInstance,
   type GameAction,
   type GameState,
-  type MinionInstance,
   type PlayerState,
+  type TripleRewardSpellInstance,
 } from "../lib/game/engine.ts";
 import {
   CLASSIC_ROSTER_VERSION,
@@ -39,10 +40,10 @@ function applyActions(
 }
 
 function fixtureMinion(
-  template: MinionInstance,
+  template: BoardMinionInstance,
   instanceId: string,
-  overrides: Partial<MinionInstance> = {},
-): MinionInstance {
+  overrides: Partial<BoardMinionInstance> = {},
+): BoardMinionInstance {
   return {
     ...template,
     instanceId,
@@ -55,11 +56,11 @@ function fixtureMinion(
 }
 
 function definitionMinion(
-  template: MinionInstance,
+  template: BoardMinionInstance,
   definitionId: string,
   instanceId: string,
-  overrides: Partial<MinionInstance> = {},
-): MinionInstance {
+  overrides: Partial<BoardMinionInstance> = {},
+): BoardMinionInstance {
   const definition = getMinionDefinition(definitionId);
   return {
     ...template,
@@ -102,6 +103,100 @@ function prepareLockedCombat(state: GameState): void {
     player.shop = [];
     player.frozen = false;
   }
+}
+
+function createGameWithTribe(
+  tribe: GameState["activeTribes"][number],
+  startingSeed: number,
+): GameState {
+  for (let seed = startingSeed; seed < startingSeed + 10_000; seed += 1) {
+    const state = createGame(seed);
+    if (state.activeTribes.includes(tribe)) {
+      return state;
+    }
+  }
+  throw new Error(`Could not create a lobby containing ${tribe}`);
+}
+
+function replaceHumanShopWithCopies(
+  state: GameState,
+  definitionId: string,
+  count: number,
+): void {
+  const human = humanPlayer(state);
+  const template = human.shop[0];
+  assert.ok(template);
+  for (const offer of human.shop) {
+    state.pool[offer.definitionId] += offer.poolCopies;
+  }
+  assert.ok(state.pool[definitionId] >= count);
+  state.pool[definitionId] -= count;
+  human.shop = Array.from({ length: count }, (_, index) =>
+    definitionMinion(
+      template,
+      definitionId,
+      `controlled-offer-${definitionId}-${index}`,
+      { poolCopies: 1 },
+    ),
+  );
+}
+
+function totalPoolCopies(
+  state: GameState,
+  definitionId: string,
+): number {
+  let total = state.pool[definitionId] ?? 0;
+  for (const player of state.players) {
+    for (const card of [...player.board, ...player.hand, ...player.shop]) {
+      if (
+        card.kind === "minion" &&
+        card.definitionId === definitionId
+      ) {
+        total += card.poolCopies;
+      }
+    }
+  }
+  if (state.pendingInteraction?.kind === "discover") {
+    for (const option of state.pendingInteraction.options) {
+      if (option.definitionId === definitionId) {
+        total += option.poolCopies;
+      }
+    }
+  }
+  return total;
+}
+
+function tripleRewardFixture(
+  instanceId: string,
+  tier: TripleRewardSpellInstance["tier"] = 2,
+): TripleRewardSpellInstance {
+  return {
+    kind: "tripleReward",
+    instanceId,
+    definitionId: "triple-reward",
+    cardId: "TB_BaconShop_Triples_01",
+    name: "三连奖励",
+    tier,
+    tribe: "neutral",
+    tribes: [],
+    associatedTribes: [],
+    effectSupport: "complete",
+    sellValue: 0,
+    attack: 0,
+    health: 0,
+    golden: false,
+    taunt: false,
+    divineShield: false,
+    reborn: false,
+    poisonous: false,
+    venomous: false,
+    windfury: false,
+    cleave: false,
+    alwaysAttacksLowestAttack: false,
+    description: "发现一个比你当前酒馆等级高一级的随从。",
+    grantsTripleReward: false,
+    poolCopies: 0,
+  };
 }
 
 test("createGame builds one human and seven deterministic AI opponents", () => {
@@ -283,7 +378,7 @@ test("classic rule fixtures remain available but never enter the live pool", () 
     new Set(MINION_DEFINITIONS.map((definition) => definition.id)).size,
     MINION_DEFINITIONS.length,
   );
-  assert.equal(createGame(1).version, 2);
+  assert.equal(createGame(1).version, 3);
 });
 
 test("Wrath Weaver, Brann, and Mama Bear use their signature recruit triggers", () => {
@@ -1035,12 +1130,314 @@ test("three normal copies combine atomically into one buff-preserving golden", (
   assert.equal(state.pool[golden.definitionId], poolBeforeSellingGolden + 3);
 });
 
+test("a played triple grants the real reward spell and reserves a deterministic discover", () => {
+  let state = createGame(0xa101);
+  const definitionId = humanPlayer(state).shop[0].definitionId;
+  replaceHumanShopWithCopies(state, definitionId, 3);
+  humanPlayer(state).gold = 9;
+  const conservedBefore = Object.fromEntries(
+    LIVE_MINION_DEFINITIONS.map((definition) => [
+      definition.id,
+      totalPoolCopies(state, definition.id),
+    ]),
+  );
+
+  state = gameReducer(state, { type: "BUY_MINION", shopIndex: 0 });
+  state = gameReducer(state, { type: "BUY_MINION", shopIndex: 0 });
+  state = gameReducer(state, { type: "BUY_MINION", shopIndex: 0 });
+  const golden = humanPlayer(state).hand[0];
+  assert.equal(golden?.kind, "minion");
+  assert.equal(golden?.golden, true);
+  assert.equal(golden?.grantsTripleReward, true);
+
+  state = gameReducer(state, {
+    type: "PLAY_HAND_CARD",
+    cardInstanceId: golden.instanceId,
+  });
+  const reward = humanPlayer(state).hand.find(
+    (card) => card.kind === "tripleReward",
+  );
+  assert.ok(reward);
+  assert.equal(reward.cardId, "TB_BaconShop_Triples_01");
+  assert.equal(reward.tier, 2);
+  assert.equal(humanPlayer(state).board[0].grantsTripleReward, false);
+
+  // A Triple Reward carries the tier it was created for. Upgrading before
+  // casting it must not silently change the already visible reward.
+  humanPlayer(state).tavernTier = 2;
+  state = gameReducer(state, {
+    type: "PLAY_HAND_CARD",
+    cardInstanceId: reward.instanceId,
+  });
+  const pending = state.pendingInteraction;
+  assert.equal(pending?.kind, "discover");
+  assert.ok(pending?.kind === "discover");
+  assert.equal(pending.filter.exactTier, 2);
+  assert.equal(pending.options.length, 3);
+  assert.equal(
+    new Set(pending.options.map((option) => option.definitionId)).size,
+    3,
+  );
+  assert.ok(pending.options.every((option) => option.tier === 2));
+
+  for (const definition of LIVE_MINION_DEFINITIONS) {
+    assert.equal(
+      totalPoolCopies(state, definition.id),
+      conservedBefore[definition.id],
+      `${definition.id} must remain conserved while options are reserved`,
+    );
+  }
+
+  const frozenSnapshot = JSON.stringify(state);
+  const stale = gameReducer(state, {
+    type: "RESOLVE_INTERACTION",
+    interactionId: "interaction-stale",
+    optionInstanceId: pending.options[0].instanceId,
+  });
+  assert.strictEqual(stale, state);
+  assert.equal(JSON.stringify(stale), frozenSnapshot);
+  const invalidOption = gameReducer(state, {
+    type: "RESOLVE_INTERACTION",
+    interactionId: pending.interactionId,
+    optionInstanceId: "minion-not-an-option",
+  });
+  assert.strictEqual(invalidOption, state);
+  assert.equal(JSON.stringify(invalidOption), frozenSnapshot);
+
+  const restored = JSON.parse(JSON.stringify(state)) as GameState;
+  const resolution = {
+    type: "RESOLVE_INTERACTION" as const,
+    interactionId: pending.interactionId,
+    optionInstanceId: pending.options[0].instanceId,
+  };
+  const resolved = gameReducer(state, resolution);
+  const restoredResolved = gameReducer(restored, resolution);
+  assert.deepEqual(restoredResolved, resolved);
+  assert.equal(resolved.pendingInteraction, null);
+  assert.ok(
+    humanPlayer(resolved).hand.some(
+      (card) =>
+        card.kind === "minion" &&
+        card.instanceId === resolution.optionInstanceId,
+    ),
+  );
+  for (const definition of LIVE_MINION_DEFINITIONS) {
+    assert.equal(
+      totalPoolCopies(resolved, definition.id),
+      conservedBefore[definition.id],
+      `${definition.id} must remain conserved after choosing`,
+    );
+  }
+});
+
+test("Triple Reward discovers exactly Tier 6 when the Tavern is already Tier 6", () => {
+  let state = createGame(0xa102);
+  const human = humanPlayer(state);
+  human.tavernTier = 6;
+  human.hand = [tripleRewardFixture("tier-six-reward", 6)];
+
+  state = gameReducer(state, {
+    type: "PLAY_HAND_CARD",
+    cardInstanceId: "tier-six-reward",
+  });
+  const pending = state.pendingInteraction;
+  assert.ok(pending?.kind === "discover");
+  assert.equal(pending.filter.exactTier, 6);
+  assert.equal(pending.options.length, 3);
+  assert.ok(pending.options.every((option) => option.tier === 6));
+  assert.equal(
+    new Set(pending.options.map((option) => option.definitionId)).size,
+    3,
+  );
+});
+
+test("Wandering Sailor uses one stable target and stacks Golden and Brann repetitions", () => {
+  let ordinaryState = createGame(0xa103);
+  const ordinary = humanPlayer(ordinaryState);
+  const ordinaryTemplate = ordinary.shop[0];
+  ordinary.board = [
+    fixtureMinion(ordinaryTemplate, "ordinary-sailor-target", {
+      attack: 1,
+      health: 1,
+    }),
+  ];
+  ordinary.hand = [
+    definitionMinion(ordinaryTemplate, "BG35_702", "ordinary-sailor"),
+  ];
+  ordinaryState = gameReducer(ordinaryState, {
+    type: "PLAY_HAND_CARD",
+    cardInstanceId: "ordinary-sailor",
+  });
+  assert.deepEqual(ordinaryState.pendingInteraction, {
+    kind: "target",
+    interactionId: "interaction-1",
+    playerId: ordinaryState.humanPlayerId,
+    sourceInstanceId: "ordinary-sailor",
+    optionInstanceIds: ["ordinary-sailor-target"],
+    attack: 2,
+    health: 2,
+    repetitions: 1,
+  });
+
+  ordinaryState = gameReducer(ordinaryState, {
+    type: "RESOLVE_INTERACTION",
+    interactionId: "interaction-1",
+    optionInstanceId: "ordinary-sailor-target",
+  });
+  assert.equal(humanPlayer(ordinaryState).board[0].attack, 3);
+  assert.equal(humanPlayer(ordinaryState).board[0].health, 3);
+
+  let stackedState = createGame(0xa104);
+  const stacked = humanPlayer(stackedState);
+  const stackedTemplate = stacked.shop[0];
+  stacked.tavernSpellsCastThisTurn = 1;
+  stacked.board = [
+    fixtureMinion(stackedTemplate, "stacked-sailor-target", {
+      attack: 1,
+      health: 1,
+    }),
+    definitionMinion(stackedTemplate, "BG_LOE_077", "stacked-brann"),
+  ];
+  stacked.hand = [
+    definitionMinion(stackedTemplate, "BG35_702", "golden-sailor", {
+      golden: true,
+    }),
+  ];
+  stackedState = gameReducer(stackedState, {
+    type: "PLAY_HAND_CARD",
+    cardInstanceId: "golden-sailor",
+  });
+  const pending = stackedState.pendingInteraction;
+  assert.ok(pending?.kind === "target");
+  assert.equal(pending.attack, 4);
+  assert.equal(pending.health, 4);
+  assert.equal(pending.repetitions, 4);
+
+  const blocked = gameReducer(stackedState, { type: "END_TURN" });
+  assert.strictEqual(blocked, stackedState);
+  const invalid = gameReducer(stackedState, {
+    type: "RESOLVE_INTERACTION",
+    interactionId: pending.interactionId,
+    optionInstanceId: "golden-sailor",
+  });
+  assert.strictEqual(invalid, stackedState);
+
+  stackedState = gameReducer(stackedState, {
+    type: "RESOLVE_INTERACTION",
+    interactionId: pending.interactionId,
+    optionInstanceId: "stacked-sailor-target",
+  });
+  const buffed = humanPlayer(stackedState).board.find(
+    (minion) => minion.instanceId === "stacked-sailor-target",
+  );
+  assert.equal(buffed?.attack, 17);
+  assert.equal(buffed?.health, 17);
+});
+
+test("Predatory Tiger Shark chains discoveries and stops cleanly at the hand limit", () => {
+  let state = createGameWithTribe("beast", 0xa105);
+  const human = humanPlayer(state);
+  const template = human.shop[0];
+  human.tavernTier = 6;
+  human.board = [
+    definitionMinion(template, "BG_LOE_077", "shark-brann"),
+  ];
+  const fillerDefinitions = LIVE_MINION_DEFINITIONS.filter(
+    (definition) =>
+      definition.id !== "BG34_523" &&
+      !(definition.tribes ?? []).includes("beast") &&
+      !(definition.tribes ?? []).includes("all"),
+  ).slice(0, 8);
+  assert.equal(fillerDefinitions.length, 8);
+  human.hand = [
+    ...fillerDefinitions.map((definition, index) =>
+      definitionMinion(
+        template,
+        definition.id,
+        `shark-hand-filler-${index}`,
+      ),
+    ),
+    definitionMinion(template, "BG34_523", "golden-tiger-shark", {
+      golden: true,
+    }),
+  ];
+
+  state = gameReducer(state, {
+    type: "PLAY_HAND_CARD",
+    cardInstanceId: "golden-tiger-shark",
+  });
+  let pending = state.pendingInteraction;
+  assert.ok(pending?.kind === "discover");
+  assert.equal(pending.filter.tribe, "beast");
+  assert.equal(pending.filter.maximumTier, 6);
+  assert.equal(pending.remainingDiscoveries, 4);
+
+  state = gameReducer(state, {
+    type: "RESOLVE_INTERACTION",
+    interactionId: pending.interactionId,
+    optionInstanceId: pending.options[0].instanceId,
+  });
+  assert.equal(humanPlayer(state).hand.length, 9);
+  pending = state.pendingInteraction;
+  assert.ok(pending?.kind === "discover");
+  assert.equal(pending.remainingDiscoveries, 3);
+
+  state = gameReducer(state, {
+    type: "RESOLVE_INTERACTION",
+    interactionId: pending.interactionId,
+    optionInstanceId: pending.options[0].instanceId,
+  });
+  assert.equal(humanPlayer(state).hand.length, 10);
+  assert.equal(state.pendingInteraction, null);
+});
+
+test("AI deterministically casts Triple Reward and chooses the highest-scoring option", () => {
+  const first = createGame(0xa106);
+  first.activeTribes = [
+    "beast",
+    "mech",
+    "demon",
+    "murloc",
+    "dragon",
+  ];
+  for (const definition of LIVE_MINION_DEFINITIONS) {
+    if (definition.tier === 2) {
+      first.pool[definition.id] = 0;
+    }
+  }
+  for (const definitionId of ["BG21_015", "BG24_715", "BG27_002"]) {
+    first.pool[definitionId] = 1;
+  }
+  for (const player of first.players) {
+    player.gold = 0;
+    player.board = [];
+    player.hand = [];
+    player.shop = [];
+  }
+  const rewardedAi = first.players[1];
+  rewardedAi.tavernTier = 1;
+  rewardedAi.hand = [tripleRewardFixture("ai-triple-reward")];
+  const replay = jsonClone(first);
+
+  const firstCombat = gameReducer(first, { type: "END_TURN" });
+  const replayCombat = gameReducer(replay, { type: "END_TURN" });
+  assert.deepEqual(replayCombat, firstCombat);
+  assert.equal(firstCombat.pendingInteraction, null);
+  const resolvedAi = firstCombat.players[1];
+  assert.equal(
+    resolvedAi.hand.some((card) => card.kind === "tripleReward"),
+    false,
+  );
+  assert.equal(resolvedAi.board[0]?.definitionId, "BG21_015");
+});
+
 test("END_TURN runs seven AI turns and one complete deterministic combat round", () => {
   let state = createGame(505);
   state = applyActions(state, [
     { type: "BUY_MINION", shopIndex: 0 },
     { type: "PLAY_MINION", handIndex: 0 },
   ]);
+  humanPlayer(state).tavernSpellsCastThisTurn = 3;
   const permanentHumanBoard = jsonClone(humanPlayer(state).board);
 
   const combat = gameReducer(state, { type: "END_TURN" });
@@ -1086,6 +1483,7 @@ test("END_TURN runs seven AI turns and one complete deterministic combat round",
   assert.equal(nextRecruit.round, 2);
   assert.equal(nextRecruit.lastBattle, null);
   assert.equal(nextRecruit.lastRoundBattles.length, 0);
+  assert.equal(humanPlayer(nextRecruit).tavernSpellsCastThisTurn, 0);
 });
 
 test("the same seed and manual action sequence reproduce AI and battle state", () => {

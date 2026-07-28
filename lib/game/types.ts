@@ -18,6 +18,8 @@ export type Tribe =
 
 export type EffectSupport = "complete" | "partial";
 
+export type TavernTier = 1 | 2 | 3 | 4 | 5 | 6;
+
 export type EffectTarget =
   | "self"
   | "randomFriendly"
@@ -106,6 +108,26 @@ export type MinionEffect =
   | SummonRandomDeathrattleEffect
   | DamageAllMinionsEffect;
 
+export interface TargetedBuffBattlecry {
+  kind: "targetedBuff";
+  target: "otherFriendly";
+  attack: number;
+  health: number;
+  attackPerTavernSpell: number;
+  healthPerTavernSpell: number;
+  goldenMode: "repeat";
+}
+
+export interface DiscoverMinionBattlecry {
+  kind: "discoverMinion";
+  tribe: Tribe;
+  goldenMode: "repeat";
+}
+
+export type InteractiveBattlecry =
+  | TargetedBuffBattlecry
+  | DiscoverMinionBattlecry;
+
 export interface FriendlyTribeTrigger {
   tribe: Tribe;
   attack?: number;
@@ -146,7 +168,7 @@ export interface MinionDefinition {
   /** Hearthstone CardID used only to locate the familiar card artwork. */
   cardId: string;
   name: string;
-  tier: 1 | 2 | 3 | 4 | 5 | 6;
+  tier: TavernTier;
   /** Primary type retained for the current single-type engine compatibility. */
   tribe: Tribe;
   /** Printed minion types. Empty means the card is typeless. */
@@ -167,6 +189,7 @@ export interface MinionDefinition {
   cleave?: boolean;
   alwaysAttacksLowestAttack?: boolean;
   battlecry?: readonly MinionEffect[];
+  interactiveBattlecry?: InteractiveBattlecry;
   deathrattle?: readonly MinionEffect[];
   afterFriendlyPlayed?: FriendlyTribeTrigger;
   afterFriendlySummoned?: FriendlyTribeTrigger;
@@ -187,12 +210,19 @@ export interface MinionDefinition {
  * reserved in a shop. Combat works on cloned instances, never on the permanent
  * board itself.
  */
+/**
+ * Shared visual/card fields used by both board minions and the Triple Reward
+ * spell. Runtime minion factories always set `kind: "minion"`; the wider
+ * discriminator keeps the existing card renderer compatible while hand cards
+ * become a serializable union.
+ */
 export interface MinionInstance {
+  kind: "minion" | "tripleReward";
   instanceId: string;
   definitionId: string;
   cardId: string;
   name: string;
-  tier: 1 | 2 | 3 | 4 | 5 | 6;
+  tier: TavernTier;
   tribe: Tribe;
   tribes: Tribe[];
   associatedTribes: Tribe[];
@@ -211,11 +241,28 @@ export interface MinionInstance {
   alwaysAttacksLowestAttack: boolean;
   description: string;
   /**
+   * True only for a Golden minion produced by combining three owned copies.
+   * Combat/token Golden minions never grant a Triple Reward.
+   */
+  grantsTripleReward: boolean;
+  /**
    * Number of base copies represented in the shared pool. It is 1 for a
    * regular purchased minion, 3 for a golden minion, and 0 for combat tokens.
    */
   poolCopies: number;
 }
+
+export type BoardMinionInstance = MinionInstance & { kind: "minion" };
+
+export interface TripleRewardSpellInstance extends MinionInstance {
+  kind: "tripleReward";
+  cardId: "TB_BaconShop_Triples_01";
+  definitionId: "triple-reward";
+}
+
+export type HandCardInstance =
+  | BoardMinionInstance
+  | TripleRewardSpellInstance;
 
 export interface PlayerState {
   id: PlayerId;
@@ -223,13 +270,14 @@ export interface PlayerState {
   isHuman: boolean;
   health: number;
   alive: boolean;
-  tavernTier: 1 | 2 | 3 | 4 | 5 | 6;
+  tavernTier: TavernTier;
   gold: number;
-  board: MinionInstance[];
-  hand: MinionInstance[];
-  shop: MinionInstance[];
+  board: BoardMinionInstance[];
+  hand: HandCardInstance[];
+  shop: BoardMinionInstance[];
   frozen: boolean;
   upgradeDiscount: number;
+  tavernSpellsCastThisTurn: number;
   lastOpponentId?: PlayerId;
   eliminatedRound?: number;
   placement?: number;
@@ -261,6 +309,37 @@ export interface BattleEvent {
   minion?: MinionInstance;
 }
 
+interface PendingInteractionBase {
+  interactionId: string;
+  playerId: PlayerId;
+  sourceInstanceId: string;
+}
+
+export interface PendingTargetInteraction extends PendingInteractionBase {
+  kind: "target";
+  optionInstanceIds: string[];
+  attack: number;
+  health: number;
+  repetitions: number;
+}
+
+export interface DiscoverFilter {
+  exactTier?: TavernTier;
+  maximumTier?: TavernTier;
+  tribe?: Tribe;
+}
+
+export interface PendingDiscoverInteraction extends PendingInteractionBase {
+  kind: "discover";
+  options: BoardMinionInstance[];
+  filter: DiscoverFilter;
+  remainingDiscoveries: number;
+}
+
+export type PendingInteraction =
+  | PendingTargetInteraction
+  | PendingDiscoverInteraction;
+
 export type BattleResult = "win" | "loss" | "tie";
 
 export interface BattleSummary {
@@ -284,12 +363,17 @@ export interface BattleSummary {
 }
 
 export interface GameState {
-  version: 2;
+  /**
+   * The union keeps the legacy client-side guard type-safe while all newly
+   * created states use schema version 3.
+   */
+  version: 2 | 3;
   /** Invalidates local saves when the roster or its mechanics change. */
   contentVersion: string;
   seed: number;
   rngState: number;
   nextInstanceId: number;
+  nextInteractionId: number;
   phase: GamePhase;
   round: number;
   humanPlayerId: PlayerId;
@@ -298,6 +382,7 @@ export interface GameState {
   players: PlayerState[];
   /** Available (not owned and not reserved in a shop) copies by definition ID. */
   pool: Record<string, number>;
+  pendingInteraction: PendingInteraction | null;
   /** The human player's most recently resolved battle. */
   lastBattle: BattleSummary | null;
   /** All battles resolved by the latest END_TURN action. */
@@ -309,6 +394,16 @@ export type GameAction =
   | { type: "BUY_MINION"; shopIndex: number }
   | { type: "SELL_MINION"; boardIndex: number }
   | { type: "PLAY_MINION"; handIndex: number; boardIndex?: number }
+  | {
+      type: "PLAY_HAND_CARD";
+      cardInstanceId: string;
+      boardIndex?: number;
+    }
+  | {
+      type: "RESOLVE_INTERACTION";
+      interactionId: string;
+      optionInstanceId: string;
+    }
   | { type: "REFRESH_SHOP" }
   | { type: "TOGGLE_FREEZE" }
   | { type: "UPGRADE_TAVERN" }

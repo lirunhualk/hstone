@@ -9,29 +9,39 @@ import type {
   BattleEvent,
   BattleResult,
   BattleSummary,
+  BoardMinionInstance,
   BuffEffect,
+  DiscoverFilter,
   GameAction,
   GameState,
   MinionEffect,
   MinionInstance,
+  PendingDiscoverInteraction,
   PlayerId,
   PlayerState,
+  TavernTier,
   Tribe,
+  TripleRewardSpellInstance,
 } from "./types.ts";
 
 export type {
   BattleEvent,
   BattleResult,
   BattleSummary,
+  BoardMinionInstance,
   GameAction,
   GamePhase,
   GameState,
+  HandCardInstance,
   MinionDefinition,
   MinionEffect,
   MinionInstance,
+  PendingInteraction,
   PlayerId,
   PlayerState,
+  TavernTier,
   Tribe,
+  TripleRewardSpellInstance,
 } from "./types.ts";
 
 const HUMAN_PLAYER_ID = "player-0";
@@ -60,6 +70,8 @@ const MAX_HAND_SIZE = 10;
 const BUY_COST = 3;
 const REFRESH_COST = 1;
 const MAX_COMBAT_ATTACKS = 100;
+const TRIPLE_REWARD_CARD_ID = "TB_BaconShop_Triples_01" as const;
+const TRIPLE_REWARD_DEFINITION_ID = "triple-reward" as const;
 const LOBBY_TRIBES: readonly Tribe[] = [
   "beast",
   "mech",
@@ -73,7 +85,7 @@ const LOBBY_TRIBES: readonly Tribe[] = [
   "undead",
 ];
 
-type MutableTier = 1 | 2 | 3 | 4 | 5 | 6;
+type MutableTier = TavernTier;
 
 interface Pairing {
   playerA: PlayerState;
@@ -91,16 +103,21 @@ function cloneState(state: GameState): GameState {
   return JSON.parse(JSON.stringify(state)) as GameState;
 }
 
-function cloneMinion(minion: MinionInstance): MinionInstance {
-  return { ...minion };
+function cloneMinion(minion: MinionInstance): BoardMinionInstance {
+  if (minion.kind !== "minion") {
+    throw new Error("Only minions can be cloned onto a combat board");
+  }
+  return { ...minion, kind: "minion" };
 }
 
-function cloneBoard(board: readonly MinionInstance[]): MinionInstance[] {
+function cloneBoard(
+  board: readonly BoardMinionInstance[],
+): BoardMinionInstance[] {
   return board.map(cloneMinion);
 }
 
 function minionHasTribe(
-  minion: Pick<MinionInstance, "tribe" | "tribes">,
+  minion: Pick<BoardMinionInstance, "tribe" | "tribes">,
   tribe: Tribe | undefined,
 ): boolean {
   if (!tribe || tribe === "neutral") {
@@ -185,9 +202,10 @@ function createMinionInstance(
   state: GameState,
   definitionId: string,
   poolCopies: number,
-): MinionInstance {
+): BoardMinionInstance {
   const definition = getMinionDefinition(definitionId);
-  const instance: MinionInstance = {
+  const instance: BoardMinionInstance = {
+    kind: "minion",
     instanceId: `minion-${state.nextInstanceId}`,
     definitionId: definition.id,
     cardId: definition.cardId,
@@ -214,6 +232,7 @@ function createMinionInstance(
     alwaysAttacksLowestAttack:
       definition.alwaysAttacksLowestAttack === true,
     description: definition.description,
+    grantsTripleReward: false,
     poolCopies,
   };
   state.nextInstanceId += 1;
@@ -224,7 +243,9 @@ function describeGoldenMinion(description: string): string {
   return `金色随从：基础属性已翻倍；可倍增的效果会按金色规则结算。普通版本牌面：${description}`;
 }
 
-function makeGoldenToken(minion: MinionInstance): MinionInstance {
+function makeGoldenToken(
+  minion: BoardMinionInstance,
+): BoardMinionInstance {
   if (minion.golden) {
     return minion;
   }
@@ -239,6 +260,48 @@ function makeGoldenToken(minion: MinionInstance): MinionInstance {
   return minion;
 }
 
+function createTripleRewardSpell(
+  state: GameState,
+  tavernTier: TavernTier,
+): TripleRewardSpellInstance {
+  const rewardTier = Math.min(6, tavernTier + 1) as TavernTier;
+  const instance: TripleRewardSpellInstance = {
+    kind: "tripleReward",
+    instanceId: `card-${state.nextInstanceId}`,
+    definitionId: TRIPLE_REWARD_DEFINITION_ID,
+    cardId: TRIPLE_REWARD_CARD_ID,
+    name: "三连奖励",
+    tier: rewardTier,
+    tribe: "neutral",
+    tribes: [],
+    associatedTribes: [],
+    effectSupport: "complete",
+    sellValue: 0,
+    attack: 0,
+    health: 0,
+    golden: false,
+    taunt: false,
+    divineShield: false,
+    reborn: false,
+    poisonous: false,
+    venomous: false,
+    windfury: false,
+    cleave: false,
+    alwaysAttacksLowestAttack: false,
+    description: `发现一个 ${rewardTier} 级随从。`,
+    grantsTripleReward: false,
+    poolCopies: 0,
+  };
+  state.nextInstanceId += 1;
+  return instance;
+}
+
+function nextInteractionId(state: GameState): string {
+  const interactionId = `interaction-${state.nextInteractionId}`;
+  state.nextInteractionId += 1;
+  return interactionId;
+}
+
 function returnMinionToPool(state: GameState, minion: MinionInstance): void {
   if (minion.poolCopies <= 0) {
     return;
@@ -250,7 +313,7 @@ function returnMinionToPool(state: GameState, minion: MinionInstance): void {
 function drawFromPool(
   state: GameState,
   tavernTier: MutableTier,
-): MinionInstance | null {
+): BoardMinionInstance | null {
   const eligible = MINION_DEFINITIONS.filter(
     (definition) =>
       definitionIsAvailable(definition, state.activeTribes) &&
@@ -275,6 +338,70 @@ function drawFromPool(
     roll -= copies;
   }
   return null;
+}
+
+function definitionHasTribe(
+  definition: (typeof MINION_DEFINITIONS)[number],
+  tribe: Tribe,
+): boolean {
+  const tribes =
+    definition.tribes ??
+    (definition.tribe === "neutral" ? [] : [definition.tribe]);
+  return tribes.includes("all") || tribes.includes(tribe);
+}
+
+function reserveDiscoverOptions(
+  state: GameState,
+  filter: DiscoverFilter,
+): BoardMinionInstance[] {
+  const candidates = MINION_DEFINITIONS.filter((definition) => {
+    if (
+      !definitionIsAvailable(definition, state.activeTribes) ||
+      (state.pool[definition.id] ?? 0) <= 0
+    ) {
+      return false;
+    }
+    if (
+      filter.exactTier !== undefined &&
+      definition.tier !== filter.exactTier
+    ) {
+      return false;
+    }
+    if (
+      filter.maximumTier !== undefined &&
+      definition.tier > filter.maximumTier
+    ) {
+      return false;
+    }
+    return (
+      filter.tribe === undefined ||
+      definitionHasTribe(definition, filter.tribe)
+    );
+  });
+  const options: BoardMinionInstance[] = [];
+  while (candidates.length > 0 && options.length < 3) {
+    const totalCopies = candidates.reduce(
+      (total, definition) => total + (state.pool[definition.id] ?? 0),
+      0,
+    );
+    if (totalCopies <= 0) {
+      break;
+    }
+    let roll = Math.floor(nextRandom(state) * totalCopies);
+    let candidateIndex = 0;
+    for (let index = 0; index < candidates.length; index += 1) {
+      const copies = state.pool[candidates[index].id] ?? 0;
+      if (roll < copies) {
+        candidateIndex = index;
+        break;
+      }
+      roll -= copies;
+    }
+    const [definition] = candidates.splice(candidateIndex, 1);
+    state.pool[definition.id] -= 1;
+    options.push(createMinionInstance(state, definition.id, 1));
+  }
+  return options;
 }
 
 function releaseShop(state: GameState, player: PlayerState): void {
@@ -543,7 +670,11 @@ function resolveTriples(state: GameState, player: PlayerState): void {
     combined = false;
     const definitionIds = [
       ...player.board.map((minion) => minion.definitionId),
-      ...player.hand.map((minion) => minion.definitionId),
+      ...player.hand
+        .filter(
+          (card): card is BoardMinionInstance => card.kind === "minion",
+        )
+        .map((minion) => minion.definitionId),
     ];
     for (const definitionId of definitionIds) {
       const boardMatches = player.board.filter(
@@ -551,7 +682,8 @@ function resolveTriples(state: GameState, player: PlayerState): void {
           minion.definitionId === definitionId && minion.golden === false,
       );
       const handMatches = player.hand.filter(
-        (minion) =>
+        (minion): minion is BoardMinionInstance =>
+          minion.kind === "minion" &&
           minion.definitionId === definitionId && minion.golden === false,
       );
       const matches = [...boardMatches, ...handMatches];
@@ -583,6 +715,7 @@ function resolveTriples(state: GameState, player: PlayerState): void {
         consumed.reduce((total, minion) => total + minion.poolCopies, 0),
       );
       golden.golden = true;
+      golden.grantsTripleReward = true;
       golden.name = `金色·${definition.name}`;
       golden.attack = definition.attack * 2 + extraAttack;
       golden.health = definition.health * 2 + extraHealth;
@@ -641,14 +774,20 @@ function playMinion(
   handIndex: number,
   boardIndex?: number,
 ): boolean {
+  const card = player.hand[handIndex];
   if (
     player.board.length >= MAX_BOARD_SIZE ||
     handIndex < 0 ||
-    handIndex >= player.hand.length
+    handIndex >= player.hand.length ||
+    card?.kind !== "minion"
   ) {
     return false;
   }
-  const [minion] = player.hand.splice(handIndex, 1);
+  const [removed] = player.hand.splice(handIndex, 1);
+  if (removed.kind !== "minion") {
+    throw new Error("PLAY_MINION removed a non-minion hand card");
+  }
+  const minion = removed;
   const insertAt =
     boardIndex === undefined
       ? player.board.length
@@ -659,10 +798,54 @@ function playMinion(
   for (let count = 0; count < triggerCount; count += 1) {
     applyRecruitEffects(state, player, minion, battlecry);
   }
+  if (minion.grantsTripleReward && player.hand.length < MAX_HAND_SIZE) {
+    minion.grantsTripleReward = false;
+    player.hand.push(
+      createTripleRewardSpell(state, player.tavernTier),
+    );
+  }
   applyRecruitSummonTriggers(player, minion);
   applyAfterFriendlyPlayed(player, minion);
   resolveTriples(state, player);
+  beginInteractiveBattlecry(state, player, minion);
   return true;
+}
+
+function castTripleReward(
+  state: GameState,
+  player: PlayerState,
+  handIndex: number,
+): boolean {
+  const card = player.hand[handIndex];
+  if (card?.kind !== "tripleReward") {
+    return false;
+  }
+  player.hand.splice(handIndex, 1);
+  beginDiscoverInteraction(
+    state,
+    player,
+    card.instanceId,
+    { exactTier: card.tier },
+    1,
+  );
+  return true;
+}
+
+function playHandCard(
+  state: GameState,
+  player: PlayerState,
+  cardInstanceId: string,
+  boardIndex?: number,
+): boolean {
+  const handIndex = player.hand.findIndex(
+    (card) => card.instanceId === cardInstanceId,
+  );
+  if (handIndex < 0) {
+    return false;
+  }
+  return player.hand[handIndex].kind === "minion"
+    ? playMinion(state, player, handIndex, boardIndex)
+    : castTripleReward(state, player, handIndex);
 }
 
 function refreshShop(state: GameState, player: PlayerState): boolean {
@@ -693,6 +876,7 @@ function upgradeTavern(state: GameState, player: PlayerState): boolean {
 function ownedNormalCount(player: PlayerState, definitionId: string): number {
   return [...player.board, ...player.hand].filter(
     (minion) =>
+      minion.kind === "minion" &&
       minion.definitionId === definitionId && minion.golden === false,
   ).length;
 }
@@ -701,7 +885,10 @@ function tribeCount(player: PlayerState, tribe: Tribe): number {
   return player.board.filter((minion) => minionHasTribe(minion, tribe)).length;
 }
 
-function minionScore(player: PlayerState, minion: MinionInstance): number {
+function minionScore(
+  player: PlayerState,
+  minion: BoardMinionInstance,
+): number {
   let score = minion.attack + minion.health;
   if (minion.divineShield) {
     score += Math.max(3, minion.attack * 0.65);
@@ -743,18 +930,240 @@ function minionScore(player: PlayerState, minion: MinionInstance): number {
   return score;
 }
 
+function bestMinionByScore(
+  player: PlayerState,
+  options: readonly BoardMinionInstance[],
+): BoardMinionInstance {
+  return [...options].sort((left, right) => {
+    const scoreDifference =
+      minionScore(player, right) - minionScore(player, left);
+    return scoreDifference !== 0
+      ? scoreDifference
+      : left.instanceId.localeCompare(right.instanceId);
+  })[0];
+}
+
+function returnDiscoverOptions(
+  state: GameState,
+  options: readonly BoardMinionInstance[],
+  selectedInstanceId?: string,
+): void {
+  for (const option of options) {
+    if (option.instanceId !== selectedInstanceId) {
+      returnMinionToPool(state, option);
+    }
+  }
+}
+
+function beginDiscoverInteraction(
+  state: GameState,
+  player: PlayerState,
+  sourceInstanceId: string,
+  filter: DiscoverFilter,
+  discoveries: number,
+): void {
+  if (
+    discoveries <= 0 ||
+    player.hand.length >= MAX_HAND_SIZE ||
+    state.pendingInteraction !== null
+  ) {
+    return;
+  }
+  const options = reserveDiscoverOptions(state, filter);
+  if (options.length === 0) {
+    return;
+  }
+  if (!player.isHuman) {
+    const selected = bestMinionByScore(player, options);
+    returnDiscoverOptions(state, options, selected.instanceId);
+    player.hand.push(selected);
+    resolveTriples(state, player);
+    beginDiscoverInteraction(
+      state,
+      player,
+      sourceInstanceId,
+      filter,
+      discoveries - 1,
+    );
+    return;
+  }
+  const interaction: PendingDiscoverInteraction = {
+    kind: "discover",
+    interactionId: nextInteractionId(state),
+    playerId: player.id,
+    sourceInstanceId,
+    options,
+    filter: { ...filter },
+    remainingDiscoveries: discoveries,
+  };
+  state.pendingInteraction = interaction;
+}
+
+function beginInteractiveBattlecry(
+  state: GameState,
+  player: PlayerState,
+  source: BoardMinionInstance,
+): void {
+  const ability = getMinionDefinition(
+    source.definitionId,
+  ).interactiveBattlecry;
+  if (!ability) {
+    return;
+  }
+  const goldenRepetitions =
+    source.golden && ability.goldenMode === "repeat" ? 2 : 1;
+  const repetitions =
+    battlecryTriggerCount(player) * goldenRepetitions;
+  if (ability.kind === "discoverMinion") {
+    beginDiscoverInteraction(
+      state,
+      player,
+      source.instanceId,
+      {
+        maximumTier: player.tavernTier,
+        tribe: ability.tribe,
+      },
+      repetitions,
+    );
+    return;
+  }
+
+  const candidates = player.board.filter(
+    (minion) => minion.instanceId !== source.instanceId,
+  );
+  if (candidates.length === 0) {
+    return;
+  }
+  const attack =
+    ability.attack +
+    ability.attackPerTavernSpell * player.tavernSpellsCastThisTurn;
+  const health =
+    ability.health +
+    ability.healthPerTavernSpell * player.tavernSpellsCastThisTurn;
+  if (!player.isHuman) {
+    const target = bestMinionByScore(player, candidates);
+    target.attack += attack * repetitions;
+    target.health += health * repetitions;
+    return;
+  }
+  state.pendingInteraction = {
+    kind: "target",
+    interactionId: nextInteractionId(state),
+    playerId: player.id,
+    sourceInstanceId: source.instanceId,
+    optionInstanceIds: candidates.map((minion) => minion.instanceId),
+    attack,
+    health,
+    repetitions,
+  };
+}
+
+function resolvePendingInteraction(
+  state: GameState,
+  action: Extract<GameAction, { type: "RESOLVE_INTERACTION" }>,
+): GameState {
+  const pending = state.pendingInteraction;
+  if (
+    !pending ||
+    pending.interactionId !== action.interactionId ||
+    pending.playerId !== state.humanPlayerId
+  ) {
+    return state;
+  }
+  const player = findPlayer(state, pending.playerId);
+  if (!player) {
+    return state;
+  }
+  if (pending.kind === "target") {
+    if (!pending.optionInstanceIds.includes(action.optionInstanceId)) {
+      return state;
+    }
+    const target = player.board.find(
+      (minion) => minion.instanceId === action.optionInstanceId,
+    );
+    if (!target) {
+      return state;
+    }
+    const next = cloneState(state);
+    const nextPlayer = findPlayer(next, pending.playerId);
+    const nextTarget = nextPlayer?.board.find(
+      (minion) => minion.instanceId === action.optionInstanceId,
+    );
+    if (!nextTarget) {
+      return state;
+    }
+    nextTarget.attack += pending.attack * pending.repetitions;
+    nextTarget.health += pending.health * pending.repetitions;
+    next.pendingInteraction = null;
+    return next;
+  }
+
+  const selected = pending.options.find(
+    (option) => option.instanceId === action.optionInstanceId,
+  );
+  if (!selected || player.hand.length >= MAX_HAND_SIZE) {
+    return state;
+  }
+  const next = cloneState(state);
+  const nextPlayer = findPlayer(next, pending.playerId);
+  const nextPending = next.pendingInteraction;
+  if (!nextPlayer || nextPending?.kind !== "discover") {
+    return state;
+  }
+  const nextSelected = nextPending.options.find(
+    (option) => option.instanceId === action.optionInstanceId,
+  );
+  if (!nextSelected) {
+    return state;
+  }
+  returnDiscoverOptions(
+    next,
+    nextPending.options,
+    nextSelected.instanceId,
+  );
+  nextPlayer.hand.push(nextSelected);
+  resolveTriples(next, nextPlayer);
+  next.pendingInteraction = null;
+  beginDiscoverInteraction(
+    next,
+    nextPlayer,
+    nextPending.sourceInstanceId,
+    nextPending.filter,
+    nextPending.remainingDiscoveries - 1,
+  );
+  return next;
+}
+
 function playAiHand(state: GameState, player: PlayerState): void {
-  while (player.hand.length > 0 && player.board.length < MAX_BOARD_SIZE) {
+  while (player.hand.length > 0) {
+    const reward = player.hand.find(
+      (card): card is TripleRewardSpellInstance =>
+        card.kind === "tripleReward",
+    );
+    if (reward) {
+      playHandCard(state, player, reward.instanceId);
+      continue;
+    }
+    if (player.board.length >= MAX_BOARD_SIZE) {
+      break;
+    }
+    const minions = player.hand.filter(
+      (card): card is BoardMinionInstance => card.kind === "minion",
+    );
+    if (minions.length === 0) {
+      break;
+    }
     let bestIndex = 0;
     let bestScore = Number.NEGATIVE_INFINITY;
-    for (let index = 0; index < player.hand.length; index += 1) {
-      const score = minionScore(player, player.hand[index]);
+    for (let index = 0; index < minions.length; index += 1) {
+      const score = minionScore(player, minions[index]);
       if (score > bestScore) {
         bestScore = score;
         bestIndex = index;
       }
     }
-    playMinion(state, player, bestIndex);
+    const chosen = minions[bestIndex];
+    playHandCard(state, player, chosen.instanceId);
   }
 }
 
@@ -1755,7 +2164,8 @@ function simulateBattle(
       );
       const cleaveTargets = currentAttacker.cleave
         ? [enemyBoard[targetIndex - 1], enemyBoard[targetIndex + 1]].filter(
-            (minion): minion is MinionInstance => minion !== undefined,
+            (minion): minion is BoardMinionInstance =>
+              minion !== undefined,
           )
         : [];
       pushBattleEvent(events, {
@@ -1977,6 +2387,7 @@ function beginNextRecruit(state: GameState): void {
   state.lastRoundBattles = [];
   for (const player of alivePlayers) {
     player.gold = Math.min(10, state.round + 2);
+    player.tavernSpellsCastThisTurn = 0;
     if (player.tavernTier < 6) {
       player.upgradeDiscount += 1;
     }
@@ -2005,20 +2416,23 @@ export function createGame(seed?: number): GameState {
     shop: [],
     frozen: false,
     upgradeDiscount: 0,
+    tavernSpellsCastThisTurn: 0,
   }));
   const pool: Record<string, number> = {};
   const state: GameState = {
-    version: 2,
+    version: 3,
     contentVersion: CURRENT_ROSTER_VERSION,
     seed: normalizedSeed,
     rngState: normalizedSeed,
     nextInstanceId: 1,
+    nextInteractionId: 1,
     phase: "recruit",
     round: 1,
     humanPlayerId: HUMAN_PLAYER_ID,
     activeTribes: [],
     players,
     pool,
+    pendingInteraction: null,
     lastBattle: null,
     lastRoundBattles: [],
     winnerId: null,
@@ -2044,6 +2458,12 @@ export function createGame(seed?: number): GameState {
 }
 
 export function gameReducer(state: GameState, action: GameAction): GameState {
+  if (action.type === "RESOLVE_INTERACTION") {
+    return resolvePendingInteraction(state, action);
+  }
+  if (state.pendingInteraction !== null) {
+    return state;
+  }
   const next = cloneState(state);
   if (action.type === "CONTINUE") {
     if (next.phase === "combat") {
@@ -2068,6 +2488,14 @@ export function gameReducer(state: GameState, action: GameAction): GameState {
       break;
     case "PLAY_MINION":
       playMinion(next, player, action.handIndex, action.boardIndex);
+      break;
+    case "PLAY_HAND_CARD":
+      playHandCard(
+        next,
+        player,
+        action.cardInstanceId,
+        action.boardIndex,
+      );
       break;
     case "REFRESH_SHOP":
       refreshShop(next, player);

@@ -3,7 +3,7 @@ import liveRosterSnapshot from "./generated/battlegrounds-36.0.3-247416.zhCN.jso
 };
 import type { MinionDefinition, Tribe } from "./types.ts";
 
-export const CURRENT_ROSTER_VERSION = "battlegrounds-36.0.3-247416-v2";
+export const CURRENT_ROSTER_VERSION = "battlegrounds-36.0.3-247416-v3";
 /** Compatibility alias for existing save and engine imports. */
 export const CLASSIC_ROSTER_VERSION = CURRENT_ROSTER_VERSION;
 
@@ -728,13 +728,6 @@ function plainCardText(html: string): string {
     .trim();
 }
 
-function onlySupportedKeywordText(description: string): boolean {
-  const residue = description
-    .replace(/嘲讽|圣盾|复生|风怒|烈毒/gu, "")
-    .replace(/[\s，。；、,.!！?？：:]/gu, "");
-  return residue.length === 0;
-}
-
 function hasMechanic(card: LiveRosterCard, mechanic: string): boolean {
   return card.mechanics.includes(mechanic);
 }
@@ -1011,7 +1004,61 @@ const LIVE_RULE_OVERRIDES: Readonly<
     sellValue: 3,
     goldenSellValue: 6,
   },
+  BG35_702: {
+    interactiveBattlecry: {
+      kind: "targetedBuff",
+      target: "otherFriendly",
+      attack: 2,
+      health: 2,
+      attackPerTavernSpell: 2,
+      healthPerTavernSpell: 2,
+      goldenMode: "repeat",
+    },
+  },
+  BG34_523: {
+    interactiveBattlecry: {
+      kind: "discoverMinion",
+      tribe: "beast",
+      goldenMode: "repeat",
+    },
+  },
 };
+
+/**
+ * A live card is marked complete only after its entire printed behavior has a
+ * rules implementation. Keeping this allowlist explicit prevents a small
+ * partial override from accidentally upgrading the whole card to "complete".
+ */
+const FULLY_SUPPORTED_LIVE_CARD_IDS = new Set([
+  "BG21_014",
+  "BG25_001",
+  "BG25_010",
+  "BG25_022",
+  "BG25_354",
+  "BG26_805",
+  "BG26_817",
+  "BG28_300",
+  "BG29_611",
+  "BG30_125",
+  "BG31_803",
+  "BG32_235",
+  "BG33_156",
+  "BG34_523",
+  "BG34_630",
+  "BG34_636t",
+  "BG34_637t",
+  "BG34_731",
+  "BG35_702",
+  "BG_DAL_775",
+  "BGS_004",
+  "BGS_012",
+  "BGS_018",
+  "BGS_049",
+  "BGS_071",
+  "BGS_119",
+  "BGS_131",
+  "BG_LOE_077",
+]);
 
 function createLiveDefinition(card: LiveRosterCard): MinionDefinition {
   if (
@@ -1035,14 +1082,9 @@ function createLiveDefinition(card: LiveRosterCard): MinionDefinition {
     throw new Error(`Missing legacy rules fixture for ${card.id}`);
   }
 
-  const effectSupport =
-    reusedFixture ||
-    liveRuleOverride ||
-    description.length === 0 ||
-    onlySupportedKeywordText(description) ||
-    cleave
-      ? "complete"
-      : "partial";
+  const effectSupport = FULLY_SUPPORTED_LIVE_CARD_IDS.has(card.id)
+    ? "complete"
+    : "partial";
 
   return {
     ...reusedFixture,

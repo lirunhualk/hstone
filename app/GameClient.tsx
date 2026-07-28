@@ -7,6 +7,7 @@ import {
   useRef,
   useState,
   type CSSProperties,
+  type KeyboardEvent as ReactKeyboardEvent,
   type PointerEvent as ReactPointerEvent,
   type PointerEventHandler,
 } from "react";
@@ -20,7 +21,9 @@ import {
   type GameAction,
   type GameState,
   type MinionInstance,
+  type PendingInteraction,
   type PlayerState,
+  type TripleRewardSpellInstance,
   type Tribe,
 } from "../lib/game/engine";
 import {
@@ -28,7 +31,7 @@ import {
   TRIBE_NAMES,
 } from "../lib/game/content";
 
-const SAVE_KEY = "hearthstone-battlegrounds-local.save.v2";
+const SAVE_KEY = "hearthstone-battlegrounds-local.save.v3";
 const INITIAL_SEED = 0x53544152;
 const BOARD_LIMIT = 7;
 const DRAG_THRESHOLD_PX = 8;
@@ -96,17 +99,78 @@ const TRIBE_HUE: Record<Tribe, number> = {
   neutral: 42,
 };
 
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return value !== null && typeof value === "object";
+}
+
+function isPendingInteraction(
+  value: unknown,
+): value is PendingInteraction {
+  if (
+    !isRecord(value) ||
+    typeof value.interactionId !== "string" ||
+    typeof value.playerId !== "string" ||
+    typeof value.sourceInstanceId !== "string"
+  ) {
+    return false;
+  }
+  if (value.kind === "target") {
+    return (
+      Array.isArray(value.optionInstanceIds) &&
+      value.optionInstanceIds.length > 0 &&
+      value.optionInstanceIds.every(
+        (instanceId) => typeof instanceId === "string",
+      ) &&
+      typeof value.attack === "number" &&
+      typeof value.health === "number" &&
+      typeof value.repetitions === "number" &&
+      value.repetitions > 0
+    );
+  }
+  if (value.kind !== "discover") return false;
+  return (
+    Array.isArray(value.options) &&
+    value.options.length > 0 &&
+    value.options.every(
+      (option) =>
+        isRecord(option) &&
+        option.kind === "minion" &&
+        typeof option.instanceId === "string",
+    ) &&
+    isRecord(value.filter) &&
+    typeof value.remainingDiscoveries === "number" &&
+    value.remainingDiscoveries > 0
+  );
+}
+
 function isGameState(value: unknown): value is GameState {
   if (!value || typeof value !== "object") return false;
   const candidate = value as Partial<GameState>;
   return (
-    candidate.version === 2 &&
+    candidate.version === 3 &&
     candidate.contentVersion === CURRENT_ROSTER_VERSION &&
     typeof candidate.seed === "number" &&
+    typeof candidate.nextInteractionId === "number" &&
     Array.isArray(candidate.activeTribes) &&
     candidate.activeTribes.length === 5 &&
     Array.isArray(candidate.players) &&
     candidate.players.length === 8 &&
+    candidate.players.every(
+      (player) =>
+        typeof player.tavernSpellsCastThisTurn === "number" &&
+        Array.isArray(player.hand) &&
+        player.hand.every(
+          (card) =>
+            card.kind === "minion" || card.kind === "tripleReward",
+        ),
+    ) &&
+    (candidate.pendingInteraction === null ||
+      (isPendingInteraction(candidate.pendingInteraction) &&
+        candidate.players.some(
+          (player) =>
+            player.id === candidate.pendingInteraction?.playerId &&
+            player.isHuman,
+        ))) &&
     typeof candidate.humanPlayerId === "string" &&
     (candidate.phase === "recruit" ||
       candidate.phase === "combat" ||
@@ -168,7 +232,8 @@ function selectionUnit(
   player: PlayerState,
 ): MinionInstance | null {
   if (!selection) return null;
-  return player[selection.zone][selection.index] ?? null;
+  const card = player[selection.zone][selection.index];
+  return card?.kind === "minion" ? card : null;
 }
 
 function unitKeyword(unit: MinionInstance): string {
@@ -216,6 +281,8 @@ function UnitCard({
   dragging = false,
   combatActor = false,
   combatTarget = false,
+  choiceTarget = false,
+  disabled = false,
   dragHandlers,
   testId,
   onClick,
@@ -228,6 +295,8 @@ function UnitCard({
   dragging?: boolean;
   combatActor?: boolean;
   combatTarget?: boolean;
+  choiceTarget?: boolean;
+  disabled?: boolean;
   dragHandlers?: DragPointerHandlers;
   testId?: string;
   onClick?: () => void;
@@ -241,9 +310,16 @@ function UnitCard({
         dragEnabled ? " is-draggable" : ""
       }${dragging ? " is-drag-source" : ""}${
         combatActor ? " is-combat-actor" : ""
-      }${combatTarget ? " is-combat-target" : ""}`}
-      aria-label={`${unit.name}，${unit.attack} 攻击，${unit.health} 生命`}
+      }${combatTarget ? " is-combat-target" : ""}${
+        choiceTarget ? " is-choice-target" : ""
+      }${disabled ? " is-disabled" : ""}`}
+      aria-label={`${unit.name}，${unit.tier} 级，${printedTribeLabel(
+        unit,
+      )}，${unit.attack} 攻击，${unit.health} 生命，${
+        unit.description
+      }${choiceTarget ? "，可选择为效果目标" : ""}`}
       aria-pressed={selected}
+      aria-disabled={disabled}
       aria-describedby={dragEnabled ? "drag-instructions" : undefined}
       data-combat-role={
         combatActor && combatTarget
@@ -258,10 +334,43 @@ function UnitCard({
       data-testid={testId}
       data-unit-instance-id={unit.instanceId}
       onClick={onClick}
+      disabled={disabled}
       style={{ "--card-hue": TRIBE_HUE[unit.tribe] } as CSSProperties}
       {...dragHandlers}
     >
       <UnitCardFace unit={unit} />
+    </button>
+  );
+}
+
+function TripleRewardCard({
+  card,
+  disabled = false,
+  testId,
+  onPlay,
+}: {
+  card: TripleRewardSpellInstance;
+  disabled?: boolean;
+  testId?: string;
+  onPlay: () => void;
+}) {
+  return (
+    <button
+      type="button"
+      className="triple-reward-card"
+      aria-label={`三连奖励，发现一个 ${card.tier} 级随从`}
+      data-testid={testId}
+      disabled={disabled}
+      onClick={onPlay}
+      style={{ "--card-hue": TRIBE_HUE.neutral } as CSSProperties}
+    >
+      <CardArtwork unit={card} kind="portrait" />
+      <span className="triple-reward-tier">{card.tier}</span>
+      <span className="triple-reward-name">三连奖励</span>
+      <span className="triple-reward-copy">
+        发现一个 <strong>{card.tier}</strong> 级随从
+      </span>
+      <span className="triple-reward-hint">点击使用</span>
     </button>
   );
 }
@@ -317,9 +426,12 @@ function BoardRow({
   dragSession,
   actorInstanceId,
   targetInstanceId,
+  choiceTargetIds,
   getDragHandlers,
   onUnitClick,
+  onChoiceTarget,
   onEmptyClick,
+  interactionLocked = false,
 }: {
   units: MinionInstance[];
   side: "enemy" | "friendly";
@@ -328,12 +440,15 @@ function BoardRow({
   dragSession?: DragSession | null;
   actorInstanceId?: string;
   targetInstanceId?: string;
+  choiceTargetIds?: readonly string[];
   getDragHandlers?: (
     source: DragSource,
     unit: MinionInstance,
   ) => DragPointerHandlers;
   onUnitClick?: (index: number) => void;
+  onChoiceTarget?: (instanceId: string) => void;
   onEmptyClick?: (index: number) => void;
+  interactionLocked?: boolean;
 }) {
   const slotCount =
     side === "enemy"
@@ -353,6 +468,9 @@ function BoardRow({
     >
       {Array.from({ length: slotCount }, (_, index) => {
         const unit = units[index];
+        const isChoiceTarget =
+          unit !== undefined &&
+          choiceTargetIds?.includes(unit.instanceId) === true;
         const isValidDragTarget =
           side === "friendly" &&
           dragSession?.active === true &&
@@ -392,13 +510,19 @@ function BoardRow({
                 }
                 combatActor={unit.instanceId === actorInstanceId}
                 combatTarget={unit.instanceId === targetInstanceId}
+                choiceTarget={isChoiceTarget}
+                disabled={interactionLocked && !isChoiceTarget}
                 dragHandlers={
                   side === "friendly" && getDragHandlers
                     ? getDragHandlers({ zone: "board", index }, unit)
                     : undefined
                 }
                 onClick={
-                  onUnitClick ? () => onUnitClick(index) : undefined
+                  isChoiceTarget && onChoiceTarget
+                    ? () => onChoiceTarget(unit.instanceId)
+                    : onUnitClick
+                      ? () => onUnitClick(index)
+                      : undefined
                 }
               />
             </div>
@@ -484,6 +608,8 @@ export default function GameClient() {
   const dragCaptureElementRef = useRef<HTMLButtonElement | null>(null);
   const suppressCardClickRef = useRef(false);
   const battlePlaybackTimerRef = useRef<number | null>(null);
+  const interactionReturnFocusRef = useRef<HTMLElement | null>(null);
+  const previousInteractionIdRef = useRef<string | null>(null);
 
   const writeDragSession = useCallback((next: DragSession | null) => {
     dragSessionRef.current = next;
@@ -542,6 +668,92 @@ export default function GameClient() {
       game.players.find((player) => player.id === game.humanPlayerId) ??
       game.players[0],
     [game],
+  );
+  const humanInteraction =
+    game.pendingInteraction?.playerId === human.id
+      ? game.pendingInteraction
+      : null;
+  const targetInteraction =
+    humanInteraction?.kind === "target" ? humanInteraction : null;
+  const discoverInteraction =
+    humanInteraction?.kind === "discover" ? humanInteraction : null;
+  const interactionLocked = game.pendingInteraction !== null;
+
+  useEffect(() => {
+    if (humanInteraction) {
+      if (previousInteractionIdRef.current === null) {
+        const activeElement = document.activeElement;
+        interactionReturnFocusRef.current =
+          activeElement instanceof HTMLElement &&
+          activeElement !== document.body
+            ? activeElement
+            : null;
+      }
+      previousInteractionIdRef.current =
+        humanInteraction.interactionId;
+      const focusFrame = window.requestAnimationFrame(() => {
+        const focusTarget =
+          humanInteraction.kind === "discover"
+            ? document.querySelector<HTMLElement>(
+                '[data-testid="discover-option-0"]',
+              )
+            : Array.from(
+                document.querySelectorAll<HTMLElement>(
+                  "[data-unit-instance-id]",
+                ),
+              ).find(
+                (element) =>
+                  element.dataset.unitInstanceId ===
+                  humanInteraction.optionInstanceIds[0],
+              );
+        focusTarget?.focus();
+      });
+      return () => window.cancelAnimationFrame(focusFrame);
+    }
+
+    if (previousInteractionIdRef.current !== null) {
+      previousInteractionIdRef.current = null;
+      const returnTarget = interactionReturnFocusRef.current;
+      interactionReturnFocusRef.current = null;
+      const focusFrame = window.requestAnimationFrame(() => {
+        if (
+          returnTarget?.isConnected &&
+          returnTarget !== document.body
+        ) {
+          returnTarget.focus();
+          return;
+        }
+        document
+          .querySelector<HTMLElement>('[data-testid="end-turn"]')
+          ?.focus();
+      });
+      return () => window.cancelAnimationFrame(focusFrame);
+    }
+  }, [humanInteraction]);
+
+  const trapDiscoverFocus = useCallback(
+    (event: ReactKeyboardEvent<HTMLDivElement>) => {
+      if (event.key !== "Tab") return;
+      const focusable = Array.from(
+        event.currentTarget.querySelectorAll<HTMLButtonElement>(
+          "button:not([disabled])",
+        ),
+      );
+      if (focusable.length === 0) return;
+      const first = focusable[0];
+      const last = focusable[focusable.length - 1];
+      if (event.shiftKey && document.activeElement === first) {
+        event.preventDefault();
+        last.focus();
+      } else if (
+        !event.shiftKey &&
+        document.activeElement === last
+      ) {
+        event.preventDefault();
+        first.focus();
+      }
+    },
+    [],
   );
 
   const standings = useMemo(
@@ -616,18 +828,45 @@ export default function GameClient() {
   const upgradeCost = getUpgradeCost(game, human.id);
   const canBuyFromShop =
     game.phase === "recruit" &&
+    !interactionLocked &&
     human.gold >= 3 &&
     human.hand.length < 10;
   const selectedCanBuy =
     selection?.zone === "shop" && canBuyFromShop;
   const selectedCanPlay =
-    selection?.zone === "hand" && human.board.length < BOARD_LIMIT;
+    !interactionLocked &&
+    selection?.zone === "hand" &&
+    selectedUnit?.kind === "minion" &&
+    human.board.length < BOARD_LIMIT;
   const buyUnavailableReason =
-    human.hand.length >= 10
+    interactionLocked
+      ? "请先完成当前选择"
+      : human.hand.length >= 10
       ? "手牌已满"
       : human.gold < 3
         ? "金币不足，需要 3 枚金币"
         : null;
+  const targetSource = targetInteraction
+    ? human.board.find(
+        (minion) =>
+          minion.instanceId === targetInteraction.sourceInstanceId,
+      )
+    : undefined;
+  const discoverSource = discoverInteraction
+    ? human.board.find(
+        (minion) =>
+          minion.instanceId === discoverInteraction.sourceInstanceId,
+      )
+    : undefined;
+  const discoverTitle = discoverInteraction
+    ? discoverInteraction.filter.exactTier
+      ? `三连奖励 · 发现一个 ${discoverInteraction.filter.exactTier} 级随从`
+      : discoverInteraction.filter.tribe
+        ? `${discoverSource?.name ?? "战吼"} · 发现一张${
+            TRIBE_NAMES[discoverInteraction.filter.tribe]
+          }牌`
+        : "发现一个随从"
+    : "";
 
   useEffect(() => {
     clearBattlePlaybackTimer();
@@ -706,14 +945,16 @@ export default function GameClient() {
 
   const deploySelected = useCallback(
     (boardIndex?: number) => {
-      if (selection?.zone !== "hand") return;
+      if (selection?.zone !== "hand" || interactionLocked) return;
+      const card = human.hand[selection.index];
+      if (card?.kind !== "minion") return;
       send({
-        type: "PLAY_MINION",
-        handIndex: selection.index,
+        type: "PLAY_HAND_CARD",
+        cardInstanceId: card.instanceId,
         boardIndex,
       });
     },
-    [selection, send],
+    [human.hand, interactionLocked, selection, send],
   );
 
   const select = useCallback((nextSelection: Exclude<Selection, null>) => {
@@ -723,13 +964,14 @@ export default function GameClient() {
 
   const selectCard = useCallback(
     (nextSelection: Exclude<Selection, null>) => {
+      if (interactionLocked) return;
       if (suppressCardClickRef.current) {
         suppressCardClickRef.current = false;
         return;
       }
       select(nextSelection);
     },
-    [select],
+    [interactionLocked, select],
   );
 
   const resolveDragTarget = useCallback(
@@ -791,6 +1033,7 @@ export default function GameClient() {
     ) => {
       if (
         dragSessionRef.current !== null ||
+        interactionLocked ||
         game.phase !== "recruit" ||
         (event.pointerType === "mouse" && event.button !== 0) ||
         (source.zone === "hand" && human.board.length >= BOARD_LIMIT) ||
@@ -826,6 +1069,7 @@ export default function GameClient() {
       canBuyFromShop,
       game.phase,
       human.board.length,
+      interactionLocked,
       writeDragSession,
     ],
   );
@@ -918,8 +1162,8 @@ export default function GameClient() {
       }
       if (current.zone === "hand" && target.kind === "board") {
         send({
-          type: "PLAY_MINION",
-          handIndex: current.index,
+          type: "PLAY_HAND_CARD",
+          cardInstanceId: current.unit.instanceId,
           boardIndex: target.index,
         });
         return true;
@@ -1052,7 +1296,7 @@ export default function GameClient() {
 
   useEffect(() => {
     const current = dragSessionRef.current;
-    if (game.phase !== "recruit" && current) {
+    if ((game.phase !== "recruit" || interactionLocked) && current) {
       finishDragSession(
         current.pointerId,
         current.clientX,
@@ -1060,7 +1304,7 @@ export default function GameClient() {
         true,
       );
     }
-  }, [finishDragSession, game.phase]);
+  }, [finishDragSession, game.phase, interactionLocked]);
 
   const dragAnnouncement =
     dragSession?.active !== true
@@ -1096,13 +1340,16 @@ export default function GameClient() {
 
   return (
     <main
-      className={`game-shell${dragSession?.active ? " is-dragging" : ""}`}
+      className={`game-shell${dragSession?.active ? " is-dragging" : ""}${
+        interactionLocked ? " has-pending-interaction" : ""
+      }`}
       data-phase={game.phase}
       data-loaded={loaded}
       data-dragging={dragSession?.active === true}
+      data-pending-interaction={humanInteraction?.kind ?? "none"}
       data-testid="game-shell"
     >
-      <header className="top-hud">
+      <header className="top-hud" inert={interactionLocked}>
         <div className="brand">
           酒馆战棋 · 单机版
           <small
@@ -1130,6 +1377,7 @@ export default function GameClient() {
           <button
             type="button"
             className="action-button secondary"
+            disabled={interactionLocked}
             onClick={() => setShowRestart(true)}
           >
             重开
@@ -1138,7 +1386,11 @@ export default function GameClient() {
             type="button"
             className="action-button primary"
             data-testid="end-turn"
-            disabled={game.phase !== "recruit" || !started}
+            disabled={
+              game.phase !== "recruit" ||
+              !started ||
+              interactionLocked
+            }
             onClick={() => {
               setInfoTab("battle");
               send({ type: "END_TURN" });
@@ -1160,6 +1412,7 @@ export default function GameClient() {
               dragSession?.target?.kind === "sell" ? " is-sell-target" : ""
             }`}
             aria-label="鲍勃的酒馆"
+            inert={interactionLocked}
             data-sell-drop-zone="true"
             data-testid="sell-drop-zone"
           >
@@ -1189,6 +1442,7 @@ export default function GameClient() {
                   data-testid="upgrade-tavern"
                   disabled={
                     game.phase !== "recruit" ||
+                    interactionLocked ||
                     human.tavernTier >= 6 ||
                     human.gold < upgradeCost
                   }
@@ -1202,7 +1456,11 @@ export default function GameClient() {
                   type="button"
                   className="action-button secondary"
                   data-testid="refresh-shop"
-                  disabled={game.phase !== "recruit" || human.gold < 1}
+                  disabled={
+                    game.phase !== "recruit" ||
+                    interactionLocked ||
+                    human.gold < 1
+                  }
                   onClick={() => send({ type: "REFRESH_SHOP" })}
                 >
                   刷新 · 1
@@ -1213,7 +1471,9 @@ export default function GameClient() {
                     human.frozen ? " is-active" : ""
                   }`}
                   data-testid="freeze-shop"
-                  disabled={game.phase !== "recruit"}
+                  disabled={
+                    game.phase !== "recruit" || interactionLocked
+                  }
                   onClick={() => send({ type: "TOGGLE_FREEZE" })}
                 >
                   {human.frozen ? "解冻酒馆" : "冻结酒馆"}
@@ -1231,6 +1491,7 @@ export default function GameClient() {
                     unaffordable={
                       human.gold < 3 || human.hand.length >= 10
                     }
+                    disabled={interactionLocked}
                     testId={`shop-card-${index}`}
                     dragEnabled={canBuyFromShop}
                     dragging={
@@ -1361,6 +1622,26 @@ export default function GameClient() {
                     </button>
                   </div>
                 )}
+              {targetInteraction && (
+                <div
+                  className="target-choice-banner"
+                  role="status"
+                  aria-live="polite"
+                  data-testid="target-choice-banner"
+                >
+                  <strong>
+                    为{targetSource?.name ?? "这张牌"}选择一个友方随从
+                  </strong>
+                  <span>
+                    点击发光随从，使其获得 +
+                    {targetInteraction.attack *
+                      targetInteraction.repetitions}
+                    /+
+                    {targetInteraction.health *
+                      targetInteraction.repetitions}
+                  </span>
+                </div>
+              )}
               <BoardRow
                 units={friendlyCombatBoard}
                 side="friendly"
@@ -1376,25 +1657,44 @@ export default function GameClient() {
                     ? currentBattleEvent.targetInstanceId
                     : undefined
                 }
+                choiceTargetIds={
+                  targetInteraction?.optionInstanceIds
+                }
+                interactionLocked={interactionLocked}
                 canDeploy={
                   game.phase === "recruit" &&
+                  !interactionLocked &&
                   selection?.zone === "hand" &&
+                  selectedUnit?.kind === "minion" &&
                   human.board.length < BOARD_LIMIT
                 }
                 getDragHandlers={
-                  game.phase === "recruit" ? getDragHandlers : undefined
+                  game.phase === "recruit" && !interactionLocked
+                    ? getDragHandlers
+                    : undefined
                 }
                 onUnitClick={(index) =>
                   game.phase === "recruit" &&
+                  !interactionLocked &&
                   selectCard({ zone: "board", index })
                 }
+                onChoiceTarget={(instanceId) => {
+                  if (!targetInteraction) return;
+                  send({
+                    type: "RESOLVE_INTERACTION",
+                    interactionId: targetInteraction.interactionId,
+                    optionInstanceId: instanceId,
+                  });
+                }}
                 onEmptyClick={deploySelected}
               />
-              {game.phase === "recruit" && human.board.length === 0 && (
+              {game.phase === "recruit" &&
+                !interactionLocked &&
+                human.board.length === 0 && (
                 <div className="empty-state board-empty">
                   从手牌选择随从，再点空位上场
                 </div>
-              )}
+                )}
             </div>
           </section>
 
@@ -1411,6 +1711,7 @@ export default function GameClient() {
                 : ""
             }`}
             aria-label="手牌"
+            inert={interactionLocked}
             aria-describedby="buy-drop-description"
             data-drop-cost="3"
             data-drop-kind="buy"
@@ -1443,37 +1744,61 @@ export default function GameClient() {
             <div className="panel-title">
               <span>
                 手牌
-                <small>选择随从后放到战场</small>
+                <small>随从拖到战场；三连奖励点击使用</small>
               </span>
               <span>{human.hand.length} / 10</span>
             </div>
             <div className="card-row" data-testid="hand-row">
-              {human.hand.map((unit, index) => (
-                <UnitCard
-                  unit={unit}
-                  compact
-                  key={unit.instanceId}
-                  selected={
-                    selection?.zone === "hand" && selection.index === index
-                  }
-                  testId={`hand-card-${index}`}
-                  dragEnabled={
-                    game.phase === "recruit" &&
-                    human.board.length < BOARD_LIMIT
-                  }
-                  dragging={
-                    dragSession?.active === true &&
-                    dragSession.unit.instanceId === unit.instanceId
-                  }
-                  dragHandlers={
-                    game.phase === "recruit" &&
-                    human.board.length < BOARD_LIMIT
-                      ? getDragHandlers({ zone: "hand", index }, unit)
-                      : undefined
-                  }
-                  onClick={() => selectCard({ zone: "hand", index })}
-                />
-              ))}
+              {human.hand.map((card, index) =>
+                card.kind === "tripleReward" ? (
+                  <TripleRewardCard
+                    card={card}
+                    key={card.instanceId}
+                    testId={`triple-reward-card-${index}`}
+                    disabled={interactionLocked}
+                    onPlay={() =>
+                      send({
+                        type: "PLAY_HAND_CARD",
+                        cardInstanceId: card.instanceId,
+                      })
+                    }
+                  />
+                ) : (
+                  <UnitCard
+                    unit={card}
+                    compact
+                    key={card.instanceId}
+                    selected={
+                      selection?.zone === "hand" &&
+                      selection.index === index
+                    }
+                    testId={`hand-card-${index}`}
+                    disabled={interactionLocked}
+                    dragEnabled={
+                      game.phase === "recruit" &&
+                      !interactionLocked &&
+                      human.board.length < BOARD_LIMIT
+                    }
+                    dragging={
+                      dragSession?.active === true &&
+                      dragSession.unit.instanceId === card.instanceId
+                    }
+                    dragHandlers={
+                      game.phase === "recruit" &&
+                      !interactionLocked &&
+                      human.board.length < BOARD_LIMIT
+                        ? getDragHandlers(
+                            { zone: "hand", index },
+                            card,
+                          )
+                        : undefined
+                    }
+                    onClick={() =>
+                      selectCard({ zone: "hand", index })
+                    }
+                  />
+                ),
+              )}
               {human.hand.length === 0 && (
                 <div className="empty-state">购买的随从会进入这里</div>
               )}
@@ -1481,7 +1806,11 @@ export default function GameClient() {
           </section>
         </section>
 
-        <aside className="side-rail" aria-label="排名与战报">
+        <aside
+          className="side-rail"
+          aria-label="排名与战报"
+          inert={interactionLocked}
+        >
           <section className="panel standings-panel">
             <div className="panel-title">
               <span>8 人战局</span>
@@ -1605,8 +1934,10 @@ export default function GameClient() {
                         <>
                           <button
                             type="button"
-                            className="action-button secondary"
-                            disabled={selection.index === 0}
+                          className="action-button secondary"
+                          disabled={
+                            interactionLocked || selection.index === 0
+                          }
                             onClick={() =>
                               send({
                                 type: "MOVE_MINION",
@@ -1620,9 +1951,10 @@ export default function GameClient() {
                           <button
                             type="button"
                             className="action-button secondary"
-                            disabled={
-                              selection.index >= human.board.length - 1
-                            }
+                          disabled={
+                            interactionLocked ||
+                            selection.index >= human.board.length - 1
+                          }
                             onClick={() =>
                               send({
                                 type: "MOVE_MINION",
@@ -1635,8 +1967,9 @@ export default function GameClient() {
                           </button>
                           <button
                             type="button"
-                            className="action-button danger"
-                            data-testid="sell-selected"
+                          className="action-button danger"
+                          data-testid="sell-selected"
+                          disabled={interactionLocked}
                             onClick={() =>
                               send({
                                 type: "SELL_MINION",
@@ -1707,6 +2040,57 @@ export default function GameClient() {
         </div>
       )}
 
+      {discoverInteraction && (
+        <div
+          className="overlay interaction-overlay"
+          role="dialog"
+          aria-modal="true"
+          aria-labelledby="discover-title"
+          data-testid="discover-dialog"
+          onKeyDown={trapDiscoverFocus}
+        >
+          <div className="modal discover-modal">
+            <span className="discover-kicker">发现</span>
+            <h2 className="discover-title" id="discover-title">
+              {discoverTitle}
+            </h2>
+            <p className="discover-copy">
+              选择一张加入手牌；另外两张会回到共享随从池。
+            </p>
+            <div className="discover-options">
+              {discoverInteraction.options.map((option, index) => (
+                <div className="discover-option" key={option.instanceId}>
+                  <UnitCard
+                    unit={option}
+                    testId={`discover-option-${index}`}
+                    onClick={() =>
+                      send({
+                        type: "RESOLVE_INTERACTION",
+                        interactionId:
+                          discoverInteraction.interactionId,
+                        optionInstanceId: option.instanceId,
+                      })
+                    }
+                  />
+                  <div className="discover-option-summary">
+                    <span>
+                      {option.tier} 级 · {printedTribeLabel(option)} · ATK{" "}
+                      {option.attack} / HP {option.health}
+                    </span>
+                    <p>{option.description}</p>
+                  </div>
+                </div>
+              ))}
+            </div>
+            {discoverInteraction.remainingDiscoveries > 1 && (
+              <p className="discover-progress" role="status">
+                还需选择 {discoverInteraction.remainingDiscoveries} 次
+              </p>
+            )}
+          </div>
+        </div>
+      )}
+
       {!started && loaded && (
         <div className="overlay" role="dialog" aria-modal="true">
           <div className="modal">
@@ -1720,7 +2104,7 @@ export default function GameClient() {
               <span>36.0.3 · 237 张随从</span>
               <span>每局开放 5 个种族</span>
               <span>鼠标与触控拖拽</span>
-              <span>三连金色随从</span>
+              <span>三连奖励与发现</span>
             </div>
             <button
               type="button"
