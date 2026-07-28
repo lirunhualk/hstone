@@ -3,7 +3,7 @@ import liveRosterSnapshot from "./generated/battlegrounds-36.0.3-247416.zhCN.jso
 };
 import type { MinionDefinition, Tribe } from "./types.ts";
 
-export const CURRENT_ROSTER_VERSION = "battlegrounds-36.0.3-247416-v4";
+export const CURRENT_ROSTER_VERSION = "battlegrounds-36.0.3-247416-v5";
 /** Compatibility alias for existing save and engine imports. */
 export const CLASSIC_ROSTER_VERSION = CURRENT_ROSTER_VERSION;
 
@@ -846,6 +846,14 @@ const LEGACY_RULE_BY_CARD_ID = new Map(
 const LIVE_RULE_OVERRIDES: Readonly<
   Record<string, Partial<MinionDefinition>>
 > = {
+  BG29_503: {
+    interactiveBattlecry: {
+      kind: "targetedDiscoverMagnetize",
+      targetTribe: "mech",
+      discoverTribe: "mech",
+      goldenMode: "repeat",
+    },
+  },
   BG26_146: {
     endOfTurn: {
       kind: "buff",
@@ -1081,6 +1089,7 @@ const FULLY_SUPPORTED_LIVE_CARD_IDS = new Set([
   "BG26_805",
   "BG26_817",
   "BG28_300",
+  "BG29_503",
   "BG29_611",
   "BG30_125",
   "BG31_803",

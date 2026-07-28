@@ -35,7 +35,7 @@ import {
   getMinionDefinition,
 } from "../lib/game/content";
 
-const SAVE_KEY = "hearthstone-battlegrounds-local.save.v4";
+const SAVE_KEY = "hearthstone-battlegrounds-local.save.v5";
 const INITIAL_SEED = 0x53544152;
 const BOARD_LIMIT = 7;
 const MOUSE_DRAG_THRESHOLD_PX = 8;
@@ -139,7 +139,26 @@ function isPendingInteraction(
       value.repetitions > 0
     );
   }
-  if (value.kind !== "discover") return false;
+  if (value.kind === "magnetizeTarget") {
+    return (
+      Array.isArray(value.optionInstanceIds) &&
+      value.optionInstanceIds.length > 0 &&
+      value.optionInstanceIds.every(
+        (instanceId) => typeof instanceId === "string",
+      ) &&
+      isRecord(value.filter) &&
+      typeof value.remainingDiscoveries === "number" &&
+      value.remainingDiscoveries > 0
+    );
+  }
+  if (value.kind !== "discover") {
+    return false;
+  }
+  const validDestination =
+    isRecord(value.destination) &&
+    (value.destination.kind === "hand" ||
+      (value.destination.kind === "magnetize" &&
+        typeof value.destination.targetInstanceId === "string"));
   return (
     Array.isArray(value.options) &&
     value.options.length > 0 &&
@@ -150,8 +169,35 @@ function isPendingInteraction(
         typeof option.instanceId === "string",
     ) &&
     isRecord(value.filter) &&
+    validDestination &&
     typeof value.remainingDiscoveries === "number" &&
     value.remainingDiscoveries > 0
+  );
+}
+
+function pendingInteractionMatchesPlayer(
+  interaction: PendingInteraction,
+  players: readonly PlayerState[],
+): boolean {
+  const player = players.find(
+    (candidate) => candidate.id === interaction.playerId,
+  );
+  if (!player?.isHuman) return false;
+
+  const boardIds = new Set(
+    player.board.map((minion) => minion.instanceId),
+  );
+  if (interaction.kind === "discover") {
+    return (
+      interaction.destination.kind === "hand" ||
+      boardIds.has(interaction.destination.targetInstanceId)
+    );
+  }
+  return (
+    boardIds.has(interaction.sourceInstanceId) &&
+    interaction.optionInstanceIds.every((instanceId) =>
+      boardIds.has(instanceId),
+    )
   );
 }
 
@@ -180,7 +226,7 @@ function isGameState(value: unknown): value is GameState {
   if (!value || typeof value !== "object") return false;
   const candidate = value as Partial<GameState>;
   return (
-    candidate.version === 4 &&
+    candidate.version === 5 &&
     candidate.contentVersion === CURRENT_ROSTER_VERSION &&
     typeof candidate.seed === "number" &&
     typeof candidate.nextInteractionId === "number" &&
@@ -214,10 +260,9 @@ function isGameState(value: unknown): value is GameState {
     ) &&
     (candidate.pendingInteraction === null ||
       (isPendingInteraction(candidate.pendingInteraction) &&
-        candidate.players.some(
-          (player) =>
-            player.id === candidate.pendingInteraction?.playerId &&
-            player.isHuman,
+        pendingInteractionMatchesPlayer(
+          candidate.pendingInteraction,
+          candidate.players,
         ))) &&
     typeof candidate.humanPlayerId === "string" &&
     (candidate.phase === "recruit" ||
@@ -897,6 +942,12 @@ export default function GameClient() {
       : null;
   const targetInteraction =
     humanInteraction?.kind === "target" ? humanInteraction : null;
+  const magnetizeTargetInteraction =
+    humanInteraction?.kind === "magnetizeTarget"
+      ? humanInteraction
+      : null;
+  const boardChoiceInteraction =
+    magnetizeTargetInteraction ?? targetInteraction;
   const discoverInteraction =
     humanInteraction?.kind === "discover" ? humanInteraction : null;
   const interactionLocked = game.pendingInteraction !== null;
@@ -1136,10 +1187,10 @@ export default function GameClient() {
       : human.gold < 3
         ? "金币不足，需要 3 枚金币"
         : null;
-  const targetSource = targetInteraction
+  const targetSource = boardChoiceInteraction
     ? human.board.find(
         (minion) =>
-          minion.instanceId === targetInteraction.sourceInstanceId,
+          minion.instanceId === boardChoiceInteraction.sourceInstanceId,
       )
     : undefined;
   const discoverSource = discoverInteraction
@@ -1148,8 +1199,21 @@ export default function GameClient() {
           minion.instanceId === discoverInteraction.sourceInstanceId,
       )
     : undefined;
+  const discoverDestination = discoverInteraction?.destination;
+  const discoverMagnetizeTarget =
+    discoverDestination?.kind === "magnetize"
+      ? human.board.find(
+          (minion) =>
+            minion.instanceId ===
+            discoverDestination.targetInstanceId,
+        )
+      : undefined;
   const discoverTitle = discoverInteraction
-    ? discoverInteraction.filter.exactTier
+    ? discoverInteraction.destination.kind === "magnetize"
+      ? `${discoverSource?.name ?? "战吼"} · 发现机械并吸附到${
+          discoverMagnetizeTarget?.name ?? "目标机械"
+        }`
+      : discoverInteraction.filter.exactTier
       ? `三连奖励 · 发现一个 ${discoverInteraction.filter.exactTier} 级随从`
       : discoverInteraction.filter.tribe
         ? `${discoverSource?.name ?? "战吼"} · 发现一张${
@@ -2080,23 +2144,35 @@ export default function GameClient() {
                     </button>
                   </div>
                 )}
-              {targetInteraction && (
+              {boardChoiceInteraction && (
                 <div
                   className="target-choice-banner"
                   role="status"
                   aria-live="polite"
+                  data-purpose={
+                    magnetizeTargetInteraction
+                      ? "magnetize-discover"
+                      : "buff"
+                  }
                   data-testid="target-choice-banner"
                 >
                   <strong>
-                    为{targetSource?.name ?? "这张牌"}选择一个友方随从
+                    {magnetizeTargetInteraction
+                      ? `为${targetSource?.name ?? "这张牌"}选择一个友方机械`
+                      : `为${targetSource?.name ?? "这张牌"}选择一个友方随从`}
                   </strong>
                   <span>
-                    点击发光随从，使其获得 +
-                    {targetInteraction.attack *
-                      targetInteraction.repetitions}
-                    /+
-                    {targetInteraction.health *
-                      targetInteraction.repetitions}
+                    {magnetizeTargetInteraction
+                      ? `点击发光机械，随后连续发现 ${magnetizeTargetInteraction.remainingDiscoveries} 次并立即吸附`
+                      : targetInteraction
+                        ? `点击发光随从，使其获得 +${
+                            targetInteraction.attack *
+                            targetInteraction.repetitions
+                          }/+${
+                            targetInteraction.health *
+                            targetInteraction.repetitions
+                          }`
+                        : ""}
                   </span>
                 </div>
               )}
@@ -2116,7 +2192,7 @@ export default function GameClient() {
                     : undefined
                 }
                 choiceTargetIds={
-                  targetInteraction?.optionInstanceIds
+                  boardChoiceInteraction?.optionInstanceIds
                 }
                 magneticTargetIds={
                   game.phase === "recruit" && !interactionLocked
@@ -2147,10 +2223,11 @@ export default function GameClient() {
                   selectCard({ zone: "board", index })
                 }
                 onChoiceTarget={(instanceId) => {
-                  if (!targetInteraction) return;
+                  if (!boardChoiceInteraction) return;
                   send({
                     type: "RESOLVE_INTERACTION",
-                    interactionId: targetInteraction.interactionId,
+                    interactionId:
+                      boardChoiceInteraction.interactionId,
                     optionInstanceId: instanceId,
                   });
                 }}
@@ -2572,6 +2649,9 @@ export default function GameClient() {
           role="dialog"
           aria-modal="true"
           aria-labelledby="discover-title"
+          data-discover-destination={
+            discoverInteraction.destination.kind
+          }
           data-testid="discover-dialog"
           onKeyDown={trapDiscoverFocus}
         >
@@ -2581,22 +2661,53 @@ export default function GameClient() {
               {discoverTitle}
             </h2>
             <p className="discover-copy">
-              选择一张加入手牌；另外两张会回到共享随从池。
+              {discoverInteraction.destination.kind === "magnetize"
+                ? "选择后会立即吸附到目标，不会进入手牌；其余候选会回到共享随从池。"
+                : "选择一张加入手牌；另外两张会回到共享随从池。"}
             </p>
+            {discoverInteraction.destination.kind === "magnetize" && (
+              <div
+                className="discover-destination"
+                data-testid="discover-magnetize-target"
+              >
+                <span>吸附目标</span>
+                <strong>
+                  {discoverMagnetizeTarget?.name ?? "目标机械"}
+                </strong>
+                <small>
+                  当前{" "}
+                  {discoverMagnetizeTarget?.attack ?? "?"}/
+                  {discoverMagnetizeTarget?.health ?? "?"}
+                </small>
+              </div>
+            )}
             <div className="discover-options">
               {discoverInteraction.options.map((option, index) => (
                 <div className="discover-option" key={option.instanceId}>
                   <UnitCard
                     unit={option}
                     testId={`discover-option-${index}`}
-                    onClick={() =>
+                    onClick={() => {
+                      if (
+                        discoverInteraction.destination.kind ===
+                          "magnetize" &&
+                        discoverInteraction.remainingDiscoveries === 1
+                      ) {
+                        magneticFocusTargetRef.current =
+                          discoverInteraction.destination.targetInstanceId;
+                        setMagneticAnnouncement(
+                          `已将发现的${option.name}吸附到${
+                            discoverMagnetizeTarget?.name ?? "目标机械"
+                          }，贡献 +${option.attack}/+${option.health}`,
+                        );
+                      }
                       send({
                         type: "RESOLVE_INTERACTION",
                         interactionId:
                           discoverInteraction.interactionId,
                         optionInstanceId: option.instanceId,
-                      })
-                    }
+                      });
+                    }}
                   />
                   <div className="discover-option-summary">
                     <span>
@@ -2610,7 +2721,11 @@ export default function GameClient() {
             </div>
             {discoverInteraction.remainingDiscoveries > 1 && (
               <p className="discover-progress" role="status">
-                还需选择 {discoverInteraction.remainingDiscoveries} 次
+                {discoverInteraction.destination.kind === "magnetize"
+                  ? `还需为${
+                      discoverMagnetizeTarget?.name ?? "目标机械"
+                    }选择 ${discoverInteraction.remainingDiscoveries} 次`
+                  : `还需选择 ${discoverInteraction.remainingDiscoveries} 次`}
               </p>
             )}
           </div>

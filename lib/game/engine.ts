@@ -11,6 +11,7 @@ import type {
   BattleSummary,
   BoardMinionInstance,
   BuffEffect,
+  DiscoverDestination,
   DiscoverFilter,
   GameAction,
   GameState,
@@ -1071,6 +1072,25 @@ function magnetizeMinion(
     applyRecruitEffects(state, player, source, battlecry);
   }
 
+  fuseMinionIntoHost(state, player, source, target);
+
+  if (source.grantsTripleReward && player.hand.length < MAX_HAND_SIZE) {
+    player.hand.push(
+      createTripleRewardSpell(state, player.tavernTier),
+    );
+  }
+  applyAfterFriendlyPlayed(player, source);
+  applyAfterMagnetizedEffects(state, player);
+  resolveTriples(state, player);
+  return true;
+}
+
+function fuseMinionIntoHost(
+  state: GameState,
+  player: PlayerState,
+  source: BoardMinionInstance,
+  target: BoardMinionInstance,
+): void {
   // Patch 27.0 changed Battlegrounds Magnetic pool behavior: every pool copy
   // represented by the source returns immediately when it is Magnetized.
   // The attached component therefore retains its effects but carries zero
@@ -1091,16 +1111,6 @@ function magnetizeMinion(
     target.effectSupport = "partial";
   }
   target.attachments.push(createMagneticAttachment(source));
-
-  if (source.grantsTripleReward && player.hand.length < MAX_HAND_SIZE) {
-    player.hand.push(
-      createTripleRewardSpell(state, player.tavernTier),
-    );
-  }
-  applyAfterFriendlyPlayed(player, source);
-  applyAfterMagnetizedEffects(state, player);
-  resolveTriples(state, player);
-  return true;
 }
 
 function castTripleReward(
@@ -1119,6 +1129,7 @@ function castTripleReward(
     card.instanceId,
     { exactTier: card.tier },
     1,
+    { kind: "hand" },
   );
   return true;
 }
@@ -1255,10 +1266,12 @@ function beginDiscoverInteraction(
   sourceInstanceId: string,
   filter: DiscoverFilter,
   discoveries: number,
+  destination: DiscoverDestination,
 ): void {
   if (
     discoveries <= 0 ||
-    player.hand.length >= MAX_HAND_SIZE ||
+    (destination.kind === "hand" &&
+      player.hand.length >= MAX_HAND_SIZE) ||
     state.pendingInteraction !== null
   ) {
     return;
@@ -1270,14 +1283,28 @@ function beginDiscoverInteraction(
   if (!player.isHuman) {
     const selected = bestMinionByScore(player, options);
     returnDiscoverOptions(state, options, selected.instanceId);
-    player.hand.push(selected);
-    resolveTriples(state, player);
+    if (destination.kind === "hand") {
+      player.hand.push(selected);
+      resolveTriples(state, player);
+    } else {
+      const target = player.board.find(
+        (minion) =>
+          minion.instanceId === destination.targetInstanceId,
+      );
+      if (!target) {
+        returnMinionToPool(state, selected);
+        return;
+      }
+      fuseMinionIntoHost(state, player, selected, target);
+      applyAfterMagnetizedEffects(state, player);
+    }
     beginDiscoverInteraction(
       state,
       player,
       sourceInstanceId,
       filter,
       discoveries - 1,
+      destination,
     );
     return;
   }
@@ -1289,6 +1316,7 @@ function beginDiscoverInteraction(
     options,
     filter: { ...filter },
     remainingDiscoveries: discoveries,
+    destination: { ...destination },
   };
   state.pendingInteraction = interaction;
 }
@@ -1318,7 +1346,50 @@ function beginInteractiveBattlecry(
         tribe: ability.tribe,
       },
       repetitions,
+      { kind: "hand" },
     );
+    return;
+  }
+
+  if (ability.kind === "targetedDiscoverMagnetize") {
+    const candidates = player.board.filter(
+      (minion) =>
+        minion.instanceId !== source.instanceId &&
+        minionHasTribe(minion, ability.targetTribe),
+    );
+    if (candidates.length === 0) {
+      return;
+    }
+    const filter: DiscoverFilter = {
+      maximumTier: player.tavernTier,
+      tribe: ability.discoverTribe,
+    };
+    if (!player.isHuman) {
+      const target = bestMinionByScore(player, candidates);
+      beginDiscoverInteraction(
+        state,
+        player,
+        source.instanceId,
+        filter,
+        repetitions,
+        {
+          kind: "magnetize",
+          targetInstanceId: target.instanceId,
+        },
+      );
+      return;
+    }
+    state.pendingInteraction = {
+      kind: "magnetizeTarget",
+      interactionId: nextInteractionId(state),
+      playerId: player.id,
+      sourceInstanceId: source.instanceId,
+      optionInstanceIds: candidates.map(
+        (minion) => minion.instanceId,
+      ),
+      filter,
+      remainingDiscoveries: repetitions,
+    };
     return;
   }
 
@@ -1392,10 +1463,47 @@ function resolvePendingInteraction(
     return next;
   }
 
+  if (pending.kind === "magnetizeTarget") {
+    if (!pending.optionInstanceIds.includes(action.optionInstanceId)) {
+      return state;
+    }
+    const target = player.board.find(
+      (minion) => minion.instanceId === action.optionInstanceId,
+    );
+    if (!target) {
+      return state;
+    }
+    const next = cloneState(state);
+    const nextPlayer = findPlayer(next, pending.playerId);
+    const nextTarget = nextPlayer?.board.find(
+      (minion) => minion.instanceId === action.optionInstanceId,
+    );
+    if (!nextPlayer || !nextTarget) {
+      return state;
+    }
+    next.pendingInteraction = null;
+    beginDiscoverInteraction(
+      next,
+      nextPlayer,
+      pending.sourceInstanceId,
+      pending.filter,
+      pending.remainingDiscoveries,
+      {
+        kind: "magnetize",
+        targetInstanceId: nextTarget.instanceId,
+      },
+    );
+    return next;
+  }
+
   const selected = pending.options.find(
     (option) => option.instanceId === action.optionInstanceId,
   );
-  if (!selected || player.hand.length >= MAX_HAND_SIZE) {
+  if (
+    !selected ||
+    (pending.destination.kind === "hand" &&
+      player.hand.length >= MAX_HAND_SIZE)
+  ) {
     return state;
   }
   const next = cloneState(state);
@@ -1415,8 +1523,23 @@ function resolvePendingInteraction(
     nextPending.options,
     nextSelected.instanceId,
   );
-  nextPlayer.hand.push(nextSelected);
-  resolveTriples(next, nextPlayer);
+  const destination = nextPending.destination;
+  if (destination.kind === "hand") {
+    nextPlayer.hand.push(nextSelected);
+    resolveTriples(next, nextPlayer);
+  } else {
+    const target = nextPlayer.board.find(
+      (minion) =>
+        minion.instanceId === destination.targetInstanceId,
+    );
+    if (!target) {
+      returnMinionToPool(next, nextSelected);
+      next.pendingInteraction = null;
+      return next;
+    }
+    fuseMinionIntoHost(next, nextPlayer, nextSelected, target);
+    applyAfterMagnetizedEffects(next, nextPlayer);
+  }
   next.pendingInteraction = null;
   beginDiscoverInteraction(
     next,
@@ -1424,6 +1547,7 @@ function resolvePendingInteraction(
     nextPending.sourceInstanceId,
     nextPending.filter,
     nextPending.remainingDiscoveries - 1,
+    destination,
   );
   return next;
 }
@@ -2812,7 +2936,7 @@ export function createGame(seed?: number): GameState {
   }));
   const pool: Record<string, number> = {};
   const state: GameState = {
-    version: 4,
+    version: 5,
     contentVersion: CURRENT_ROSTER_VERSION,
     seed: normalizedSeed,
     rngState: normalizedSeed,

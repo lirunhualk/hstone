@@ -82,6 +82,25 @@ function keepOnlyOneOpponent(
   return enemy;
 }
 
+function keepOnlyMechDiscoverPool(
+  state: GameState,
+  definitionIds: readonly string[],
+): void {
+  state.activeTribes = [
+    "beast",
+    "mech",
+    "demon",
+    "murloc",
+    "dragon",
+  ];
+  for (const definitionId of Object.keys(state.pool)) {
+    state.pool[definitionId] = 0;
+  }
+  for (const definitionId of definitionIds) {
+    state.pool[definitionId] = 1;
+  }
+}
+
 function magneticAction(
   source: BoardMinionInstance,
   target: BoardMinionInstance,
@@ -314,6 +333,317 @@ test("triggers Scrap Lancer once per Magnetization and respects Golden scaling",
   assert.equal(nextTarget.health, target.health + source.health + 10);
 });
 
+test("Clunker Junker targets an existing Mech, discovers any Mech, and Magnetizes it directly", () => {
+  let state = createGame(4013);
+  let human = humanPlayer(state);
+  human.tavernTier = 4;
+  const target = definitionMinion("BG29_611", "clunker-host");
+  const watcher = definitionMinion("BG34_175", "clunker-watcher");
+  const nonMech = definitionMinion("BG25_001", "clunker-non-mech");
+  const source = definitionMinion("BG29_503", "clunker-source");
+  human.board = [target, watcher, nonMech];
+  human.hand = [source];
+  keepOnlyMechDiscoverPool(state, [
+    "BG29_503",
+    "BG_BOT_911",
+    "BG32_172",
+  ]);
+
+  state = gameReducer(state, {
+    type: "PLAY_HAND_CARD",
+    cardInstanceId: source.instanceId,
+  });
+  human = humanPlayer(state);
+  let pending = state.pendingInteraction;
+  assert.ok(pending?.kind === "magnetizeTarget");
+  assert.deepEqual(pending.optionInstanceIds, [
+    target.instanceId,
+    watcher.instanceId,
+  ]);
+  assert.equal(
+    pending.optionInstanceIds.includes(source.instanceId),
+    false,
+  );
+  assert.strictEqual(
+    gameReducer(state, {
+      type: "RESOLVE_INTERACTION",
+      interactionId: pending.interactionId,
+      optionInstanceId: source.instanceId,
+    }),
+    state,
+  );
+
+  state = gameReducer(state, {
+    type: "RESOLVE_INTERACTION",
+    interactionId: pending.interactionId,
+    optionInstanceId: target.instanceId,
+  });
+  pending = state.pendingInteraction;
+  assert.ok(pending?.kind === "discover");
+  assert.deepEqual(pending.destination, {
+    kind: "magnetize",
+    targetInstanceId: target.instanceId,
+  });
+  assert.equal(pending.filter.tribe, "mech");
+  assert.equal(pending.filter.maximumTier, human.tavernTier);
+  assert.equal(pending.remainingDiscoveries, 1);
+  assert.deepEqual(
+    pending.options
+      .map((option) => option.definitionId)
+      .sort(),
+    ["BG29_503", "BG32_172", "BG_BOT_911"].sort(),
+  );
+  assert.equal(getMinionDefinition("BG29_503").magnetic, undefined);
+  const discoveredClunker = pending.options.find(
+    (option) => option.definitionId === "BG29_503",
+  );
+  assert.ok(discoveredClunker);
+
+  state = gameReducer(state, {
+    type: "RESOLVE_INTERACTION",
+    interactionId: pending.interactionId,
+    optionInstanceId: discoveredClunker.instanceId,
+  });
+  human = humanPlayer(state);
+  assert.equal(state.pendingInteraction, null);
+  assert.equal(human.hand.length, 0);
+  const fusedHost = human.board.find(
+    (minion) => minion.instanceId === target.instanceId,
+  );
+  assert.ok(fusedHost);
+  assert.equal(
+    fusedHost.attack,
+    target.attack + discoveredClunker.attack + 5,
+  );
+  assert.equal(
+    fusedHost.health,
+    target.health + discoveredClunker.health + 5,
+  );
+  assert.equal(fusedHost.attachments.length, 1);
+  assert.equal(
+    fusedHost.attachments[0].definitionId,
+    discoveredClunker.definitionId,
+  );
+  assert.equal(fusedHost.attachments[0].poolCopies, 0);
+  assert.equal(
+    human.board.find(
+      (minion) => minion.instanceId === watcher.instanceId,
+    )?.attack,
+    watcher.attack + 5,
+  );
+  assert.equal(
+    human.board.find(
+      (minion) => minion.instanceId === source.instanceId,
+    )?.health,
+    source.health + 5,
+  );
+  for (const definitionId of [
+    "BG29_503",
+    "BG_BOT_911",
+    "BG32_172",
+  ]) {
+    assert.equal(state.pool[definitionId], 1);
+  }
+
+  const selectedPoolAfterAttachment =
+    state.pool[discoveredClunker.definitionId];
+  const targetIndex = human.board.findIndex(
+    (minion) => minion.instanceId === target.instanceId,
+  );
+  state = gameReducer(state, {
+    type: "SELL_MINION",
+    boardIndex: targetIndex,
+  });
+  assert.equal(
+    state.pool[discoveredClunker.definitionId],
+    selectedPoolAfterAttachment,
+  );
+});
+
+test("Golden Clunker Junker with Brann chains four discoveries onto one host even with a full hand", () => {
+  let state = createGame(4014);
+  let human = humanPlayer(state);
+  human.tavernTier = 6;
+  const target = definitionMinion("BG29_611", "golden-clunker-host");
+  const brann = definitionMinion("BG_LOE_077", "golden-clunker-brann");
+  const source = definitionMinion("BG29_503", "golden-clunker-source", {
+    golden: true,
+    name: "金色·废铁残械",
+    attack: 6,
+    health: 8,
+    grantsTripleReward: true,
+  });
+  const fillers = Array.from({ length: 9 }, (_, index) =>
+    definitionMinion("BG25_001", `golden-clunker-filler-${index}`, {
+      golden: true,
+    }),
+  );
+  human.board = [target, brann];
+  human.hand = [...fillers, source];
+  keepOnlyMechDiscoverPool(state, [
+    "BG29_503",
+    "BG_BOT_911",
+    "BG32_172",
+  ]);
+
+  state = gameReducer(state, {
+    type: "PLAY_HAND_CARD",
+    cardInstanceId: source.instanceId,
+  });
+  human = humanPlayer(state);
+  let pending = state.pendingInteraction;
+  assert.ok(pending?.kind === "magnetizeTarget");
+  assert.equal(pending.remainingDiscoveries, 4);
+  assert.equal(human.hand.length, 10);
+  assert.equal(
+    human.hand.some((card) => card.kind === "tripleReward"),
+    true,
+  );
+
+  state = gameReducer(state, {
+    type: "RESOLVE_INTERACTION",
+    interactionId: pending.interactionId,
+    optionInstanceId: target.instanceId,
+  });
+  for (let remaining = 4; remaining > 0; remaining -= 1) {
+    pending = state.pendingInteraction;
+    assert.ok(pending?.kind === "discover");
+    assert.equal(pending.remainingDiscoveries, remaining);
+    assert.deepEqual(pending.destination, {
+      kind: "magnetize",
+      targetInstanceId: target.instanceId,
+    });
+    state = gameReducer(state, {
+      type: "RESOLVE_INTERACTION",
+      interactionId: pending.interactionId,
+      optionInstanceId: pending.options[0].instanceId,
+    });
+  }
+
+  human = humanPlayer(state);
+  assert.equal(state.pendingInteraction, null);
+  assert.equal(human.hand.length, 10);
+  assert.equal(
+    human.board.find(
+      (minion) => minion.instanceId === target.instanceId,
+    )?.attachments.length,
+    4,
+  );
+});
+
+test("Clunker Junker does nothing without a different friendly Mech", () => {
+  const state = createGame(4015);
+  const human = humanPlayer(state);
+  const source = definitionMinion("BG29_503", "lonely-clunker");
+  human.board = [
+    definitionMinion("BG25_001", "lonely-clunker-undead"),
+  ];
+  human.hand = [source];
+
+  const next = gameReducer(state, {
+    type: "PLAY_HAND_CARD",
+    cardInstanceId: source.instanceId,
+  });
+  assert.equal(next.pendingInteraction, null);
+  assert.equal(
+    humanPlayer(next).board.some(
+      (minion) => minion.instanceId === source.instanceId,
+    ),
+    true,
+  );
+});
+
+test("Clunker Junker releases discover options if its saved target disappears", () => {
+  let state = createGame(4017);
+  let human = humanPlayer(state);
+  human.tavernTier = 4;
+  const target = definitionMinion("BG29_611", "stale-clunker-host");
+  const source = definitionMinion("BG29_503", "stale-clunker-source");
+  human.board = [target];
+  human.hand = [source];
+  const discoverIds = ["BG29_503", "BG_BOT_911", "BG32_172"];
+  keepOnlyMechDiscoverPool(state, discoverIds);
+
+  state = gameReducer(state, {
+    type: "PLAY_HAND_CARD",
+    cardInstanceId: source.instanceId,
+  });
+  let pending = state.pendingInteraction;
+  assert.ok(pending?.kind === "magnetizeTarget");
+  state = gameReducer(state, {
+    type: "RESOLVE_INTERACTION",
+    interactionId: pending.interactionId,
+    optionInstanceId: target.instanceId,
+  });
+  pending = state.pendingInteraction;
+  assert.ok(pending?.kind === "discover");
+
+  human = humanPlayer(state);
+  human.board = human.board.filter(
+    (minion) => minion.instanceId !== target.instanceId,
+  );
+  state = gameReducer(state, {
+    type: "RESOLVE_INTERACTION",
+    interactionId: pending.interactionId,
+    optionInstanceId: pending.options[0].instanceId,
+  });
+
+  assert.equal(state.pendingInteraction, null);
+  for (const definitionId of discoverIds) {
+    assert.equal(state.pool[definitionId], 1);
+  }
+});
+
+test("AI deterministically chooses the strongest Clunker Junker host and discovered Mech", () => {
+  const first = createGame(4016);
+  keepOnlyMechDiscoverPool(first, [
+    "BG26_146",
+    "BG_BOT_911",
+    "BG35_890",
+  ]);
+  for (const player of first.players) {
+    player.gold = 0;
+    player.hand = [];
+    player.board = [];
+    player.shop = [];
+    player.frozen = false;
+  }
+  const ai = first.players[1];
+  ai.tavernTier = 6;
+  ai.board = [
+    definitionMinion("BG29_611", "ai-clunker-strong-host", {
+      attack: 40,
+      health: 40,
+    }),
+    definitionMinion("BG29_611", "ai-clunker-weak-host", {
+      attack: 1,
+      health: 1,
+    }),
+  ];
+  ai.hand = [
+    definitionMinion("BG29_503", "ai-clunker-source"),
+  ];
+  const replay = JSON.parse(JSON.stringify(first)) as GameState;
+
+  const firstResult = gameReducer(first, { type: "END_TURN" });
+  const replayResult = gameReducer(replay, { type: "END_TURN" });
+  assert.deepEqual(replayResult, firstResult);
+  const resolvedAi = firstResult.players[1];
+  const strongHost = resolvedAi.board.find(
+    (minion) => minion.instanceId === "ai-clunker-strong-host",
+  );
+  const weakHost = resolvedAi.board.find(
+    (minion) => minion.instanceId === "ai-clunker-weak-host",
+  );
+  assert.equal(strongHost?.attachments.length, 1);
+  assert.equal(
+    strongHost?.attachments[0].definitionId,
+    "BG35_890",
+  );
+  assert.equal(weakHost?.attachments.length, 0);
+  assert.equal(firstResult.pendingInteraction, null);
+});
+
 test("preserves attached enchantments when three hosts form a Golden minion", () => {
   let state = createGame(4006);
   let human = humanPlayer(state);
@@ -462,7 +792,7 @@ test("Magnetic attachment trees survive a JSON save round-trip", () => {
   const next = gameReducer(state, magneticAction(source, target));
   const restored = JSON.parse(JSON.stringify(next)) as GameState;
   assert.deepEqual(restored, next);
-  assert.equal(restored.version, 4);
+  assert.equal(restored.version, 5);
   assert.equal(
     humanPlayer(restored).board[0].attachments[0].definitionId,
     source.definitionId,

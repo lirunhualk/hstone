@@ -65,7 +65,7 @@ function expectedPlainText(html: string): string {
 test("exports the pinned current roster version through the legacy alias", () => {
   assert.equal(
     CURRENT_ROSTER_VERSION,
-    "battlegrounds-36.0.3-247416-v4",
+    "battlegrounds-36.0.3-247416-v5",
   );
   assert.equal(CLASSIC_ROSTER_VERSION, CURRENT_ROSTER_VERSION);
 });
@@ -383,6 +383,7 @@ test("marks every live card honestly as complete or partial", () => {
       "BG26_817",
       "BG26_805",
       "BG28_300",
+      "BG29_503",
       "BG29_611",
       "BG30_125",
       "BG31_803",
@@ -414,13 +415,13 @@ test("marks every live card honestly as complete or partial", () => {
     LIVE_MINION_DEFINITIONS.filter(
       (definition) => definition.effectSupport === "partial",
     ).length,
-    202,
+    201,
   );
   assert.equal(
     LIVE_MINION_DEFINITIONS.filter(
       (definition) => definition.effectSupport === "complete",
     ).length,
-    35,
+    36,
   );
   assert.deepEqual(getMinionDefinition("BG35_702").interactiveBattlecry, {
     kind: "targetedBuff",
@@ -434,6 +435,12 @@ test("marks every live card honestly as complete or partial", () => {
   assert.deepEqual(getMinionDefinition("BG34_523").interactiveBattlecry, {
     kind: "discoverMinion",
     tribe: "beast",
+    goldenMode: "repeat",
+  });
+  assert.deepEqual(getMinionDefinition("BG29_503").interactiveBattlecry, {
+    kind: "targetedDiscoverMagnetize",
+    targetTribe: "mech",
+    discoverTribe: "mech",
     goldenMode: "repeat",
   });
 });

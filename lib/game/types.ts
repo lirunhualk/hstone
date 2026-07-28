@@ -124,9 +124,17 @@ export interface DiscoverMinionBattlecry {
   goldenMode: "repeat";
 }
 
+export interface TargetedDiscoverMagnetizeBattlecry {
+  kind: "targetedDiscoverMagnetize";
+  targetTribe: Tribe;
+  discoverTribe: Tribe;
+  goldenMode: "repeat";
+}
+
 export type InteractiveBattlecry =
   | TargetedBuffBattlecry
-  | DiscoverMinionBattlecry;
+  | DiscoverMinionBattlecry
+  | TargetedDiscoverMagnetizeBattlecry;
 
 export interface FriendlyTribeTrigger {
   tribe: Tribe;
@@ -357,21 +365,35 @@ export interface PendingTargetInteraction extends PendingInteractionBase {
   repetitions: number;
 }
 
+export interface PendingMagnetizeTargetInteraction
+  extends PendingInteractionBase {
+  kind: "magnetizeTarget";
+  optionInstanceIds: string[];
+  filter: DiscoverFilter;
+  remainingDiscoveries: number;
+}
+
 export interface DiscoverFilter {
   exactTier?: TavernTier;
   maximumTier?: TavernTier;
   tribe?: Tribe;
 }
 
+export type DiscoverDestination =
+  | { kind: "hand" }
+  | { kind: "magnetize"; targetInstanceId: string };
+
 export interface PendingDiscoverInteraction extends PendingInteractionBase {
   kind: "discover";
   options: BoardMinionInstance[];
   filter: DiscoverFilter;
   remainingDiscoveries: number;
+  destination: DiscoverDestination;
 }
 
 export type PendingInteraction =
   | PendingTargetInteraction
+  | PendingMagnetizeTargetInteraction
   | PendingDiscoverInteraction;
 
 export type BattleResult = "win" | "loss" | "tie";
@@ -398,10 +420,10 @@ export interface BattleSummary {
 
 export interface GameState {
   /**
-   * The union keeps the legacy client-side guard type-safe while all newly
-   * created states use schema version 4.
+   * The union keeps legacy migrations explicit while all newly created states
+   * use schema version 5.
    */
-  version: 2 | 3 | 4;
+  version: 2 | 3 | 4 | 5;
   /** Invalidates local saves when the roster or its mechanics change. */
   contentVersion: string;
   seed: number;
