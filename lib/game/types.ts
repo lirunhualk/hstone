@@ -100,7 +100,15 @@ export interface GetRandomMinionEffect {
   goldenMode?: "doubleCount";
 }
 
-export type RallyEffect = GetRandomMinionEffect;
+export interface RallyBuffEffect {
+  kind: "buff";
+  target: "rightFriendly";
+  attack: number;
+  health: number;
+  goldenMode?: "doubleStats";
+}
+
+export type RallyEffect = GetRandomMinionEffect | RallyBuffEffect;
 
 export interface DamageAllMinionsEffect {
   kind: "damageAllMinions";
@@ -344,6 +352,7 @@ export interface PlayerState {
 export type BattleEventType =
   | "battleStart"
   | "attack"
+  | "buff"
   | "shieldBroken"
   | "death"
   | "summon"
@@ -367,7 +376,11 @@ export interface BattleEvent {
   targetPlayerId?: PlayerId;
   targetInstanceId?: string;
   amount?: number;
+  attackDelta?: number;
+  healthDelta?: number;
+  boardIndex?: number;
   minion?: MinionInstance;
+  summonReason?: "reborn";
   cardGainResult?: CardGainResult;
 }
 

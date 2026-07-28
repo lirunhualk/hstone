@@ -5,6 +5,7 @@ import {
   createGame,
   gameReducer,
   getUpgradeCost,
+  type BattleEvent,
   type BoardMinionInstance,
   type GameAction,
   type GameState,
@@ -19,6 +20,7 @@ import {
   TOKEN_DEFINITIONS,
   getMinionDefinition,
 } from "../lib/game/content.ts";
+import { projectCombatBoard } from "../lib/game/playback.ts";
 
 function humanPlayer(state: GameState): PlayerState {
   const player = state.players.find(
@@ -481,6 +483,154 @@ test("a golden Alleycat summons one golden Tabbycat instead of two normal tokens
       "金色随从：基础属性已翻倍；可倍增的效果会按金色规则结算。",
     ),
   );
+});
+
+test("combat playback replaces a Reborn entity before applying its later buff snapshot", () => {
+  const state = createGame(0x8141);
+  const template = humanPlayer(state).shop[0];
+  const original = definitionMinion(
+    template,
+    "bronze-warden",
+    "playback-reborn-original",
+    { divineShield: false },
+  );
+  const reborn = {
+    ...original,
+    instanceId: "playback-reborn-new",
+    health: 1,
+    reborn: false,
+  };
+  const buffed = {
+    ...reborn,
+    attack: reborn.attack + 2,
+    health: reborn.health + 2,
+  };
+  const playerId = state.humanPlayerId;
+  const events: BattleEvent[] = [
+    {
+      index: 0,
+      type: "death",
+      actorPlayerId: playerId,
+      actorInstanceId: original.instanceId,
+      message: "青铜守卫被消灭。",
+    },
+    {
+      index: 1,
+      type: "summon",
+      actorPlayerId: playerId,
+      actorInstanceId: original.instanceId,
+      targetPlayerId: playerId,
+      targetInstanceId: reborn.instanceId,
+      boardIndex: 0,
+      minion: reborn,
+      summonReason: "reborn",
+      message: "青铜守卫复生了。",
+    },
+    {
+      index: 2,
+      type: "buff",
+      actorPlayerId: playerId,
+      actorInstanceId: "sleepy-supporter",
+      targetPlayerId: playerId,
+      targetInstanceId: reborn.instanceId,
+      attackDelta: 2,
+      healthDelta: 2,
+      minion: buffed,
+      message: "贪睡的援护巨龙使青铜守卫获得+2/+2。",
+    },
+  ];
+
+  const [projected] = projectCombatBoard(
+    [original],
+    playerId,
+    events,
+  );
+  assert.equal(projected.instanceId, reborn.instanceId);
+  assert.equal(projected.attack, buffed.attack);
+  assert.equal(projected.health, buffed.health);
+  assert.equal(
+    projectCombatBoard([original], "another-player", events)[0]
+      .instanceId,
+    original.instanceId,
+  );
+});
+
+test("combat playback inserts a normal summon before projecting a buff onto it", () => {
+  const state = createGame(0x8142);
+  const template = humanPlayer(state).shop[0];
+  const supporter = definitionMinion(
+    template,
+    "BG33_241",
+    "playback-summon-supporter",
+  );
+  const dyingNeighbor = fixtureMinion(
+    template,
+    "playback-summon-dying-neighbor",
+  );
+  const fallbackNeighbor = fixtureMinion(
+    template,
+    "playback-summon-fallback-neighbor",
+  );
+  const summoned = {
+    ...dyingNeighbor,
+    instanceId: "playback-summoned-neighbor",
+    attack: 2,
+    health: 2,
+  };
+  const buffed = {
+    ...summoned,
+    attack: 4,
+    health: 4,
+  };
+  const playerId = state.humanPlayerId;
+  const events: BattleEvent[] = [
+    {
+      index: 0,
+      type: "death",
+      actorPlayerId: playerId,
+      actorInstanceId: dyingNeighbor.instanceId,
+      message: "右邻被消灭。",
+    },
+    {
+      index: 1,
+      type: "summon",
+      actorPlayerId: playerId,
+      actorInstanceId: dyingNeighbor.instanceId,
+      targetPlayerId: playerId,
+      targetInstanceId: summoned.instanceId,
+      boardIndex: 1,
+      minion: summoned,
+      message: "召唤了新的右邻。",
+    },
+    {
+      index: 2,
+      type: "buff",
+      actorPlayerId: playerId,
+      actorInstanceId: supporter.instanceId,
+      targetPlayerId: playerId,
+      targetInstanceId: summoned.instanceId,
+      attackDelta: 2,
+      healthDelta: 2,
+      minion: buffed,
+      message: "新的右邻获得+2/+2。",
+    },
+  ];
+
+  const projected = projectCombatBoard(
+    [supporter, dyingNeighbor, fallbackNeighbor],
+    playerId,
+    events,
+  );
+  assert.deepEqual(
+    projected.map((minion) => minion.instanceId),
+    [
+      supporter.instanceId,
+      summoned.instanceId,
+      fallbackNeighbor.instanceId,
+    ],
+  );
+  assert.equal(projected[1].attack, 4);
+  assert.equal(projected[1].health, 4);
 });
 
 test("Zapp attacks the lowest-attack minion twice before combat passes", () => {

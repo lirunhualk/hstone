@@ -34,6 +34,7 @@ import {
   TRIBE_NAMES,
   getMinionDefinition,
 } from "../lib/game/content";
+import { projectCombatBoard } from "../lib/game/playback";
 
 const SAVE_KEY = "hearthstone-battlegrounds-local.save.v5";
 const INITIAL_SEED = 0x53544152;
@@ -388,6 +389,8 @@ function battleEventDelay(
       ? 850
       : event?.type === "attack"
         ? 800
+        : event?.type === "buff"
+          ? 620
         : event?.type === "shieldBroken"
           ? 500
           : event?.type === "death"
@@ -463,6 +466,8 @@ function UnitCard({
   dragging = false,
   combatActor = false,
   combatTarget = false,
+  combatBuffTarget = false,
+  combatBuffLabel,
   choiceTarget = false,
   magneticTarget = false,
   magneticDropTarget = false,
@@ -481,6 +486,8 @@ function UnitCard({
   dragging?: boolean;
   combatActor?: boolean;
   combatTarget?: boolean;
+  combatBuffTarget?: boolean;
+  combatBuffLabel?: string;
   choiceTarget?: boolean;
   magneticTarget?: boolean;
   magneticDropTarget?: boolean;
@@ -503,6 +510,8 @@ function UnitCard({
       }${dragging ? " is-drag-source" : ""}${
         combatActor ? " is-combat-actor" : ""
       }${combatTarget ? " is-combat-target" : ""}${
+        combatBuffTarget ? " is-combat-buff-target is-buffed" : ""
+      }${
         choiceTarget ? " is-choice-target" : ""
       }${magneticTarget ? " is-magnetic-target" : ""}${
         magneticDropTarget ? " is-magnetic-drop-target" : ""
@@ -527,10 +536,14 @@ function UnitCard({
           .join(" ") || undefined
       }
       data-combat-role={
-        combatActor && combatTarget
-          ? "actor target"
+        combatActor && combatBuffTarget
+          ? "actor buff-target"
+          : combatActor && combatTarget
+            ? "actor target"
           : combatActor
             ? "actor"
+            : combatBuffTarget
+              ? "buff-target"
             : combatTarget
               ? "target"
               : undefined
@@ -548,6 +561,11 @@ function UnitCard({
       {...dragHandlers}
     >
       <UnitCardFace unit={unit} />
+      {combatBuffTarget && combatBuffLabel && (
+        <span className="combat-buff-label" aria-hidden="true">
+          {combatBuffLabel}
+        </span>
+      )}
       {magneticTarget && (
         <span className="magnetic-target-label" aria-hidden="true">
           可吸附
@@ -690,6 +708,8 @@ function BoardRow({
   dragSession,
   actorInstanceId,
   targetInstanceId,
+  buffTargetInstanceId,
+  buffLabel,
   choiceTargetIds,
   magneticTargetIds,
   magneticDropTargetId,
@@ -707,6 +727,8 @@ function BoardRow({
   dragSession?: DragSession | null;
   actorInstanceId?: string;
   targetInstanceId?: string;
+  buffTargetInstanceId?: string;
+  buffLabel?: string;
   choiceTargetIds?: readonly string[];
   magneticTargetIds?: readonly string[];
   magneticDropTargetId?: string;
@@ -825,6 +847,14 @@ function BoardRow({
                 }
                 combatActor={unit.instanceId === actorInstanceId}
                 combatTarget={unit.instanceId === targetInstanceId}
+                combatBuffTarget={
+                  unit.instanceId === buffTargetInstanceId
+                }
+                combatBuffLabel={
+                  unit.instanceId === buffTargetInstanceId
+                    ? buffLabel
+                    : undefined
+                }
                 choiceTarget={isChoiceTarget}
                 magneticTarget={isMagneticTarget}
                 magneticDropTarget={isMagneticDropTarget}
@@ -1172,7 +1202,7 @@ export default function GameClient() {
       : battle.playerAId
     : human.lastOpponentId;
   const opponent = game.players.find((player) => player.id === opponentId);
-  const opponentBoard =
+  const opponentInitialBoard =
     battle && opponentId
       ? (
           battle.initialBoards[opponentId] ??
@@ -1207,12 +1237,36 @@ export default function GameClient() {
     revealedBattleEventCount > 0
       ? playbackEvents[revealedBattleEventCount - 1]
       : undefined;
+  const revealedPlaybackEvents =
+    battle && game.phase === "combat"
+      ? playbackEvents.slice(0, revealedBattleEventCount)
+      : [];
+  const opponentBoard =
+    battle && opponentId
+      ? projectCombatBoard(
+          opponentInitialBoard,
+          opponentId,
+          revealedPlaybackEvents,
+          { flushPendingDeaths: battlePlaybackComplete },
+        )
+      : opponentInitialBoard;
   const friendlyCombatBoard =
     game.phase === "combat" && battle
-      ? (battle.initialBoards[human.id] ?? human.board).filter(
-          isBoardMinionInstance,
+      ? projectCombatBoard(
+          (battle.initialBoards[human.id] ?? human.board).filter(
+            isBoardMinionInstance,
+          ),
+          human.id,
+          revealedPlaybackEvents,
+          { flushPendingDeaths: battlePlaybackComplete },
         )
       : human.board;
+  const currentBuffLabel =
+    currentBattleEvent?.type === "buff" &&
+    currentBattleEvent.attackDelta !== undefined &&
+    currentBattleEvent.healthDelta !== undefined
+      ? `+${currentBattleEvent.attackDelta}/+${currentBattleEvent.healthDelta}`
+      : undefined;
   const revealedBattleLogEvents = battle
     ? game.phase !== "combat" || battlePlaybackComplete
       ? battle.events
@@ -2196,10 +2250,18 @@ export default function GameClient() {
                   }
                   targetInstanceId={
                     currentBattleEvent &&
+                    currentBattleEvent.type !== "buff" &&
                     currentBattleEvent.targetPlayerId === opponentId
                       ? currentBattleEvent.targetInstanceId
                       : undefined
                   }
+                  buffTargetInstanceId={
+                    currentBattleEvent?.type === "buff" &&
+                    currentBattleEvent.targetPlayerId === opponentId
+                      ? currentBattleEvent.targetInstanceId
+                      : undefined
+                  }
+                  buffLabel={currentBuffLabel}
                 />
               )}
               {game.phase === "combat" &&
@@ -2214,8 +2276,12 @@ export default function GameClient() {
                       className="combat-playback-copy"
                       role="status"
                       aria-live="polite"
+                      aria-atomic="true"
                     >
-                      <span className="combat-playback-progress">
+                      <span
+                        className="combat-playback-progress"
+                        aria-hidden="true"
+                      >
                         战斗事件 {revealedBattleEventCount} /{" "}
                         {playbackEventCount}
                       </span>
@@ -2337,10 +2403,18 @@ export default function GameClient() {
                     : undefined
                 }
                 targetInstanceId={
+                  currentBattleEvent?.type !== "buff" &&
                   currentBattleEvent?.targetPlayerId === human.id
                     ? currentBattleEvent.targetInstanceId
                     : undefined
                 }
+                buffTargetInstanceId={
+                  currentBattleEvent?.type === "buff" &&
+                  currentBattleEvent.targetPlayerId === human.id
+                    ? currentBattleEvent.targetInstanceId
+                    : undefined
+                }
+                buffLabel={currentBuffLabel}
                 choiceTargetIds={
                   boardChoiceInteraction?.optionInstanceIds
                 }
@@ -2734,7 +2808,14 @@ export default function GameClient() {
                 )}
               </div>
             ) : (
-              <div className="battle-log" aria-live="polite">
+              <div
+                className="battle-log"
+                aria-live={
+                  game.phase === "combat" && !battlePlaybackComplete
+                    ? "off"
+                    : "polite"
+                }
+              >
                 {revealedBattleLogEvents.length ? (
                   revealedBattleLogEvents.slice(-80).map((event) => (
                     <p key={`${battle?.round ?? "battle"}-${event.index}`}>

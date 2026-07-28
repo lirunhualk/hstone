@@ -619,6 +619,39 @@
   transform: translateY(3px) scale(0.975);
 }
 
+.unit-card.is-combat-buff-target {
+  z-index: 8;
+  border-color: var(--accent);
+  filter: brightness(1.12) saturate(1.18);
+  box-shadow:
+    0 14px 30px rgb(0 0 0 / 34%),
+    0 0 0 3px rgb(50 215 196 / 76%),
+    0 0 32px rgb(50 215 196 / 46%);
+  transform: translateY(-3px) scale(1.025);
+}
+
+.combat-buff-label {
+  position: absolute;
+  z-index: 28;
+  top: 7px;
+  left: 50%;
+  padding: 4px 8px;
+  border: 1px solid rgb(225 255 249 / 88%);
+  border-radius: 999px;
+  pointer-events: none;
+  color: #06271f;
+  background: linear-gradient(135deg, #e7fff9, #60e2c8);
+  box-shadow:
+    0 5px 14px rgb(0 0 0 / 38%),
+    0 0 20px rgb(50 215 196 / 52%);
+  font-size: 11px;
+  font-weight: 950;
+  letter-spacing: 0.03em;
+  line-height: 1;
+  transform: translateX(-50%);
+  animation: combat-buff-pop 300ms ease both;
+}
+
 .unit-card.is-combat-actor.is-combat-target {
   border-color: var(--violet);
   box-shadow:
@@ -2321,11 +2354,13 @@
 }
 
 .combat-playback-copy strong {
+  display: -webkit-box;
   overflow: hidden;
   font-size: 14px;
   line-height: 1.35;
-  text-overflow: ellipsis;
-  white-space: nowrap;
+  overflow-wrap: anywhere;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
 }
 
 .combat-playback-progress {
@@ -2606,6 +2641,21 @@
     box-shadow:
       0 0 0 4px rgb(50 215 196 / 68%),
       0 0 26px rgb(50 215 196 / 35%);
+  }
+}
+
+@keyframes combat-buff-pop {
+  0% {
+    opacity: 0;
+    transform: translate(-50%, 8px) scale(0.75);
+  }
+  65% {
+    opacity: 1;
+    transform: translate(-50%, -2px) scale(1.08);
+  }
+  100% {
+    opacity: 1;
+    transform: translateX(-50%) scale(1);
   }
 }
 
@@ -3151,11 +3201,16 @@
   .unit-card.is-dead,
   .unit-card.is-combat-actor,
   .unit-card.is-combat-target,
+  .unit-card.is-combat-buff-target,
   .unit-card.is-choice-target,
   .unit-card.is-magnetic-target,
   .unit-card.is-magnetic-drop-target,
   .unit-card.is-newly-generated,
   .drag-ghost.is-direct-touch-drag {
     transform: none;
+  }
+
+  .combat-buff-label {
+    animation: none;
   }
 }

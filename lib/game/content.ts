@@ -3,7 +3,7 @@ import liveRosterSnapshot from "./generated/battlegrounds-36.0.3-247416.zhCN.jso
 };
 import type { MinionDefinition, Tribe } from "./types.ts";
 
-export const CURRENT_ROSTER_VERSION = "battlegrounds-36.0.3-247416-v7";
+export const CURRENT_ROSTER_VERSION = "battlegrounds-36.0.3-247416-v8";
 /** Compatibility alias for existing save and engine imports. */
 export const CLASSIC_ROSTER_VERSION = CURRENT_ROSTER_VERSION;
 
@@ -895,6 +895,17 @@ const LIVE_RULE_OVERRIDES: Readonly<
       },
     ],
   },
+  BG33_241: {
+    rally: [
+      {
+        kind: "buff",
+        target: "rightFriendly",
+        attack: 2,
+        health: 2,
+        goldenMode: "doubleStats",
+      },
+    ],
+  },
   BG31_859: {
     magnetic: {
       targetTribes: ["mech", "elemental"],
@@ -1129,6 +1140,7 @@ const FULLY_SUPPORTED_LIVE_CARD_IDS = new Set([
   "BG32_235",
   "BG32_172",
   "BG33_156",
+  "BG33_241",
   "BG34_175",
   "BG34_523",
   "BG34_630",

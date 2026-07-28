@@ -1729,6 +1729,414 @@ test("Mobile Projection Rally remains deterministic for identical seeded states"
   );
 });
 
+test("Sleepy Supporter buffs its current right neighbor before damage without changing the Recruit board", () => {
+  const state = createGame(4041);
+  const human = humanPlayer(state);
+  const supporter = definitionMinion(
+    "BG33_241",
+    "sleepy-supporter-order",
+  );
+  const rightNeighbor = definitionMinion(
+    "BG25_001",
+    "sleepy-supporter-right-neighbor",
+    {
+      attack: 98,
+      health: 1000,
+    },
+  );
+  human.board = [supporter, rightNeighbor];
+  keepOnlyOneOpponent(state, [
+    definitionMinion("BG25_001", "sleepy-supporter-enemy", {
+      attack: 100,
+      health: 100,
+      taunt: true,
+      reborn: false,
+    }),
+  ]);
+
+  const next = gameReducer(state, { type: "END_TURN" });
+  const battle = next.lastBattle;
+  assert.ok(battle);
+  const attack = battle.events.find(
+    (event) =>
+      event.type === "attack" &&
+      event.actorInstanceId === supporter.instanceId,
+  );
+  const buff = battle.events.find(
+    (event) =>
+      event.type === "buff" &&
+      event.actorInstanceId === supporter.instanceId,
+  );
+  const supporterDeath = battle.events.find(
+    (event) =>
+      event.type === "death" &&
+      event.actorInstanceId === supporter.instanceId,
+  );
+  assert.ok(attack);
+  assert.ok(buff);
+  assert.ok(supporterDeath);
+  assert.ok(attack.index < buff.index);
+  assert.ok(buff.index < supporterDeath.index);
+  assert.equal(buff.targetPlayerId, human.id);
+  assert.equal(buff.targetInstanceId, rightNeighbor.instanceId);
+  assert.equal(buff.attackDelta, 2);
+  assert.equal(buff.healthDelta, 2);
+  assert.equal(buff.minion?.attack, 100);
+  assert.equal(buff.minion?.health, 1002);
+  assert.match(
+    buff.message,
+    /贪睡的援护巨龙的进击使右侧的.+获得\+2\/\+2/u,
+  );
+
+  const survivingNeighbor = battle.finalBoards[human.id].find(
+    (minion) => minion.instanceId === rightNeighbor.instanceId,
+  );
+  assert.ok(survivingNeighbor);
+  assert.equal(survivingNeighbor.attack, 100);
+  assert.equal(survivingNeighbor.health, 902);
+  const permanentNeighbor = humanPlayer(next).board.find(
+    (minion) => minion.instanceId === rightNeighbor.instanceId,
+  );
+  assert.ok(permanentNeighbor);
+  assert.equal(permanentNeighbor.attack, 98);
+  assert.equal(permanentNeighbor.health, 1000);
+  assert.deepEqual(
+    JSON.parse(JSON.stringify(buff)),
+    buff,
+  );
+});
+
+test("Golden Sleepy Supporter applies one +4/+4 Rally event", () => {
+  const state = createGame(4042);
+  const human = humanPlayer(state);
+  const supporter = definitionMinion(
+    "BG33_241",
+    "golden-sleepy-supporter",
+    {
+      golden: true,
+      attack: 8,
+      health: 6,
+    },
+  );
+  const rightNeighbor = definitionMinion(
+    "BG25_001",
+    "golden-sleepy-right-neighbor",
+    {
+      attack: 96,
+      health: 1000,
+    },
+  );
+  human.board = [supporter, rightNeighbor];
+  keepOnlyOneOpponent(state, [
+    definitionMinion("BG25_001", "golden-sleepy-enemy", {
+      attack: 100,
+      health: 100,
+      taunt: true,
+      reborn: false,
+    }),
+  ]);
+
+  const next = gameReducer(state, { type: "END_TURN" });
+  const events =
+    next.lastBattle?.events.filter(
+      (event) =>
+        event.type === "buff" &&
+        event.actorInstanceId === supporter.instanceId,
+    ) ?? [];
+  assert.equal(events.length, 1);
+  assert.equal(events[0].targetInstanceId, rightNeighbor.instanceId);
+  assert.equal(events[0].attackDelta, 4);
+  assert.equal(events[0].healthDelta, 4);
+  assert.equal(events[0].minion?.attack, 100);
+  assert.equal(events[0].minion?.health, 1004);
+});
+
+test("Sleepy Supporter in the rightmost position has no valid Rally target", () => {
+  const state = createGame(4043);
+  const human = humanPlayer(state);
+  const supporter = definitionMinion(
+    "BG33_241",
+    "rightmost-sleepy-supporter",
+  );
+  const leftNeighbor = definitionMinion(
+    "BG25_001",
+    "rightmost-sleepy-left-neighbor",
+    {
+      attack: 0,
+      health: 1000,
+    },
+  );
+  human.board = [leftNeighbor, supporter];
+  keepOnlyOneOpponent(state, [
+    definitionMinion("BG25_001", "rightmost-sleepy-enemy", {
+      attack: 100,
+      health: 4,
+      taunt: true,
+    }),
+  ]);
+
+  const next = gameReducer(state, { type: "END_TURN" });
+  assert.equal(
+    next.lastBattle?.events.some(
+      (event) =>
+        event.type === "buff" &&
+        event.actorInstanceId === supporter.instanceId,
+    ),
+    false,
+  );
+  const permanentLeft = humanPlayer(next).board.find(
+    (minion) => minion.instanceId === leftNeighbor.instanceId,
+  );
+  assert.ok(permanentLeft);
+  assert.equal(permanentLeft.attack, 0);
+  assert.equal(permanentLeft.health, 1000);
+});
+
+test("Windfury Sleepy Supporter re-evaluates its right neighbor after first-strike deaths", () => {
+  const state = createGame(4044);
+  const human = humanPlayer(state);
+  const supporter = definitionMinion(
+    "BG33_241",
+    "windfury-sleepy-supporter",
+    {
+      windfury: true,
+      health: 100,
+    },
+  );
+  const firstNeighbor = definitionMinion(
+    "BG25_001",
+    "windfury-sleepy-first-neighbor",
+    {
+      attack: 1,
+      health: 1,
+      taunt: false,
+      reborn: false,
+    },
+  );
+  const nextNeighbor = definitionMinion(
+    "BG25_001",
+    "windfury-sleepy-next-neighbor",
+    {
+      attack: 0,
+      health: 1000,
+      taunt: false,
+      reborn: false,
+    },
+  );
+  human.board = [supporter, firstNeighbor, nextNeighbor];
+  keepOnlyOneOpponent(state, [
+    definitionMinion("BG_DAL_775", "windfury-sleepy-bomb", {
+      attack: 0,
+      health: 4,
+      taunt: true,
+    }),
+    definitionMinion("BG25_001", "windfury-sleepy-followup", {
+      attack: 100,
+      health: 100,
+      taunt: false,
+      reborn: false,
+    }),
+  ]);
+
+  const next = gameReducer(state, { type: "END_TURN" });
+  const relevantEvents =
+    next.lastBattle?.events.filter(
+      (event) =>
+        event.actorInstanceId === supporter.instanceId &&
+        (event.type === "attack" || event.type === "buff"),
+    ) ?? [];
+  assert.deepEqual(
+    relevantEvents.map((event) => event.type),
+    ["attack", "buff", "attack", "buff"],
+  );
+  const buffs = relevantEvents.filter(
+    (event) => event.type === "buff",
+  );
+  assert.deepEqual(
+    buffs.map((event) => event.targetInstanceId),
+    [firstNeighbor.instanceId, nextNeighbor.instanceId],
+  );
+  assert.equal(buffs[0].minion?.attack, 3);
+  assert.equal(buffs[0].minion?.health, 3);
+  assert.equal(buffs[1].minion?.attack, 2);
+  assert.equal(buffs[1].minion?.health, 999);
+  assert.ok(
+    (next.lastBattle?.events ?? []).some(
+      (event) =>
+        event.type === "death" &&
+        event.actorInstanceId === firstNeighbor.instanceId &&
+        event.index > buffs[0].index &&
+        event.index < buffs[1].index,
+    ),
+  );
+});
+
+test("a Windfury Sleepy Supporter that dies on the first strike Rallies only once", () => {
+  const state = createGame(4045);
+  const human = humanPlayer(state);
+  const supporter = definitionMinion(
+    "BG33_241",
+    "doomed-windfury-sleepy",
+    {
+      windfury: true,
+    },
+  );
+  const rightNeighbor = definitionMinion(
+    "BG25_001",
+    "doomed-windfury-right-neighbor",
+    {
+      attack: 98,
+      health: 1000,
+    },
+  );
+  human.board = [supporter, rightNeighbor];
+  keepOnlyOneOpponent(state, [
+    definitionMinion("BG25_001", "doomed-windfury-enemy", {
+      attack: 100,
+      health: 100,
+      taunt: true,
+      reborn: false,
+    }),
+  ]);
+
+  const next = gameReducer(state, { type: "END_TURN" });
+  const relevantEvents =
+    next.lastBattle?.events.filter(
+      (event) =>
+        event.actorInstanceId === supporter.instanceId &&
+        (event.type === "attack" || event.type === "buff"),
+    ) ?? [];
+  assert.deepEqual(
+    relevantEvents.map((event) => event.type),
+    ["attack", "buff"],
+  );
+});
+
+test("a right-neighbor Reborn loses its old Rally buff and can receive a fresh one", () => {
+  const state = createGame(4046);
+  const human = humanPlayer(state);
+  const supporter = definitionMinion(
+    "BG33_241",
+    "reborn-windfury-sleepy",
+    {
+      windfury: true,
+      health: 100,
+    },
+  );
+  const rebornNeighbor = definitionMinion(
+    "bronze-warden",
+    "reborn-sleepy-neighbor",
+    {
+      divineShield: false,
+    },
+  );
+  const safeNeighbor = definitionMinion(
+    "BG25_001",
+    "reborn-sleepy-safe-neighbor",
+    {
+      attack: 0,
+      health: 1000,
+    },
+  );
+  human.board = [supporter, rebornNeighbor, safeNeighbor];
+  keepOnlyOneOpponent(state, [
+    definitionMinion("BG_DAL_775", "reborn-sleepy-bomb", {
+      attack: 0,
+      health: 4,
+      taunt: true,
+    }),
+    definitionMinion("BG25_001", "reborn-sleepy-followup", {
+      attack: 100,
+      health: 100,
+      taunt: false,
+      reborn: false,
+    }),
+  ]);
+
+  const next = gameReducer(state, { type: "END_TURN" });
+  const buffs =
+    next.lastBattle?.events.filter(
+      (event) =>
+        event.type === "buff" &&
+        event.actorInstanceId === supporter.instanceId,
+    ) ?? [];
+  assert.equal(buffs.length, 2);
+  assert.equal(buffs[0].targetInstanceId, rebornNeighbor.instanceId);
+  assert.equal(buffs[0].minion?.attack, 4);
+  assert.equal(buffs[0].minion?.health, 3);
+  assert.notEqual(buffs[1].targetInstanceId, rebornNeighbor.instanceId);
+  assert.equal(buffs[1].minion?.definitionId, "bronze-warden");
+  assert.equal(buffs[1].minion?.attack, 4);
+  assert.equal(buffs[1].minion?.health, 3);
+  const rebornSummon = next.lastBattle?.events.find(
+    (event) =>
+      event.type === "summon" &&
+      event.actorInstanceId === rebornNeighbor.instanceId,
+  );
+  assert.ok(rebornSummon);
+  assert.equal(buffs[1].targetInstanceId, rebornSummon.targetInstanceId);
+  assert.ok(rebornSummon.index < buffs[1].index);
+});
+
+test("an eliminated ghost Sleepy Supporter still applies combat-only Rally buffs", () => {
+  const state = createGame(4047);
+  for (const player of state.players) {
+    player.alive = false;
+    player.health = 0;
+    player.gold = 0;
+    player.board = [];
+    player.hand = [];
+    player.shop = [];
+    player.frozen = false;
+    player.eliminatedRound = undefined;
+  }
+  for (const [index, player] of state.players.slice(0, 3).entries()) {
+    player.alive = true;
+    player.health = 40;
+    player.board = [
+      definitionMinion("BG25_001", `sleepy-ghost-living-${index}`, {
+        attack: 100,
+        health: 100,
+      }),
+    ];
+  }
+  const ghost = state.players[3];
+  ghost.eliminatedRound = 0;
+  const supporter = definitionMinion(
+    "BG33_241",
+    "sleepy-ghost-supporter",
+  );
+  const rightNeighbor = definitionMinion(
+    "BG25_001",
+    "sleepy-ghost-right-neighbor",
+    {
+      attack: 98,
+      health: 1000,
+    },
+  );
+  ghost.board = [supporter, rightNeighbor];
+
+  const next = gameReducer(state, { type: "END_TURN" });
+  const ghostBattle = next.lastRoundBattles.find(
+    (battle) =>
+      battle.isGhost &&
+      (battle.playerAId === ghost.id || battle.playerBId === ghost.id),
+  );
+  assert.ok(ghostBattle);
+  const buff = ghostBattle.events.find(
+    (event) =>
+      event.type === "buff" &&
+      event.actorInstanceId === supporter.instanceId,
+  );
+  assert.ok(buff);
+  assert.equal(buff.targetPlayerId, ghost.id);
+  assert.equal(buff.targetInstanceId, rightNeighbor.instanceId);
+  assert.equal(buff.attackDelta, 2);
+  assert.equal(buff.healthDelta, 2);
+  assert.equal(next.players[3].board[1].attack, 98);
+  assert.equal(next.players[3].board[1].health, 1000);
+});
+
 test("seven AIs can Magnetize on a full board with the same deterministic rules", () => {
   const state = createGame(4009);
   const human = humanPlayer(state);

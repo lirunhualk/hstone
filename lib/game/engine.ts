@@ -2081,7 +2081,8 @@ function summonCombatMinion(
   }
   applyPersistentTribeBuff(context, ownerId, summoned);
   applyExistingAurasToSummoned(board, summoned);
-  board.splice(Math.min(Math.max(0, insertAt), board.length), 0, summoned);
+  const boardIndex = Math.min(Math.max(0, insertAt), board.length);
+  board.splice(boardIndex, 0, summoned);
   applyNewAuraSource(board, summoned);
   triggerAfterFriendlySummoned(context, ownerId, summoned);
   pushBattleEvent(context.events, {
@@ -2090,6 +2091,7 @@ function summonCombatMinion(
     actorInstanceId: source.instanceId,
     targetPlayerId: ownerId,
     targetInstanceId: summoned.instanceId,
+    boardIndex,
     minion: cloneMinion(summoned),
     message: `${source.name}召唤了${summoned.name}。`,
   });
@@ -2304,17 +2306,52 @@ function triggerRally(
   attacker: MinionInstance,
 ): void {
   for (const component of minionEffectSources(attacker)) {
-    const effects =
-      getMinionDefinition(component.definitionId).rally ?? [];
+    const definition = getMinionDefinition(component.definitionId);
+    const effects = definition.rally ?? [];
     for (const effect of effects) {
-      resolveCombatGetRandomMinion(
-        context,
-        ownerId,
-        attacker,
-        component,
-        effect,
-        "进击",
+      if (effect.kind === "getRandomMinion") {
+        resolveCombatGetRandomMinion(
+          context,
+          ownerId,
+          attacker,
+          component,
+          effect,
+          "进击",
+        );
+        continue;
+      }
+
+      const board = context.boards[ownerId];
+      const attackerIndex = board.findIndex(
+        (minion) => minion.instanceId === attacker.instanceId,
       );
+      const target =
+        attackerIndex >= 0 ? board[attackerIndex + 1] : undefined;
+      if (
+        effect.target !== "rightFriendly" ||
+        !target ||
+        target.health <= 0
+      ) {
+        continue;
+      }
+
+      const scale =
+        component.golden && effect.goldenMode === "doubleStats" ? 2 : 1;
+      const attackDelta = effect.attack * scale;
+      const healthDelta = effect.health * scale;
+      target.attack = Math.max(0, target.attack + attackDelta);
+      target.health = Math.max(1, target.health + healthDelta);
+      pushBattleEvent(context.events, {
+        type: "buff",
+        actorPlayerId: ownerId,
+        actorInstanceId: attacker.instanceId,
+        targetPlayerId: ownerId,
+        targetInstanceId: target.instanceId,
+        attackDelta,
+        healthDelta,
+        minion: cloneMinion(target),
+        message: `${definition.name}的进击使右侧的${target.name}获得+${attackDelta}/+${healthDelta}。`,
+      });
     }
   }
 }
@@ -2680,7 +2717,8 @@ function resolveCombatDeaths(context: CombatContext): void {
       reborn.reborn = false;
       applyPersistentTribeBuff(context, death.ownerId, reborn);
       const board = context.boards[death.ownerId];
-      board.splice(Math.min(death.index, board.length), 0, reborn);
+      const boardIndex = Math.min(death.index, board.length);
+      board.splice(boardIndex, 0, reborn);
       triggerAfterFriendlySummoned(context, death.ownerId, reborn);
       pushBattleEvent(context.events, {
         type: "summon",
@@ -2688,7 +2726,9 @@ function resolveCombatDeaths(context: CombatContext): void {
         actorInstanceId: death.minion.instanceId,
         targetPlayerId: death.ownerId,
         targetInstanceId: reborn.instanceId,
+        boardIndex,
         minion: cloneMinion(reborn),
+        summonReason: "reborn",
         message: `${death.minion.name}复生了。`,
       });
     }
