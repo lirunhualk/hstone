@@ -4,11 +4,11 @@ import "./globals.css";
 
 export const metadata: Metadata = {
   title: {
-    default: "经典酒馆战棋 · 单机版",
-    template: "%s · 经典酒馆战棋",
+    default: "酒馆战棋 · 单机版",
+    template: "%s · 酒馆战棋单机版",
   },
   description:
-    "一名玩家与七名 AI 对战、没有回合倒计时的本地经典酒馆战棋。",
+    "一名玩家与七名 AI 对战、使用 36.0.3 当前随从池且没有回合倒计时的本地酒馆战棋。",
 };
 
 export default function RootLayout({

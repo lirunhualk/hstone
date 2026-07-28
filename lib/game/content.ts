@@ -1,6 +1,11 @@
+import liveRosterSnapshot from "./generated/battlegrounds-36.0.3-247416.zhCN.json" with {
+  type: "json",
+};
 import type { MinionDefinition, Tribe } from "./types.ts";
 
-export const CLASSIC_ROSTER_VERSION = "classic-nostalgia-2026-07";
+export const CURRENT_ROSTER_VERSION = "battlegrounds-36.0.3-247416-v2";
+/** Compatibility alias for existing save and engine imports. */
+export const CLASSIC_ROSTER_VERSION = CURRENT_ROSTER_VERSION;
 
 export const TRIBE_NAMES: Readonly<Record<Tribe, string>> = {
   beast: "野兽",
@@ -9,15 +14,20 @@ export const TRIBE_NAMES: Readonly<Record<Tribe, string>> = {
   murloc: "鱼人",
   dragon: "龙",
   pirate: "海盗",
+  elemental: "元素",
+  naga: "纳迦",
+  quilboar: "野猪人",
+  undead: "亡灵",
+  all: "全部",
   neutral: "中立",
 };
 
 /**
- * A deliberately stable nostalgia pool rather than the live rotating pool.
- * Names, art CardIDs and signature mechanics match recognizable Battlegrounds
- * cards. Some tiers use their best-known classic placement.
+ * Stable legacy fixtures for rules already implemented by the engine. They are
+ * retained for focused mechanics tests and token generation, but are converted
+ * to non-collectible definitions before joining the public definition catalog.
  */
-export const MINION_DEFINITIONS: readonly MinionDefinition[] = [
+const LEGACY_FIXTURE_DEFINITIONS: readonly MinionDefinition[] = [
   // Tier 1
   {
     id: "alleycat",
@@ -619,6 +629,458 @@ export const MINION_DEFINITIONS: readonly MinionDefinition[] = [
     collectible: false,
   },
 ] as const;
+
+interface LiveRosterCard {
+  id: string;
+  dbfId: number;
+  premiumDbfId: number;
+  name: string;
+  tier: number;
+  attack: number;
+  health: number;
+  races: readonly string[];
+  associatedRaces: readonly string[];
+  mechanics: readonly string[];
+  referencedTags: readonly string[];
+  text: string;
+}
+
+interface LiveRosterSnapshot {
+  minions: readonly LiveRosterCard[];
+}
+
+const SOURCE_TRIBE_MAP = {
+  BEAST: "beast",
+  MECHANICAL: "mech",
+  DEMON: "demon",
+  MURLOC: "murloc",
+  DRAGON: "dragon",
+  PIRATE: "pirate",
+  ELEMENTAL: "elemental",
+  NAGA: "naga",
+  QUILBOAR: "quilboar",
+  UNDEAD: "undead",
+  ALL: "all",
+} as const satisfies Readonly<Record<string, Exclude<Tribe, "neutral">>>;
+
+const REUSED_RULE_CARD_IDS = new Set([
+  "BGS_004",
+  "BGS_071",
+  "BG_LOE_077",
+  "BG25_354",
+  "BGS_012",
+  "BGS_018",
+]);
+
+const CLEAVE_DESCRIPTION = "同时对其攻击目标相邻的随从造成伤害。";
+
+// Build 247416 contains duplicated internal dynamic-template expansions in
+// these zhCN text fields. Keep the pinned source untouched, but present the
+// normal localized card text in-game.
+const LIVE_DESCRIPTION_OVERRIDES: Readonly<Record<string, string>> = {
+  BG21_018:
+    "每当本随从通过其他来源获得攻击力时，获得+1生命值。",
+  BG26_199:
+    "每2个回合，在回合结束时，获取一张本随从左边随从的原始版复制。（还剩2回合！）",
+  BG26_529:
+    "每3个回合，在回合结束时，随机获取一张龙牌。（还剩3回合！）",
+  BG26_810:
+    "每当你花掉\n6枚铸币，使你的海盗获得+2攻击力。（还剩6枚！）",
+  BG27_005:
+    "每当你施放一个酒馆法术，使你的随从获得+1攻击力。",
+  BG31_035:
+    "在你使用一张纳迦牌后，获得+1/+1。（在本局对战中，你每施放4个法术都会提升！）",
+  BG31_816:
+    "当你出售本随从时，使你的随从获得+1攻击力。提升你此后投球手的效果。",
+  BG31_818:
+    "当你出售本随从时，使你的随从获得+1生命值。提升你此后投球手的效果。",
+  BG32_235:
+    "在你的回合结束时，使相邻的随从获得+1攻击力。每有一个友方金色随从，重复一次。",
+  BG35_601:
+    "每当本随从受到伤害，获得一次免费的刷新。（每回合限3次。）",
+  BG35_801:
+    "一旦你购买了4张牌，获得+4/+4。（还剩4张！）",
+  BG35_814:
+    "一旦本随从的攻击力达到6点，获得圣盾。",
+};
+
+function mapSourceTribe(source: string): Tribe {
+  const mapped =
+    SOURCE_TRIBE_MAP[source as keyof typeof SOURCE_TRIBE_MAP];
+  if (!mapped) {
+    throw new Error(`Unknown Battlegrounds minion type: ${source}`);
+  }
+  return mapped;
+}
+
+function plainCardText(html: string): string {
+  return html
+    .replace(/<br\s*\/?>/giu, "\n")
+    .replace(/<[^>]+>/gu, "")
+    .replaceAll("&nbsp;", " ")
+    .replaceAll("&amp;", "&")
+    .replaceAll("&lt;", "<")
+    .replaceAll("&gt;", ">")
+    .replace(/\r/gu, "")
+    .replace(/[ \t]+\n/gu, "\n")
+    .replace(/\n[ \t]+/gu, "\n")
+    .replace(/[ \t]{2,}/gu, " ")
+    .trim();
+}
+
+function onlySupportedKeywordText(description: string): boolean {
+  const residue = description
+    .replace(/嘲讽|圣盾|复生|风怒|烈毒/gu, "")
+    .replace(/[\s，。；、,.!！?？：:]/gu, "");
+  return residue.length === 0;
+}
+
+function hasMechanic(card: LiveRosterCard, mechanic: string): boolean {
+  return card.mechanics.includes(mechanic);
+}
+
+function legacyPrintedTribes(definition: MinionDefinition): readonly Tribe[] {
+  return definition.tribe === "neutral" ? [] : [definition.tribe];
+}
+
+export const LEGACY_RULE_DEFINITIONS: readonly MinionDefinition[] =
+  Object.freeze(
+    LEGACY_FIXTURE_DEFINITIONS.filter(
+      (definition) => definition.collectible !== false,
+    ).map((definition) => ({
+      ...definition,
+      tribes: legacyPrintedTribes(definition),
+      associatedTribes: [],
+      effectSupport: "complete" as const,
+      collectible: false,
+    })),
+  );
+
+export const TOKEN_DEFINITIONS: readonly MinionDefinition[] = Object.freeze(
+  LEGACY_FIXTURE_DEFINITIONS.filter(
+    (definition) => definition.collectible === false,
+  ).map((definition) => ({
+    ...definition,
+    tribes: legacyPrintedTribes(definition),
+    associatedTribes: [],
+    effectSupport: "complete" as const,
+    collectible: false,
+  })),
+);
+
+export const LIVE_TOKEN_DEFINITIONS: readonly MinionDefinition[] =
+  Object.freeze([
+    {
+      id: "live-skeleton-token",
+      cardId: "BG_ICC_026t",
+      name: "骷髅",
+      tier: 1,
+      tribe: "undead",
+      tribes: ["undead"],
+      associatedTribes: [],
+      effectSupport: "complete",
+      attack: 1,
+      health: 1,
+      description: "由亡语召唤。",
+      collectible: false,
+    },
+    {
+      id: "live-microbot-token",
+      cardId: "BG_BOT_312t",
+      name: "微型机器人",
+      tier: 1,
+      tribe: "mech",
+      tribes: ["mech"],
+      associatedTribes: [],
+      effectSupport: "complete",
+      attack: 1,
+      health: 1,
+      description: "由拔线机召唤。",
+      collectible: false,
+    },
+    {
+      id: "live-beetle-token",
+      cardId: "BG28_603t",
+      name: "甲虫",
+      tier: 1,
+      tribe: "beast",
+      tribes: ["beast"],
+      associatedTribes: [],
+      effectSupport: "complete",
+      attack: 2,
+      health: 2,
+      description: "由嗡鸣害虫召唤。",
+      collectible: false,
+    },
+    {
+      id: "live-twilight-whelp-token",
+      cardId: "BG34_630t",
+      name: "暮光雏龙",
+      tier: 1,
+      tribe: "dragon",
+      tribes: ["dragon"],
+      associatedTribes: [],
+      effectSupport: "complete",
+      attack: 3,
+      health: 3,
+      description: "由暮光龙崽召唤并立即攻击。",
+      collectible: false,
+    },
+    {
+      id: "live-helping-hand-token",
+      cardId: "BG25_010t",
+      name: "援手",
+      tier: 1,
+      tribe: "undead",
+      tribes: ["undead"],
+      associatedTribes: [],
+      effectSupport: "complete",
+      attack: 2,
+      health: 1,
+      reborn: true,
+      description: "复生",
+      collectible: false,
+    },
+  ] satisfies readonly MinionDefinition[]);
+
+const LEGACY_RULE_BY_CARD_ID = new Map(
+  LEGACY_RULE_DEFINITIONS.map((definition) => [
+    definition.cardId,
+    definition,
+  ]),
+);
+
+const LIVE_RULE_OVERRIDES: Readonly<
+  Record<string, Partial<MinionDefinition>>
+> = {
+  BG25_022: {
+    deathrattle: [
+      {
+        kind: "buff",
+        target: "randomFriendlyTribe",
+        tribe: "undead",
+        attack: 1,
+        health: 2,
+      },
+    ],
+  },
+  BG28_300: {
+    deathrattle: [
+      {
+        kind: "summon",
+        definitionId: "live-skeleton-token",
+        count: 2,
+        goldenMode: "doubleCount",
+      },
+    ],
+  },
+  BG29_611: {
+    deathrattle: [
+      {
+        kind: "summon",
+        definitionId: "live-microbot-token",
+        count: 1,
+      },
+    ],
+  },
+  BG31_803: {
+    deathrattle: [
+      {
+        kind: "summon",
+        definitionId: "live-beetle-token",
+        count: 1,
+        goldenMode: "doubleCount",
+      },
+    ],
+  },
+  BG34_630: {
+    deathrattle: [
+      {
+        kind: "summon",
+        definitionId: "live-twilight-whelp-token",
+        count: 1,
+        immediateAttack: true,
+        goldenMode: "doubleCount",
+      },
+    ],
+  },
+  BG25_010: {
+    deathrattle: [
+      {
+        kind: "summon",
+        definitionId: "live-helping-hand-token",
+        count: 1,
+        goldenMode: "doubleCount",
+      },
+    ],
+  },
+  BG30_125: {
+    deathrattle: [
+      {
+        kind: "summon",
+        definitionId: "live-skeleton-token",
+        count: 3,
+        goldenMode: "doubleCount",
+      },
+    ],
+  },
+  BG34_731: {
+    deathrattle: [
+      {
+        kind: "summon",
+        definitionId: "BG34_630",
+        count: 2,
+        taunt: true,
+        goldenMode: "doubleCount",
+      },
+    ],
+  },
+  BG34_636t: {
+    battlecry: [
+      {
+        kind: "buff",
+        target: "otherFriendlyTribe",
+        tribe: "dragon",
+        attack: 1,
+        health: 3,
+      },
+    ],
+  },
+  BG34_637t: {
+    battlecry: [
+      {
+        kind: "buff",
+        target: "otherFriendlyTribe",
+        tribe: "dragon",
+        attack: 3,
+        health: 1,
+      },
+    ],
+  },
+  BG_DAL_775: {
+    deathrattle: [
+      {
+        kind: "damageAllMinions",
+        amount: 3,
+        goldenMode: "repeat",
+      },
+    ],
+  },
+  BG33_156: {
+    deathrattle: [
+      {
+        kind: "damageAllMinions",
+        amount: 2,
+        excludeFriendlyTribe: "demon",
+        goldenMode: "repeat",
+      },
+    ],
+  },
+  BG21_014: {
+    startOfCombat: [
+      {
+        kind: "buff",
+        target: "friendlyTribe",
+        tribe: "dragon",
+        attack: 4,
+        health: 4,
+      },
+    ],
+  },
+  BG26_805: {
+    startOfCombat: [
+      {
+        kind: "buff",
+        target: "friendlyTribe",
+        tribe: "beast",
+        attack: 1,
+        health: 0,
+      },
+    ],
+  },
+  BG32_235: {
+    endOfTurn: {
+      kind: "buff",
+      target: "adjacentFriendly",
+      attack: 1,
+      health: 0,
+      repeatPerGoldenFriendly: true,
+    },
+  },
+  BGS_049: {
+    sellValue: 3,
+    goldenSellValue: 6,
+  },
+};
+
+function createLiveDefinition(card: LiveRosterCard): MinionDefinition {
+  if (
+    !Number.isInteger(card.tier) ||
+    card.tier < 1 ||
+    card.tier > 6
+  ) {
+    throw new Error(`Invalid live Tavern Tier for ${card.id}: ${card.tier}`);
+  }
+
+  const tribes = card.races.map(mapSourceTribe);
+  const associatedTribes = card.associatedRaces.map(mapSourceTribe);
+  const description =
+    LIVE_DESCRIPTION_OVERRIDES[card.id] ?? plainCardText(card.text);
+  const cleave = description === CLEAVE_DESCRIPTION;
+  const reusedFixture = REUSED_RULE_CARD_IDS.has(card.id)
+    ? LEGACY_RULE_BY_CARD_ID.get(card.id)
+    : undefined;
+  const liveRuleOverride = LIVE_RULE_OVERRIDES[card.id];
+  if (REUSED_RULE_CARD_IDS.has(card.id) && !reusedFixture) {
+    throw new Error(`Missing legacy rules fixture for ${card.id}`);
+  }
+
+  const effectSupport =
+    reusedFixture ||
+    liveRuleOverride ||
+    description.length === 0 ||
+    onlySupportedKeywordText(description) ||
+    cleave
+      ? "complete"
+      : "partial";
+
+  return {
+    ...reusedFixture,
+    ...liveRuleOverride,
+    id: card.id,
+    cardId: card.id,
+    name: card.name,
+    tier: card.tier as MinionDefinition["tier"],
+    tribe: tribes[0] ?? "neutral",
+    tribes,
+    associatedTribes,
+    effectSupport,
+    attack: card.attack,
+    health: card.health,
+    description,
+    taunt: hasMechanic(card, "TAUNT"),
+    divineShield: hasMechanic(card, "DIVINE_SHIELD"),
+    reborn: hasMechanic(card, "REBORN"),
+    poisonous: false,
+    venomous: hasMechanic(card, "VENOMOUS"),
+    windfury: hasMechanic(card, "WINDFURY"),
+    cleave,
+    collectible: true,
+  };
+}
+
+const LIVE_ROSTER =
+  liveRosterSnapshot as unknown as LiveRosterSnapshot;
+
+export const LIVE_MINION_DEFINITIONS: readonly MinionDefinition[] =
+  Object.freeze(LIVE_ROSTER.minions.map(createLiveDefinition));
+
+export const MINION_DEFINITIONS: readonly MinionDefinition[] = Object.freeze([
+  ...LEGACY_RULE_DEFINITIONS,
+  ...TOKEN_DEFINITIONS,
+  ...LIVE_TOKEN_DEFINITIONS,
+  ...LIVE_MINION_DEFINITIONS,
+]);
 
 export const MINION_BY_ID: Readonly<Record<string, MinionDefinition>> =
   Object.freeze(

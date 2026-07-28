@@ -1,0 +1,4440 @@
+{
+  "schemaVersion": 1,
+  "source": {
+    "patch": "36.0.3",
+    "build": 247416,
+    "locale": "zhCN",
+    "cutoffDate": "2026-07-27",
+    "url": "https://api.hearthstonejson.com/v1/247416/zhCN/cards.json",
+    "sha256": "5E48186C2E1702B474088958978D560026A6CDC3990F181CAB790D42A7727013"
+  },
+  "counts": {
+    "rawPoolMinions": 278,
+    "duosExcluded": 29,
+    "soloPoolMinions": 249,
+    "tierSevenExcluded": 12,
+    "snapshotMinions": 237,
+    "byTier": {
+      "1": 22,
+      "2": 32,
+      "3": 41,
+      "4": 50,
+      "5": 57,
+      "6": 35
+    }
+  },
+  "minions": [
+    {
+      "id": "BG20_100",
+      "dbfId": 70143,
+      "premiumDbfId": 70150,
+      "name": "剃刀沼泽地卜师",
+      "tier": 1,
+      "attack": 2,
+      "health": 1,
+      "races": [
+        "QUILBOAR"
+      ],
+      "associatedRaces": [],
+      "mechanics": [
+        "BATTLECRY"
+      ],
+      "referencedTags": [
+        "BACON_BLOOD_GEM_TOOLTIP"
+      ],
+      "text": "<b>战吼：</b>获取2张\n<b>鲜血宝石</b>。"
+    },
+    {
+      "id": "BG20_301",
+      "dbfId": 70147,
+      "premiumDbfId": 70148,
+      "name": "晾膘的游客",
+      "tier": 1,
+      "attack": 2,
+      "health": 3,
+      "races": [
+        "QUILBOAR"
+      ],
+      "associatedRaces": [],
+      "mechanics": [],
+      "referencedTags": [
+        "BACON_BLOOD_GEM_TOOLTIP"
+      ],
+      "text": "当你出售本随从时，获取2张<b>鲜血宝石</b>。"
+    },
+    {
+      "id": "BG24_009",
+      "dbfId": 92400,
+      "premiumDbfId": 92427,
+      "name": "挑食魔犬",
+      "tier": 1,
+      "attack": 1,
+      "health": 1,
+      "races": [
+        "DEMON"
+      ],
+      "associatedRaces": [],
+      "mechanics": [
+        "BATTLECRY"
+      ],
+      "referencedTags": [],
+      "text": "<b>战吼：</b>随机吞食酒馆中的一个随从，获得其属性值。"
+    },
+    {
+      "id": "BG25_001",
+      "dbfId": 95246,
+      "premiumDbfId": 95248,
+      "name": "复活的骑兵",
+      "tier": 1,
+      "attack": 2,
+      "health": 1,
+      "races": [
+        "UNDEAD"
+      ],
+      "associatedRaces": [],
+      "mechanics": [
+        "REBORN",
+        "TAUNT"
+      ],
+      "referencedTags": [],
+      "text": "<b>嘲讽</b>，<b>复生</b>"
+    },
+    {
+      "id": "BG25_013",
+      "dbfId": 95271,
+      "premiumDbfId": 95272,
+      "name": "腐皮豺狼人",
+      "tier": 1,
+      "attack": 1,
+      "health": 4,
+      "races": [
+        "UNDEAD"
+      ],
+      "associatedRaces": [],
+      "mechanics": [
+        "AURA"
+      ],
+      "referencedTags": [],
+      "text": "在本场战斗中，每有一个友方随从死亡，便拥有+1攻击力。"
+    },
+    {
+      "id": "BG26_135",
+      "dbfId": 98501,
+      "premiumDbfId": 98502,
+      "name": "南海卖艺者",
+      "tier": 1,
+      "attack": 3,
+      "health": 1,
+      "races": [
+        "PIRATE"
+      ],
+      "associatedRaces": [],
+      "mechanics": [
+        "BATTLECRY"
+      ],
+      "referencedTags": [],
+      "text": "<b>战吼：</b>下回合获得1枚铸币。"
+    },
+    {
+      "id": "BG26_146",
+      "dbfId": 98582,
+      "premiumDbfId": 98585,
+      "name": "催眠机器人",
+      "tier": 1,
+      "attack": 2,
+      "health": 2,
+      "races": [
+        "MECHANICAL"
+      ],
+      "associatedRaces": [],
+      "mechanics": [
+        "END_OF_TURN_TRIGGER",
+        "MAGNETIC"
+      ],
+      "referencedTags": [],
+      "text": "<b>磁力</b>\n在你的回合结束时，获得+1生命值。"
+    },
+    {
+      "id": "BG26_529",
+      "dbfId": 101114,
+      "premiumDbfId": 101115,
+      "name": "蓄势主唱幼龙",
+      "tier": 1,
+      "attack": 1,
+      "health": 1,
+      "races": [
+        "DRAGON"
+      ],
+      "associatedRaces": [],
+      "mechanics": [
+        "END_OF_TURN_TRIGGER",
+        "TRIGGER_VISUAL"
+      ],
+      "referencedTags": [],
+      "text": "每3个回合，在回合结束时，随机获取一张龙牌。<i>（还剩3回合！）</i>3每3个回合，在回合结束时，随机获取一张龙牌。<i>（就是这回合！）</i>"
+    },
+    {
+      "id": "BG27_004",
+      "dbfId": 103674,
+      "premiumDbfId": 103675,
+      "name": "海上双雄",
+      "tier": 1,
+      "attack": 1,
+      "health": 1,
+      "races": [
+        "NAGA",
+        "BEAST"
+      ],
+      "associatedRaces": [],
+      "mechanics": [
+        "BACON_SPELLCRAFT_ID",
+        "TRIGGER_VISUAL"
+      ],
+      "referencedTags": [
+        "DEATHRATTLE"
+      ],
+      "text": "<b>塑造法术：</b>直到下个回合，使一个随从获得“<b>亡语：</b>召唤一只3/2的螃蟹”。"
+    },
+    {
+      "id": "BG28_300",
+      "dbfId": 104551,
+      "premiumDbfId": 104554,
+      "name": "无害的骨颅",
+      "tier": 1,
+      "attack": 1,
+      "health": 1,
+      "races": [
+        "UNDEAD"
+      ],
+      "associatedRaces": [],
+      "mechanics": [
+        "DEATHRATTLE"
+      ],
+      "referencedTags": [],
+      "text": "<b>亡语：</b>召唤两个1/1的骷髅。"
+    },
+    {
+      "id": "BG29_611",
+      "dbfId": 110101,
+      "premiumDbfId": 110102,
+      "name": "拔线机",
+      "tier": 1,
+      "attack": 1,
+      "health": 1,
+      "races": [
+        "MECHANICAL"
+      ],
+      "associatedRaces": [],
+      "mechanics": [
+        "DEATHRATTLE",
+        "DIVINE_SHIELD"
+      ],
+      "referencedTags": [],
+      "text": "<b>圣盾</b>。<b>亡语：</b>召唤一个1/1的微型机器人。"
+    },
+    {
+      "id": "BG31_330",
+      "dbfId": 117553,
+      "premiumDbfId": 117554,
+      "name": "厄运先知",
+      "tier": 1,
+      "attack": 2,
+      "health": 1,
+      "races": [
+        "DEMON",
+        "NAGA"
+      ],
+      "associatedRaces": [],
+      "mechanics": [
+        "BATTLECRY"
+      ],
+      "referencedTags": [],
+      "text": "<b>战吼：</b>你购买的下一张酒馆法术牌消耗的铸币减少（1）枚。"
+    },
+    {
+      "id": "BG31_803",
+      "dbfId": 116240,
+      "premiumDbfId": 116241,
+      "name": "嗡鸣害虫",
+      "tier": 1,
+      "attack": 1,
+      "health": 1,
+      "races": [
+        "BEAST"
+      ],
+      "associatedRaces": [],
+      "mechanics": [
+        "DEATHRATTLE",
+        "TAUNT"
+      ],
+      "referencedTags": [],
+      "text": "<b>嘲讽</b>。<b>亡语：</b>召唤一只2/2的甲虫。"
+    },
+    {
+      "id": "BG31_815",
+      "dbfId": 116734,
+      "premiumDbfId": 116735,
+      "name": "沙丘土著",
+      "tier": 1,
+      "attack": 3,
+      "health": 2,
+      "races": [
+        "ELEMENTAL"
+      ],
+      "associatedRaces": [],
+      "mechanics": [
+        "BATTLECRY"
+      ],
+      "referencedTags": [],
+      "text": "<b>战吼：</b>使酒馆中的元素在本局对战中获得+1/+1。"
+    },
+    {
+      "id": "BG32_236",
+      "dbfId": 119996,
+      "premiumDbfId": 119997,
+      "name": "夺金健将",
+      "tier": 1,
+      "attack": 1,
+      "health": 1,
+      "races": [
+        "PIRATE"
+      ],
+      "associatedRaces": [],
+      "mechanics": [
+        "BATTLECRY",
+        "DIVINE_SHIELD"
+      ],
+      "referencedTags": [],
+      "text": "<b>圣盾</b>。<b>战吼：</b>使本随从变为金色。"
+    },
+    {
+      "id": "BG32_330",
+      "dbfId": 120677,
+      "premiumDbfId": 120678,
+      "name": "好斗的斥候",
+      "tier": 1,
+      "attack": 3,
+      "health": 3,
+      "races": [
+        "MURLOC"
+      ],
+      "associatedRaces": [],
+      "mechanics": [
+        "START_OF_COMBAT",
+        "TRIGGER_VISUAL"
+      ],
+      "referencedTags": [],
+      "text": "<b>战斗开始时：</b>如果本随从在你的手牌中，召唤一个它的复制。"
+    },
+    {
+      "id": "BG33_140",
+      "dbfId": 122092,
+      "premiumDbfId": 122093,
+      "name": "江河弹跳鱼",
+      "tier": 1,
+      "attack": 1,
+      "health": 1,
+      "races": [
+        "MURLOC"
+      ],
+      "associatedRaces": [],
+      "mechanics": [],
+      "referencedTags": [],
+      "text": "当你出售本随从时，随机获取一张等级1的随从牌。"
+    },
+    {
+      "id": "BG34_630",
+      "dbfId": 126741,
+      "premiumDbfId": 126742,
+      "name": "暮光龙崽",
+      "tier": 1,
+      "attack": 1,
+      "health": 1,
+      "races": [
+        "DRAGON"
+      ],
+      "associatedRaces": [],
+      "mechanics": [
+        "DEATHRATTLE"
+      ],
+      "referencedTags": [],
+      "text": "<b>亡语：</b>召唤一条3/3并立即发起攻击的\n雏龙。"
+    },
+    {
+      "id": "BG35_801",
+      "dbfId": 129745,
+      "premiumDbfId": 129746,
+      "name": "贪吃的穴居人",
+      "tier": 1,
+      "attack": 2,
+      "health": 3,
+      "races": [],
+      "associatedRaces": [],
+      "mechanics": [
+        "TRIGGER_VISUAL"
+      ],
+      "referencedTags": [],
+      "text": "一旦你购买了4张牌，获得+4/+4。<i>（还剩4张！）</i>4一旦你购买了4张牌，获得+4/+4。<i>（已完成！）</i>"
+    },
+    {
+      "id": "BG35_814",
+      "dbfId": 129749,
+      "premiumDbfId": 129750,
+      "name": "血色幸存飞龙",
+      "tier": 1,
+      "attack": 3,
+      "health": 3,
+      "races": [
+        "DRAGON"
+      ],
+      "associatedRaces": [],
+      "mechanics": [
+        "TRIGGER_VISUAL"
+      ],
+      "referencedTags": [
+        "DIVINE_SHIELD"
+      ],
+      "text": "一旦本随从的攻击力达到6点，获得<b>圣盾</b>。6一旦本随从的攻击力达到6点，获得<b>圣盾</b>。<i>（已完成！）</i>"
+    },
+    {
+      "id": "BGS_004",
+      "dbfId": 59670,
+      "premiumDbfId": 59679,
+      "name": "愤怒编织者",
+      "tier": 1,
+      "attack": 1,
+      "health": 3,
+      "races": [
+        "DEMON"
+      ],
+      "associatedRaces": [],
+      "mechanics": [
+        "TRIGGER_VISUAL"
+      ],
+      "referencedTags": [],
+      "text": "在你使用一张恶魔牌后，对你的英雄造成1点伤害并获得+2/+2。"
+    },
+    {
+      "id": "BGS_119",
+      "dbfId": 64054,
+      "premiumDbfId": 64055,
+      "name": "爆裂飓风",
+      "tier": 1,
+      "attack": 2,
+      "health": 1,
+      "races": [
+        "ELEMENTAL"
+      ],
+      "associatedRaces": [],
+      "mechanics": [
+        "DIVINE_SHIELD",
+        "WINDFURY"
+      ],
+      "referencedTags": [],
+      "text": "<b>圣盾，风怒</b>"
+    },
+    {
+      "id": "BG_TTN_401",
+      "dbfId": 108432,
+      "premiumDbfId": 108435,
+      "name": "星元自动机",
+      "tier": 2,
+      "attack": 3,
+      "health": 4,
+      "races": [
+        "MECHANICAL"
+      ],
+      "associatedRaces": [],
+      "mechanics": [
+        "AURA"
+      ],
+      "referencedTags": [],
+      "text": "在本局对战中，你每召唤过一个其他星元自动机，便拥有+3/+2<i>（无论本随从在哪）</i>。"
+    },
+    {
+      "id": "BG20_203",
+      "dbfId": 70153,
+      "premiumDbfId": 70155,
+      "name": "野猪预言者",
+      "tier": 2,
+      "attack": 3,
+      "health": 4,
+      "races": [],
+      "associatedRaces": [
+        "QUILBOAR"
+      ],
+      "mechanics": [
+        "TAUNT",
+        "TRIGGER_VISUAL"
+      ],
+      "referencedTags": [
+        "BACON_BLOOD_GEM_TOOLTIP"
+      ],
+      "text": "<b>嘲讽</b>。在你使用一张野猪人后，获取一张<b>鲜血宝石</b>。"
+    },
+    {
+      "id": "BG21_015",
+      "dbfId": 72062,
+      "premiumDbfId": 73453,
+      "name": "泰蕾苟萨",
+      "tier": 2,
+      "attack": 4,
+      "health": 4,
+      "races": [
+        "DRAGON"
+      ],
+      "associatedRaces": [],
+      "mechanics": [
+        "TRIGGER_VISUAL"
+      ],
+      "referencedTags": [],
+      "text": "本随从可永久保留战斗阶段获得的<b><b>额外关键词</b></b>和属性值。"
+    },
+    {
+      "id": "BG21_018",
+      "dbfId": 72061,
+      "premiumDbfId": 74899,
+      "name": "挑衅的船工",
+      "tier": 2,
+      "attack": 2,
+      "health": 5,
+      "races": [
+        "PIRATE"
+      ],
+      "associatedRaces": [],
+      "mechanics": [
+        "TRIGGER_VISUAL"
+      ],
+      "referencedTags": [],
+      "text": "每当本随从通过其他来源获得攻击力时，获得+1生命值。0每当本随从通过其他来源获得攻击力时，获得+0/+1。"
+    },
+    {
+      "id": "BG22_202",
+      "dbfId": 87060,
+      "premiumDbfId": 87062,
+      "name": "塔德",
+      "tier": 2,
+      "attack": 2,
+      "health": 2,
+      "races": [
+        "MURLOC"
+      ],
+      "associatedRaces": [],
+      "mechanics": [],
+      "referencedTags": [],
+      "text": "当你出售本随从时，随机获取一张鱼人牌。"
+    },
+    {
+      "id": "BG23_002",
+      "dbfId": 80740,
+      "premiumDbfId": 82646,
+      "name": "贝类收藏家",
+      "tier": 2,
+      "attack": 4,
+      "health": 3,
+      "races": [
+        "NAGA"
+      ],
+      "associatedRaces": [],
+      "mechanics": [
+        "BATTLECRY"
+      ],
+      "referencedTags": [],
+      "text": "<b>战吼：</b>获取\n一张酒馆币。"
+    },
+    {
+      "id": "BG23_009",
+      "dbfId": 80747,
+      "premiumDbfId": 80765,
+      "name": "熔岩潜伏者",
+      "tier": 2,
+      "attack": 2,
+      "health": 5,
+      "races": [
+        "NAGA"
+      ],
+      "associatedRaces": [],
+      "mechanics": [
+        "TRIGGER_VISUAL"
+      ],
+      "referencedTags": [
+        "BACON_SPELLCRAFT_ID"
+      ],
+      "text": "每回合从手牌对本随从使用的第一张<b>塑造法术</b>的法术牌永久有效。<i>（还剩1张！）</i>"
+    },
+    {
+      "id": "BG24_715",
+      "dbfId": 97604,
+      "premiumDbfId": 97605,
+      "name": "耐心的侦查员",
+      "tier": 2,
+      "attack": 1,
+      "health": 1,
+      "races": [],
+      "associatedRaces": [],
+      "mechanics": [
+        "END_OF_TURN_TRIGGER"
+      ],
+      "referencedTags": [
+        "DISCOVER"
+      ],
+      "text": "当你出售本随从时，<b>发现</b>一个等级1的随从。<i>（每回合都会提升！）</i>"
+    },
+    {
+      "id": "BG25_008",
+      "dbfId": 95261,
+      "premiumDbfId": 95262,
+      "name": "永恒骑士",
+      "tier": 2,
+      "attack": 4,
+      "health": 2,
+      "races": [
+        "UNDEAD"
+      ],
+      "associatedRaces": [],
+      "mechanics": [
+        "AURA",
+        "InvisibleDeathrattle"
+      ],
+      "referencedTags": [],
+      "text": "在本局对战中，每有一个友方永恒骑士死亡，便拥有+4/+2<i>（无论本随从在哪）</i>。"
+    },
+    {
+      "id": "BG25_011",
+      "dbfId": 95267,
+      "premiumDbfId": 95268,
+      "name": "死亡群居蛛魔",
+      "tier": 2,
+      "attack": 1,
+      "health": 4,
+      "races": [
+        "UNDEAD"
+      ],
+      "associatedRaces": [],
+      "mechanics": [
+        "BATTLECRY"
+      ],
+      "referencedTags": [],
+      "text": "<b>战吼：</b>在本局对战中，你的亡灵拥有+1攻击力<i>（无论它们在哪）</i>。"
+    },
+    {
+      "id": "BG25_022",
+      "dbfId": 95280,
+      "premiumDbfId": 95281,
+      "name": "血色骷髅",
+      "tier": 2,
+      "attack": 2,
+      "health": 1,
+      "races": [
+        "UNDEAD"
+      ],
+      "associatedRaces": [],
+      "mechanics": [
+        "DEATHRATTLE",
+        "REBORN"
+      ],
+      "referencedTags": [],
+      "text": "<b>复生</b>。<b>亡语：</b>使一个友方亡灵获得+1/+2。"
+    },
+    {
+      "id": "BG26_159",
+      "dbfId": 98930,
+      "premiumDbfId": 98934,
+      "name": "暗膘爵士乐手",
+      "tier": 2,
+      "attack": 2,
+      "health": 3,
+      "races": [
+        "QUILBOAR"
+      ],
+      "associatedRaces": [],
+      "mechanics": [
+        "BATTLECRY"
+      ],
+      "referencedTags": [
+        "BACON_BLOOD_GEM_TOOLTIP"
+      ],
+      "text": "<b>战吼：</b>在本局对战中，你的<b>鲜血宝石</b>会额外获得+1生命值。"
+    },
+    {
+      "id": "BG26_174",
+      "dbfId": 100949,
+      "premiumDbfId": 100950,
+      "name": "灵魂回溯者",
+      "tier": 2,
+      "attack": 4,
+      "health": 1,
+      "races": [
+        "DEMON"
+      ],
+      "associatedRaces": [],
+      "mechanics": [
+        "TRIGGER_VISUAL"
+      ],
+      "referencedTags": [],
+      "text": "在你的英雄\n受到伤害后，回溯该伤害并使本随从获得\n+1生命值。"
+    },
+    {
+      "id": "BG26_501",
+      "dbfId": 98880,
+      "premiumDbfId": 98882,
+      "name": "疾涛吉他手",
+      "tier": 2,
+      "attack": 3,
+      "health": 2,
+      "races": [
+        "NAGA"
+      ],
+      "associatedRaces": [],
+      "mechanics": [
+        "BACON_SPELLCRAFT_ID",
+        "TRIGGER_VISUAL"
+      ],
+      "referencedTags": [],
+      "text": "<b>塑造法术：</b>直到下个回合，使一个随从获得等同于你当前等级的属性值。"
+    },
+    {
+      "id": "BG26_805",
+      "dbfId": 98939,
+      "premiumDbfId": 98941,
+      "name": "哼鸣蜂鸟",
+      "tier": 2,
+      "attack": 1,
+      "health": 4,
+      "races": [
+        "BEAST"
+      ],
+      "associatedRaces": [],
+      "mechanics": [
+        "START_OF_COMBAT",
+        "TRIGGER_VISUAL"
+      ],
+      "referencedTags": [],
+      "text": "<b>战斗开始时：</b>在本场战斗的剩余时间内，你的野兽拥有+1攻击力。"
+    },
+    {
+      "id": "BG27_002",
+      "dbfId": 103670,
+      "premiumDbfId": 103671,
+      "name": "软泥角斗士",
+      "tier": 2,
+      "attack": 2,
+      "health": 2,
+      "races": [],
+      "associatedRaces": [],
+      "mechanics": [
+        "BATTLECRY"
+      ],
+      "referencedTags": [
+        "TAUNT"
+      ],
+      "text": "<b>战吼：</b>获取两张可以使随从获得+1/+1和<b>嘲讽</b>的黏黏盾。"
+    },
+    {
+      "id": "BG29_300",
+      "dbfId": 109879,
+      "premiumDbfId": 109881,
+      "name": "巨饿冬鳍鱼人",
+      "tier": 2,
+      "attack": 2,
+      "health": 5,
+      "races": [
+        "MURLOC"
+      ],
+      "associatedRaces": [],
+      "mechanics": [
+        "TAUNT",
+        "TRIGGER_VISUAL"
+      ],
+      "referencedTags": [],
+      "text": "<b>嘲讽</b>。每当本随从受到伤害，使你手牌中的一张随从牌获得+2/+1。"
+    },
+    {
+      "id": "BG31_801",
+      "dbfId": 115577,
+      "premiumDbfId": 115578,
+      "name": "森林游虫",
+      "tier": 2,
+      "attack": 1,
+      "health": 1,
+      "races": [
+        "BEAST"
+      ],
+      "associatedRaces": [],
+      "mechanics": [
+        "BATTLECRY",
+        "DEATHRATTLE"
+      ],
+      "referencedTags": [],
+      "text": "<b>战吼：</b>在本局对战中，你的甲虫拥有+2/+1。\n<b>亡语：</b>召唤一只2/2的甲虫。"
+    },
+    {
+      "id": "BG31_816",
+      "dbfId": 116736,
+      "premiumDbfId": 116737,
+      "name": "火焰投球手",
+      "tier": 2,
+      "attack": 4,
+      "health": 3,
+      "races": [
+        "ELEMENTAL"
+      ],
+      "associatedRaces": [],
+      "mechanics": [],
+      "referencedTags": [],
+      "text": "当你出售本随从时，使你的随从获得+1攻击力。提升你此后投球手的效果。1当你出售本随从时，使你的随从获得+1/+0。提升你此后投球手的效果。"
+    },
+    {
+      "id": "BG31_818",
+      "dbfId": 117667,
+      "premiumDbfId": 117668,
+      "name": "冰雪投球手",
+      "tier": 2,
+      "attack": 3,
+      "health": 4,
+      "races": [
+        "ELEMENTAL"
+      ],
+      "associatedRaces": [],
+      "mechanics": [],
+      "referencedTags": [],
+      "text": "当你出售本随从时，使你的随从获得+1生命值。提升你此后投球手的效果。0当你出售本随从时，使你的随从获得+0/+1。提升你此后投球手的效果。"
+    },
+    {
+      "id": "BG32_170",
+      "dbfId": 120021,
+      "premiumDbfId": 120022,
+      "name": "钢铁猎人",
+      "tier": 2,
+      "attack": 4,
+      "health": 2,
+      "races": [
+        "MECHANICAL"
+      ],
+      "associatedRaces": [],
+      "mechanics": [
+        "DEATHRATTLE"
+      ],
+      "referencedTags": [],
+      "text": "<b>亡语：</b>获取一张尖利箭矢。"
+    },
+    {
+      "id": "BG32_235",
+      "dbfId": 119994,
+      "premiumDbfId": 119995,
+      "name": "冲浪的希尔梵",
+      "tier": 2,
+      "attack": 1,
+      "health": 2,
+      "races": [
+        "PIRATE"
+      ],
+      "associatedRaces": [],
+      "mechanics": [
+        "END_OF_TURN_TRIGGER"
+      ],
+      "referencedTags": [],
+      "text": "在你的回合结束时，使相邻的随从获得+1攻击力。每有一个友方金色随从，重复一次。1在你的回合结束时，使相邻的随从获得+1/+0。每有一个友方金色随从，重复一次。"
+    },
+    {
+      "id": "BG32_237",
+      "dbfId": 120223,
+      "premiumDbfId": 120224,
+      "name": "新锐植物学家",
+      "tier": 2,
+      "attack": 3,
+      "health": 4,
+      "races": [],
+      "associatedRaces": [],
+      "mechanics": [
+        "CHOOSE_ONE"
+      ],
+      "referencedTags": [],
+      "text": "<b>抉择：</b>在本局对战中，你的酒馆法术使随从额外获得+1攻击力；或者+1生命值。"
+    },
+    {
+      "id": "BG32_430",
+      "dbfId": 120031,
+      "premiumDbfId": 120032,
+      "name": "亮喉督军",
+      "tier": 2,
+      "attack": 2,
+      "health": 2,
+      "races": [
+        "QUILBOAR"
+      ],
+      "associatedRaces": [],
+      "mechanics": [
+        "DEATHRATTLE"
+      ],
+      "referencedTags": [
+        "BACON_BLOOD_GEM_TOOLTIP",
+        "TAUNT"
+      ],
+      "text": "<b>亡语：</b>召唤两个1/1并具有<b>嘲讽</b>的野猪人。本随从对其使用一张<b>鲜血宝石</b>。"
+    },
+    {
+      "id": "BG33_241",
+      "dbfId": 122434,
+      "premiumDbfId": 122435,
+      "name": "贪睡的援护巨龙",
+      "tier": 2,
+      "attack": 4,
+      "health": 3,
+      "races": [
+        "DRAGON"
+      ],
+      "associatedRaces": [],
+      "mechanics": [
+        "BACON_RALLY"
+      ],
+      "referencedTags": [],
+      "text": "<b>进击：</b>使本随从右边的随从获得+2/+2。"
+    },
+    {
+      "id": "BG34_140",
+      "dbfId": 126637,
+      "premiumDbfId": 126638,
+      "name": "飞行专家",
+      "tier": 2,
+      "attack": 3,
+      "health": 4,
+      "races": [
+        "MURLOC"
+      ],
+      "associatedRaces": [],
+      "mechanics": [
+        "BACON_RALLY"
+      ],
+      "referencedTags": [],
+      "text": "<b>进击：</b>召唤你手牌中攻击力最高的随从，其登场仅限本场战斗。"
+    },
+    {
+      "id": "BG34_231",
+      "dbfId": 126802,
+      "premiumDbfId": 126803,
+      "name": "古老之魂",
+      "tier": 2,
+      "attack": 3,
+      "health": 4,
+      "races": [
+        "UNDEAD"
+      ],
+      "associatedRaces": [],
+      "mechanics": [],
+      "referencedTags": [],
+      "text": "当本随从在你手牌中时，在15个友方随从死亡后，将本随从变为金色。<i>（还剩15个！）</i>"
+    },
+    {
+      "id": "BG34_920",
+      "dbfId": 126629,
+      "premiumDbfId": 126630,
+      "name": "赶潮纳迦",
+      "tier": 2,
+      "attack": 2,
+      "health": 1,
+      "races": [
+        "NAGA"
+      ],
+      "associatedRaces": [],
+      "mechanics": [
+        "DEATHRATTLE",
+        "TAUNT"
+      ],
+      "referencedTags": [],
+      "text": "<b>嘲讽</b>。<b>亡语：</b>对一个相邻的随从施放变换之潮。"
+    },
+    {
+      "id": "BG35_150",
+      "dbfId": 130075,
+      "premiumDbfId": 130080,
+      "name": "实验室助理",
+      "tier": 2,
+      "attack": 3,
+      "health": 4,
+      "races": [
+        "DEMON"
+      ],
+      "associatedRaces": [],
+      "mechanics": [
+        "BATTLECRY"
+      ],
+      "referencedTags": [
+        "BACON_REFRESH_TOOLTIP"
+      ],
+      "text": "<b>战吼：</b>在你的下3次<b>刷新</b>中各添加一个恶魔<b>饲料</b>。"
+    },
+    {
+      "id": "BG35_340",
+      "dbfId": 130794,
+      "premiumDbfId": 130795,
+      "name": "通报警告机",
+      "tier": 2,
+      "attack": 2,
+      "health": 2,
+      "races": [
+        "MECHANICAL"
+      ],
+      "associatedRaces": [],
+      "mechanics": [
+        "DEATHRATTLE",
+        "TAUNT"
+      ],
+      "referencedTags": [],
+      "text": "<b>嘲讽</b>。<b>亡语：</b>你购买的下一张酒馆法术牌消耗的铸币减少\n（1）枚。"
+    },
+    {
+      "id": "BGS_049",
+      "dbfId": 61049,
+      "premiumDbfId": 62187,
+      "name": "白赚赌徒",
+      "tier": 2,
+      "attack": 3,
+      "health": 3,
+      "races": [
+        "PIRATE"
+      ],
+      "associatedRaces": [],
+      "mechanics": [],
+      "referencedTags": [],
+      "text": "出售本随从可以获得3枚铸币。"
+    },
+    {
+      "id": "BGS_115",
+      "dbfId": 64038,
+      "premiumDbfId": 64041,
+      "name": "商贩元素",
+      "tier": 2,
+      "attack": 3,
+      "health": 3,
+      "races": [
+        "ELEMENTAL"
+      ],
+      "associatedRaces": [],
+      "mechanics": [],
+      "referencedTags": [],
+      "text": "当你出售\n本随从时，获取一张3/3的元素牌。"
+    },
+    {
+      "id": "BG_BOT_911",
+      "dbfId": 96812,
+      "premiumDbfId": 60327,
+      "name": "吵吵模组",
+      "tier": 3,
+      "attack": 2,
+      "health": 4,
+      "races": [
+        "MECHANICAL"
+      ],
+      "associatedRaces": [],
+      "mechanics": [
+        "DIVINE_SHIELD",
+        "MAGNETIC",
+        "TAUNT"
+      ],
+      "referencedTags": [],
+      "text": "<b>磁力</b>\n<b>圣盾</b>\n<b>嘲讽</b>"
+    },
+    {
+      "id": "BG23_004",
+      "dbfId": 80742,
+      "premiumDbfId": 80760,
+      "name": "深海钓客",
+      "tier": 3,
+      "attack": 2,
+      "health": 3,
+      "races": [
+        "NAGA"
+      ],
+      "associatedRaces": [],
+      "mechanics": [
+        "BACON_SPELLCRAFT_ID",
+        "TRIGGER_VISUAL"
+      ],
+      "referencedTags": [
+        "TAUNT"
+      ],
+      "text": "<b>塑造法术：</b>直到下个回合，使一个随从获得+2/+6和<b>嘲讽</b>。"
+    },
+    {
+      "id": "BG24_500",
+      "dbfId": 95006,
+      "premiumDbfId": 95010,
+      "name": "琥珀卫士",
+      "tier": 3,
+      "attack": 3,
+      "health": 2,
+      "races": [
+        "DRAGON"
+      ],
+      "associatedRaces": [],
+      "mechanics": [
+        "START_OF_COMBAT",
+        "TAUNT",
+        "TRIGGER_VISUAL"
+      ],
+      "referencedTags": [
+        "DIVINE_SHIELD"
+      ],
+      "text": "<b>嘲讽</b>。<b>战斗开始时：</b>使另一条友方的龙获得+2/+2和<b>圣盾</b>。"
+    },
+    {
+      "id": "BG24_707",
+      "dbfId": 97115,
+      "premiumDbfId": 97116,
+      "name": "刺鬃废料铁匠",
+      "tier": 3,
+      "attack": 4,
+      "health": 4,
+      "races": [
+        "QUILBOAR"
+      ],
+      "associatedRaces": [],
+      "mechanics": [
+        "TRIGGER_VISUAL"
+      ],
+      "referencedTags": [
+        "BACON_BLOOD_GEM_TOOLTIP",
+        "TAUNT"
+      ],
+      "text": "在一个友方<b>嘲讽</b>随从死亡后，获取一张<b>鲜血宝石</b>。"
+    },
+    {
+      "id": "BG25_010",
+      "dbfId": 95265,
+      "premiumDbfId": 95266,
+      "name": "断手被遗忘者",
+      "tier": 3,
+      "attack": 2,
+      "health": 1,
+      "races": [
+        "UNDEAD"
+      ],
+      "associatedRaces": [],
+      "mechanics": [
+        "DEATHRATTLE"
+      ],
+      "referencedTags": [],
+      "text": "<b>亡语：</b>召唤一只2/1并具有<b>复生</b>的手。"
+    },
+    {
+      "id": "BG25_032",
+      "dbfId": 97535,
+      "premiumDbfId": 97536,
+      "name": "佩吉·斯特迪伯",
+      "tier": 3,
+      "attack": 2,
+      "health": 1,
+      "races": [
+        "PIRATE"
+      ],
+      "associatedRaces": [],
+      "mechanics": [
+        "TRIGGER_VISUAL"
+      ],
+      "referencedTags": [],
+      "text": "每当一张卡牌被置入你的手牌，使另一个友方海盗获得+2/+1。"
+    },
+    {
+      "id": "BG25_039",
+      "dbfId": 97549,
+      "premiumDbfId": 97550,
+      "name": "刺豚野猪",
+      "tier": 3,
+      "attack": 2,
+      "health": 6,
+      "races": [
+        "QUILBOAR",
+        "NAGA"
+      ],
+      "associatedRaces": [],
+      "mechanics": [
+        "TRIGGER_VISUAL"
+      ],
+      "referencedTags": [
+        "VENOMOUS"
+      ],
+      "text": "每当法术被施放在本随从身上，直到下个回合，获得<b>烈毒</b>。"
+    },
+    {
+      "id": "BG25_041",
+      "dbfId": 97553,
+      "premiumDbfId": 97554,
+      "name": "邪能元素",
+      "tier": 3,
+      "attack": 3,
+      "health": 3,
+      "races": [
+        "ELEMENTAL",
+        "DEMON"
+      ],
+      "associatedRaces": [],
+      "mechanics": [
+        "BATTLECRY"
+      ],
+      "referencedTags": [],
+      "text": "<b>战吼：</b>使酒馆中的随从在本局对战中获得+2/+1。"
+    },
+    {
+      "id": "BG25_806",
+      "dbfId": 101584,
+      "premiumDbfId": 101591,
+      "name": "狡猾的迅猛龙",
+      "tier": 3,
+      "attack": 1,
+      "health": 3,
+      "races": [
+        "BEAST"
+      ],
+      "associatedRaces": [],
+      "mechanics": [
+        "DEATHRATTLE"
+      ],
+      "referencedTags": [],
+      "text": "<b>亡语：</b>随机召唤一只野兽，其属性值变为6/6。"
+    },
+    {
+      "id": "BG26_147",
+      "dbfId": 98576,
+      "premiumDbfId": 98581,
+      "name": "手风琴机器人",
+      "tier": 3,
+      "attack": 3,
+      "health": 3,
+      "races": [
+        "MECHANICAL"
+      ],
+      "associatedRaces": [],
+      "mechanics": [
+        "MAGNETIC",
+        "TRIGGER_VISUAL"
+      ],
+      "referencedTags": [],
+      "text": "<b>磁力</b>。在你的回合开始时，获得1枚铸币。"
+    },
+    {
+      "id": "BG26_160",
+      "dbfId": 98946,
+      "premiumDbfId": 98947,
+      "name": "刺头吹笛人",
+      "tier": 3,
+      "attack": 5,
+      "health": 1,
+      "races": [
+        "QUILBOAR"
+      ],
+      "associatedRaces": [],
+      "mechanics": [
+        "DEATHRATTLE"
+      ],
+      "referencedTags": [
+        "BACON_BLOOD_GEM_TOOLTIP"
+      ],
+      "text": "<b>亡语：</b>在本局对战中，你的<b>鲜血宝石</b>会额外获得+1攻击力。"
+    },
+    {
+      "id": "BG26_360",
+      "dbfId": 100930,
+      "premiumDbfId": 100931,
+      "name": "寻宝鱼人",
+      "tier": 3,
+      "attack": 4,
+      "health": 3,
+      "races": [
+        "MURLOC"
+      ],
+      "associatedRaces": [],
+      "mechanics": [
+        "DEATHRATTLE"
+      ],
+      "referencedTags": [],
+      "text": "<b>亡语：</b>随机使你手牌中的一张随从牌获得+7/+7。"
+    },
+    {
+      "id": "BG26_502",
+      "dbfId": 98886,
+      "premiumDbfId": 98887,
+      "name": "深沉蓝调歌手",
+      "tier": 3,
+      "attack": 2,
+      "health": 2,
+      "races": [
+        "NAGA"
+      ],
+      "associatedRaces": [],
+      "mechanics": [
+        "BACON_SPELLCRAFT_ID",
+        "TRIGGER_VISUAL"
+      ],
+      "referencedTags": [],
+      "text": "<b>塑造法术：</b>直到下个回合，使一个随从获得+2/+2。提升你此后的深沉蓝调效果。"
+    },
+    {
+      "id": "BG26_524",
+      "dbfId": 99199,
+      "premiumDbfId": 99220,
+      "name": "舞蹈王子玛克扎尔",
+      "tier": 3,
+      "attack": 2,
+      "health": 1,
+      "races": [
+        "DEMON"
+      ],
+      "associatedRaces": [],
+      "mechanics": [
+        "TRIGGER_VISUAL"
+      ],
+      "referencedTags": [
+        "BACON_REFRESH_TOOLTIP"
+      ],
+      "text": "每回合中，有两次<b>刷新</b>会消耗生命值，而非铸币。<i>（还剩2次！）</i>"
+    },
+    {
+      "id": "BG26_810",
+      "dbfId": 98889,
+      "premiumDbfId": 98890,
+      "name": "火药运输工",
+      "tier": 3,
+      "attack": 3,
+      "health": 6,
+      "races": [
+        "PIRATE"
+      ],
+      "associatedRaces": [],
+      "mechanics": [
+        "TRIGGER_VISUAL"
+      ],
+      "referencedTags": [],
+      "text": "每当你花掉\n6枚铸币，使你的海盗获得+2攻击力。<i>（还剩6枚！）</i>6每当你花掉6枚铸币，使你的海盗获得+2/+0。<i>（还剩6枚！）</i>"
+    },
+    {
+      "id": "BG27_005",
+      "dbfId": 103676,
+      "premiumDbfId": 103677,
+      "name": "时空船长钩尾",
+      "tier": 3,
+      "attack": 1,
+      "health": 4,
+      "races": [
+        "DRAGON",
+        "PIRATE"
+      ],
+      "associatedRaces": [],
+      "mechanics": [
+        "TRIGGER_VISUAL"
+      ],
+      "referencedTags": [],
+      "text": "每当你施放一个酒馆法术，使你的随从获得+1攻击力。1每当你施放一个酒馆法术，使你的随从获得+1/+0。"
+    },
+    {
+      "id": "BG27_084",
+      "dbfId": 108909,
+      "premiumDbfId": 108910,
+      "name": "机变甲虫",
+      "tier": 3,
+      "attack": 3,
+      "health": 1,
+      "races": [
+        "BEAST"
+      ],
+      "associatedRaces": [],
+      "mechanics": [
+        "CHOOSE_ONE"
+      ],
+      "referencedTags": [
+        "WINDFURY"
+      ],
+      "text": "<b>抉择：</b>使一只野兽获得+1/+1和<b>复生</b>；或者+4攻击力和<b>风怒</b>。"
+    },
+    {
+      "id": "BG28_303",
+      "dbfId": 104610,
+      "premiumDbfId": 104611,
+      "name": "变装盗墓贼",
+      "tier": 3,
+      "attack": 4,
+      "health": 4,
+      "races": [],
+      "associatedRaces": [
+        "UNDEAD"
+      ],
+      "mechanics": [
+        "BATTLECRY"
+      ],
+      "referencedTags": [],
+      "text": "<b>战吼：</b>消灭一个友方亡灵以获取一张它的原始版复制。"
+    },
+    {
+      "id": "BG28_309",
+      "dbfId": 108992,
+      "premiumDbfId": 109003,
+      "name": "木乃伊工匠",
+      "tier": 3,
+      "attack": 5,
+      "health": 2,
+      "races": [
+        "UNDEAD"
+      ],
+      "associatedRaces": [],
+      "mechanics": [
+        "DEATHRATTLE"
+      ],
+      "referencedTags": [],
+      "text": "<b>亡语：</b>使一个不同的友方亡灵获得<b>复生</b>。"
+    },
+    {
+      "id": "BG29_816",
+      "dbfId": 109806,
+      "premiumDbfId": 109807,
+      "name": "咆哮募兵龙",
+      "tier": 3,
+      "attack": 2,
+      "health": 8,
+      "races": [
+        "DRAGON"
+      ],
+      "associatedRaces": [],
+      "mechanics": [
+        "TRIGGER_VISUAL"
+      ],
+      "referencedTags": [],
+      "text": "每当另一条友方的龙攻击时，使其获得+3/+1。"
+    },
+    {
+      "id": "BG30_123",
+      "dbfId": 113154,
+      "premiumDbfId": 113155,
+      "name": "无畏的食客",
+      "tier": 3,
+      "attack": 2,
+      "health": 4,
+      "races": [
+        "QUILBOAR"
+      ],
+      "associatedRaces": [],
+      "mechanics": [
+        "CHOOSE_ONE"
+      ],
+      "referencedTags": [
+        "BACON_BLOOD_GEM_TOOLTIP"
+      ],
+      "text": "<b>抉择：</b>在本局对战中，你的<b>鲜血宝石</b>使随从额外获得+1/+1；或者获取4张<b>鲜血宝石</b>。"
+    },
+    {
+      "id": "BG30_125",
+      "dbfId": 113158,
+      "premiumDbfId": 113159,
+      "name": "遗骸看管者",
+      "tier": 3,
+      "attack": 3,
+      "health": 3,
+      "races": [
+        "UNDEAD"
+      ],
+      "associatedRaces": [],
+      "mechanics": [
+        "DEATHRATTLE"
+      ],
+      "referencedTags": [],
+      "text": "<b>亡语：</b>召唤三个1/1的骷髅。"
+    },
+    {
+      "id": "BG31_859",
+      "dbfId": 119202,
+      "premiumDbfId": 119203,
+      "name": "科技元素体",
+      "tier": 3,
+      "attack": 5,
+      "health": 6,
+      "races": [
+        "ELEMENTAL",
+        "MECHANICAL"
+      ],
+      "associatedRaces": [],
+      "mechanics": [
+        "MAGNETIC"
+      ],
+      "referencedTags": [],
+      "text": "<b>磁力</b>。可以<b>磁力吸附</b>在机械和元素上。"
+    },
+    {
+      "id": "BG32_841",
+      "dbfId": 119949,
+      "premiumDbfId": 119950,
+      "name": "沙尘旋流",
+      "tier": 3,
+      "attack": 4,
+      "health": 3,
+      "races": [
+        "ELEMENTAL"
+      ],
+      "associatedRaces": [],
+      "mechanics": [
+        "BATTLECRY"
+      ],
+      "referencedTags": [],
+      "text": "<b>战吼：</b>在本局对战中，你的元素使随从额外获得+1攻击力。"
+    },
+    {
+      "id": "BG33_323",
+      "dbfId": 122229,
+      "premiumDbfId": 122230,
+      "name": "尘骨毁灭者",
+      "tier": 3,
+      "attack": 1,
+      "health": 6,
+      "races": [
+        "UNDEAD"
+      ],
+      "associatedRaces": [],
+      "mechanics": [
+        "BACON_RALLY"
+      ],
+      "referencedTags": [],
+      "text": "<b>进击：</b>\n在本局对战中，你的亡灵拥有+2攻击力<i>（无论它们在哪）。</i>"
+    },
+    {
+      "id": "BG33_820",
+      "dbfId": 122175,
+      "premiumDbfId": 122176,
+      "name": "失落之城掠夺者",
+      "tier": 3,
+      "attack": 1,
+      "health": 1,
+      "races": [
+        "PIRATE"
+      ],
+      "associatedRaces": [],
+      "mechanics": [
+        "END_OF_TURN_TRIGGER",
+        "TAUNT"
+      ],
+      "referencedTags": [],
+      "text": "<b>嘲讽</b>。在你的回合结束时，随机获取一张<b>悬赏令</b>。"
+    },
+    {
+      "id": "BG33_894",
+      "dbfId": 122283,
+      "premiumDbfId": 122284,
+      "name": "寒光潜水鱼人",
+      "tier": 3,
+      "attack": 1,
+      "health": 1,
+      "races": [
+        "MURLOC"
+      ],
+      "associatedRaces": [],
+      "mechanics": [
+        "BATTLECRY",
+        "DEATHRATTLE"
+      ],
+      "referencedTags": [],
+      "text": "<b>战吼，亡语：</b>随机获取一张等级1的酒馆法术牌。"
+    },
+    {
+      "id": "BG34_312",
+      "dbfId": 126849,
+      "premiumDbfId": 126850,
+      "name": "强韧的虎鲸",
+      "tier": 3,
+      "attack": 1,
+      "health": 6,
+      "races": [
+        "BEAST"
+      ],
+      "associatedRaces": [],
+      "mechanics": [
+        "TAUNT",
+        "TRIGGER_VISUAL"
+      ],
+      "referencedTags": [],
+      "text": "<b>嘲讽</b>。每当本随从受到伤害，使你的其他随从获得+1/+1。"
+    },
+    {
+      "id": "BG34_634t",
+      "dbfId": 126711,
+      "premiumDbfId": 126724,
+      "name": "蓝色多彩幼龙",
+      "tier": 3,
+      "attack": 4,
+      "health": 4,
+      "races": [
+        "DRAGON"
+      ],
+      "associatedRaces": [],
+      "mechanics": [
+        "BATTLECRY"
+      ],
+      "referencedTags": [],
+      "text": "<b>战吼：</b>随机获取一张消耗2枚铸币的酒馆法术牌。"
+    },
+    {
+      "id": "BG34_635t",
+      "dbfId": 126713,
+      "premiumDbfId": 126725,
+      "name": "黑色多彩幼龙",
+      "tier": 3,
+      "attack": 4,
+      "health": 6,
+      "races": [
+        "DRAGON"
+      ],
+      "associatedRaces": [],
+      "mechanics": [
+        "BATTLECRY"
+      ],
+      "referencedTags": [],
+      "text": "<b>战吼：</b>\n在本局对战中，你的酒馆法术使随从额外获得+1生命值。"
+    },
+    {
+      "id": "BG34_636t",
+      "dbfId": 126715,
+      "premiumDbfId": 126729,
+      "name": "绿色多彩幼龙",
+      "tier": 3,
+      "attack": 3,
+      "health": 5,
+      "races": [
+        "DRAGON"
+      ],
+      "associatedRaces": [],
+      "mechanics": [
+        "BATTLECRY"
+      ],
+      "referencedTags": [],
+      "text": "<b>战吼：</b>使你的其他龙获得+1/+3。"
+    },
+    {
+      "id": "BG34_637t",
+      "dbfId": 126717,
+      "premiumDbfId": 126727,
+      "name": "青铜多彩幼龙",
+      "tier": 3,
+      "attack": 5,
+      "health": 3,
+      "races": [
+        "DRAGON"
+      ],
+      "associatedRaces": [],
+      "mechanics": [
+        "BATTLECRY"
+      ],
+      "referencedTags": [],
+      "text": "<b>战吼：</b>使你的其他龙获得+3/+1。"
+    },
+    {
+      "id": "BG34_638t",
+      "dbfId": 126718,
+      "premiumDbfId": 126728,
+      "name": "红色多彩幼龙",
+      "tier": 3,
+      "attack": 6,
+      "health": 4,
+      "races": [
+        "DRAGON"
+      ],
+      "associatedRaces": [],
+      "mechanics": [
+        "BATTLECRY"
+      ],
+      "referencedTags": [],
+      "text": "<b>战吼：</b>\n在本局对战中，你的酒馆法术使随从额外获得+1攻击力。"
+    },
+    {
+      "id": "BG34_683",
+      "dbfId": 126669,
+      "premiumDbfId": 126670,
+      "name": "棘背鼓手",
+      "tier": 3,
+      "attack": 5,
+      "health": 3,
+      "races": [
+        "QUILBOAR"
+      ],
+      "associatedRaces": [],
+      "mechanics": [
+        "BATTLECRY"
+      ],
+      "referencedTags": [
+        "BACON_BLOOD_GEM_TOOLTIP"
+      ],
+      "text": "<b>战吼：</b>获取一张鲜血宝石弹幕。"
+    },
+    {
+      "id": "BG34_781",
+      "dbfId": 129437,
+      "premiumDbfId": 129439,
+      "name": "邪能恐角龙",
+      "tier": 3,
+      "attack": 2,
+      "health": 4,
+      "races": [
+        "DEMON",
+        "BEAST"
+      ],
+      "associatedRaces": [],
+      "mechanics": [
+        "BATTLECRY"
+      ],
+      "referencedTags": [],
+      "text": "<b>战吼：</b>使你的其他恶魔和野兽获得+1/+2并对其造成1点伤害，触发两次。"
+    },
+    {
+      "id": "BG34_856",
+      "dbfId": 126169,
+      "premiumDbfId": 126170,
+      "name": "幼体水波",
+      "tier": 3,
+      "attack": 6,
+      "health": 1,
+      "races": [
+        "ELEMENTAL"
+      ],
+      "associatedRaces": [],
+      "mechanics": [
+        "DEATHRATTLE"
+      ],
+      "referencedTags": [
+        "BACON_REFRESH_TOOLTIP"
+      ],
+      "text": "<b>亡语：</b>在本局对战中，在酒馆<b>刷新</b>后，使酒馆中一个随机随从获得+3/+3。"
+    },
+    {
+      "id": "BG35_140",
+      "dbfId": 131145,
+      "premiumDbfId": 131146,
+      "name": "莫格顿大妈",
+      "tier": 3,
+      "attack": 5,
+      "health": 3,
+      "races": [
+        "MURLOC"
+      ],
+      "associatedRaces": [],
+      "mechanics": [
+        "BATTLECRY"
+      ],
+      "referencedTags": [],
+      "text": "<b>战吼：</b>使你的其他鱼人获得+2攻击力。<i>（在本局对战中你每使用过一张莫格顿家的鱼人牌都会提升！）</i>"
+    },
+    {
+      "id": "BG35_141",
+      "dbfId": 131147,
+      "premiumDbfId": 131148,
+      "name": "莫格顿老爹",
+      "tier": 3,
+      "attack": 3,
+      "health": 5,
+      "races": [
+        "MURLOC"
+      ],
+      "associatedRaces": [],
+      "mechanics": [
+        "BATTLECRY"
+      ],
+      "referencedTags": [],
+      "text": "<b>战吼：</b>使你的其他鱼人获得+2生命值。<i>（在本局对战中你每使用过一张莫格顿家的鱼人牌都会提升！）</i>"
+    },
+    {
+      "id": "BGS_071",
+      "dbfId": 61930,
+      "premiumDbfId": 61932,
+      "name": "偏折机器人",
+      "tier": 3,
+      "attack": 3,
+      "health": 2,
+      "races": [
+        "MECHANICAL"
+      ],
+      "associatedRaces": [],
+      "mechanics": [
+        "DIVINE_SHIELD",
+        "TRIGGER_VISUAL"
+      ],
+      "referencedTags": [],
+      "text": "<b>圣盾</b>\n在战斗阶段中，每当你召唤一个机械，便获得+2攻击力和<b>圣盾</b>。"
+    },
+    {
+      "id": "BGS_126",
+      "dbfId": 64189,
+      "premiumDbfId": 64190,
+      "name": "野火元素",
+      "tier": 3,
+      "attack": 6,
+      "health": 3,
+      "races": [
+        "ELEMENTAL"
+      ],
+      "associatedRaces": [],
+      "mechanics": [
+        "TRIGGER_VISUAL"
+      ],
+      "referencedTags": [],
+      "text": "在本随从攻击并消灭一个随从后，对一个相邻的随从造成超过目标生命值的伤害。"
+    },
+    {
+      "id": "BGS_131",
+      "dbfId": 65031,
+      "premiumDbfId": 65122,
+      "name": "致命的孢子",
+      "tier": 3,
+      "attack": 1,
+      "health": 1,
+      "races": [],
+      "associatedRaces": [],
+      "mechanics": [
+        "VENOMOUS"
+      ],
+      "referencedTags": [],
+      "text": "<b>烈毒</b>"
+    },
+    {
+      "id": "BG_DAL_775",
+      "dbfId": 92880,
+      "premiumDbfId": 92881,
+      "name": "坑道爆破师",
+      "tier": 4,
+      "attack": 3,
+      "health": 7,
+      "races": [],
+      "associatedRaces": [],
+      "mechanics": [
+        "DEATHRATTLE",
+        "TAUNT"
+      ],
+      "referencedTags": [],
+      "text": "<b>嘲讽，亡语：</b>对所有随从造成3点伤害。"
+    },
+    {
+      "id": "BG_DEEP_015",
+      "dbfId": 112364,
+      "premiumDbfId": 112366,
+      "name": "义肢假手",
+      "tier": 4,
+      "attack": 3,
+      "health": 1,
+      "races": [
+        "UNDEAD",
+        "MECHANICAL"
+      ],
+      "associatedRaces": [],
+      "mechanics": [
+        "MAGNETIC",
+        "REBORN"
+      ],
+      "referencedTags": [],
+      "text": "<b>磁力</b>。<b>复生</b>\n可以<b>磁力吸附</b>在机械或亡灵上。"
+    },
+    {
+      "id": "BG21_014",
+      "dbfId": 72073,
+      "premiumDbfId": 73452,
+      "name": "珍稀增强幼龙",
+      "tier": 4,
+      "attack": 1,
+      "health": 1,
+      "races": [
+        "DRAGON"
+      ],
+      "associatedRaces": [],
+      "mechanics": [
+        "START_OF_COMBAT",
+        "TRIGGER_VISUAL"
+      ],
+      "referencedTags": [],
+      "text": "<b>战斗开始时：</b>使你的龙获得+4/+4。"
+    },
+    {
+      "id": "BG24_018",
+      "dbfId": 92406,
+      "premiumDbfId": 92436,
+      "name": "蓝壳始祖龟",
+      "tier": 4,
+      "attack": 3,
+      "health": 6,
+      "races": [],
+      "associatedRaces": [],
+      "mechanics": [],
+      "referencedTags": [],
+      "text": "如果你输掉了上一场战斗，出售本随从可以获得5枚铸币。"
+    },
+    {
+      "id": "BG25_016",
+      "dbfId": 95286,
+      "premiumDbfId": 95287,
+      "name": "辛多雷直射手",
+      "tier": 4,
+      "attack": 3,
+      "health": 4,
+      "races": [],
+      "associatedRaces": [],
+      "mechanics": [
+        "BACON_RALLY",
+        "DIVINE_SHIELD",
+        "WINDFURY"
+      ],
+      "referencedTags": [
+        "TAUNT"
+      ],
+      "text": "<b>风怒</b>，<b>圣盾</b>。<b>进击：</b>移除目标的<b>复生</b>和<b>嘲讽</b>。"
+    },
+    {
+      "id": "BG26_137",
+      "dbfId": 98509,
+      "premiumDbfId": 98513,
+      "name": "裁脍鱼人",
+      "tier": 4,
+      "attack": 6,
+      "health": 6,
+      "races": [
+        "MURLOC"
+      ],
+      "associatedRaces": [],
+      "mechanics": [],
+      "referencedTags": [],
+      "text": "当本牌在你手牌中时，在你使用一张鱼人牌后，获得+6/+6。"
+    },
+    {
+      "id": "BG26_505",
+      "dbfId": 99054,
+      "premiumDbfId": 99066,
+      "name": "热情沙锤手",
+      "tier": 4,
+      "attack": 6,
+      "health": 7,
+      "races": [
+        "NAGA"
+      ],
+      "associatedRaces": [],
+      "mechanics": [
+        "TRIGGER_VISUAL"
+      ],
+      "referencedTags": [
+        "BACON_SPELLCRAFT_ID"
+      ],
+      "text": "每回合一次：当<b>塑造法术</b>的法术被用于本随从时，获取它的一张新复制。"
+    },
+    {
+      "id": "BG26_525",
+      "dbfId": 99232,
+      "premiumDbfId": 99233,
+      "name": "奇瑰打击乐手",
+      "tier": 4,
+      "attack": 4,
+      "health": 4,
+      "races": [
+        "DEMON"
+      ],
+      "associatedRaces": [],
+      "mechanics": [
+        "BATTLECRY"
+      ],
+      "referencedTags": [
+        "DISCOVER"
+      ],
+      "text": "<b><b>战吼：\n</b>发现</b>一张恶魔牌，对你的英雄造成等同于其等级的伤害。"
+    },
+    {
+      "id": "BG26_801",
+      "dbfId": 98829,
+      "premiumDbfId": 98830,
+      "name": "重金属双头飞龙",
+      "tier": 4,
+      "attack": 5,
+      "health": 3,
+      "races": [
+        "BEAST"
+      ],
+      "associatedRaces": [],
+      "mechanics": [
+        "DEATHRATTLE",
+        "TAUNT"
+      ],
+      "referencedTags": [
+        "BATTLECRY"
+      ],
+      "text": "<b>嘲讽</b>。<b>亡语：</b>触发一个相邻随从的<b>战吼</b>。"
+    },
+    {
+      "id": "BG26_802",
+      "dbfId": 98824,
+      "premiumDbfId": 98827,
+      "name": "香蕉猛猿",
+      "tier": 4,
+      "attack": 3,
+      "health": 6,
+      "races": [
+        "BEAST"
+      ],
+      "associatedRaces": [],
+      "mechanics": [
+        "TRIGGER_VISUAL"
+      ],
+      "referencedTags": [],
+      "text": "在战斗中，在你召唤一只野兽后，使其攻击力翻倍。"
+    },
+    {
+      "id": "BG26_814",
+      "dbfId": 99011,
+      "premiumDbfId": 99012,
+      "name": "苦情民谣歌手",
+      "tier": 4,
+      "attack": 3,
+      "health": 2,
+      "races": [
+        "PIRATE"
+      ],
+      "associatedRaces": [],
+      "mechanics": [
+        "BATTLECRY"
+      ],
+      "referencedTags": [],
+      "text": "<b>战吼：</b>使一个海盗获得+1生命值。<i>（在本回合中你每花费一枚铸币都会提升！）</i>"
+    },
+    {
+      "id": "BG26_817",
+      "dbfId": 99035,
+      "premiumDbfId": 99036,
+      "name": "刀剑收藏家",
+      "tier": 4,
+      "attack": 3,
+      "health": 2,
+      "races": [
+        "PIRATE"
+      ],
+      "associatedRaces": [],
+      "mechanics": [],
+      "referencedTags": [],
+      "text": "同时对其攻击目标相邻的随从造成伤害。"
+    },
+    {
+      "id": "BG27_556",
+      "dbfId": 108922,
+      "premiumDbfId": 108930,
+      "name": "凶饿的觅食者",
+      "tier": 4,
+      "attack": 5,
+      "health": 6,
+      "races": [
+        "MURLOC"
+      ],
+      "associatedRaces": [],
+      "mechanics": [
+        "TRIGGER_VISUAL"
+      ],
+      "referencedTags": [],
+      "text": "<b>战斗开始时：</b>当你有空位时，召唤你手牌中攻击力最高的鱼人，其登场仅限本场战斗。"
+    },
+    {
+      "id": "BG28_583",
+      "dbfId": 104766,
+      "premiumDbfId": 104767,
+      "name": "地卜大师鲁古格",
+      "tier": 4,
+      "attack": 4,
+      "health": 6,
+      "races": [
+        "QUILBOAR"
+      ],
+      "associatedRaces": [],
+      "mechanics": [
+        "DIVINE_SHIELD",
+        "TRIGGER_VISUAL"
+      ],
+      "referencedTags": [
+        "BACON_BLOOD_GEM_TOOLTIP"
+      ],
+      "text": "<b>圣盾</b>。每当一张<b>鲜血宝石</b>被用于本随从时，本随从对一个不同的友方随从使用一张<b>鲜血宝石</b>。"
+    },
+    {
+      "id": "BG29_503",
+      "dbfId": 113766,
+      "premiumDbfId": 113767,
+      "name": "废铁残械",
+      "tier": 4,
+      "attack": 3,
+      "health": 4,
+      "races": [
+        "MECHANICAL"
+      ],
+      "associatedRaces": [],
+      "mechanics": [
+        "BATTLECRY"
+      ],
+      "referencedTags": [
+        "DISCOVER",
+        "MAGNETIC"
+      ],
+      "text": "<b>战吼：</b>选择一个友方机械，<b>发现</b>一个机械以对其<b>磁力吸附</b>。"
+    },
+    {
+      "id": "BG29_807",
+      "dbfId": 107930,
+      "premiumDbfId": 107934,
+      "name": "鞭笞者特里高雷",
+      "tier": 4,
+      "attack": 9,
+      "health": 3,
+      "races": [
+        "BEAST"
+      ],
+      "associatedRaces": [],
+      "mechanics": [
+        "TRIGGER_VISUAL"
+      ],
+      "referencedTags": [],
+      "text": "每当另一只友方野兽受到伤害时，永久获得+2生命值。"
+    },
+    {
+      "id": "BG29_813",
+      "dbfId": 108463,
+      "premiumDbfId": 108464,
+      "name": "执念诗心龙",
+      "tier": 4,
+      "attack": 2,
+      "health": 3,
+      "races": [
+        "DRAGON"
+      ],
+      "associatedRaces": [],
+      "mechanics": [
+        "DIVINE_SHIELD",
+        "TRIGGER_VISUAL"
+      ],
+      "referencedTags": [],
+      "text": "<b>圣盾</b>。相邻的龙可永久保留战斗阶段获得的<b><b>额外关键词</b></b>和属性值。"
+    },
+    {
+      "id": "BG30_117",
+      "dbfId": 114099,
+      "premiumDbfId": 114100,
+      "name": "火山访客",
+      "tier": 4,
+      "attack": 4,
+      "health": 4,
+      "races": [
+        "NAGA"
+      ],
+      "associatedRaces": [],
+      "mechanics": [
+        "BACON_SPELLCRAFT_ID",
+        "TRIGGER_VISUAL"
+      ],
+      "referencedTags": [],
+      "text": "<b><b>塑造法术：</b>\n抉择：</b>使你的随从获得+4攻击力；或者+4生命值。"
+    },
+    {
+      "id": "BG30_121",
+      "dbfId": 113152,
+      "premiumDbfId": 113153,
+      "name": "热气球测绘员",
+      "tier": 4,
+      "attack": 3,
+      "health": 7,
+      "races": [
+        "QUILBOAR"
+      ],
+      "associatedRaces": [],
+      "mechanics": [
+        "AURA"
+      ],
+      "referencedTags": [
+        "BACON_BLOOD_GEM_TOOLTIP"
+      ],
+      "text": "从你手牌中使用\n的<b>鲜血宝石</b>会额外施放一次。"
+    },
+    {
+      "id": "BG31_178",
+      "dbfId": 115680,
+      "premiumDbfId": 115681,
+      "name": "招牌计时机",
+      "tier": 4,
+      "attack": 3,
+      "health": 7,
+      "races": [
+        "MECHANICAL"
+      ],
+      "associatedRaces": [],
+      "mechanics": [
+        "END_OF_TURN_TRIGGER"
+      ],
+      "referencedTags": [],
+      "text": "在你的回合结束时，随机获取一张酒馆法术牌。"
+    },
+    {
+      "id": "BG31_824",
+      "dbfId": 115708,
+      "premiumDbfId": 115709,
+      "name": "双持海盗",
+      "tier": 4,
+      "attack": 3,
+      "health": 4,
+      "races": [
+        "PIRATE"
+      ],
+      "associatedRaces": [],
+      "mechanics": [
+        "TRIGGER_VISUAL"
+      ],
+      "referencedTags": [],
+      "text": "每当你花掉5枚铸币，使两个友方海盗\n获得+3/+4。\n<i>（还剩5枚！）</i>"
+    },
+    {
+      "id": "BG32_172",
+      "dbfId": 120025,
+      "premiumDbfId": 120026,
+      "name": "自动装配机",
+      "tier": 4,
+      "attack": 2,
+      "health": 2,
+      "races": [
+        "MECHANICAL"
+      ],
+      "associatedRaces": [],
+      "mechanics": [
+        "DEATHRATTLE",
+        "MAGNETIC"
+      ],
+      "referencedTags": [],
+      "text": "<b>磁力</b>。<b>亡语：</b>召唤一个星元自动机。"
+    },
+    {
+      "id": "BG32_341",
+      "dbfId": 121640,
+      "premiumDbfId": 121642,
+      "name": "胡蒙格斯",
+      "tier": 4,
+      "attack": 5,
+      "health": 5,
+      "races": [],
+      "associatedRaces": [],
+      "mechanics": [
+        "AURA",
+        "DIVINE_SHIELD"
+      ],
+      "referencedTags": [],
+      "text": "<b>圣盾</b>。你的酒馆法术使随从额外获得+1/+2。"
+    },
+    {
+      "id": "BG32_842",
+      "dbfId": 119951,
+      "premiumDbfId": 119952,
+      "name": "辐光余烬",
+      "tier": 4,
+      "attack": 4,
+      "health": 1,
+      "races": [
+        "ELEMENTAL"
+      ],
+      "associatedRaces": [],
+      "mechanics": [
+        "DEATHRATTLE"
+      ],
+      "referencedTags": [],
+      "text": "<b>亡语：</b>在本局对战中，你的元素使随从额外获得+2生命值。"
+    },
+    {
+      "id": "BG32_880",
+      "dbfId": 120219,
+      "premiumDbfId": 120221,
+      "name": "友善的恶鬼",
+      "tier": 4,
+      "attack": 6,
+      "health": 3,
+      "races": [
+        "UNDEAD"
+      ],
+      "associatedRaces": [],
+      "mechanics": [
+        "DEATHRATTLE"
+      ],
+      "referencedTags": [],
+      "text": "<b>亡语：</b>在本局对战中，你酒馆法术使随从额外获得+1攻击力。"
+    },
+    {
+      "id": "BG33_155",
+      "dbfId": 122586,
+      "premiumDbfId": 122587,
+      "name": "虔诚的萨特唤魔者",
+      "tier": 4,
+      "attack": 2,
+      "health": 2,
+      "races": [
+        "DEMON"
+      ],
+      "associatedRaces": [],
+      "mechanics": [
+        "TRIGGER_VISUAL"
+      ],
+      "referencedTags": [],
+      "text": "在另一个友方恶魔造成伤害后，永久获得+1/+2。"
+    },
+    {
+      "id": "BG33_156",
+      "dbfId": 122605,
+      "premiumDbfId": 122606,
+      "name": "沉默的惩罚者",
+      "tier": 4,
+      "attack": 6,
+      "health": 2,
+      "races": [
+        "DEMON"
+      ],
+      "associatedRaces": [],
+      "mechanics": [
+        "DEATHRATTLE",
+        "TAUNT"
+      ],
+      "referencedTags": [],
+      "text": "<b>嘲讽</b>。<b>亡语：</b>对所有随从造成2点伤害<i>（友方恶魔除外）</i>。"
+    },
+    {
+      "id": "BG33_319",
+      "dbfId": 122221,
+      "premiumDbfId": 122222,
+      "name": "霜鳞女祭司",
+      "tier": 4,
+      "attack": 3,
+      "health": 3,
+      "races": [
+        "NAGA"
+      ],
+      "associatedRaces": [],
+      "mechanics": [
+        "BACON_SPELLCRAFT_ID",
+        "TRIGGER_VISUAL"
+      ],
+      "referencedTags": [],
+      "text": "<b>塑造法术：</b>随机获取一张能使随从获得属性值的酒馆法术牌。"
+    },
+    {
+      "id": "BG33_822",
+      "dbfId": 122179,
+      "premiumDbfId": 122180,
+      "name": "顶尖大盗",
+      "tier": 4,
+      "attack": 4,
+      "health": 6,
+      "races": [
+        "PIRATE"
+      ],
+      "associatedRaces": [],
+      "mechanics": [
+        "BACON_RALLY"
+      ],
+      "referencedTags": [],
+      "text": "<b>进击：</b>随机获取一张<b>悬赏令</b>。"
+    },
+    {
+      "id": "BG34_500",
+      "dbfId": 126924,
+      "premiumDbfId": 126925,
+      "name": "魔焰执行者",
+      "tier": 4,
+      "attack": 4,
+      "health": 5,
+      "races": [
+        "ELEMENTAL",
+        "DEMON"
+      ],
+      "associatedRaces": [],
+      "mechanics": [
+        "END_OF_TURN_TRIGGER"
+      ],
+      "referencedTags": [],
+      "text": "在你的回合结束时，吞食酒馆中生命值最高的随从以获得其\n属性值。"
+    },
+    {
+      "id": "BG34_523",
+      "dbfId": 128168,
+      "premiumDbfId": 128169,
+      "name": "猎食的虎鲨",
+      "tier": 4,
+      "attack": 3,
+      "health": 5,
+      "races": [
+        "BEAST"
+      ],
+      "associatedRaces": [],
+      "mechanics": [
+        "BATTLECRY"
+      ],
+      "referencedTags": [
+        "DISCOVER"
+      ],
+      "text": "<b>战吼：</b>\n<b>发现</b>一张野兽牌。"
+    },
+    {
+      "id": "BG34_604",
+      "dbfId": 126966,
+      "premiumDbfId": 126967,
+      "name": "英勇的逆袭者",
+      "tier": 4,
+      "attack": 1,
+      "health": 10,
+      "races": [],
+      "associatedRaces": [],
+      "mechanics": [
+        "BACON_RALLY",
+        "STEALTH"
+      ],
+      "referencedTags": [],
+      "text": "<b>潜行</b>。<b>进击：</b>获得目标的攻击力。"
+    },
+    {
+      "id": "BG34_632",
+      "dbfId": 126745,
+      "premiumDbfId": 126746,
+      "name": "孵化研究员",
+      "tier": 4,
+      "attack": 2,
+      "health": 8,
+      "races": [
+        "DRAGON"
+      ],
+      "associatedRaces": [],
+      "mechanics": [
+        "AVENGE"
+      ],
+      "referencedTags": [],
+      "text": "<b>复仇（3）：</b>随机获取一张<b>多彩幼龙</b>。"
+    },
+    {
+      "id": "BG34_682",
+      "dbfId": 126667,
+      "premiumDbfId": 126668,
+      "name": "剃刀沼泽舞扇者",
+      "tier": 4,
+      "attack": 6,
+      "health": 2,
+      "races": [
+        "QUILBOAR"
+      ],
+      "associatedRaces": [],
+      "mechanics": [
+        "DEATHRATTLE"
+      ],
+      "referencedTags": [
+        "BACON_BLOOD_GEM_TOOLTIP"
+      ],
+      "text": "<b>亡语：</b>获取一张鲜血宝石弹幕。"
+    },
+    {
+      "id": "BG34_684",
+      "dbfId": 126671,
+      "premiumDbfId": 126672,
+      "name": "堑壕斗士",
+      "tier": 4,
+      "attack": 6,
+      "health": 6,
+      "races": [
+        "QUILBOAR"
+      ],
+      "associatedRaces": [],
+      "mechanics": [
+        "END_OF_TURN_TRIGGER"
+      ],
+      "referencedTags": [],
+      "text": "在你的回合结束时，获取一张查抄宝石。"
+    },
+    {
+      "id": "BG34_690",
+      "dbfId": 126451,
+      "premiumDbfId": 126452,
+      "name": "疫病行尸",
+      "tier": 4,
+      "attack": 4,
+      "health": 2,
+      "races": [
+        "UNDEAD"
+      ],
+      "associatedRaces": [],
+      "mechanics": [
+        "DEATHRATTLE"
+      ],
+      "referencedTags": [],
+      "text": "<b>亡语：</b>在本局对战中，你的亡灵拥有+2攻击力，无论它们在哪。<i>（如果本随从在战斗之外死亡，改为+4！）</i>"
+    },
+    {
+      "id": "BG34_865",
+      "dbfId": 126175,
+      "premiumDbfId": 126176,
+      "name": "爆焰灯神",
+      "tier": 4,
+      "attack": 4,
+      "health": 4,
+      "races": [
+        "ELEMENTAL"
+      ],
+      "associatedRaces": [],
+      "mechanics": [
+        "BATTLECRY"
+      ],
+      "referencedTags": [
+        "BACON_REFRESH_TOOLTIP"
+      ],
+      "text": "<b>战吼：</b>在本局对战中，在酒馆<b>刷新</b>后，使酒馆中一个随机随从获得+7/+7。"
+    },
+    {
+      "id": "BG34_925",
+      "dbfId": 126916,
+      "premiumDbfId": 126917,
+      "name": "海床招募者",
+      "tier": 4,
+      "attack": 3,
+      "health": 5,
+      "races": [
+        "NAGA"
+      ],
+      "associatedRaces": [],
+      "mechanics": [
+        "BACON_RALLY"
+      ],
+      "referencedTags": [],
+      "text": "<b>进击：</b>对本随从右边的随从施放主厨\n甄选。"
+    },
+    {
+      "id": "BG35_143",
+      "dbfId": 131216,
+      "premiumDbfId": 131217,
+      "name": "深水酋长",
+      "tier": 4,
+      "attack": 3,
+      "health": 2,
+      "races": [
+        "MURLOC"
+      ],
+      "associatedRaces": [],
+      "mechanics": [
+        "BATTLECRY",
+        "DEATHRATTLE"
+      ],
+      "referencedTags": [],
+      "text": "<b>战吼，亡语：</b>获取一张深水族群。"
+    },
+    {
+      "id": "BG35_151",
+      "dbfId": 130076,
+      "premiumDbfId": 130081,
+      "name": "林地亵渎者",
+      "tier": 4,
+      "attack": 5,
+      "health": 6,
+      "races": [
+        "DEMON"
+      ],
+      "associatedRaces": [],
+      "mechanics": [
+        "END_OF_TURN_TRIGGER"
+      ],
+      "referencedTags": [
+        "BACON_REFRESH_TOOLTIP"
+      ],
+      "text": "在你的回合结束时，在你的下3次<b>刷新</b>中各添加一个恶魔<b>饲料</b>。"
+    },
+    {
+      "id": "BG35_341",
+      "dbfId": 130796,
+      "premiumDbfId": 130797,
+      "name": "附魔哨卫",
+      "tier": 4,
+      "attack": 3,
+      "health": 5,
+      "races": [
+        "MECHANICAL"
+      ],
+      "associatedRaces": [],
+      "mechanics": [
+        "AURA",
+        "MAGNETIC"
+      ],
+      "referencedTags": [],
+      "text": "<b>磁力</b>。你的酒馆法术使随从额外获得+1/+1。"
+    },
+    {
+      "id": "BG35_433",
+      "dbfId": 130153,
+      "premiumDbfId": 130154,
+      "name": "赤牙荆棘培育师",
+      "tier": 4,
+      "attack": 3,
+      "health": 7,
+      "races": [
+        "QUILBOAR"
+      ],
+      "associatedRaces": [],
+      "mechanics": [
+        "END_OF_TURN_TRIGGER"
+      ],
+      "referencedTags": [
+        "BACON_BLOOD_GEM_TOOLTIP"
+      ],
+      "text": "在你的回合结束时，获取一张<b>鲜血宝石</b>。该宝石还能使野猪人获得<b>复生</b>。"
+    },
+    {
+      "id": "BG35_601",
+      "dbfId": 130709,
+      "premiumDbfId": 130710,
+      "name": "双足飞龙前锋",
+      "tier": 4,
+      "attack": 2,
+      "health": 8,
+      "races": [
+        "BEAST"
+      ],
+      "associatedRaces": [],
+      "mechanics": [
+        "TRIGGER_VISUAL"
+      ],
+      "referencedTags": [
+        "BACON_REFRESH_TOOLTIP"
+      ],
+      "text": "每当本随从受到伤害，获得一次免费的<b>刷新</b>。<i>（每回合限3次。）</i>3每当本随从受到伤害，获得一次免费的<b>刷新</b>。<i>（还剩3次！）</i>"
+    },
+    {
+      "id": "BG35_702",
+      "dbfId": 130705,
+      "premiumDbfId": 130706,
+      "name": "浪荡水手",
+      "tier": 4,
+      "attack": 7,
+      "health": 3,
+      "races": [
+        "PIRATE"
+      ],
+      "associatedRaces": [],
+      "mechanics": [
+        "BATTLECRY"
+      ],
+      "referencedTags": [],
+      "text": "<b>战吼：</b>使一个友方随从获得+2/+2。<i>（在本回合中，你每施放过一个酒馆法术都会提升！）</i>"
+    },
+    {
+      "id": "BG35_881",
+      "dbfId": 130294,
+      "premiumDbfId": 130295,
+      "name": "魔网浮灵",
+      "tier": 4,
+      "attack": 4,
+      "health": 6,
+      "races": [
+        "ELEMENTAL"
+      ],
+      "associatedRaces": [],
+      "mechanics": [
+        "BATTLECRY",
+        "DEATHRATTLE"
+      ],
+      "referencedTags": [],
+      "text": "<b>战吼，亡语：</b>获取一张奥术吸收。"
+    },
+    {
+      "id": "BG35_921",
+      "dbfId": 130658,
+      "premiumDbfId": 130659,
+      "name": "深渊打手",
+      "tier": 4,
+      "attack": 1,
+      "health": 1,
+      "races": [
+        "NAGA"
+      ],
+      "associatedRaces": [],
+      "mechanics": [
+        "AURA",
+        "DIVINE_SHIELD"
+      ],
+      "referencedTags": [],
+      "text": "<b>圣盾</b>。在本局对战中，你每施放一个酒馆法术，便拥有+1/+1。"
+    },
+    {
+      "id": "BGS_030",
+      "dbfId": 60247,
+      "premiumDbfId": 60396,
+      "name": "拜戈尔格国王",
+      "tier": 4,
+      "attack": 4,
+      "health": 4,
+      "races": [
+        "MURLOC"
+      ],
+      "associatedRaces": [],
+      "mechanics": [
+        "BATTLECRY"
+      ],
+      "referencedTags": [],
+      "text": "<b>战吼：</b>使你手牌中和场上的所有其他鱼人获得+4/+4。"
+    },
+    {
+      "id": "BGS_078",
+      "dbfId": 62230,
+      "premiumDbfId": 62231,
+      "name": "巨大的金刚鹦鹉",
+      "tier": 4,
+      "attack": 5,
+      "health": 4,
+      "races": [
+        "BEAST"
+      ],
+      "associatedRaces": [],
+      "mechanics": [
+        "BACON_RALLY"
+      ],
+      "referencedTags": [
+        "DEATHRATTLE"
+      ],
+      "text": "<b>进击：</b>触发你最左边的<b>亡语</b><i>（本随从的除外）</i>。"
+    },
+    {
+      "id": "BGS_116",
+      "dbfId": 64042,
+      "premiumDbfId": 64045,
+      "name": "刷新畸体",
+      "tier": 4,
+      "attack": 4,
+      "health": 5,
+      "races": [
+        "ELEMENTAL"
+      ],
+      "associatedRaces": [],
+      "mechanics": [
+        "BATTLECRY"
+      ],
+      "referencedTags": [
+        "BACON_REFRESH_TOOLTIP"
+      ],
+      "text": "<b>战吼：</b>获得2次免费的<b>刷新</b>。"
+    },
+    {
+      "id": "BGS_123",
+      "dbfId": 64077,
+      "premiumDbfId": 64079,
+      "name": "酒馆旋风",
+      "tier": 4,
+      "attack": 2,
+      "health": 2,
+      "races": [
+        "ELEMENTAL"
+      ],
+      "associatedRaces": [],
+      "mechanics": [
+        "BATTLECRY"
+      ],
+      "referencedTags": [],
+      "text": "<b>战吼：</b>随机获取一张元素牌。"
+    },
+    {
+      "id": "BG_LOE_077",
+      "dbfId": 96786,
+      "premiumDbfId": 58400,
+      "name": "布莱恩·铜须",
+      "tier": 5,
+      "attack": 2,
+      "health": 4,
+      "races": [],
+      "associatedRaces": [],
+      "mechanics": [
+        "AURA"
+      ],
+      "referencedTags": [
+        "BATTLECRY"
+      ],
+      "text": "你的<b>战吼</b>会触发\n两次。"
+    },
+    {
+      "id": "BG21_005",
+      "dbfId": 72067,
+      "premiumDbfId": 72824,
+      "name": "饥饿的魔蝠",
+      "tier": 5,
+      "attack": 6,
+      "health": 3,
+      "races": [
+        "DEMON"
+      ],
+      "associatedRaces": [],
+      "mechanics": [
+        "END_OF_TURN_TRIGGER"
+      ],
+      "referencedTags": [],
+      "text": "在你的回合结束时，你的恶魔各吞食酒馆中的一个随从，获得其属性值。"
+    },
+    {
+      "id": "BG23_008",
+      "dbfId": 80746,
+      "premiumDbfId": 80764,
+      "name": "闪鳞纳迦",
+      "tier": 5,
+      "attack": 4,
+      "health": 6,
+      "races": [
+        "NAGA"
+      ],
+      "associatedRaces": [],
+      "mechanics": [
+        "BACON_SPELLCRAFT_ID",
+        "TAUNT",
+        "TRIGGER_VISUAL"
+      ],
+      "referencedTags": [
+        "DIVINE_SHIELD"
+      ],
+      "text": "<b>嘲讽</b>，<b>塑造法术：</b>直到下个回合，使一个随从获得<b>圣盾</b>。"
+    },
+    {
+      "id": "BG23_018",
+      "dbfId": 80756,
+      "premiumDbfId": 80774,
+      "name": "暗视长者",
+      "tier": 5,
+      "attack": 6,
+      "health": 8,
+      "races": [
+        "QUILBOAR"
+      ],
+      "associatedRaces": [],
+      "mechanics": [
+        "TRIGGER_VISUAL"
+      ],
+      "referencedTags": [
+        "BACON_BLOOD_GEM_TOOLTIP"
+      ],
+      "text": "每当你花掉8枚铸币，本随从对你的所有野猪人各使用两张<b>鲜血宝石</b>。<i>（还剩8枚！）</i>"
+    },
+    {
+      "id": "BG23_318",
+      "dbfId": 90425,
+      "premiumDbfId": 90430,
+      "name": "莽神火车王",
+      "tier": 5,
+      "attack": 6,
+      "health": 2,
+      "races": [],
+      "associatedRaces": [],
+      "mechanics": [
+        "DEATHRATTLE"
+      ],
+      "referencedTags": [],
+      "text": "<b>亡语：</b>消灭击杀本随从的随从。"
+    },
+    {
+      "id": "BG25_354",
+      "dbfId": 97408,
+      "premiumDbfId": 97409,
+      "name": "提图斯·瑞文戴尔",
+      "tier": 5,
+      "attack": 1,
+      "health": 7,
+      "races": [],
+      "associatedRaces": [],
+      "mechanics": [
+        "AURA"
+      ],
+      "referencedTags": [
+        "DEATHRATTLE"
+      ],
+      "text": "你的<b>亡语</b>额外触发一次。"
+    },
+    {
+      "id": "BG26_148",
+      "dbfId": 98592,
+      "premiumDbfId": 98593,
+      "name": "报废废铁回收机",
+      "tier": 5,
+      "attack": 6,
+      "health": 5,
+      "races": [
+        "MECHANICAL"
+      ],
+      "associatedRaces": [],
+      "mechanics": [
+        "DEATHRATTLE"
+      ],
+      "referencedTags": [
+        "MAGNETIC"
+      ],
+      "text": "<b>亡语：</b>随机获取一张<b>磁力</b>机械牌。"
+    },
+    {
+      "id": "BG26_162",
+      "dbfId": 99523,
+      "premiumDbfId": 99734,
+      "name": "农场热舞旋风",
+      "tier": 5,
+      "attack": 4,
+      "health": 4,
+      "races": [
+        "ELEMENTAL"
+      ],
+      "associatedRaces": [],
+      "mechanics": [
+        "BATTLECRY",
+        "DEATHRATTLE"
+      ],
+      "referencedTags": [],
+      "text": "<b>战吼，亡语：</b>使酒馆中的元素在本局对战中获得+8/+8。"
+    },
+    {
+      "id": "BG26_199",
+      "dbfId": 101092,
+      "premiumDbfId": 101095,
+      "name": "蓄势二重唱",
+      "tier": 5,
+      "attack": 6,
+      "health": 6,
+      "races": [],
+      "associatedRaces": [],
+      "mechanics": [
+        "END_OF_TURN_TRIGGER",
+        "TRIGGER_VISUAL"
+      ],
+      "referencedTags": [],
+      "text": "每2个回合，在回合结束时，获取一张本随从左边随从的原始版复制。<i>（还剩2回合！）</i>2每2个回合，在回合结束时，获取一张本随从左边随从的原始版复制。<i>（就是这回合！）</i>"
+    },
+    {
+      "id": "BG26_867",
+      "dbfId": 114486,
+      "premiumDbfId": 114487,
+      "name": "三只小野猪",
+      "tier": 5,
+      "attack": 3,
+      "health": 3,
+      "races": [
+        "QUILBOAR"
+      ],
+      "associatedRaces": [],
+      "mechanics": [
+        "DEATHRATTLE"
+      ],
+      "referencedTags": [
+        "BACON_BLOOD_GEM_TOOLTIP"
+      ],
+      "text": "<b>亡语：</b>本随从对你的所有野猪人各使用3张<b>鲜血宝石</b>。"
+    },
+    {
+      "id": "BG26_ICC_901",
+      "dbfId": 101314,
+      "premiumDbfId": 101315,
+      "name": "达卡莱附魔师",
+      "tier": 5,
+      "attack": 1,
+      "health": 5,
+      "races": [],
+      "associatedRaces": [],
+      "mechanics": [
+        "AURA"
+      ],
+      "referencedTags": [],
+      "text": "你的回合结束效果会触发两次。"
+    },
+    {
+      "id": "BG28_308",
+      "dbfId": 105518,
+      "premiumDbfId": 105520,
+      "name": "大巫妖克尔苏加德",
+      "tier": 5,
+      "attack": 10,
+      "health": 8,
+      "races": [
+        "UNDEAD"
+      ],
+      "associatedRaces": [],
+      "mechanics": [
+        "END_OF_TURN_TRIGGER"
+      ],
+      "referencedTags": [],
+      "text": "在你的回合结束时，消灭本随从左侧的亡灵并再次召唤完全相同的复制。"
+    },
+    {
+      "id": "BG28_550",
+      "dbfId": 104466,
+      "premiumDbfId": 104467,
+      "name": "竞技表演者",
+      "tier": 5,
+      "attack": 3,
+      "health": 4,
+      "races": [],
+      "associatedRaces": [],
+      "mechanics": [
+        "BATTLECRY"
+      ],
+      "referencedTags": [
+        "DISCOVER"
+      ],
+      "text": "<b>战吼：</b><b>发现</b>一张酒馆法术牌。"
+    },
+    {
+      "id": "BG28_551",
+      "dbfId": 104468,
+      "premiumDbfId": 104471,
+      "name": "救赎者娜拉",
+      "tier": 5,
+      "attack": 5,
+      "health": 6,
+      "races": [],
+      "associatedRaces": [],
+      "mechanics": [
+        "TRIGGER_VISUAL"
+      ],
+      "referencedTags": [],
+      "text": "每当你施放一个酒馆法术，使每个类型的各一个友方随从获得+4/+3。"
+    },
+    {
+      "id": "BG28_633",
+      "dbfId": 110664,
+      "premiumDbfId": 110665,
+      "name": "邪能野猪人",
+      "tier": 5,
+      "attack": 2,
+      "health": 6,
+      "races": [
+        "DEMON",
+        "QUILBOAR"
+      ],
+      "associatedRaces": [],
+      "mechanics": [
+        "TRIGGER_VISUAL"
+      ],
+      "referencedTags": [],
+      "text": "在你施放3个法术后，吞食酒馆中的一个随从，获得其属性值。<i>（还剩3个！）</i>"
+    },
+    {
+      "id": "BG28_741",
+      "dbfId": 110321,
+      "premiumDbfId": 110322,
+      "name": "蓄能女沙皇",
+      "tier": 5,
+      "attack": 4,
+      "health": 1,
+      "races": [
+        "MECHANICAL"
+      ],
+      "associatedRaces": [],
+      "mechanics": [
+        "DIVINE_SHIELD",
+        "TRIGGER_VISUAL"
+      ],
+      "referencedTags": [],
+      "text": "<b>圣盾</b>。每当你施放一个酒馆法术时，使你具有<b>圣盾</b>的随从获得+4攻击力。"
+    },
+    {
+      "id": "BG29_806",
+      "dbfId": 107937,
+      "premiumDbfId": 107938,
+      "name": "炫彩灼天者",
+      "tier": 5,
+      "attack": 3,
+      "health": 8,
+      "races": [
+        "BEAST"
+      ],
+      "associatedRaces": [],
+      "mechanics": [
+        "TRIGGER_VISUAL"
+      ],
+      "referencedTags": [],
+      "text": "每当一只友方野兽受到伤害时，使该受伤野兽之外的一只友方野兽永久获得+3/+2。"
+    },
+    {
+      "id": "BG29_808",
+      "dbfId": 108439,
+      "premiumDbfId": 108455,
+      "name": "尖角救星",
+      "tier": 5,
+      "attack": 8,
+      "health": 2,
+      "races": [
+        "BEAST"
+      ],
+      "associatedRaces": [],
+      "mechanics": [
+        "DEATHRATTLE",
+        "REBORN",
+        "TAUNT"
+      ],
+      "referencedTags": [],
+      "text": "<b><b>嘲讽</b>。<b>复生</b></b>\n<b>亡语：</b>使你的随从获得+1生命值并对其造成1点伤害。"
+    },
+    {
+      "id": "BG29_840",
+      "dbfId": 108393,
+      "premiumDbfId": 108394,
+      "name": "噬月者的勇士",
+      "tier": 5,
+      "attack": 5,
+      "health": 5,
+      "races": [],
+      "associatedRaces": [],
+      "mechanics": [
+        "TRIGGER_VISUAL"
+      ],
+      "referencedTags": [],
+      "text": "在你使用奇数等级的牌后，使你的奇数等级的随从获得+1/+1。"
+    },
+    {
+      "id": "BG29_862",
+      "dbfId": 114469,
+      "premiumDbfId": 114470,
+      "name": "贫瘠之地咒术师",
+      "tier": 5,
+      "attack": 6,
+      "health": 2,
+      "races": [],
+      "associatedRaces": [],
+      "mechanics": [
+        "DEATHRATTLE"
+      ],
+      "referencedTags": [
+        "BATTLECRY"
+      ],
+      "text": "<b>亡语：</b>随机获取一张<b>战吼</b>随从牌。"
+    },
+    {
+      "id": "BG30_122",
+      "dbfId": 114391,
+      "premiumDbfId": 114392,
+      "name": "鱼人蟊贼",
+      "tier": 5,
+      "attack": 10,
+      "health": 10,
+      "races": [
+        "MURLOC"
+      ],
+      "associatedRaces": [],
+      "mechanics": [
+        "TRIGGER_VISUAL"
+      ],
+      "referencedTags": [],
+      "text": "在你使用一张鱼人牌后，使一个友方随从和你手牌中的一张随从牌获得+5/+5。"
+    },
+    {
+      "id": "BG30_129",
+      "dbfId": 114379,
+      "premiumDbfId": 114380,
+      "name": "古墓捣蛋鬼",
+      "tier": 5,
+      "attack": 4,
+      "health": 10,
+      "races": [
+        "UNDEAD"
+      ],
+      "associatedRaces": [],
+      "mechanics": [
+        "TRIGGER_VISUAL"
+      ],
+      "referencedTags": [],
+      "text": "每当你即将召唤随从且你的战队放不下时，使你的随从永久获得+2/+2。"
+    },
+    {
+      "id": "BG31_175",
+      "dbfId": 115674,
+      "premiumDbfId": 115675,
+      "name": "移动投影仪",
+      "tier": 5,
+      "attack": 4,
+      "health": 6,
+      "races": [
+        "MECHANICAL"
+      ],
+      "associatedRaces": [],
+      "mechanics": [
+        "BACON_RALLY",
+        "DIVINE_SHIELD"
+      ],
+      "referencedTags": [
+        "MAGNETIC"
+      ],
+      "text": "<b>圣盾</b>。<b>进击：</b>随机获取一张<b>磁力</b>机械牌。"
+    },
+    {
+      "id": "BG31_809",
+      "dbfId": 119255,
+      "premiumDbfId": 119256,
+      "name": "绿松石飞掠虫",
+      "tier": 5,
+      "attack": 5,
+      "health": 5,
+      "races": [
+        "BEAST"
+      ],
+      "associatedRaces": [],
+      "mechanics": [
+        "DEATHRATTLE"
+      ],
+      "referencedTags": [],
+      "text": "<b>亡语：</b>在本局\n对战中，你的甲虫拥有+5/+5。召唤一只2/2的甲虫。"
+    },
+    {
+      "id": "BG31_920",
+      "dbfId": 115555,
+      "premiumDbfId": 115556,
+      "name": "暗潮战略专家",
+      "tier": 5,
+      "attack": 4,
+      "health": 5,
+      "races": [
+        "NAGA"
+      ],
+      "associatedRaces": [],
+      "mechanics": [
+        "END_OF_TURN_TRIGGER",
+        "BACON_SPELLCRAFT_ID",
+        "TRIGGER_VISUAL"
+      ],
+      "referencedTags": [],
+      "text": "<b>塑造法术：</b>随机获取一张等级1的纳迦牌。<i>（每回合都会提升！）</i>"
+    },
+    {
+      "id": "BG32_111",
+      "dbfId": 120754,
+      "premiumDbfId": 120758,
+      "name": "梦魇茶客",
+      "tier": 5,
+      "attack": 3,
+      "health": 3,
+      "races": [
+        "ALL"
+      ],
+      "associatedRaces": [],
+      "mechanics": [
+        "BATTLECRY",
+        "DEATHRATTLE"
+      ],
+      "referencedTags": [],
+      "text": "<b>战吼，亡语：</b>获取一张乱放的茶具。"
+    },
+    {
+      "id": "BG32_324",
+      "dbfId": 120104,
+      "premiumDbfId": 120105,
+      "name": "德鲁斯特堕落屠夫",
+      "tier": 5,
+      "attack": 2,
+      "health": 7,
+      "races": [
+        "UNDEAD"
+      ],
+      "associatedRaces": [],
+      "mechanics": [
+        "AVENGE"
+      ],
+      "referencedTags": [],
+      "text": "<b>复仇（3）：</b>获取一张宰割。"
+    },
+    {
+      "id": "BG32_821",
+      "dbfId": 120299,
+      "premiumDbfId": 120300,
+      "name": "邪火咒龙",
+      "tier": 5,
+      "attack": 6,
+      "health": 5,
+      "races": [
+        "DEMON",
+        "DRAGON"
+      ],
+      "associatedRaces": [],
+      "mechanics": [
+        "END_OF_TURN_TRIGGER"
+      ],
+      "referencedTags": [],
+      "text": "在你的回合结束时，你的酒馆法术在本局对战中使随从额外获得+1/+1。"
+    },
+    {
+      "id": "BG32_835",
+      "dbfId": 119942,
+      "premiumDbfId": 119943,
+      "name": "宁静的冥想者",
+      "tier": 5,
+      "attack": 3,
+      "health": 8,
+      "races": [
+        "NAGA"
+      ],
+      "associatedRaces": [],
+      "mechanics": [
+        "BACON_SPELLCRAFT_ID",
+        "TRIGGER_VISUAL"
+      ],
+      "referencedTags": [],
+      "text": "<b>塑造法术：</b>在本局对战中，你的酒馆法术使随从额外获得+1/+1。"
+    },
+    {
+      "id": "BG32_873",
+      "dbfId": 121687,
+      "premiumDbfId": 121688,
+      "name": "灰烬腐蚀者",
+      "tier": 5,
+      "attack": 6,
+      "health": 6,
+      "races": [
+        "DEMON"
+      ],
+      "associatedRaces": [],
+      "mechanics": [
+        "TRIGGER_VISUAL"
+      ],
+      "referencedTags": [],
+      "text": "在你的英雄受到伤害后，回溯该伤害并使酒馆中的随从在本回合中获得+1/+1。"
+    },
+    {
+      "id": "BG32_891",
+      "dbfId": 120662,
+      "premiumDbfId": 120663,
+      "name": "影舞者",
+      "tier": 5,
+      "attack": 5,
+      "health": 3,
+      "races": [
+        "DEMON"
+      ],
+      "associatedRaces": [],
+      "mechanics": [
+        "DEATHRATTLE",
+        "TAUNT"
+      ],
+      "referencedTags": [],
+      "text": "<b>嘲讽</b>。<b>亡语：</b>获取一张富足之杖。"
+    },
+    {
+      "id": "BG33_318",
+      "dbfId": 122219,
+      "premiumDbfId": 122220,
+      "name": "怒胆喷毒鱼人",
+      "tier": 5,
+      "attack": 1,
+      "health": 10,
+      "races": [
+        "MURLOC"
+      ],
+      "associatedRaces": [],
+      "mechanics": [
+        "BACON_RALLY",
+        "VENOMOUS"
+      ],
+      "referencedTags": [],
+      "text": "<b>烈毒</b>。<b>进击：</b>使另一个友方鱼人获得<b>烈毒</b>。"
+    },
+    {
+      "id": "BG33_809",
+      "dbfId": 123644,
+      "premiumDbfId": 123645,
+      "name": "神圣火花机器人",
+      "tier": 5,
+      "attack": 4,
+      "health": 2,
+      "races": [
+        "MECHANICAL"
+      ],
+      "associatedRaces": [],
+      "mechanics": [
+        "DEATHRATTLE",
+        "DIVINE_SHIELD",
+        "TAUNT"
+      ],
+      "referencedTags": [],
+      "text": "<b>嘲讽</b>。<b>圣盾</b>。<b>亡语：</b>获取一张圣洁庇护。"
+    },
+    {
+      "id": "BG33_821",
+      "dbfId": 122177,
+      "premiumDbfId": 122178,
+      "name": "船难海贼",
+      "tier": 5,
+      "attack": 5,
+      "health": 4,
+      "races": [
+        "PIRATE"
+      ],
+      "associatedRaces": [],
+      "mechanics": [
+        "BATTLECRY",
+        "DEATHRATTLE"
+      ],
+      "referencedTags": [],
+      "text": "<b>战吼，亡语：</b>随机获取一张<b>悬赏令</b>。"
+    },
+    {
+      "id": "BG33_825",
+      "dbfId": 122520,
+      "premiumDbfId": 122521,
+      "name": "骄傲的私掠者",
+      "tier": 5,
+      "attack": 8,
+      "health": 8,
+      "races": [
+        "PIRATE"
+      ],
+      "associatedRaces": [],
+      "mechanics": [
+        "AURA"
+      ],
+      "referencedTags": [],
+      "text": "你的<b>悬赏令</b>会施放\n两次。"
+    },
+    {
+      "id": "BG33_888",
+      "dbfId": 122737,
+      "premiumDbfId": 122738,
+      "name": "护猪牧人",
+      "tier": 5,
+      "attack": 5,
+      "health": 5,
+      "races": [],
+      "associatedRaces": [
+        "QUILBOAR"
+      ],
+      "mechanics": [
+        "BATTLECRY"
+      ],
+      "referencedTags": [
+        "BACON_BLOOD_GEM_TOOLTIP",
+        "DIVINE_SHIELD"
+      ],
+      "text": "<b>战吼：</b>获取一张<b>鲜血宝石</b>。该宝石还能使野猪人获得<b>圣盾</b>。"
+    },
+    {
+      "id": "BG34_142",
+      "dbfId": 126641,
+      "premiumDbfId": 126642,
+      "name": "狂热变装鱼人",
+      "tier": 5,
+      "attack": 4,
+      "health": 5,
+      "races": [
+        "MURLOC"
+      ],
+      "associatedRaces": [],
+      "mechanics": [
+        "DIVINE_SHIELD",
+        "START_OF_COMBAT",
+        "TRIGGER_VISUAL"
+      ],
+      "referencedTags": [],
+      "text": "<b>圣盾</b>。<b>战斗开始时：</b>获得你手牌中攻击力\n最高的随从牌的攻击力。"
+    },
+    {
+      "id": "BG34_403",
+      "dbfId": 129263,
+      "premiumDbfId": 129264,
+      "name": "永恒大亨",
+      "tier": 5,
+      "attack": 4,
+      "health": 8,
+      "races": [
+        "UNDEAD"
+      ],
+      "associatedRaces": [],
+      "mechanics": [
+        "AVENGE"
+      ],
+      "referencedTags": [],
+      "text": "<b>复仇（5）：</b>召唤一个永恒骑士并使其立即发起攻击。"
+    },
+    {
+      "id": "BG34_633",
+      "dbfId": 126860,
+      "premiumDbfId": 126861,
+      "name": "龙族看护员",
+      "tier": 5,
+      "attack": 7,
+      "health": 4,
+      "races": [
+        "DRAGON"
+      ],
+      "associatedRaces": [],
+      "mechanics": [
+        "BATTLECRY",
+        "DEATHRATTLE"
+      ],
+      "referencedTags": [],
+      "text": "<b>战吼，亡语：</b>随机获取一张<b>多彩幼龙</b>。"
+    },
+    {
+      "id": "BG34_694",
+      "dbfId": 126955,
+      "premiumDbfId": 126956,
+      "name": "冬拥食尸鬼",
+      "tier": 5,
+      "attack": 5,
+      "health": 3,
+      "races": [
+        "UNDEAD"
+      ],
+      "associatedRaces": [],
+      "mechanics": [
+        "DEATHRATTLE"
+      ],
+      "referencedTags": [],
+      "text": "<b>亡语：</b>获取一张惊扰墓穴。"
+    },
+    {
+      "id": "BG34_731",
+      "dbfId": 127236,
+      "premiumDbfId": 127237,
+      "name": "暮光巢母",
+      "tier": 5,
+      "attack": 7,
+      "health": 4,
+      "races": [
+        "DRAGON"
+      ],
+      "associatedRaces": [],
+      "mechanics": [
+        "DEATHRATTLE"
+      ],
+      "referencedTags": [
+        "TAUNT"
+      ],
+      "text": "<b>亡语：</b>召唤2条暮光龙崽并使其获得<b>嘲讽</b>。"
+    },
+    {
+      "id": "BG34_858",
+      "dbfId": 126173,
+      "premiumDbfId": 126174,
+      "name": "空气亡魂",
+      "tier": 5,
+      "attack": 3,
+      "health": 6,
+      "races": [
+        "ELEMENTAL"
+      ],
+      "associatedRaces": [],
+      "mechanics": [
+        "TRIGGER_VISUAL"
+      ],
+      "referencedTags": [],
+      "text": "在你花掉7枚铸币后，施放乘借东风。<i>（还剩7枚！）</i>"
+    },
+    {
+      "id": "BG34_922",
+      "dbfId": 126633,
+      "premiumDbfId": 126634,
+      "name": "大漩涡涌流纳迦",
+      "tier": 5,
+      "attack": 2,
+      "health": 7,
+      "races": [
+        "NAGA"
+      ],
+      "associatedRaces": [],
+      "mechanics": [
+        "AURA"
+      ],
+      "referencedTags": [],
+      "text": "在战斗中，你的\n酒馆法术会额外施放一次。"
+    },
+    {
+      "id": "BG35_123",
+      "dbfId": 130884,
+      "premiumDbfId": 130885,
+      "name": "灾变先锋",
+      "tier": 5,
+      "attack": 6,
+      "health": 10,
+      "races": [],
+      "associatedRaces": [],
+      "mechanics": [
+        "END_OF_TURN_TRIGGER"
+      ],
+      "referencedTags": [],
+      "text": "在你的回合结束时，获取你施放的上一个酒馆法术的一张复制。"
+    },
+    {
+      "id": "BG35_142",
+      "dbfId": 131149,
+      "premiumDbfId": 131150,
+      "name": "厄戈尔表弟",
+      "tier": 5,
+      "attack": 5,
+      "health": 5,
+      "races": [
+        "MURLOC"
+      ],
+      "associatedRaces": [],
+      "mechanics": [
+        "END_OF_TURN_TRIGGER"
+      ],
+      "referencedTags": [],
+      "text": "在你的回合结束时，获取一张莫格顿大妈或莫格顿老爹。"
+    },
+    {
+      "id": "BG35_152",
+      "dbfId": 130078,
+      "premiumDbfId": 130082,
+      "name": "虚空幼犬训练师",
+      "tier": 5,
+      "attack": 7,
+      "health": 7,
+      "races": [
+        "DEMON"
+      ],
+      "associatedRaces": [],
+      "mechanics": [
+        "BATTLECRY"
+      ],
+      "referencedTags": [],
+      "text": "<b>战吼：</b>在本局对战中，使酒馆中等级3或以下的随从获得+3/+3。"
+    },
+    {
+      "id": "BG35_334",
+      "dbfId": 130552,
+      "premiumDbfId": 130553,
+      "name": "骷髅狂射手",
+      "tier": 5,
+      "attack": 5,
+      "health": 5,
+      "races": [
+        "UNDEAD"
+      ],
+      "associatedRaces": [],
+      "mechanics": [
+        "AVENGE",
+        "END_OF_TURN_TRIGGER"
+      ],
+      "referencedTags": [],
+      "text": "在你的回合结束时，使你的随从获得+1/+1。<b>复仇（1）：</b>永久提升此效果。"
+    },
+    {
+      "id": "BG35_437",
+      "dbfId": 130157,
+      "premiumDbfId": 130158,
+      "name": "藤语野猪人",
+      "tier": 5,
+      "attack": 5,
+      "health": 6,
+      "races": [
+        "QUILBOAR"
+      ],
+      "associatedRaces": [],
+      "mechanics": [
+        "TRIGGER_VISUAL"
+      ],
+      "referencedTags": [
+        "BACON_BLOOD_GEM_TOOLTIP",
+        "DEATHRATTLE"
+      ],
+      "text": "在一个友方<b>亡语</b>随从死亡后，你的<b>鲜血宝石</b>会在本局对战中使随从额外获得+2攻击力。"
+    },
+    {
+      "id": "BG35_602",
+      "dbfId": 130711,
+      "premiumDbfId": 130712,
+      "name": "深潜巨兽",
+      "tier": 5,
+      "attack": 3,
+      "health": 8,
+      "races": [
+        "BEAST"
+      ],
+      "associatedRaces": [],
+      "mechanics": [
+        "TRIGGER_VISUAL"
+      ],
+      "referencedTags": [],
+      "text": "每当你召唤野兽时，使其获得+2攻击力并永久提升此效果。"
+    },
+    {
+      "id": "BG35_604",
+      "dbfId": 130996,
+      "premiumDbfId": 130997,
+      "name": "下水道老鼠头目",
+      "tier": 5,
+      "attack": 4,
+      "health": 6,
+      "races": [
+        "BEAST"
+      ],
+      "associatedRaces": [],
+      "mechanics": [
+        "DEATHRATTLE"
+      ],
+      "referencedTags": [
+        "TAUNT"
+      ],
+      "text": "<b>亡语：</b>召唤两只下水道老鼠。下水道老鼠能召唤2/3并具有<b>嘲讽</b>的乌龟。"
+    },
+    {
+      "id": "BG35_701",
+      "dbfId": 130703,
+      "premiumDbfId": 130704,
+      "name": "无耻的海盗",
+      "tier": 5,
+      "attack": 5,
+      "health": 6,
+      "races": [
+        "PIRATE"
+      ],
+      "associatedRaces": [],
+      "mechanics": [
+        "END_OF_TURN_TRIGGER"
+      ],
+      "referencedTags": [],
+      "text": "在你的回合结束时，使你最左边的海盗获得+2/+3。在本回合中你每使用过一张牌，重复一次。<i>（重复0次）</i>"
+    },
+    {
+      "id": "BG35_882",
+      "dbfId": 130296,
+      "premiumDbfId": 130297,
+      "name": "火焰之地的逸火",
+      "tier": 5,
+      "attack": 5,
+      "health": 7,
+      "races": [
+        "ELEMENTAL"
+      ],
+      "associatedRaces": [],
+      "mechanics": [
+        "BATTLECRY"
+      ],
+      "referencedTags": [],
+      "text": "<b>战吼：</b>获取一张\n燃焰。"
+    },
+    {
+      "id": "BG35_895",
+      "dbfId": 131608,
+      "premiumDbfId": 131609,
+      "name": "招潮者先知",
+      "tier": 5,
+      "attack": 5,
+      "health": 6,
+      "races": [
+        "MURLOC"
+      ],
+      "associatedRaces": [],
+      "mechanics": [
+        "AURA",
+        "TRIGGER_VISUAL"
+      ],
+      "referencedTags": [],
+      "text": "你的酒馆法术使随从额外获得+1/+1。在你使用2张鱼人牌后，在本回合中提升此效果。<i>（还剩2张！）</i>"
+    },
+    {
+      "id": "BGS_012",
+      "dbfId": 59935,
+      "premiumDbfId": 59976,
+      "name": "坎格尔的学徒",
+      "tier": 5,
+      "attack": 3,
+      "health": 6,
+      "races": [],
+      "associatedRaces": [
+        "MECHANICAL"
+      ],
+      "mechanics": [
+        "DEATHRATTLE"
+      ],
+      "referencedTags": [],
+      "text": "<b>亡语：</b>召唤你本场战斗中最先死亡的2个机械的原始版复制。"
+    },
+    {
+      "id": "BGS_020",
+      "dbfId": 60028,
+      "premiumDbfId": 60027,
+      "name": "蛮鱼斥候",
+      "tier": 5,
+      "attack": 3,
+      "health": 2,
+      "races": [
+        "MURLOC"
+      ],
+      "associatedRaces": [],
+      "mechanics": [
+        "BATTLECRY",
+        "DISCOVER"
+      ],
+      "referencedTags": [],
+      "text": "<b>战吼：</b>如果你控制着其他鱼人，<b>发现</b>一张鱼人牌。"
+    },
+    {
+      "id": "BGS_041",
+      "dbfId": 60630,
+      "premiumDbfId": 60667,
+      "name": "奥术守护者卡雷苟斯",
+      "tier": 5,
+      "attack": 4,
+      "health": 12,
+      "races": [
+        "DRAGON"
+      ],
+      "associatedRaces": [],
+      "mechanics": [
+        "TRIGGER_VISUAL"
+      ],
+      "referencedTags": [
+        "BATTLECRY"
+      ],
+      "text": "在你触发一个<b>战吼</b>后，使你的龙获得+2/+2。"
+    },
+    {
+      "id": "BGS_104",
+      "dbfId": 63626,
+      "premiumDbfId": 64185,
+      "name": "“厨房煞星”诺米",
+      "tier": 5,
+      "attack": 6,
+      "health": 6,
+      "races": [],
+      "associatedRaces": [
+        "ELEMENTAL"
+      ],
+      "mechanics": [
+        "TRIGGER_VISUAL"
+      ],
+      "referencedTags": [],
+      "text": "在你使用一张元素牌后，使酒馆中的元素在本局对战中获得+4/+4。"
+    },
+    {
+      "id": "BG25_009",
+      "dbfId": 95263,
+      "premiumDbfId": 95264,
+      "name": "永恒召唤者",
+      "tier": 6,
+      "attack": 8,
+      "health": 1,
+      "races": [
+        "UNDEAD"
+      ],
+      "associatedRaces": [],
+      "mechanics": [
+        "DEATHRATTLE",
+        "REBORN"
+      ],
+      "referencedTags": [],
+      "text": "<b>复生</b>。<b>亡语：</b>召唤1个永恒骑士。"
+    },
+    {
+      "id": "BG26_157",
+      "dbfId": 100997,
+      "premiumDbfId": 100999,
+      "name": "作曲鬃师",
+      "tier": 6,
+      "attack": 3,
+      "health": 10,
+      "races": [
+        "QUILBOAR"
+      ],
+      "associatedRaces": [],
+      "mechanics": [
+        "AVENGE"
+      ],
+      "referencedTags": [
+        "BACON_BLOOD_GEM_TOOLTIP"
+      ],
+      "text": "<b>复仇（2）：</b>本随从对你的所有野猪人各使用2张<b>鲜血宝石</b>。"
+    },
+    {
+      "id": "BG26_175",
+      "dbfId": 101280,
+      "premiumDbfId": 101281,
+      "name": "惊喜元素",
+      "tier": 6,
+      "attack": 8,
+      "health": 8,
+      "races": [
+        "ELEMENTAL"
+      ],
+      "associatedRaces": [],
+      "mechanics": [
+        "DIVINE_SHIELD"
+      ],
+      "referencedTags": [],
+      "text": "<b>圣盾</b>。可以与任意元素三连。"
+    },
+    {
+      "id": "BG26_354",
+      "dbfId": 98948,
+      "premiumDbfId": 98950,
+      "name": "合唱鱼人",
+      "tier": 6,
+      "attack": 6,
+      "health": 6,
+      "races": [
+        "MURLOC"
+      ],
+      "associatedRaces": [],
+      "mechanics": [
+        "START_OF_COMBAT",
+        "TRIGGER_VISUAL"
+      ],
+      "referencedTags": [],
+      "text": "<b>战斗开始时：</b>获得你手牌中所有随从牌的属性值。"
+    },
+    {
+      "id": "BG28_595",
+      "dbfId": 105852,
+      "premiumDbfId": 105853,
+      "name": "生火专家",
+      "tier": 6,
+      "attack": 8,
+      "health": 8,
+      "races": [
+        "DRAGON"
+      ],
+      "associatedRaces": [],
+      "mechanics": [
+        "END_OF_TURN_TRIGGER"
+      ],
+      "referencedTags": [],
+      "text": "在你的回合结束时，随机获取2张\n酒馆法术牌。"
+    },
+    {
+      "id": "BG29_841",
+      "dbfId": 108397,
+      "premiumDbfId": 108400,
+      "name": "格雷迈恩的勇士",
+      "tier": 6,
+      "attack": 4,
+      "health": 4,
+      "races": [],
+      "associatedRaces": [],
+      "mechanics": [
+        "TRIGGER_VISUAL"
+      ],
+      "referencedTags": [],
+      "text": "在你使用偶数等级的牌后，使你的偶数等级的随从获得+2/+2。"
+    },
+    {
+      "id": "BG31_035",
+      "dbfId": 114816,
+      "premiumDbfId": 114817,
+      "name": "碎地者",
+      "tier": 6,
+      "attack": 5,
+      "health": 4,
+      "races": [
+        "NAGA"
+      ],
+      "associatedRaces": [],
+      "mechanics": [
+        "TRIGGER_VISUAL"
+      ],
+      "referencedTags": [],
+      "text": "在你使用一张纳迦牌后，获得+1/+1。<i>（在本局对战中，你每施放4个法术都会提升！）</i>4在你使用一张纳迦牌后，获得+1/+1。<i>（施放0/4个法术即可提升！）</i>"
+    },
+    {
+      "id": "BG31_171",
+      "dbfId": 115666,
+      "premiumDbfId": 115667,
+      "name": "月铁毁灭战舰",
+      "tier": 6,
+      "attack": 8,
+      "health": 8,
+      "races": [
+        "MECHANICAL"
+      ],
+      "associatedRaces": [],
+      "mechanics": [
+        "END_OF_TURN_TRIGGER"
+      ],
+      "referencedTags": [
+        "MAGNETIC"
+      ],
+      "text": "在你的回合结束时，获取两张6/6的<b>磁力</b>卫星并提升此效果。"
+    },
+    {
+      "id": "BG31_820",
+      "dbfId": 115593,
+      "premiumDbfId": 115594,
+      "name": "空间眺望者",
+      "tier": 6,
+      "attack": 3,
+      "health": 6,
+      "races": [
+        "PIRATE"
+      ],
+      "associatedRaces": [],
+      "mechanics": [
+        "TRIGGER_VISUAL"
+      ],
+      "referencedTags": [],
+      "text": "每当另一个友方海盗获得攻击力时，获得+2生命值。"
+    },
+    {
+      "id": "BG31_835",
+      "dbfId": 115610,
+      "premiumDbfId": 115611,
+      "name": "致命打击者",
+      "tier": 6,
+      "attack": 8,
+      "health": 8,
+      "races": [
+        "UNDEAD"
+      ],
+      "associatedRaces": [],
+      "mechanics": [
+        "AVENGE",
+        "DEATHRATTLE"
+      ],
+      "referencedTags": [],
+      "text": "<b>复仇（4）：</b>随机获取一张亡灵牌。<b>亡语：</b>从你的手牌中召唤它，其登场仅限本场战斗。"
+    },
+    {
+      "id": "BG32_204",
+      "dbfId": 121135,
+      "premiumDbfId": 121136,
+      "name": "丝柔烁光蛾",
+      "tier": 6,
+      "attack": 3,
+      "health": 12,
+      "races": [
+        "BEAST"
+      ],
+      "associatedRaces": [],
+      "mechanics": [
+        "DEATHRATTLE"
+      ],
+      "referencedTags": [],
+      "text": "每当本随从受到伤害，在本局对战中，你的甲虫拥有+2/+2。<b>亡语：</b>召唤一只2/2的甲虫。"
+    },
+    {
+      "id": "BG32_234",
+      "dbfId": 119992,
+      "premiumDbfId": 119993,
+      "name": "卑鄙的德鲁斯特",
+      "tier": 6,
+      "attack": 5,
+      "health": 4,
+      "races": [
+        "PIRATE"
+      ],
+      "associatedRaces": [],
+      "mechanics": [
+        "TRIGGER_VISUAL"
+      ],
+      "referencedTags": [],
+      "text": "每当你获取一张海盗牌，使你的随从获得+2/+2，金色随从改为+6/+6。"
+    },
+    {
+      "id": "BG32_822",
+      "dbfId": 120301,
+      "premiumDbfId": 120302,
+      "name": "火铸唤魔师",
+      "tier": 6,
+      "attack": 8,
+      "health": 5,
+      "races": [
+        "DRAGON"
+      ],
+      "associatedRaces": [],
+      "mechanics": [
+        "START_OF_COMBAT",
+        "TRIGGER_VISUAL"
+      ],
+      "referencedTags": [],
+      "text": "<b>战斗开始时：</b>使你的龙获得+2/+1。在你施放一个酒馆法术后永久提升此效果。"
+    },
+    {
+      "id": "BG32_846",
+      "dbfId": 120674,
+      "premiumDbfId": 120675,
+      "name": "狂放的法力涌流",
+      "tier": 6,
+      "attack": 6,
+      "health": 5,
+      "races": [
+        "ELEMENTAL"
+      ],
+      "associatedRaces": [],
+      "mechanics": [
+        "TRIGGER_VISUAL"
+      ],
+      "referencedTags": [],
+      "text": "在你使用一张元素牌后，使你的元素获得+4/+4。"
+    },
+    {
+      "id": "BG33_154",
+      "dbfId": 122116,
+      "premiumDbfId": 122117,
+      "name": "废墟领主",
+      "tier": 6,
+      "attack": 5,
+      "health": 6,
+      "races": [
+        "DEMON"
+      ],
+      "associatedRaces": [],
+      "mechanics": [
+        "TRIGGER_VISUAL"
+      ],
+      "referencedTags": [],
+      "text": "在一个友方恶魔造成伤害后，使其之外的友方随从获得+2/+1。"
+    },
+    {
+      "id": "BG33_240",
+      "dbfId": 122086,
+      "premiumDbfId": 122087,
+      "name": "魅惑之翼",
+      "tier": 6,
+      "attack": 3,
+      "health": 10,
+      "races": [
+        "DRAGON"
+      ],
+      "associatedRaces": [],
+      "mechanics": [
+        "BACON_RALLY"
+      ],
+      "referencedTags": [],
+      "text": "<b>进击：</b>使2条友方的龙获得本随从的生命值上限<i>（魅惑之翼除外）</i>。"
+    },
+    {
+      "id": "BG33_823",
+      "dbfId": 122516,
+      "premiumDbfId": 122517,
+      "name": "空军上将罗杰斯",
+      "tier": 6,
+      "attack": 4,
+      "health": 5,
+      "races": [
+        "PIRATE"
+      ],
+      "associatedRaces": [],
+      "mechanics": [
+        "TRIGGER_VISUAL"
+      ],
+      "referencedTags": [],
+      "text": "在你花掉9枚铸币后，随机获取一张<b>悬赏令</b>。<i>（还剩9枚！）</i>"
+    },
+    {
+      "id": "BG33_885",
+      "dbfId": 122566,
+      "premiumDbfId": 122567,
+      "name": "鲜血精研者",
+      "tier": 6,
+      "attack": 3,
+      "health": 11,
+      "races": [
+        "QUILBOAR"
+      ],
+      "associatedRaces": [],
+      "mechanics": [
+        "BACON_RALLY"
+      ],
+      "referencedTags": [
+        "BACON_BLOOD_GEM_TOOLTIP"
+      ],
+      "text": "<b>进击：</b>在本局对战中，你的<b>鲜血宝石</b>使随从额外获得+1/+2。"
+    },
+    {
+      "id": "BG33_891",
+      "dbfId": 122277,
+      "premiumDbfId": 122278,
+      "name": "魔鳍真菌学家",
+      "tier": 6,
+      "attack": 4,
+      "health": 8,
+      "races": [
+        "MURLOC"
+      ],
+      "associatedRaces": [],
+      "mechanics": [
+        "TRIGGER_VISUAL"
+      ],
+      "referencedTags": [],
+      "text": "每回合一次。在你购买一个酒馆法术后，获取一张1/1的鱼人并教会它该法术。<i>（还剩1次！）</i>"
+    },
+    {
+      "id": "BG33_893",
+      "dbfId": 122281,
+      "premiumDbfId": 122282,
+      "name": "原始鱼人画家",
+      "tier": 6,
+      "attack": 2,
+      "health": 7,
+      "races": [
+        "MURLOC"
+      ],
+      "associatedRaces": [],
+      "mechanics": [
+        "TRIGGER_VISUAL"
+      ],
+      "referencedTags": [],
+      "text": "在你使用一张等级3或以下的牌后，使你的鱼人获得+2/+2。"
+    },
+    {
+      "id": "BG33_920",
+      "dbfId": 122094,
+      "premiumDbfId": 122095,
+      "name": "怒鳞潜行者",
+      "tier": 6,
+      "attack": 3,
+      "health": 6,
+      "races": [
+        "NAGA"
+      ],
+      "associatedRaces": [],
+      "mechanics": [
+        "TRIGGER_VISUAL"
+      ],
+      "referencedTags": [],
+      "text": "在另一个友方纳迦获得生命值后，使其获得等量的攻击力。"
+    },
+    {
+      "id": "BG33_923",
+      "dbfId": 122672,
+      "premiumDbfId": 122673,
+      "name": "破碎主母",
+      "tier": 6,
+      "attack": 7,
+      "health": 4,
+      "races": [
+        "NAGA"
+      ],
+      "associatedRaces": [],
+      "mechanics": [
+        "TRIGGER_VISUAL"
+      ],
+      "referencedTags": [],
+      "text": "每当你施放一个法术，使你的随从获得+3生命值。"
+    },
+    {
+      "id": "BG34_175",
+      "dbfId": 126830,
+      "premiumDbfId": 126831,
+      "name": "废铁枪骑士",
+      "tier": 6,
+      "attack": 8,
+      "health": 7,
+      "races": [
+        "MECHANICAL"
+      ],
+      "associatedRaces": [],
+      "mechanics": [
+        "TRIGGER_VISUAL"
+      ],
+      "referencedTags": [
+        "MAGNETIC"
+      ],
+      "text": "在你<b>磁力吸附</b>一个随从后，使你的随从获得+5/+5。"
+    },
+    {
+      "id": "BG34_321",
+      "dbfId": 127111,
+      "premiumDbfId": 127112,
+      "name": "狂乱的猎豹",
+      "tier": 6,
+      "attack": 4,
+      "health": 8,
+      "races": [
+        "BEAST"
+      ],
+      "associatedRaces": [],
+      "mechanics": [
+        "TRIGGER_VISUAL"
+      ],
+      "referencedTags": [],
+      "text": "在你使用一张野兽牌后，使你的野兽获得+3/+3并对它们造成1点伤害。"
+    },
+    {
+      "id": "BG34_692",
+      "dbfId": 126733,
+      "premiumDbfId": 126734,
+      "name": "被遗忘者纺织工",
+      "tier": 6,
+      "attack": 3,
+      "health": 10,
+      "races": [
+        "UNDEAD"
+      ],
+      "associatedRaces": [],
+      "mechanics": [
+        "TRIGGER_VISUAL"
+      ],
+      "referencedTags": [],
+      "text": "在你施放一个酒馆法术后，你的亡灵在本局对战中拥有+2攻击力<i>（无论它们\n在哪）</i>。"
+    },
+    {
+      "id": "BG34_765",
+      "dbfId": 127240,
+      "premiumDbfId": 127241,
+      "name": "死海破坏者",
+      "tier": 6,
+      "attack": 4,
+      "health": 5,
+      "races": [
+        "UNDEAD",
+        "PIRATE"
+      ],
+      "associatedRaces": [],
+      "mechanics": [
+        "BACON_RALLY"
+      ],
+      "referencedTags": [],
+      "text": "<b>进击：</b>使4个其他友方随从获得本随从的攻击力。"
+    },
+    {
+      "id": "BG34_921",
+      "dbfId": 126631,
+      "premiumDbfId": 126632,
+      "name": "护戒纳迦",
+      "tier": 6,
+      "attack": 5,
+      "health": 10,
+      "races": [
+        "NAGA",
+        "DRAGON"
+      ],
+      "associatedRaces": [],
+      "mechanics": [
+        "TRIGGER_VISUAL"
+      ],
+      "referencedTags": [],
+      "text": "每当一个友方随从\n攻击时，施放闪亮的戒指。"
+    },
+    {
+      "id": "BG34_926",
+      "dbfId": 126918,
+      "premiumDbfId": 126919,
+      "name": "无情的女王护卫",
+      "tier": 6,
+      "attack": 3,
+      "health": 3,
+      "races": [
+        "NAGA"
+      ],
+      "associatedRaces": [],
+      "mechanics": [
+        "BATTLECRY",
+        "BACON_RALLY",
+        "DEATHRATTLE"
+      ],
+      "referencedTags": [],
+      "text": "<b>战吼，亡语，进击：</b>施放女王的命令。"
+    },
+    {
+      "id": "BG35_153",
+      "dbfId": 130079,
+      "premiumDbfId": 130083,
+      "name": "食力征服者",
+      "tier": 6,
+      "attack": 9,
+      "health": 7,
+      "races": [
+        "DEMON"
+      ],
+      "associatedRaces": [],
+      "mechanics": [
+        "TRIGGER_VISUAL"
+      ],
+      "referencedTags": [],
+      "text": "每当一个随从被吞食，在本回合中使酒馆中的随从获得+1/+1。"
+    },
+    {
+      "id": "BG35_155",
+      "dbfId": 130662,
+      "premiumDbfId": 130663,
+      "name": "扭曲的愤怒卫士",
+      "tier": 6,
+      "attack": 8,
+      "health": 8,
+      "races": [
+        "DEMON"
+      ],
+      "associatedRaces": [],
+      "mechanics": [
+        "TRIGGER_VISUAL"
+      ],
+      "referencedTags": [
+        "BACON_REFRESH_TOOLTIP"
+      ],
+      "text": "在你出售一个随从后，在你的下一次<b>刷新</b>中添加一个恶魔<b>饲料</b>。"
+    },
+    {
+      "id": "BG35_342",
+      "dbfId": 130798,
+      "premiumDbfId": 130799,
+      "name": "坠落的飞天魔像",
+      "tier": 6,
+      "attack": 4,
+      "health": 2,
+      "races": [
+        "MECHANICAL"
+      ],
+      "associatedRaces": [],
+      "mechanics": [
+        "AURA",
+        "DIVINE_SHIELD"
+      ],
+      "referencedTags": [
+        "DEATHRATTLE"
+      ],
+      "text": "<b>圣盾</b>。在本局对战中，你每触发过一次<b>亡语</b>，便拥有+4/+2<i>（无论本随从在哪）。</i>"
+    },
+    {
+      "id": "BG35_431",
+      "dbfId": 130149,
+      "premiumDbfId": 130150,
+      "name": "大地之歌萨满祭司",
+      "tier": 6,
+      "attack": 4,
+      "health": 5,
+      "races": [
+        "QUILBOAR"
+      ],
+      "associatedRaces": [],
+      "mechanics": [
+        "END_OF_TURN_TRIGGER",
+        "WINDFURY"
+      ],
+      "referencedTags": [
+        "BACON_BLOOD_GEM_TOOLTIP"
+      ],
+      "text": "<b>风怒</b>。在你的回合结束时，本随从对你的所有随从各使用一张<b>鲜血宝石</b>。本随从每拥有一个<b>额外关键词</b>，重复一次。"
+    },
+    {
+      "id": "BG35_883",
+      "dbfId": 130298,
+      "premiumDbfId": 130299,
+      "name": "巴琳达·斯通赫尔斯",
+      "tier": 6,
+      "attack": 6,
+      "health": 6,
+      "races": [],
+      "associatedRaces": [],
+      "mechanics": [
+        "AURA"
+      ],
+      "referencedTags": [],
+      "text": "你的以友方随从为目标的法术会施放\n两次。"
+    },
+    {
+      "id": "BG35_890",
+      "dbfId": 131606,
+      "premiumDbfId": 131607,
+      "name": "机巧发明机",
+      "tier": 6,
+      "attack": 9,
+      "health": 4,
+      "races": [
+        "MECHANICAL"
+      ],
+      "associatedRaces": [],
+      "mechanics": [
+        "DEATHRATTLE"
+      ],
+      "referencedTags": [
+        "MAGNETIC"
+      ],
+      "text": "<b>亡语：</b>在本场战斗中，你的机械拥有+2攻击力。<i>（在本局对战中你每<b>磁力吸附</b>一次都会提升！）</i>"
+    },
+    {
+      "id": "BGS_018",
+      "dbfId": 59955,
+      "premiumDbfId": 59956,
+      "name": "巨狼戈德林",
+      "tier": 6,
+      "attack": 8,
+      "health": 8,
+      "races": [
+        "BEAST"
+      ],
+      "associatedRaces": [],
+      "mechanics": [
+        "DEATHRATTLE"
+      ],
+      "referencedTags": [],
+      "text": "<b>亡语：</b>在本场战斗的剩余时间内，你的野兽拥有+8/+8。"
+    }
+  ]
+}

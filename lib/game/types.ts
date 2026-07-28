@@ -9,7 +9,14 @@ export type Tribe =
   | "murloc"
   | "dragon"
   | "pirate"
+  | "elemental"
+  | "naga"
+  | "quilboar"
+  | "undead"
+  | "all"
   | "neutral";
+
+export type EffectSupport = "complete" | "partial";
 
 export type EffectTarget =
   | "self"
@@ -17,6 +24,7 @@ export type EffectTarget =
   | "randomFriendlyTribe"
   | "allFriendly"
   | "otherFriendly"
+  | "otherFriendlyTribe"
   | "friendlyTribe"
   | "adjacentFriendly";
 
@@ -34,6 +42,12 @@ export interface SummonEffect {
   definitionId: string;
   count: number | "sourceAttack";
   immediateAttack?: boolean;
+  taunt?: boolean;
+  /**
+   * Golden summon text is card-specific: some cards summon a Golden token,
+   * while others summon twice as many regular tokens.
+   */
+  goldenMode?: "goldenToken" | "doubleCount";
 }
 
 export interface GrantShieldEffect {
@@ -72,6 +86,14 @@ export interface SummonRandomDeathrattleEffect {
   count: number;
 }
 
+export interface DamageAllMinionsEffect {
+  kind: "damageAllMinions";
+  amount: number;
+  excludeFriendlyTribe?: Tribe;
+  /** Some Golden cards repeat the damage instead of combining it into one hit. */
+  goldenMode?: "doubleDamage" | "repeat";
+}
+
 export type MinionEffect =
   | BuffEffect
   | SummonEffect
@@ -81,7 +103,8 @@ export type MinionEffect =
   | DamageEnemyEffect
   | GainMissingHealthEffect
   | ResummonMechsEffect
-  | SummonRandomDeathrattleEffect;
+  | SummonRandomDeathrattleEffect
+  | DamageAllMinionsEffect;
 
 export interface FriendlyTribeTrigger {
   tribe: Tribe;
@@ -93,11 +116,23 @@ export interface FriendlyTribeTrigger {
   grantShield?: boolean;
 }
 
-export interface EndOfTurnEffect {
+export interface MenagerieEndOfTurnEffect {
   kind: "onePerTribe";
   attack: number;
   health: number;
 }
+
+export interface BuffEndOfTurnEffect {
+  kind: "buff";
+  target: "self" | "adjacentFriendly";
+  attack: number;
+  health: number;
+  repeatPerGoldenFriendly?: boolean;
+}
+
+export type EndOfTurnEffect =
+  | MenagerieEndOfTurnEffect
+  | BuffEndOfTurnEffect;
 
 export interface StatAura {
   tribe: Tribe;
@@ -112,7 +147,14 @@ export interface MinionDefinition {
   cardId: string;
   name: string;
   tier: 1 | 2 | 3 | 4 | 5 | 6;
+  /** Primary type retained for the current single-type engine compatibility. */
   tribe: Tribe;
+  /** Printed minion types. Empty means the card is typeless. */
+  tribes?: readonly Tribe[];
+  /** Type-specific pool affinity for a printed typeless support minion. */
+  associatedTribes?: readonly Tribe[];
+  /** Whether all card-text behavior is represented by the current rules DSL. */
+  effectSupport?: EffectSupport;
   attack: number;
   health: number;
   description: string;
@@ -120,6 +162,7 @@ export interface MinionDefinition {
   divineShield?: boolean;
   reborn?: boolean;
   poisonous?: boolean;
+  venomous?: boolean;
   windfury?: boolean;
   cleave?: boolean;
   alwaysAttacksLowestAttack?: boolean;
@@ -129,10 +172,13 @@ export interface MinionDefinition {
   afterFriendlySummoned?: FriendlyTribeTrigger;
   afterFriendlyDied?: FriendlyTribeTrigger;
   afterSelfDamaged?: readonly MinionEffect[];
+  startOfCombat?: readonly MinionEffect[];
   endOfTurn?: EndOfTurnEffect;
   aura?: StatAura;
   extraBattlecries?: number;
   extraDeathrattles?: number;
+  sellValue?: number;
+  goldenSellValue?: number;
   collectible?: boolean;
 }
 
@@ -148,6 +194,10 @@ export interface MinionInstance {
   name: string;
   tier: 1 | 2 | 3 | 4 | 5 | 6;
   tribe: Tribe;
+  tribes: Tribe[];
+  associatedTribes: Tribe[];
+  effectSupport: EffectSupport;
+  sellValue: number;
   attack: number;
   health: number;
   golden: boolean;
@@ -155,6 +205,7 @@ export interface MinionInstance {
   divineShield: boolean;
   reborn: boolean;
   poisonous: boolean;
+  venomous: boolean;
   windfury: boolean;
   cleave: boolean;
   alwaysAttacksLowestAttack: boolean;
@@ -242,6 +293,8 @@ export interface GameState {
   phase: GamePhase;
   round: number;
   humanPlayerId: PlayerId;
+  /** Five ordinary minion types enabled for this deterministic Solo lobby. */
+  activeTribes: Tribe[];
   players: PlayerState[];
   /** Available (not owned and not reserved in a shop) copies by definition ID. */
   pool: Record<string, number>;

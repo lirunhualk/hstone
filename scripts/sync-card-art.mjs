@@ -3,6 +3,7 @@ import path from "node:path";
 import { fileURLToPath } from "node:url";
 
 import { MINION_DEFINITIONS } from "../lib/game/content.ts";
+import { createGame } from "../lib/game/engine.ts";
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const STARTUP = process.argv.includes("--startup");
@@ -17,11 +18,21 @@ const RENDER_CARD_ID_FALLBACKS = {
   BG_EX1_556t: "skele21",
   BG_LOE_077: "LOE_077",
 };
-const RENDER_UNAVAILABLE = new Set(["BGS_034"]);
+const RENDER_UNAVAILABLE = new Set(["BGS_034", "BG31_803"]);
 
-const cardIds = [
+const allCardIds = [
   ...new Set(MINION_DEFINITIONS.map((definition) => definition.cardId)),
 ].sort();
+const startupCardIds = STARTUP
+  ? new Set(
+      createGame(0x53544152)
+        .players.find((player) => player.isHuman)
+        ?.shop.map((minion) => minion.cardId) ?? [],
+    )
+  : null;
+const cardIds = startupCardIds
+  ? allCardIds.filter((cardId) => startupCardIds.has(cardId))
+  : allCardIds;
 
 for (const cardId of cardIds) {
   if (!CARD_ID_PATTERN.test(cardId)) {

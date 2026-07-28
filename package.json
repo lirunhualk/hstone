@@ -1,5 +1,5 @@
 {
-  "name": "classic-battlegrounds-local",
+  "name": "battlegrounds-solo-local",
   "version": "0.1.0",
   "private": true,
   "engines": {
@@ -11,7 +11,9 @@
     "start": "vinext start",
     "assets:sync": "node --experimental-strip-types scripts/sync-card-art.mjs",
     "assets:check": "node scripts/check-no-card-binaries.mjs",
-    "test": "node --experimental-strip-types --test tests/game-engine.test.ts",
+    "data:bg:generate": "node scripts/generate-battlegrounds-pool.mjs",
+    "data:bg:check": "node --test tests/battlegrounds-pool.test.mjs",
+    "test": "node --experimental-strip-types --test tests/game-engine.test.ts tests/live-content.test.ts tests/battlegrounds-pool.test.mjs",
     "typecheck": "tsc --noEmit",
     "check": "npm run assets:check && npm run lint && npm run typecheck && npm run test && npm run build",
     "lint": "eslint . --ignore-pattern dist --ignore-pattern .next"

@@ -26,7 +26,7 @@ if errorlevel 1 (
 )
 
 start "" powershell.exe -NoProfile -WindowStyle Hidden -Command "Start-Sleep -Seconds 3; Start-Process 'http://localhost:3000/'"
-echo Starting Classic Battlegrounds at http://localhost:3000/
+echo Starting Battlegrounds Solo at http://localhost:3000/
 echo Press Ctrl+C to stop the game.
 call npm run dev
 

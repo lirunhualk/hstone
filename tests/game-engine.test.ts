@@ -12,7 +12,10 @@ import {
 } from "../lib/game/engine.ts";
 import {
   CLASSIC_ROSTER_VERSION,
+  LEGACY_RULE_DEFINITIONS,
+  LIVE_MINION_DEFINITIONS,
   MINION_DEFINITIONS,
+  TOKEN_DEFINITIONS,
   getMinionDefinition,
 } from "../lib/game/content.ts";
 
@@ -66,6 +69,13 @@ function definitionMinion(
     name: definition.name,
     tier: definition.tier,
     tribe: definition.tribe,
+    tribes: [
+      ...(definition.tribes ??
+        (definition.tribe === "neutral" ? [] : [definition.tribe])),
+    ],
+    associatedTribes: [...(definition.associatedTribes ?? [])],
+    effectSupport: definition.effectSupport ?? "complete",
+    sellValue: definition.sellValue ?? 1,
     attack: definition.attack,
     health: definition.health,
     golden: false,
@@ -73,6 +83,7 @@ function definitionMinion(
     divineShield: definition.divineShield === true,
     reborn: definition.reborn === true,
     poisonous: definition.poisonous === true,
+    venomous: definition.venomous === true,
     windfury: definition.windfury === true,
     cleave: definition.cleave === true,
     alwaysAttacksLowestAttack:
@@ -105,6 +116,13 @@ test("createGame builds one human and seven deterministic AI opponents", () => {
   assert.equal(first.players.filter((player) => player.isHuman).length, 1);
   assert.equal(first.players.filter((player) => !player.isHuman).length, 7);
   assert.equal(first.humanPlayerId, "player-0");
+  assert.equal(first.activeTribes.length, 5);
+  assert.equal(new Set(first.activeTribes).size, 5);
+  assert.ok(
+    first.activeTribes.every(
+      (tribe) => tribe !== "neutral" && tribe !== "all",
+    ),
+  );
 
   for (const player of first.players) {
     assert.equal(player.health, 40);
@@ -120,28 +138,119 @@ test("createGame builds one human and seven deterministic AI opponents", () => {
     player.shop.map((minion) => minion.instanceId),
   );
   assert.equal(new Set(offeredIds).size, offeredIds.length);
+  const liveIds = new Set(
+    LIVE_MINION_DEFINITIONS.map((definition) => definition.id),
+  );
+  for (const offered of first.players.flatMap((player) => player.shop)) {
+    assert.ok(liveIds.has(offered.definitionId));
+    assert.ok(
+      offered.tribes.includes("all") ||
+        (offered.tribes.length === 0 &&
+          offered.associatedTribes.length === 0) ||
+        [...offered.tribes, ...offered.associatedTribes].some((tribe) =>
+          first.activeTribes.includes(tribe),
+        ),
+      `${offered.name} must belong to an enabled lobby type`,
+    );
+  }
   assert.notDeepEqual(createGame(0x1234abce), first);
 });
 
-test("classic nostalgia roster is locked to six recognizable minions per tier", () => {
-  const collectible = MINION_DEFINITIONS.filter(
-    (definition) => definition.collectible !== false,
-  );
+test("the shared pool uses live copy counts and excludes inactive types", () => {
+  const state = createGame(0x600d);
+  const reservedByDefinition = new Map<string, number>();
+  for (const minion of state.players.flatMap((player) => player.shop)) {
+    reservedByDefinition.set(
+      minion.definitionId,
+      (reservedByDefinition.get(minion.definitionId) ?? 0) + 1,
+    );
+  }
+  const expectedCopies = [0, 15, 15, 13, 11, 9, 7];
 
-  assert.equal(collectible.length, 36);
-  assert.equal(new Set(collectible.map((definition) => definition.id)).size, 36);
+  for (const definition of LIVE_MINION_DEFINITIONS) {
+    const printed = definition.tribes ?? [];
+    const associated = definition.associatedTribes ?? [];
+    const enabled =
+      printed.includes("all") ||
+      (printed.length === 0 && associated.length === 0) ||
+      [...printed, ...associated].some((tribe) =>
+        state.activeTribes.includes(tribe),
+      );
+    const available =
+      (state.pool[definition.id] ?? 0) +
+      (reservedByDefinition.get(definition.id) ?? 0);
+    assert.equal(
+      available,
+      enabled ? expectedCopies[definition.tier] : 0,
+      `${definition.name} has the wrong shared-pool copy count`,
+    );
+  }
+});
+
+test("current Tavern economy constants cover every Tier", () => {
+  const shopSizes = [0, 3, 4, 4, 5, 5, 6] as const;
+  const upgradeCosts = [0, 5, 7, 8, 11, 12, 0] as const;
+
+  for (let tier = 1; tier <= 6; tier += 1) {
+    let state = createGame(0x6100 + tier);
+    const human = humanPlayer(state);
+    human.tavernTier = tier as PlayerState["tavernTier"];
+    human.gold = 1;
+    state = gameReducer(state, { type: "REFRESH_SHOP" });
+    assert.equal(
+      humanPlayer(state).shop.length,
+      shopSizes[tier],
+      `Tier ${tier} has the wrong minion-offer count`,
+    );
+
+    const costState = createGame(0x6200 + tier);
+    const costPlayer = humanPlayer(costState);
+    costPlayer.tavernTier = tier as PlayerState["tavernTier"];
+    costPlayer.upgradeDiscount = 0;
+    assert.equal(
+      getUpgradeCost(costState, costPlayer.id),
+      upgradeCosts[tier],
+      `Tier ${tier} has the wrong base upgrade cost`,
+    );
+    if (tier < 6) {
+      costPlayer.upgradeDiscount = 2;
+      assert.equal(
+        getUpgradeCost(costState, costPlayer.id),
+        Math.max(0, upgradeCosts[tier] - 2),
+      );
+    }
+  }
+});
+
+test("classic rule fixtures remain available but never enter the live pool", () => {
+  assert.equal(LEGACY_RULE_DEFINITIONS.length, 36);
+  assert.ok(
+    LEGACY_RULE_DEFINITIONS.every(
+      (definition) => definition.collectible === false,
+    ),
+  );
   assert.equal(
-    new Set(collectible.map((definition) => definition.cardId)).size,
+    new Set(LEGACY_RULE_DEFINITIONS.map((definition) => definition.id)).size,
+    36,
+  );
+  assert.equal(
+    new Set(
+      LEGACY_RULE_DEFINITIONS.map((definition) => definition.cardId),
+    ).size,
     36,
   );
   for (let tier = 1; tier <= 6; tier += 1) {
     assert.equal(
-      collectible.filter((definition) => definition.tier === tier).length,
+      LEGACY_RULE_DEFINITIONS.filter(
+        (definition) => definition.tier === tier,
+      ).length,
       6,
     );
   }
   assert.deepEqual(
-    collectible.slice(0, 6).map((definition) => definition.name),
+    LEGACY_RULE_DEFINITIONS.slice(0, 6).map(
+      (definition) => definition.name,
+    ),
     [
       "雄斑虎",
       "鱼人猎潮者",
@@ -152,14 +261,12 @@ test("classic nostalgia roster is locked to six recognizable minions per tier", 
     ],
   );
   assert.ok(
-    collectible.every((definition) =>
+    LEGACY_RULE_DEFINITIONS.every((definition) =>
       /^[A-Za-z0-9_]+$/u.test(definition.cardId),
     ),
   );
   assert.deepEqual(
-    MINION_DEFINITIONS.filter(
-      (definition) => definition.collectible === false,
-    ).map(({ id, cardId }) => [id, cardId]),
+    TOKEN_DEFINITIONS.map(({ id, cardId }) => [id, cardId]),
     [
       ["tabbycat-token", "BG_CFM_315t"],
       ["murloc-scout-token", "EX1_506a"],
@@ -173,7 +280,7 @@ test("classic nostalgia roster is locked to six recognizable minions per tier", 
     ],
   );
   assert.equal(
-    new Set(MINION_DEFINITIONS.map((definition) => definition.cardId)).size,
+    new Set(MINION_DEFINITIONS.map((definition) => definition.id)).size,
     MINION_DEFINITIONS.length,
   );
   assert.equal(createGame(1).version, 2);
@@ -184,7 +291,7 @@ test("Wrath Weaver, Brann, and Mama Bear use their signature recruit triggers", 
   let human = humanPlayer(state);
   const template = human.shop[0];
   human.board = [
-    definitionMinion(template, "wrath-weaver", "wrath-fixture"),
+    definitionMinion(template, "BGS_004", "wrath-fixture"),
   ];
   human.hand = [
     definitionMinion(template, "vulgar-homunculus", "demon-fixture"),
@@ -200,10 +307,31 @@ test("Wrath Weaver, Brann, and Mama Bear use their signature recruit triggers", 
   assert.equal(wrath?.attack, 3);
   assert.equal(wrath?.health, 5);
 
+  state = createGame(0x8111);
+  human = humanPlayer(state);
+  human.board = [
+    definitionMinion(template, "BGS_004", "golden-wrath-fixture", {
+      attack: 2,
+      health: 6,
+      golden: true,
+    }),
+  ];
+  human.hand = [
+    definitionMinion(template, "BGS_004", "played-demon-fixture"),
+  ];
+  human.health = 40;
+  state = gameReducer(state, { type: "PLAY_MINION", handIndex: 0 });
+  const goldenWrath = humanPlayer(state).board.find(
+    (minion) => minion.instanceId === "golden-wrath-fixture",
+  );
+  assert.equal(humanPlayer(state).health, 38);
+  assert.equal(goldenWrath?.attack, 6);
+  assert.equal(goldenWrath?.health, 10);
+
   state = createGame(0x812);
   human = humanPlayer(state);
   human.board = [
-    definitionMinion(template, "brann-bronzebeard", "brann-fixture"),
+    definitionMinion(template, "BG_LOE_077", "brann-fixture"),
     definitionMinion(template, "vulgar-homunculus", "brann-demon-fixture"),
   ];
   human.hand = [
@@ -308,6 +436,58 @@ test("Zapp attacks the lowest-attack minion twice before combat passes", () => {
     ),
   );
   assert.ok(firstAttacks[1].message.includes("风怒"));
+});
+
+test("Venomous is consumed after the first minion it damages", () => {
+  const state = createGame(0x8150);
+  const template = humanPlayer(state).shop[0];
+  prepareLockedCombat(state);
+
+  for (const player of state.players) {
+    if (player.isHuman) {
+      player.board = [
+        definitionMinion(template, "BGS_131", "venomous-attacker", {
+          attack: 1,
+          health: 100,
+          windfury: true,
+          venomous: true,
+        }),
+        fixtureMinion(template, "venomous-friendly-filler-1", {
+          attack: 0,
+          health: 1,
+        }),
+        fixtureMinion(template, "venomous-friendly-filler-2", {
+          attack: 0,
+          health: 1,
+        }),
+      ];
+    } else {
+      player.board = [
+        fixtureMinion(template, `venomous-taunt-${player.id}`, {
+          name: "烈毒首个目标",
+          attack: 0,
+          health: 50,
+          taunt: true,
+        }),
+        fixtureMinion(template, `venomous-survivor-${player.id}`, {
+          name: "烈毒后续目标",
+          attack: 100,
+          health: 50,
+        }),
+      ];
+    }
+  }
+
+  const combat = gameReducer(state, { type: "END_TURN" });
+  const battle = combat.lastBattle;
+  assert.ok(battle);
+  const opponentId =
+    battle.playerAId === state.humanPlayerId
+      ? battle.playerBId
+      : battle.playerAId;
+  assert.equal(battle.finalBoards[opponentId].length, 1);
+  assert.equal(battle.finalBoards[opponentId][0].name, "烈毒后续目标");
+  assert.equal(battle.finalBoards[opponentId][0].health, 49);
 });
 
 test("Bronze Warden reborns and Titus repeats Kaboom Bot's deathrattle", () => {
@@ -421,6 +601,328 @@ test("buy, play, and sell update economy and ownership without mutating input", 
   assert.equal(state.pool[offered.definitionId], poolBeforeSell + 1);
 });
 
+test("current live Battlecries and special sell prices resolve", () => {
+  let state = createGame(0x9101);
+  let human = humanPlayer(state);
+  const template = human.shop[0];
+  human.board = [
+    definitionMinion(template, "BG34_630", "dragon-buff-target"),
+  ];
+  human.hand = [
+    definitionMinion(template, "BG34_636t", "green-chromadrake"),
+  ];
+
+  state = gameReducer(state, { type: "PLAY_MINION", handIndex: 0 });
+  human = humanPlayer(state);
+  const buffedDragon = human.board.find(
+    (minion) => minion.instanceId === "dragon-buff-target",
+  );
+  const chromadrake = human.board.find(
+    (minion) => minion.instanceId === "green-chromadrake",
+  );
+  assert.equal(buffedDragon?.attack, 2);
+  assert.equal(buffedDragon?.health, 4);
+  assert.equal(chromadrake?.attack, 3);
+  assert.equal(chromadrake?.health, 5);
+
+  human.board = [
+    definitionMinion(template, "BGS_049", "gambler-fixture"),
+  ];
+  human.gold = 0;
+  state = gameReducer(state, { type: "SELL_MINION", boardIndex: 0 });
+  assert.equal(humanPlayer(state).gold, 3);
+
+  human = humanPlayer(state);
+  human.gold = 9;
+  human.board = [];
+  human.hand = [];
+  human.shop = Array.from({ length: 3 }, (_, index) =>
+    definitionMinion(
+      template,
+      "BGS_049",
+      `golden-gambler-copy-${index}`,
+      { poolCopies: 1 },
+    ),
+  );
+  state = gameReducer(state, { type: "BUY_MINION", shopIndex: 0 });
+  state = gameReducer(state, { type: "BUY_MINION", shopIndex: 0 });
+  state = gameReducer(state, { type: "BUY_MINION", shopIndex: 0 });
+  assert.equal(humanPlayer(state).hand[0]?.golden, true);
+  assert.equal(humanPlayer(state).hand[0]?.sellValue, 6);
+
+  state = gameReducer(state, { type: "PLAY_MINION", handIndex: 0 });
+  state = gameReducer(state, { type: "SELL_MINION", boardIndex: 0 });
+  assert.equal(humanPlayer(state).gold, 6);
+});
+
+test("current live end-of-turn and start-of-combat effects resolve", () => {
+  const state = createGame(0x9102);
+  const template = humanPlayer(state).shop[0];
+  prepareLockedCombat(state);
+
+  for (const player of state.players) {
+    if (player.isHuman) {
+      player.board = [
+        definitionMinion(template, "BG34_630", "left-dragon"),
+        definitionMinion(template, "BG32_235", "surfin-sylvan"),
+        definitionMinion(template, "BG21_014", "enhanced-whelp"),
+      ];
+    } else {
+      player.board = [
+        fixtureMinion(template, `start-effect-target-${player.id}`, {
+          attack: 0,
+          health: 100,
+        }),
+      ];
+    }
+  }
+
+  const combat = gameReducer(state, { type: "END_TURN" });
+  const permanentBoard = humanPlayer(combat).board;
+  assert.equal(permanentBoard[0].attack, 2);
+  assert.equal(permanentBoard[0].health, 1);
+  assert.equal(permanentBoard[2].attack, 2);
+  assert.equal(permanentBoard[2].health, 1);
+
+  const battle = combat.lastBattle;
+  assert.ok(battle);
+  const initialHumanBoard = battle.initialBoards[state.humanPlayerId];
+  const dragonAfterStart = initialHumanBoard.find(
+    (minion) => minion.instanceId === "left-dragon",
+  );
+  const whelpAfterStart = initialHumanBoard.find(
+    (minion) => minion.instanceId === "enhanced-whelp",
+  );
+  assert.equal(dragonAfterStart?.attack, 6);
+  assert.equal(dragonAfterStart?.health, 5);
+  assert.equal(whelpAfterStart?.attack, 6);
+  assert.equal(whelpAfterStart?.health, 5);
+});
+
+test("current live Deathrattles summon real tokens", () => {
+  const state = createGame(0x9103);
+  const template = humanPlayer(state).shop[0];
+  prepareLockedCombat(state);
+
+  for (const player of state.players) {
+    player.board = player.isHuman
+      ? [
+          definitionMinion(template, "BG28_300", "bonehead-fixture", {
+            taunt: true,
+          }),
+        ]
+      : [
+          fixtureMinion(template, `bonehead-killer-${player.id}`, {
+            attack: 100,
+            health: 100,
+          }),
+        ];
+  }
+
+  const combat = gameReducer(state, { type: "END_TURN" });
+  const skeletonSummons =
+    combat.lastBattle?.events.filter(
+      (event) =>
+        event.type === "summon" &&
+        event.minion?.definitionId === "live-skeleton-token",
+    ) ?? [];
+  assert.equal(skeletonSummons.length, 2);
+  assert.ok(
+    skeletonSummons.every(
+      (event) =>
+        event.minion?.name === "骷髅" &&
+        event.minion.attack === 1 &&
+        event.minion.health === 1,
+    ),
+  );
+});
+
+test("Golden live summon Deathrattles follow their printed token rules", () => {
+  const doubledCountState = createGame(0x9104);
+  const doubledTemplate = humanPlayer(doubledCountState).shop[0];
+  prepareLockedCombat(doubledCountState);
+  for (const player of doubledCountState.players) {
+    player.board = player.isHuman
+      ? [
+          definitionMinion(
+            doubledTemplate,
+            "BG28_300",
+            "golden-bonehead",
+            {
+              attack: 2,
+              health: 1,
+              golden: true,
+              taunt: true,
+            },
+          ),
+        ]
+      : [
+          fixtureMinion(
+            doubledTemplate,
+            `golden-token-killer-${player.id}`,
+            { attack: 100, health: 100 },
+          ),
+        ];
+  }
+
+  const doubledCountCombat = gameReducer(doubledCountState, {
+    type: "END_TURN",
+  });
+  const skeletonSummons =
+    doubledCountCombat.lastBattle?.events.filter(
+      (event) =>
+        event.type === "summon" &&
+        event.minion?.definitionId === "live-skeleton-token",
+    ) ?? [];
+  assert.equal(skeletonSummons.length, 4);
+  assert.ok(
+    skeletonSummons.every(
+      (event) =>
+        event.minion?.golden === false &&
+        event.minion.attack === 1 &&
+        event.minion.health === 1,
+    ),
+  );
+
+  const goldenTokenState = createGame(0x9105);
+  const goldenTemplate = humanPlayer(goldenTokenState).shop[0];
+  prepareLockedCombat(goldenTokenState);
+  for (const player of goldenTokenState.players) {
+    player.board = player.isHuman
+      ? [
+          definitionMinion(
+            goldenTemplate,
+            "BG29_611",
+            "golden-cord-puller",
+            {
+              attack: 2,
+              health: 1,
+              golden: true,
+              divineShield: false,
+              taunt: true,
+            },
+          ),
+        ]
+      : [
+          fixtureMinion(
+            goldenTemplate,
+            `golden-cord-puller-killer-${player.id}`,
+            { attack: 100, health: 100 },
+          ),
+        ];
+  }
+
+  const goldenTokenCombat = gameReducer(goldenTokenState, {
+    type: "END_TURN",
+  });
+  const microbotSummons =
+    goldenTokenCombat.lastBattle?.events.filter(
+      (event) =>
+        event.type === "summon" &&
+        event.minion?.definitionId === "live-microbot-token",
+    ) ?? [];
+  assert.equal(microbotSummons.length, 1);
+  assert.equal(microbotSummons[0]?.minion?.golden, true);
+  assert.equal(microbotSummons[0]?.minion?.attack, 2);
+  assert.equal(microbotSummons[0]?.minion?.health, 2);
+
+  const immediateAttackState = createGame(0x91051);
+  const immediateTemplate = humanPlayer(immediateAttackState).shop[0];
+  prepareLockedCombat(immediateAttackState);
+  for (const player of immediateAttackState.players) {
+    player.board = player.isHuman
+      ? [
+          definitionMinion(
+            immediateTemplate,
+            "BG34_630",
+            "golden-twilight-whelp",
+            {
+              attack: 2,
+              health: 1,
+              golden: true,
+              taunt: true,
+            },
+          ),
+          ...Array.from({ length: 6 }, (_, index) =>
+            fixtureMinion(
+              immediateTemplate,
+              `twilight-board-filler-${index}`,
+              { attack: 0, health: 100 },
+            ),
+          ),
+        ]
+      : [
+          fixtureMinion(
+            immediateTemplate,
+            `twilight-whelp-killer-${player.id}`,
+            { attack: 100, health: 100 },
+          ),
+        ];
+  }
+
+  const immediateAttackCombat = gameReducer(immediateAttackState, {
+    type: "END_TURN",
+  });
+  const whelpSummons =
+    immediateAttackCombat.lastBattle?.events.filter(
+      (event) =>
+        event.type === "summon" &&
+        event.minion?.definitionId === "live-twilight-whelp-token",
+    ) ?? [];
+  assert.equal(
+    whelpSummons.length,
+    2,
+    "the first dead attacker must free its board slot for the second summon",
+  );
+});
+
+test("Golden repeated damage keeps separate hits for Divine Shield", () => {
+  const state = createGame(0x9106);
+  const template = humanPlayer(state).shop[0];
+  prepareLockedCombat(state);
+  for (const player of state.players) {
+    player.board = player.isHuman
+      ? [
+          definitionMinion(
+            template,
+            "BG_DAL_775",
+            "golden-tunnel-blaster",
+            {
+              attack: 6,
+              health: 1,
+              golden: true,
+              taunt: true,
+            },
+          ),
+        ]
+      : [
+          fixtureMinion(template, `blaster-killer-${player.id}`, {
+            attack: 100,
+            health: 100,
+          }),
+          fixtureMinion(template, `blaster-shield-${player.id}`, {
+            attack: 0,
+            health: 20,
+            divineShield: true,
+          }),
+        ];
+  }
+
+  const combat = gameReducer(state, { type: "END_TURN" });
+  const battle = combat.lastBattle;
+  assert.ok(battle);
+  const opponentId =
+    battle.playerAId === state.humanPlayerId
+      ? battle.playerBId
+      : battle.playerAId;
+  const shieldTarget = battle.finalBoards[opponentId].find((minion) =>
+    minion.instanceId.startsWith("blaster-shield-"),
+  );
+  assert.ok(shieldTarget);
+  assert.equal(shieldTarget.divineShield, false);
+  assert.equal(shieldTarget.health, 17);
+});
+
 test("refresh replaces offers, while freeze preserves them through manual combat", () => {
   let state = createGame(202);
   humanPlayer(state).gold = 5;
@@ -467,7 +969,7 @@ test("refresh replaces offers, while freeze preserves them through manual combat
   );
 });
 
-test("tavern upgrades enforce cost and expand the shop", () => {
+test("tavern upgrades enforce cost and expand the next Recruit shop", () => {
   let state = createGame(303);
   assert.equal(getUpgradeCost(state, state.humanPlayerId), 5);
 
@@ -480,8 +982,12 @@ test("tavern upgrades enforce cost and expand the shop", () => {
   state = gameReducer(state, { type: "UPGRADE_TAVERN" });
   assert.equal(humanPlayer(state).tavernTier, 2);
   assert.equal(humanPlayer(state).gold, 0);
-  assert.equal(humanPlayer(state).shop.length, 4);
+  assert.equal(humanPlayer(state).shop.length, 3);
   assert.equal(getUpgradeCost(state, state.humanPlayerId), 7);
+
+  state = gameReducer(state, { type: "END_TURN" });
+  state = gameReducer(state, { type: "CONTINUE" });
+  assert.equal(humanPlayer(state).shop.length, 4);
 });
 
 test("three normal copies combine atomically into one buff-preserving golden", () => {
