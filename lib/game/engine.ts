@@ -454,15 +454,19 @@ function createMagneticAttachment(
   };
 }
 
-function drawFromPool(
+function drawMatchingFromPool(
   state: GameState,
   tavernTier: MutableTier,
+  matches: (
+    definition: (typeof MINION_DEFINITIONS)[number],
+  ) => boolean,
 ): BoardMinionInstance | null {
   const eligible = MINION_DEFINITIONS.filter(
     (definition) =>
       definitionIsAvailable(definition, state.activeTribes) &&
       definition.tier <= tavernTier &&
-      (state.pool[definition.id] ?? 0) > 0,
+      (state.pool[definition.id] ?? 0) > 0 &&
+      matches(definition),
   );
   let totalCopies = 0;
   for (const definition of eligible) {
@@ -482,6 +486,13 @@ function drawFromPool(
     roll -= copies;
   }
   return null;
+}
+
+function drawFromPool(
+  state: GameState,
+  tavernTier: MutableTier,
+): BoardMinionInstance | null {
+  return drawMatchingFromPool(state, tavernTier, () => true);
 }
 
 function definitionHasTribe(
@@ -2452,6 +2463,83 @@ function resolveOneDeathrattle(
               death.index + count,
               source,
             );
+          }
+        } else if (effect.kind === "getRandomMinion") {
+          const owner = findPlayer(context.state, ownerId);
+          if (!owner?.alive) {
+            continue;
+          }
+          const componentDefinition = getMinionDefinition(
+            component.definitionId,
+          );
+          const componentName = component.golden
+            ? `金色·${componentDefinition.name}`
+            : componentDefinition.name;
+          const gainCount =
+            effect.count *
+            (component.golden &&
+            effect.goldenMode === "doubleCount"
+              ? 2
+              : 1);
+          for (let count = 0; count < gainCount; count += 1) {
+            if (owner.hand.length >= MAX_HAND_SIZE) {
+              pushBattleEvent(context.events, {
+                type: "cardGain",
+                actorPlayerId: ownerId,
+                actorInstanceId: source.instanceId,
+                targetPlayerId: ownerId,
+                amount: 0,
+                cardGainResult: "handFull",
+                message: owner.isHuman
+                  ? `手牌已满，${componentName}未能使你获得磁力机械。`
+                  : `${componentName}未能使${owner.name}获得磁力机械。`,
+              });
+              continue;
+            }
+            const gained = drawMatchingFromPool(
+              context.state,
+              owner.tavernTier,
+              (definition) =>
+                (effect.filter.tribe === undefined ||
+                  definitionHasTribe(
+                    definition,
+                    effect.filter.tribe,
+                  )) &&
+                (effect.filter.magnetic !== true ||
+                  definition.magnetic !== undefined),
+            );
+            if (!gained) {
+              pushBattleEvent(context.events, {
+                type: "cardGain",
+                actorPlayerId: ownerId,
+                actorInstanceId: source.instanceId,
+                targetPlayerId: ownerId,
+                amount: 0,
+                cardGainResult: "noCandidate",
+                message: owner.isHuman
+                  ? `当前共享池中没有可由${componentName}获取的磁力机械。`
+                  : `${componentName}没有找到可获取的磁力机械。`,
+              });
+              continue;
+            }
+            const gainedSnapshot = cloneMinion(gained);
+            owner.hand.push(gained);
+            resolveTriples(context.state, owner);
+            pushBattleEvent(context.events, {
+              type: "cardGain",
+              actorPlayerId: ownerId,
+              actorInstanceId: source.instanceId,
+              targetPlayerId: ownerId,
+              targetInstanceId: owner.isHuman
+                ? gained.instanceId
+                : undefined,
+              amount: 1,
+              minion: owner.isHuman ? gainedSnapshot : undefined,
+              cardGainResult: "added",
+              message: owner.isHuman
+                ? `${componentName}使你获得了「${gained.name}」。`
+                : `${componentName}使${owner.name}获得了一张磁力机械。`,
+            });
           }
         }
       }

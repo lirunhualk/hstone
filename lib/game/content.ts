@@ -3,7 +3,7 @@ import liveRosterSnapshot from "./generated/battlegrounds-36.0.3-247416.zhCN.jso
 };
 import type { MinionDefinition, Tribe } from "./types.ts";
 
-export const CURRENT_ROSTER_VERSION = "battlegrounds-36.0.3-247416-v5";
+export const CURRENT_ROSTER_VERSION = "battlegrounds-36.0.3-247416-v6";
 /** Compatibility alias for existing save and engine imports. */
 export const CLASSIC_ROSTER_VERSION = CURRENT_ROSTER_VERSION;
 
@@ -865,6 +865,21 @@ const LIVE_RULE_OVERRIDES: Readonly<
   BG26_147: {
     startOfTurn: [{ kind: "gainGold", amount: 1 }],
   },
+  BG26_148: {
+    deathrattle: [
+      {
+        kind: "getRandomMinion",
+        count: 1,
+        filter: {
+          tribe: "mech",
+          magnetic: true,
+        },
+        maximumTier: "ownerTavern",
+        source: "sharedPool",
+        goldenMode: "doubleCount",
+      },
+    ],
+  },
   BG31_859: {
     magnetic: {
       targetTribes: ["mech", "elemental"],
@@ -1086,6 +1101,7 @@ const FULLY_SUPPORTED_LIVE_CARD_IDS = new Set([
   "BG25_354",
   "BG26_146",
   "BG26_147",
+  "BG26_148",
   "BG26_805",
   "BG26_817",
   "BG28_300",

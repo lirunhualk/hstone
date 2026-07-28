@@ -88,6 +88,18 @@ export interface SummonRandomDeathrattleEffect {
   count: number;
 }
 
+export interface GetRandomMinionEffect {
+  kind: "getRandomMinion";
+  count: number;
+  filter: {
+    tribe?: Tribe;
+    magnetic?: true;
+  };
+  maximumTier: "ownerTavern";
+  source: "sharedPool";
+  goldenMode?: "doubleCount";
+}
+
 export interface DamageAllMinionsEffect {
   kind: "damageAllMinions";
   amount: number;
@@ -106,6 +118,7 @@ export type MinionEffect =
   | GainMissingHealthEffect
   | ResummonMechsEffect
   | SummonRandomDeathrattleEffect
+  | GetRandomMinionEffect
   | DamageAllMinionsEffect;
 
 export interface TargetedBuffBattlecry {
@@ -331,8 +344,11 @@ export type BattleEventType =
   | "shieldBroken"
   | "death"
   | "summon"
+  | "cardGain"
   | "heroDamage"
   | "battleEnd";
+
+export type CardGainResult = "added" | "handFull" | "noCandidate";
 
 /**
  * Battle events deliberately contain IDs and a readable fallback message.
@@ -349,6 +365,7 @@ export interface BattleEvent {
   targetInstanceId?: string;
   amount?: number;
   minion?: MinionInstance;
+  cardGainResult?: CardGainResult;
 }
 
 interface PendingInteractionBase {

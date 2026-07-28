@@ -65,7 +65,7 @@ function expectedPlainText(html: string): string {
 test("exports the pinned current roster version through the legacy alias", () => {
   assert.equal(
     CURRENT_ROSTER_VERSION,
-    "battlegrounds-36.0.3-247416-v5",
+    "battlegrounds-36.0.3-247416-v6",
   );
   assert.equal(CLASSIC_ROSTER_VERSION, CURRENT_ROSTER_VERSION);
 });
@@ -278,7 +278,7 @@ test("maps supported basic keywords and exact cleave text", () => {
   assert.equal(getMinionDefinition("BGS_049").goldenSellValue, 6);
 });
 
-test("maps Magnetic targets and the first complete live Magnetic effects", () => {
+test("maps Magnetic targets, generation, and the first complete live Magnetic effects", () => {
   assert.deepEqual(getMinionDefinition("BG26_146").magnetic, {
     targetTribes: ["mech"],
   });
@@ -290,6 +290,19 @@ test("maps Magnetic targets and the first complete live Magnetic effects", () =>
   });
   assert.deepEqual(getMinionDefinition("BG26_147").startOfTurn, [
     { kind: "gainGold", amount: 1 },
+  ]);
+  assert.deepEqual(getMinionDefinition("BG26_148").deathrattle, [
+    {
+      kind: "getRandomMinion",
+      count: 1,
+      filter: {
+        tribe: "mech",
+        magnetic: true,
+      },
+      maximumTier: "ownerTavern",
+      source: "sharedPool",
+      goldenMode: "doubleCount",
+    },
   ]);
   assert.deepEqual(getMinionDefinition("BG31_859").magnetic, {
     targetTribes: ["mech", "elemental"],
@@ -379,6 +392,7 @@ test("marks every live card honestly as complete or partial", () => {
       "BG25_354",
       "BG26_146",
       "BG26_147",
+      "BG26_148",
       "BG21_014",
       "BG26_817",
       "BG26_805",
@@ -415,13 +429,13 @@ test("marks every live card honestly as complete or partial", () => {
     LIVE_MINION_DEFINITIONS.filter(
       (definition) => definition.effectSupport === "partial",
     ).length,
-    201,
+    200,
   );
   assert.equal(
     LIVE_MINION_DEFINITIONS.filter(
       (definition) => definition.effectSupport === "complete",
     ).length,
-    36,
+    37,
   );
   assert.deepEqual(getMinionDefinition("BG35_702").interactiveBattlecry, {
     kind: "targetedBuff",

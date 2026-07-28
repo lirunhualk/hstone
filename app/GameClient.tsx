@@ -96,6 +96,14 @@ type BattlePlaybackState = {
   complete: boolean;
 };
 
+type CombatRewardSummary = {
+  addedCount: number;
+  handFullCount: number;
+  noCandidateCount: number;
+  addedNames: string[];
+  addedInstanceIds: string[];
+};
+
 const TRIBE_HUE: Record<Tribe, number> = {
   beast: 106,
   mech: 198,
@@ -318,6 +326,55 @@ function resultLabel(result: BattleResult | undefined): string {
   return "势均力敌";
 }
 
+function summarizeCombatRewards(
+  events: readonly BattleEvent[],
+  playerId: string,
+): CombatRewardSummary {
+  const rewardEvents = events.filter(
+    (event) =>
+      event.type === "cardGain" &&
+      event.actorPlayerId === playerId,
+  );
+  return {
+    addedCount: rewardEvents.filter(
+      (event) => event.cardGainResult === "added",
+    ).length,
+    handFullCount: rewardEvents.filter(
+      (event) => event.cardGainResult === "handFull",
+    ).length,
+    noCandidateCount: rewardEvents.filter(
+      (event) => event.cardGainResult === "noCandidate",
+    ).length,
+    addedNames: rewardEvents.flatMap((event) =>
+      event.cardGainResult === "added" && event.minion
+        ? [event.minion.name]
+        : [],
+    ),
+    addedInstanceIds: rewardEvents.flatMap((event) =>
+      event.cardGainResult === "added" && event.minion
+        ? [event.minion.instanceId]
+        : [],
+    ),
+  };
+}
+
+function combatRewardSummaryText(
+  summary: CombatRewardSummary,
+): string {
+  const parts = [
+    summary.addedCount > 0
+      ? `获得 ${summary.addedCount} 张磁力机械牌`
+      : "未获得磁力机械牌",
+  ];
+  if (summary.handFullCount > 0) {
+    parts.push(`手牌已满 ${summary.handFullCount} 次`);
+  }
+  if (summary.noCandidateCount > 0) {
+    parts.push(`随从池无候选 ${summary.noCandidateCount} 次`);
+  }
+  return parts.join(" · ");
+}
+
 function isPlaybackEvent(event: BattleEvent): boolean {
   return event.type !== "battleEnd";
 }
@@ -337,6 +394,8 @@ function battleEventDelay(
             ? 600
             : event?.type === "summon"
               ? 650
+              : event?.type === "cardGain"
+                ? 720
               : event?.type === "heroDamage"
                 ? 850
                 : 650;
@@ -407,6 +466,7 @@ function UnitCard({
   choiceTarget = false,
   magneticTarget = false,
   magneticDropTarget = false,
+  newlyGenerated = false,
   disabled = false,
   dragHandlers,
   testId,
@@ -424,6 +484,7 @@ function UnitCard({
   choiceTarget?: boolean;
   magneticTarget?: boolean;
   magneticDropTarget?: boolean;
+  newlyGenerated?: boolean;
   disabled?: boolean;
   dragHandlers?: DragPointerHandlers;
   testId?: string;
@@ -445,14 +506,16 @@ function UnitCard({
         choiceTarget ? " is-choice-target" : ""
       }${magneticTarget ? " is-magnetic-target" : ""}${
         magneticDropTarget ? " is-magnetic-drop-target" : ""
-      }${disabled ? " is-disabled" : ""}`}
+      }${newlyGenerated ? " is-newly-generated" : ""}${
+        disabled ? " is-disabled" : ""
+      }`}
       aria-label={`${unit.name}，${unit.tier} 级，${printedTribeLabel(
         unit,
       )}，${unit.attack} 攻击，${unit.health} 生命，${
         unit.description
       }${choiceTarget ? "，可选择为效果目标" : ""}${
         magneticTarget ? "，可作为磁力吸附目标" : ""
-      }`}
+      }${newlyGenerated ? "，本轮战斗新获得" : ""}`}
       aria-pressed={selected}
       aria-disabled={disabled}
       aria-describedby={
@@ -475,6 +538,7 @@ function UnitCard({
       data-drag-enabled={dragEnabled}
       data-magnetic-target={magneticTarget || undefined}
       data-magnetic-drop-target={magneticDropTarget || undefined}
+      data-newly-generated={newlyGenerated || undefined}
       data-testid={testId}
       data-unit-instance-id={unit.instanceId}
       onClick={onClick}
@@ -487,6 +551,11 @@ function UnitCard({
       {magneticTarget && (
         <span className="magnetic-target-label" aria-hidden="true">
           可吸附
+        </span>
+      )}
+      {newlyGenerated && (
+        <span className="new-card-label" aria-hidden="true">
+          新获得
         </span>
       )}
     </button>
@@ -863,6 +932,11 @@ export default function GameClient() {
   const [dragSession, setDragSession] = useState<DragSession | null>(null);
   const [magneticAnnouncement, setMagneticAnnouncement] = useState("");
   const [battleSpeed, setBattleSpeed] = useState<BattleSpeed>(1);
+  const [combatRewardNotice, setCombatRewardNotice] =
+    useState<CombatRewardSummary | null>(null);
+  const [newCombatRewardIds, setNewCombatRewardIds] = useState<string[]>(
+    [],
+  );
   const [battlePlayback, setBattlePlayback] =
     useState<BattlePlaybackState>({
       battle: null,
@@ -877,6 +951,7 @@ export default function GameClient() {
   const previousInteractionIdRef = useRef<string | null>(null);
   const magneticFocusTargetRef = useRef<string | null>(null);
   const previousMagneticSelectionRef = useRef<string | null>(null);
+  const preCombatHandIdsRef = useRef<Set<string> | null>(null);
 
   const writeDragSession = useCallback((next: DragSession | null) => {
     dragSessionRef.current = next;
@@ -887,6 +962,11 @@ export default function GameClient() {
     if (battlePlaybackTimerRef.current === null) return;
     window.clearTimeout(battlePlaybackTimerRef.current);
     battlePlaybackTimerRef.current = null;
+  }, []);
+
+  const clearCombatRewardFeedback = useCallback(() => {
+    setCombatRewardNotice(null);
+    setNewCombatRewardIds([]);
   }, []);
 
   useEffect(() => {
@@ -915,6 +995,15 @@ export default function GameClient() {
     if (!loaded || !started) return;
     window.localStorage.setItem(SAVE_KEY, JSON.stringify(game));
   }, [game, loaded, started]);
+
+  useEffect(() => {
+    if (!combatRewardNotice) return;
+    const noticeTimer = window.setTimeout(
+      clearCombatRewardFeedback,
+      5200,
+    );
+    return () => window.clearTimeout(noticeTimer);
+  }, [clearCombatRewardFeedback, combatRewardNotice]);
 
   const send = useCallback(
     (action: GameAction) => {
@@ -1069,6 +1158,14 @@ export default function GameClient() {
   );
 
   const battle = game.lastBattle;
+  const humanCombatRewards = useMemo(
+    () => summarizeCombatRewards(battle?.events ?? [], human.id),
+    [battle, human.id],
+  );
+  const humanCombatRewardOutcomeCount =
+    humanCombatRewards.addedCount +
+    humanCombatRewards.handFullCount +
+    humanCombatRewards.noCandidateCount;
   const opponentId = battle
     ? battle.playerAId === game.humanPlayerId
       ? battle.playerBId
@@ -1315,6 +1412,38 @@ export default function GameClient() {
     playbackEventCount,
   ]);
 
+  const continueAfterCombat = useCallback(() => {
+    if (!battle || game.phase !== "combat") return;
+    if (human.alive && humanCombatRewardOutcomeCount > 0) {
+      setCombatRewardNotice(humanCombatRewards);
+      const preCombatHandIds = preCombatHandIdsRef.current;
+      setNewCombatRewardIds(
+        preCombatHandIds
+          ? human.hand
+              .filter(
+                (card) =>
+                  card.kind === "minion" &&
+                  !preCombatHandIds.has(card.instanceId),
+              )
+              .map((card) => card.instanceId)
+          : humanCombatRewards.addedInstanceIds,
+      );
+    } else {
+      clearCombatRewardFeedback();
+    }
+    preCombatHandIdsRef.current = null;
+    send({ type: "CONTINUE" });
+  }, [
+    battle,
+    clearCombatRewardFeedback,
+    game.phase,
+    human.alive,
+    human.hand,
+    humanCombatRewardOutcomeCount,
+    humanCombatRewards,
+    send,
+  ]);
+
   const startFreshGame = useCallback(() => {
     const next = createGame(newSeed());
     window.localStorage.setItem(SAVE_KEY, JSON.stringify(next));
@@ -1325,8 +1454,10 @@ export default function GameClient() {
     setShowRestart(false);
     setInfoTab("details");
     setMagneticAnnouncement("");
+    clearCombatRewardFeedback();
     magneticFocusTargetRef.current = null;
-  }, []);
+    preCombatHandIdsRef.current = null;
+  }, [clearCombatRewardFeedback]);
 
   const deploySelected = useCallback(
     (boardIndex?: number) => {
@@ -1914,6 +2045,10 @@ export default function GameClient() {
               interactionLocked
             }
             onClick={() => {
+              clearCombatRewardFeedback();
+              preCombatHandIdsRef.current = new Set(
+                human.hand.map((card) => card.instanceId),
+              );
               setInfoTab("battle");
               send({ type: "END_TURN" });
             }}
@@ -1934,7 +2069,8 @@ export default function GameClient() {
               dragSession?.target?.kind === "sell" ? " is-sell-target" : ""
             }`}
             aria-label="鲍勃的酒馆"
-            inert={interactionLocked}
+            aria-hidden={game.phase !== "recruit"}
+            inert={interactionLocked || game.phase !== "recruit"}
             data-sell-drop-zone="true"
             data-testid="sell-drop-zone"
           >
@@ -2128,17 +2264,31 @@ export default function GameClient() {
                 battle &&
                 battlePlaybackComplete && (
                   <div className="combat-banner" role="status">
-                    <strong>{resultLabel(battle.resultForHuman)}</strong>
-                    <span>
-                      {battleDamage > 0
-                        ? `${battleDamage} 点英雄伤害`
-                        : "双方英雄未受伤害"}
-                    </span>
+                    <div className="combat-banner-copy">
+                      <div className="combat-banner-result">
+                        <strong>{resultLabel(battle.resultForHuman)}</strong>
+                        <span>
+                          {battleDamage > 0
+                            ? `${battleDamage} 点英雄伤害`
+                            : "双方英雄未受伤害"}
+                        </span>
+                      </div>
+                      {human.alive &&
+                        humanCombatRewardOutcomeCount > 0 && (
+                        <span
+                          className="combat-reward-summary"
+                          data-testid="combat-reward-summary"
+                        >
+                          废铁回收：
+                          {combatRewardSummaryText(humanCombatRewards)}
+                        </span>
+                        )}
+                    </div>
                     <button
                       type="button"
                       className="action-button primary"
                       data-testid="continue-after-combat"
-                      onClick={() => send({ type: "CONTINUE" })}
+                      onClick={continueAfterCombat}
                     >
                       {human.alive ? "继续招募" : "查看最终名次"}
                     </button>
@@ -2263,7 +2413,8 @@ export default function GameClient() {
                 : ""
             }`}
             aria-label="手牌"
-            inert={interactionLocked}
+            aria-hidden={game.phase !== "recruit"}
+            inert={interactionLocked || game.phase !== "recruit"}
             aria-describedby="buy-drop-description"
             data-drop-cost="3"
             data-drop-kind="buy"
@@ -2328,6 +2479,9 @@ export default function GameClient() {
                     }
                     testId={`hand-card-${index}`}
                     disabled={interactionLocked}
+                    newlyGenerated={newCombatRewardIds.includes(
+                      card.instanceId,
+                    )}
                     dragEnabled={canDragHandMinion(card)}
                     dragging={
                       dragSession?.active === true &&
@@ -2617,6 +2771,36 @@ export default function GameClient() {
       >
         {interactionAnnouncement}
       </span>
+
+      {game.phase === "recruit" && combatRewardNotice && (
+        <div
+          className="toast combat-reward-toast"
+          role="status"
+          aria-live="polite"
+          data-testid="combat-reward-toast"
+        >
+          <strong>
+            {combatRewardNotice.addedCount > 0
+              ? `本轮获得 ${combatRewardNotice.addedCount} 张磁力机械牌`
+              : "本轮未获得磁力机械牌"}
+          </strong>
+          <span>
+            {[
+              combatRewardNotice.addedNames.length > 0
+                ? `加入手牌：${combatRewardNotice.addedNames.join("、")}`
+                : null,
+              combatRewardNotice.handFullCount > 0
+                ? `${combatRewardNotice.handFullCount} 张因手牌已满未获得`
+                : null,
+              combatRewardNotice.noCandidateCount > 0
+                ? `${combatRewardNotice.noCandidateCount} 次随从池无可用候选`
+                : null,
+            ]
+              .filter(Boolean)
+              .join(" · ")}
+          </span>
+        </div>
+      )}
 
       {dragSession?.active && (
         <div

@@ -101,6 +101,27 @@ function keepOnlyMechDiscoverPool(
   }
 }
 
+function keepOnlySpecifiedPool(
+  state: GameState,
+  copiesByDefinitionId: Readonly<Record<string, number>>,
+): void {
+  state.activeTribes = [
+    "beast",
+    "mech",
+    "demon",
+    "murloc",
+    "dragon",
+  ];
+  for (const definitionId of Object.keys(state.pool)) {
+    state.pool[definitionId] = 0;
+  }
+  for (const [definitionId, copies] of Object.entries(
+    copiesByDefinitionId,
+  )) {
+    state.pool[definitionId] = copies;
+  }
+}
+
 function magneticAction(
   source: BoardMinionInstance,
   target: BoardMinionInstance,
@@ -742,6 +763,407 @@ test("runs an attached Golden Auto Assembler Deathrattle in combat", () => {
   assert.ok(summon);
   assert.equal(summon.minion?.golden, true);
   assert.deepEqual(summon.minion?.attachments, []);
+});
+
+test("Scrap Scraper gains a pooled Magnetic Mech in combat and keeps it after Continue", () => {
+  let state = createGame(4020);
+  let human = humanPlayer(state);
+  human.tavernTier = 1;
+  const scraper = definitionMinion("BG26_148", "scrap-scraper", {
+    attack: 1,
+    health: 1,
+    taunt: true,
+  });
+  human.board = [scraper];
+  keepOnlyOneOpponent(state, [
+    definitionMinion("BG25_001", "scrap-scraper-enemy", {
+      attack: 100,
+      health: 100,
+    }),
+  ]);
+  keepOnlySpecifiedPool(state, { BG26_146: 1 });
+
+  state = gameReducer(state, { type: "END_TURN" });
+  human = humanPlayer(state);
+  assert.equal(state.phase, "combat");
+  assert.equal(state.pool.BG26_146, 0);
+  assert.equal(human.hand.length, 1);
+  const gained = human.hand[0];
+  assert.equal(gained.kind, "minion");
+  assert.equal(
+    gained.kind === "minion" ? gained.definitionId : undefined,
+    "BG26_146",
+  );
+  assert.equal(
+    gained.kind === "minion" ? gained.poolCopies : undefined,
+    1,
+  );
+
+  const events =
+    state.lastBattle?.events.filter(
+      (event) =>
+        event.type === "cardGain" &&
+        event.actorPlayerId === human.id,
+    ) ?? [];
+  assert.equal(events.length, 1);
+  assert.equal(events[0].cardGainResult, "added");
+  assert.equal(events[0].amount, 1);
+  assert.equal(events[0].targetInstanceId, gained.instanceId);
+  assert.equal(events[0].minion?.definitionId, "BG26_146");
+  assert.match(events[0].message, /获得了「催眠机器人」/u);
+  assert.deepEqual(
+    JSON.parse(JSON.stringify(events)),
+    events,
+  );
+
+  state = gameReducer(state, { type: "CONTINUE" });
+  human = humanPlayer(state);
+  assert.equal(state.phase, "recruit");
+  assert.equal(
+    human.hand.some(
+      (card) => card.instanceId === gained.instanceId,
+    ),
+    true,
+  );
+});
+
+test("Golden Scrap Scraper with Golden Titus resolves six independent gains", () => {
+  const state = createGame(4021);
+  const human = humanPlayer(state);
+  human.tavernTier = 1;
+  human.board = [
+    definitionMinion("BG26_148", "golden-scrap-scraper", {
+      golden: true,
+      name: "金色·报废废铁回收机",
+      attack: 1,
+      health: 1,
+      taunt: true,
+    }),
+    definitionMinion("BG25_354", "golden-scrap-titus", {
+      golden: true,
+      name: "金色·提图斯·瑞文戴尔",
+      attack: 2,
+      health: 14,
+    }),
+  ];
+  keepOnlyOneOpponent(state, [
+    definitionMinion("BG25_001", "golden-scrap-enemy", {
+      attack: 100,
+      health: 100,
+    }),
+  ]);
+  keepOnlySpecifiedPool(state, { BG26_146: 6 });
+
+  const next = gameReducer(state, { type: "END_TURN" });
+  const nextHuman = humanPlayer(next);
+  const events =
+    next.lastBattle?.events.filter(
+      (event) =>
+        event.type === "cardGain" &&
+        event.actorPlayerId === human.id,
+    ) ?? [];
+  assert.equal(events.length, 6);
+  assert.equal(
+    events.every(
+      (event) =>
+        event.cardGainResult === "added" &&
+        event.minion?.definitionId === "BG26_146",
+    ),
+    true,
+  );
+  assert.equal(next.pool.BG26_146, 0);
+  assert.equal(nextHuman.hand.length, 2);
+  assert.equal(
+    nextHuman.hand.every(
+      (card) =>
+        card.kind === "minion" &&
+        card.definitionId === "BG26_146" &&
+        card.golden,
+    ),
+    true,
+  );
+  assert.deepEqual(
+    JSON.parse(JSON.stringify(next.lastBattle?.events)),
+    next.lastBattle?.events,
+  );
+});
+
+test("Scrap Scraper respects Tavern tier and Magnetic filters for every Titus repetition", () => {
+  const state = createGame(4022);
+  const human = humanPlayer(state);
+  human.tavernTier = 1;
+  human.board = [
+    definitionMinion("BG26_148", "filtered-scrap-scraper", {
+      attack: 1,
+      health: 1,
+      taunt: true,
+    }),
+    definitionMinion("BG25_354", "filtered-scrap-titus"),
+  ];
+  keepOnlyOneOpponent(state, [
+    definitionMinion("BG25_001", "filtered-scrap-enemy", {
+      attack: 100,
+      health: 100,
+    }),
+  ]);
+  keepOnlySpecifiedPool(state, {
+    BG26_146: 1,
+    BG_BOT_911: 4,
+    BG29_611: 4,
+  });
+
+  const next = gameReducer(state, { type: "END_TURN" });
+  const events =
+    next.lastBattle?.events.filter(
+      (event) =>
+        event.type === "cardGain" &&
+        event.actorPlayerId === human.id,
+    ) ?? [];
+  assert.deepEqual(
+    events.map((event) => event.cardGainResult),
+    ["added", "noCandidate"],
+  );
+  assert.equal(events[0].minion?.definitionId, "BG26_146");
+  assert.equal(events[1].amount, 0);
+  assert.equal(next.pool.BG26_146, 0);
+  assert.equal(next.pool.BG_BOT_911, 4);
+  assert.equal(next.pool.BG29_611, 4);
+});
+
+test("Scrap Scraper does not touch the pool when the hand is already full", () => {
+  const state = createGame(4023);
+  const human = humanPlayer(state);
+  human.tavernTier = 1;
+  human.board = [
+    definitionMinion("BG26_148", "full-hand-scrap-scraper", {
+      attack: 1,
+      health: 1,
+      taunt: true,
+    }),
+  ];
+  keepOnlyOneOpponent(state, [
+    definitionMinion("BG25_001", "full-hand-scrap-enemy", {
+      attack: 100,
+      health: 100,
+    }),
+  ]);
+  human.hand = Array.from({ length: 10 }, (_, index) =>
+    definitionMinion("BG25_001", `full-hand-scrap-${index}`, {
+      golden: true,
+    }),
+  );
+  keepOnlySpecifiedPool(state, { BG26_146: 1 });
+
+  const next = gameReducer(state, { type: "END_TURN" });
+  const nextHuman = humanPlayer(next);
+  const events =
+    next.lastBattle?.events.filter(
+      (event) =>
+        event.type === "cardGain" &&
+        event.actorPlayerId === human.id,
+    ) ?? [];
+  assert.equal(nextHuman.hand.length, 10);
+  assert.equal(next.nextInstanceId, state.nextInstanceId);
+  assert.equal(next.pool.BG26_146, 1);
+  assert.deepEqual(
+    events.map((event) => event.cardGainResult),
+    ["handFull"],
+  );
+  assert.equal(events[0].amount, 0);
+  assert.equal(events[0].minion, undefined);
+});
+
+test("Scrap Scraper resolves triples between Titus gain attempts to free hand space", () => {
+  const state = createGame(4024);
+  const human = humanPlayer(state);
+  human.tavernTier = 1;
+  human.board = [
+    definitionMinion("BG26_148", "triple-space-scrap-scraper", {
+      attack: 1,
+      health: 1,
+      taunt: true,
+    }),
+    definitionMinion("BG25_354", "triple-space-scrap-titus"),
+  ];
+  keepOnlyOneOpponent(state, [
+    definitionMinion("BG25_001", "triple-space-scrap-enemy", {
+      attack: 100,
+      health: 100,
+    }),
+  ]);
+  human.hand = [
+    definitionMinion("BG26_146", "triple-space-magnetic-1", {
+      poolCopies: 1,
+    }),
+    definitionMinion("BG26_146", "triple-space-magnetic-2", {
+      poolCopies: 1,
+    }),
+    ...Array.from({ length: 7 }, (_, index) =>
+      definitionMinion("BG25_001", `triple-space-filler-${index}`, {
+        golden: true,
+      }),
+    ),
+  ];
+  keepOnlySpecifiedPool(state, { BG26_146: 2 });
+
+  const next = gameReducer(state, { type: "END_TURN" });
+  const nextHuman = humanPlayer(next);
+  const events =
+    next.lastBattle?.events.filter(
+      (event) =>
+        event.type === "cardGain" &&
+        event.actorPlayerId === human.id,
+    ) ?? [];
+  assert.deepEqual(
+    events.map((event) => event.cardGainResult),
+    ["added", "added"],
+  );
+  assert.equal(next.pool.BG26_146, 0);
+  assert.equal(nextHuman.hand.length, 9);
+  const magnetics = nextHuman.hand.filter(
+    (card): card is BoardMinionInstance =>
+      card.kind === "minion" &&
+      card.definitionId === "BG26_146",
+  );
+  assert.equal(magnetics.length, 2);
+  assert.equal(
+    magnetics.filter((minion) => minion.golden).length,
+    1,
+  );
+  assert.equal(
+    magnetics.filter((minion) => !minion.golden).length,
+    1,
+  );
+});
+
+test("AI Scrap Scraper gains from the same pool without revealing its card in combat events", () => {
+  const state = createGame(4025);
+  const human = humanPlayer(state);
+  const ai = keepOnlyOneOpponent(state);
+  human.board = [
+    definitionMinion("BG25_001", "ai-scrap-human-enemy", {
+      attack: 100,
+      health: 100,
+    }),
+  ];
+  ai.tavernTier = 1;
+  ai.board = [
+    definitionMinion("BG26_148", "ai-scrap-scraper", {
+      attack: 1,
+      health: 1,
+      taunt: true,
+    }),
+  ];
+  keepOnlySpecifiedPool(state, { BG26_146: 1 });
+
+  const next = gameReducer(state, { type: "END_TURN" });
+  const nextAi = next.players.find((player) => player.id === ai.id);
+  assert.ok(nextAi);
+  assert.equal(nextAi.hand.length, 1);
+  assert.equal(nextAi.hand[0].kind, "minion");
+  assert.equal(
+    nextAi.hand[0].kind === "minion"
+      ? nextAi.hand[0].definitionId
+      : undefined,
+    "BG26_146",
+  );
+  assert.equal(next.pool.BG26_146, 0);
+  const event = next.lastBattle?.events.find(
+    (candidate) =>
+      candidate.type === "cardGain" &&
+      candidate.actorPlayerId === ai.id,
+  );
+  assert.ok(event);
+  assert.equal(event.cardGainResult, "added");
+  assert.equal(event.minion, undefined);
+  assert.equal(event.targetInstanceId, undefined);
+  assert.match(event.message, /获得了一张磁力机械/u);
+});
+
+test("an eliminated player releases Scrap Scraper combat gains back to the shared pool", () => {
+  const state = createGame(4027);
+  const human = humanPlayer(state);
+  human.health = 1;
+  human.tavernTier = 1;
+  human.board = [
+    definitionMinion("BG26_148", "eliminated-scrap-scraper", {
+      attack: 0,
+      health: 1,
+      taunt: true,
+    }),
+  ];
+  keepOnlyOneOpponent(state, [
+    definitionMinion("BG25_001", "eliminated-scrap-enemy", {
+      attack: 100,
+      health: 100,
+    }),
+  ]);
+  keepOnlySpecifiedPool(state, { BG26_146: 1 });
+
+  const next = gameReducer(state, { type: "END_TURN" });
+  const nextHuman = humanPlayer(next);
+  const event = next.lastBattle?.events.find(
+    (candidate) =>
+      candidate.type === "cardGain" &&
+      candidate.actorPlayerId === human.id,
+  );
+  assert.ok(event);
+  assert.equal(event.cardGainResult, "added");
+  assert.equal(nextHuman.alive, false);
+  assert.deepEqual(nextHuman.hand, []);
+  assert.equal(next.pool.BG26_146, 1);
+});
+
+test("an eliminated ghost Scrap Scraper cannot gain permanent cards", () => {
+  const state = createGame(4026);
+  for (const player of state.players) {
+    player.alive = false;
+    player.health = 0;
+    player.gold = 0;
+    player.board = [];
+    player.hand = [];
+    player.shop = [];
+    player.frozen = false;
+    player.eliminatedRound = undefined;
+  }
+  for (const [index, player] of state.players.slice(0, 3).entries()) {
+    player.alive = true;
+    player.health = 40;
+    player.board = [
+      definitionMinion("BG25_001", `ghost-scrap-living-${index}`, {
+        attack: 100,
+        health: 100,
+      }),
+    ];
+  }
+  const ghost = state.players[3];
+  ghost.eliminatedRound = 0;
+  ghost.board = [
+    definitionMinion("BG26_148", "ghost-scrap-scraper", {
+      attack: 1,
+      health: 1,
+      taunt: true,
+    }),
+  ];
+  keepOnlySpecifiedPool(state, { BG26_146: 1 });
+
+  const next = gameReducer(state, { type: "END_TURN" });
+  const ghostBattle = next.lastRoundBattles.find(
+    (battle) =>
+      battle.isGhost &&
+      (battle.playerAId === ghost.id || battle.playerBId === ghost.id),
+  );
+  assert.ok(ghostBattle);
+  assert.equal(
+    ghostBattle.events.some(
+      (event) =>
+        event.type === "cardGain" &&
+        event.actorPlayerId === ghost.id,
+    ),
+    false,
+  );
+  assert.equal(next.pool.BG26_146, 1);
+  assert.equal(next.players[3].hand.length, 0);
 });
 
 test("seven AIs can Magnetize on a full board with the same deterministic rules", () => {
