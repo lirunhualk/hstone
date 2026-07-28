@@ -3,7 +3,7 @@ import liveRosterSnapshot from "./generated/battlegrounds-36.0.3-247416.zhCN.jso
 };
 import type { MinionDefinition, Tribe } from "./types.ts";
 
-export const CURRENT_ROSTER_VERSION = "battlegrounds-36.0.3-247416-v6";
+export const CURRENT_ROSTER_VERSION = "battlegrounds-36.0.3-247416-v7";
 /** Compatibility alias for existing save and engine imports. */
 export const CLASSIC_ROSTER_VERSION = CURRENT_ROSTER_VERSION;
 
@@ -880,6 +880,21 @@ const LIVE_RULE_OVERRIDES: Readonly<
       },
     ],
   },
+  BG31_175: {
+    rally: [
+      {
+        kind: "getRandomMinion",
+        count: 1,
+        filter: {
+          tribe: "mech",
+          magnetic: true,
+        },
+        maximumTier: "ownerTavern",
+        source: "sharedPool",
+        goldenMode: "doubleCount",
+      },
+    ],
+  },
   BG31_859: {
     magnetic: {
       targetTribes: ["mech", "elemental"],
@@ -1108,6 +1123,7 @@ const FULLY_SUPPORTED_LIVE_CARD_IDS = new Set([
   "BG29_503",
   "BG29_611",
   "BG30_125",
+  "BG31_175",
   "BG31_803",
   "BG31_859",
   "BG32_235",

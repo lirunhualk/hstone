@@ -100,6 +100,8 @@ export interface GetRandomMinionEffect {
   goldenMode?: "doubleCount";
 }
 
+export type RallyEffect = GetRandomMinionEffect;
+
 export interface DamageAllMinionsEffect {
   kind: "damageAllMinions";
   amount: number;
@@ -222,6 +224,7 @@ export interface MinionDefinition {
   afterSelfDamaged?: readonly MinionEffect[];
   startOfTurn?: readonly MinionEffect[];
   startOfCombat?: readonly MinionEffect[];
+  rally?: readonly RallyEffect[];
   endOfTurn?: EndOfTurnEffect;
   afterMagnetized?: readonly MinionEffect[];
   aura?: StatAura;

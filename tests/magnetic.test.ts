@@ -1166,6 +1166,569 @@ test("an eliminated ghost Scrap Scraper cannot gain permanent cards", () => {
   assert.equal(next.players[3].hand.length, 0);
 });
 
+test("Mobile Projection Rally gains before combat damage and persists after Continue", () => {
+  let state = createGame(4030);
+  let human = humanPlayer(state);
+  human.tavernTier = 1;
+  const projection = definitionMinion(
+    "BG31_175",
+    "mobile-projection-order",
+    { taunt: true },
+  );
+  human.board = [
+    projection,
+    definitionMinion("BG25_001", "mobile-projection-order-filler", {
+      attack: 0,
+      health: 100,
+    }),
+  ];
+  keepOnlyOneOpponent(state, [
+    definitionMinion("BG25_001", "mobile-projection-order-enemy", {
+      attack: 100,
+      health: 100,
+    }),
+  ]);
+  keepOnlySpecifiedPool(state, { BG26_146: 1 });
+
+  state = gameReducer(state, { type: "END_TURN" });
+  human = humanPlayer(state);
+  const battle = state.lastBattle;
+  assert.ok(battle);
+  const attack = battle.events.find(
+    (event) =>
+      event.type === "attack" &&
+      event.actorInstanceId === projection.instanceId,
+  );
+  const gain = battle.events.find(
+    (event) =>
+      event.type === "cardGain" &&
+      event.actorInstanceId === projection.instanceId,
+  );
+  const shieldBreak = battle.events.find(
+    (event) =>
+      event.type === "shieldBroken" &&
+      event.targetInstanceId === projection.instanceId,
+  );
+  assert.ok(attack);
+  assert.ok(gain);
+  assert.ok(shieldBreak);
+  assert.ok(attack.index < gain.index);
+  assert.ok(gain.index < shieldBreak.index);
+  assert.equal(gain.cardGainResult, "added");
+  assert.equal(gain.minion?.definitionId, "BG26_146");
+  assert.equal(human.hand.length, 1);
+  assert.equal(human.hand[0].instanceId, gain.targetInstanceId);
+  assert.equal(state.pool.BG26_146, 0);
+
+  const gainedInstanceId = human.hand[0].instanceId;
+  state = gameReducer(state, { type: "CONTINUE" });
+  human = humanPlayer(state);
+  assert.equal(state.phase, "recruit");
+  assert.equal(
+    human.hand.some((card) => card.instanceId === gainedInstanceId),
+    true,
+  );
+});
+
+test("Golden Mobile Projection resolves two independent Rally gains per attack", () => {
+  const state = createGame(4031);
+  const human = humanPlayer(state);
+  human.tavernTier = 1;
+  const projection = definitionMinion(
+    "BG31_175",
+    "golden-mobile-projection",
+    {
+      golden: true,
+      name: "金色·移动投影仪",
+      attack: 8,
+      health: 12,
+      taunt: true,
+    },
+  );
+  human.board = [
+    projection,
+    definitionMinion("BG25_001", "golden-mobile-projection-filler", {
+      attack: 0,
+      health: 100,
+    }),
+  ];
+  keepOnlyOneOpponent(state, [
+    definitionMinion("BG25_001", "golden-mobile-projection-enemy", {
+      attack: 100,
+      health: 100,
+    }),
+  ]);
+  keepOnlySpecifiedPool(state, { BG26_146: 2 });
+
+  const next = gameReducer(state, { type: "END_TURN" });
+  const nextHuman = humanPlayer(next);
+  const events =
+    next.lastBattle?.events.filter(
+      (event) =>
+        event.type === "cardGain" &&
+        event.actorInstanceId === projection.instanceId,
+    ) ?? [];
+  assert.equal(events.length, 2);
+  assert.deepEqual(
+    events.map((event) => event.cardGainResult),
+    ["added", "added"],
+  );
+  assert.equal(
+    events.every((event) => event.minion?.definitionId === "BG26_146"),
+    true,
+  );
+  assert.equal(nextHuman.hand.length, 2);
+  assert.equal(next.pool.BG26_146, 0);
+});
+
+test("Windfury Mobile Projection Rallies once for each strike", () => {
+  const state = createGame(4032);
+  const human = humanPlayer(state);
+  human.tavernTier = 1;
+  const projection = definitionMinion(
+    "BG31_175",
+    "windfury-mobile-projection",
+    {
+      windfury: true,
+      taunt: true,
+    },
+  );
+  human.board = [
+    projection,
+    definitionMinion("BG25_001", "windfury-mobile-projection-filler", {
+      attack: 0,
+      health: 100,
+    }),
+  ];
+  keepOnlyOneOpponent(state, [
+    definitionMinion("BG25_001", "windfury-mobile-projection-enemy", {
+      attack: 100,
+      health: 100,
+    }),
+  ]);
+  keepOnlySpecifiedPool(state, { BG26_146: 2 });
+
+  const next = gameReducer(state, { type: "END_TURN" });
+  const relevantEvents =
+    next.lastBattle?.events.filter(
+      (event) =>
+        event.actorInstanceId === projection.instanceId &&
+        (event.type === "attack" || event.type === "cardGain"),
+    ) ?? [];
+  assert.deepEqual(
+    relevantEvents.map((event) => event.type),
+    ["attack", "cardGain", "attack", "cardGain"],
+  );
+  assert.equal(
+    relevantEvents.filter(
+      (event) =>
+        event.type === "cardGain" &&
+        event.cardGainResult === "added",
+    ).length,
+    2,
+  );
+  assert.equal(humanPlayer(next).hand.length, 2);
+  assert.equal(next.pool.BG26_146, 0);
+});
+
+test("Mobile Projection does not draw or allocate when its owner's hand is full", () => {
+  const state = createGame(4033);
+  const human = humanPlayer(state);
+  human.tavernTier = 1;
+  const projection = definitionMinion(
+    "BG31_175",
+    "full-hand-mobile-projection",
+    { taunt: true },
+  );
+  human.board = [
+    projection,
+    definitionMinion("BG26_146", "full-hand-mobile-projection-filler", {
+      attack: 0,
+      health: 100,
+    }),
+  ];
+  keepOnlyOneOpponent(state, [
+    definitionMinion("BG26_146", "full-hand-mobile-projection-enemy", {
+      attack: 100,
+      health: 100,
+    }),
+  ]);
+  human.hand = Array.from({ length: 10 }, (_, index) =>
+    definitionMinion("BG25_001", `full-hand-mobile-projection-${index}`, {
+      golden: true,
+    }),
+  );
+  keepOnlySpecifiedPool(state, { BG26_146: 1 });
+  const nextInstanceIdBefore = state.nextInstanceId;
+
+  const next = gameReducer(state, { type: "END_TURN" });
+  const events =
+    next.lastBattle?.events.filter(
+      (event) =>
+        event.type === "cardGain" &&
+        event.actorInstanceId === projection.instanceId,
+    ) ?? [];
+  assert.deepEqual(
+    events.map((event) => event.cardGainResult),
+    ["handFull"],
+  );
+  assert.equal(humanPlayer(next).hand.length, 10);
+  assert.equal(next.pool.BG26_146, 1);
+  assert.equal(next.nextInstanceId, nextInstanceIdBefore);
+});
+
+test("Golden Mobile Projection uses its only open hand slot before reporting full", () => {
+  const state = createGame(4034);
+  const human = humanPlayer(state);
+  human.tavernTier = 1;
+  const projection = definitionMinion(
+    "BG31_175",
+    "one-slot-mobile-projection",
+    {
+      golden: true,
+      name: "金色·移动投影仪",
+      attack: 8,
+      health: 12,
+      taunt: true,
+    },
+  );
+  human.board = [
+    projection,
+    definitionMinion("BG25_001", "one-slot-mobile-projection-filler", {
+      attack: 0,
+      health: 100,
+    }),
+  ];
+  keepOnlyOneOpponent(state, [
+    definitionMinion("BG25_001", "one-slot-mobile-projection-enemy", {
+      attack: 100,
+      health: 100,
+    }),
+  ]);
+  human.hand = Array.from({ length: 9 }, (_, index) =>
+    definitionMinion("BG25_001", `one-slot-mobile-projection-${index}`, {
+      golden: true,
+    }),
+  );
+  keepOnlySpecifiedPool(state, { BG26_146: 2 });
+
+  const next = gameReducer(state, { type: "END_TURN" });
+  const events =
+    next.lastBattle?.events.filter(
+      (event) =>
+        event.type === "cardGain" &&
+        event.actorInstanceId === projection.instanceId,
+    ) ?? [];
+  assert.deepEqual(
+    events.map((event) => event.cardGainResult),
+    ["added", "handFull"],
+  );
+  assert.equal(humanPlayer(next).hand.length, 10);
+  assert.equal(next.pool.BG26_146, 1);
+});
+
+test("Mobile Projection filters non-Magnetic and higher-Tier pool copies before reporting no candidate", () => {
+  const state = createGame(4035);
+  const human = humanPlayer(state);
+  human.tavernTier = 1;
+  const projection = definitionMinion(
+    "BG31_175",
+    "filtered-mobile-projection",
+    { taunt: true },
+  );
+  human.board = [
+    projection,
+    definitionMinion("BG25_001", "filtered-mobile-projection-filler", {
+      attack: 0,
+      health: 100,
+    }),
+  ];
+  keepOnlyOneOpponent(state, [
+    definitionMinion("BG25_001", "filtered-mobile-projection-enemy", {
+      attack: 100,
+      health: 100,
+    }),
+  ]);
+  keepOnlySpecifiedPool(state, {
+    BG29_611: 4,
+    BG_BOT_911: 4,
+  });
+
+  const next = gameReducer(state, { type: "END_TURN" });
+  const events =
+    next.lastBattle?.events.filter(
+      (event) =>
+        event.type === "cardGain" &&
+        event.actorInstanceId === projection.instanceId,
+    ) ?? [];
+  assert.deepEqual(
+    events.map((event) => event.cardGainResult),
+    ["noCandidate"],
+  );
+  assert.equal(events[0].amount, 0);
+  assert.equal(events[0].minion, undefined);
+  assert.equal(humanPlayer(next).hand.length, 0);
+  assert.equal(next.pool.BG29_611, 4);
+  assert.equal(next.pool.BG_BOT_911, 4);
+});
+
+test("Mobile Projection resolves a triple between Golden Rally gain attempts", () => {
+  const state = createGame(4036);
+  const human = humanPlayer(state);
+  human.tavernTier = 1;
+  const projection = definitionMinion(
+    "BG31_175",
+    "triple-space-mobile-projection",
+    {
+      golden: true,
+      name: "金色·移动投影仪",
+      attack: 8,
+      health: 12,
+      taunt: true,
+    },
+  );
+  human.board = [
+    projection,
+    definitionMinion("BG25_001", "triple-space-projection-filler", {
+      attack: 0,
+      health: 100,
+    }),
+  ];
+  keepOnlyOneOpponent(state, [
+    definitionMinion("BG25_001", "triple-space-projection-enemy", {
+      attack: 100,
+      health: 100,
+    }),
+  ]);
+  human.hand = [
+    definitionMinion("BG26_146", "triple-space-projection-magnetic-1", {
+      poolCopies: 1,
+    }),
+    definitionMinion("BG26_146", "triple-space-projection-magnetic-2", {
+      poolCopies: 1,
+    }),
+    ...Array.from({ length: 7 }, (_, index) =>
+      definitionMinion("BG25_001", `triple-space-projection-${index}`, {
+        golden: true,
+      }),
+    ),
+  ];
+  keepOnlySpecifiedPool(state, { BG26_146: 2 });
+
+  const next = gameReducer(state, { type: "END_TURN" });
+  const nextHuman = humanPlayer(next);
+  const events =
+    next.lastBattle?.events.filter(
+      (event) =>
+        event.type === "cardGain" &&
+        event.actorInstanceId === projection.instanceId,
+    ) ?? [];
+  assert.deepEqual(
+    events.map((event) => event.cardGainResult),
+    ["added", "added"],
+  );
+  assert.equal(next.pool.BG26_146, 0);
+  assert.equal(nextHuman.hand.length, 9);
+  const magnetics = nextHuman.hand.filter(
+    (card): card is BoardMinionInstance =>
+      card.kind === "minion" &&
+      card.definitionId === "BG26_146",
+  );
+  assert.equal(magnetics.length, 2);
+  assert.equal(
+    magnetics.filter((minion) => minion.golden).length,
+    1,
+  );
+  assert.equal(
+    magnetics.filter((minion) => !minion.golden).length,
+    1,
+  );
+});
+
+test("AI Mobile Projection uses the shared pool without revealing its gained card", () => {
+  const state = createGame(4037);
+  const human = humanPlayer(state);
+  human.board = [
+    definitionMinion("BG25_001", "ai-mobile-projection-human", {
+      attack: 100,
+      health: 100,
+    }),
+  ];
+  const ai = keepOnlyOneOpponent(state);
+  ai.tavernTier = 1;
+  const projection = definitionMinion(
+    "BG31_175",
+    "ai-mobile-projection",
+    { taunt: true },
+  );
+  ai.board = [
+    projection,
+    definitionMinion("BG25_001", "ai-mobile-projection-filler", {
+      attack: 0,
+      health: 100,
+    }),
+  ];
+  keepOnlySpecifiedPool(state, { BG26_146: 1 });
+
+  const next = gameReducer(state, { type: "END_TURN" });
+  const nextAi = next.players.find((player) => player.id === ai.id);
+  assert.ok(nextAi);
+  assert.equal(nextAi.hand.length, 1);
+  assert.equal(nextAi.hand[0].kind, "minion");
+  assert.equal(
+    nextAi.hand[0].kind === "minion"
+      ? nextAi.hand[0].definitionId
+      : undefined,
+    "BG26_146",
+  );
+  assert.equal(next.pool.BG26_146, 0);
+  const event = next.lastBattle?.events.find(
+    (candidate) =>
+      candidate.type === "cardGain" &&
+      candidate.actorInstanceId === projection.instanceId,
+  );
+  assert.ok(event);
+  assert.equal(event.cardGainResult, "added");
+  assert.equal(event.minion, undefined);
+  assert.equal(event.targetInstanceId, undefined);
+  assert.match(event.message, /获得了一张磁力机械/u);
+});
+
+test("an eliminated ghost Mobile Projection cannot gain permanent cards", () => {
+  const state = createGame(4038);
+  for (const player of state.players) {
+    player.alive = false;
+    player.health = 0;
+    player.gold = 0;
+    player.board = [];
+    player.hand = [];
+    player.shop = [];
+    player.frozen = false;
+    player.eliminatedRound = undefined;
+  }
+  for (const [index, player] of state.players.slice(0, 3).entries()) {
+    player.alive = true;
+    player.health = 40;
+    player.board = [
+      definitionMinion("BG25_001", `mobile-projection-living-${index}`, {
+        attack: 100,
+        health: 100,
+      }),
+    ];
+  }
+  const ghost = state.players[3];
+  ghost.eliminatedRound = 0;
+  const projection = definitionMinion(
+    "BG31_175",
+    "ghost-mobile-projection",
+    { taunt: true },
+  );
+  ghost.board = [
+    projection,
+    definitionMinion("BG25_001", "ghost-mobile-projection-filler", {
+      attack: 0,
+      health: 100,
+    }),
+  ];
+  keepOnlySpecifiedPool(state, { BG26_146: 1 });
+
+  const next = gameReducer(state, { type: "END_TURN" });
+  const ghostBattle = next.lastRoundBattles.find(
+    (battle) =>
+      battle.isGhost &&
+      (battle.playerAId === ghost.id || battle.playerBId === ghost.id),
+  );
+  assert.ok(ghostBattle);
+  assert.equal(
+    ghostBattle.events.some(
+      (event) =>
+        event.type === "cardGain" &&
+        event.actorInstanceId === projection.instanceId,
+    ),
+    false,
+  );
+  assert.equal(next.pool.BG26_146, 1);
+  assert.equal(next.players[3].hand.length, 0);
+});
+
+test("an eliminated player releases Mobile Projection Rally gains back to the shared pool", () => {
+  const state = createGame(4039);
+  const human = humanPlayer(state);
+  human.health = 1;
+  human.tavernTier = 1;
+  const projection = definitionMinion(
+    "BG31_175",
+    "eliminated-mobile-projection",
+    { taunt: true },
+  );
+  human.board = [
+    projection,
+    definitionMinion("BG25_001", "eliminated-projection-filler", {
+      attack: 0,
+      health: 1,
+    }),
+  ];
+  keepOnlyOneOpponent(state, [
+    definitionMinion("BG25_001", "eliminated-projection-enemy", {
+      attack: 100,
+      health: 100,
+    }),
+  ]);
+  keepOnlySpecifiedPool(state, { BG26_146: 1 });
+
+  const next = gameReducer(state, { type: "END_TURN" });
+  const nextHuman = humanPlayer(next);
+  const event = next.lastBattle?.events.find(
+    (candidate) =>
+      candidate.type === "cardGain" &&
+      candidate.actorInstanceId === projection.instanceId,
+  );
+  assert.ok(event);
+  assert.equal(event.cardGainResult, "added");
+  assert.equal(nextHuman.alive, false);
+  assert.deepEqual(nextHuman.hand, []);
+  assert.equal(next.pool.BG26_146, 1);
+});
+
+test("Mobile Projection Rally remains deterministic for identical seeded states", () => {
+  const state = createGame(4040);
+  const human = humanPlayer(state);
+  human.tavernTier = 3;
+  const projection = definitionMinion(
+    "BG31_175",
+    "deterministic-mobile-projection",
+    {
+      windfury: true,
+      taunt: true,
+    },
+  );
+  human.board = [
+    projection,
+    definitionMinion("BG25_001", "deterministic-projection-filler", {
+      attack: 0,
+      health: 100,
+    }),
+  ];
+  keepOnlyOneOpponent(state, [
+    definitionMinion("BG25_001", "deterministic-projection-enemy", {
+      attack: 100,
+      health: 100,
+    }),
+  ]);
+  keepOnlySpecifiedPool(state, {
+    BG26_146: 3,
+    BG_BOT_911: 3,
+  });
+
+  const first = gameReducer(state, { type: "END_TURN" });
+  const second = gameReducer(state, { type: "END_TURN" });
+  assert.deepEqual(first, second);
+  assert.deepEqual(
+    JSON.parse(JSON.stringify(first.lastBattle?.events)),
+    first.lastBattle?.events,
+  );
+});
+
 test("seven AIs can Magnetize on a full board with the same deterministic rules", () => {
   const state = createGame(4009);
   const human = humanPlayer(state);

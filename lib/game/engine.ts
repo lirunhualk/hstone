@@ -15,6 +15,7 @@ import type {
   DiscoverFilter,
   GameAction,
   GameState,
+  GetRandomMinionEffect,
   MagneticAttachment,
   MinionEffect,
   MinionInstance,
@@ -2211,16 +2212,147 @@ function chooseAttackTarget(
   return candidates[randomIndex(context.state, candidates.length)];
 }
 
-function performImmediateAttack(
+function resolveCombatGetRandomMinion(
+  context: CombatContext,
+  ownerId: PlayerId,
+  source: MinionInstance,
+  component: MinionEffectSource,
+  effect: GetRandomMinionEffect,
+  triggerLabel?: string,
+): void {
+  const owner = findPlayer(context.state, ownerId);
+  if (!owner?.alive) {
+    return;
+  }
+  const componentDefinition = getMinionDefinition(
+    component.definitionId,
+  );
+  const componentName = component.golden
+    ? `金色·${componentDefinition.name}`
+    : componentDefinition.name;
+  const sourceLabel = triggerLabel
+    ? `${componentName}的${triggerLabel}`
+    : componentName;
+  const gainCount =
+    effect.count *
+    (component.golden && effect.goldenMode === "doubleCount"
+      ? 2
+      : 1);
+
+  for (let count = 0; count < gainCount; count += 1) {
+    if (owner.hand.length >= MAX_HAND_SIZE) {
+      pushBattleEvent(context.events, {
+        type: "cardGain",
+        actorPlayerId: ownerId,
+        actorInstanceId: source.instanceId,
+        targetPlayerId: ownerId,
+        amount: 0,
+        cardGainResult: "handFull",
+        message: owner.isHuman
+          ? `手牌已满，${sourceLabel}未能使你获得磁力机械。`
+          : `${sourceLabel}未能使${owner.name}获得磁力机械。`,
+      });
+      continue;
+    }
+    const gained = drawMatchingFromPool(
+      context.state,
+      owner.tavernTier,
+      (definition) =>
+        (effect.filter.tribe === undefined ||
+          definitionHasTribe(definition, effect.filter.tribe)) &&
+        (effect.filter.magnetic !== true ||
+          definition.magnetic !== undefined),
+    );
+    if (!gained) {
+      pushBattleEvent(context.events, {
+        type: "cardGain",
+        actorPlayerId: ownerId,
+        actorInstanceId: source.instanceId,
+        targetPlayerId: ownerId,
+        amount: 0,
+        cardGainResult: "noCandidate",
+        message: owner.isHuman
+          ? `当前共享池中没有可由${sourceLabel}获取的磁力机械。`
+          : `${sourceLabel}没有找到可获取的磁力机械。`,
+      });
+      continue;
+    }
+    const gainedSnapshot = cloneMinion(gained);
+    owner.hand.push(gained);
+    resolveTriples(context.state, owner);
+    pushBattleEvent(context.events, {
+      type: "cardGain",
+      actorPlayerId: ownerId,
+      actorInstanceId: source.instanceId,
+      targetPlayerId: ownerId,
+      targetInstanceId: owner.isHuman
+        ? gained.instanceId
+        : undefined,
+      amount: 1,
+      minion: owner.isHuman ? gainedSnapshot : undefined,
+      cardGainResult: "added",
+      message: owner.isHuman
+        ? `${sourceLabel}使你获得了「${gained.name}」。`
+        : `${sourceLabel}使${owner.name}获得了一张磁力机械。`,
+    });
+  }
+}
+
+function triggerRally(
   context: CombatContext,
   ownerId: PlayerId,
   attacker: MinionInstance,
 ): void {
+  for (const component of minionEffectSources(attacker)) {
+    const effects =
+      getMinionDefinition(component.definitionId).rally ?? [];
+    for (const effect of effects) {
+      resolveCombatGetRandomMinion(
+        context,
+        ownerId,
+        attacker,
+        component,
+        effect,
+        "进击",
+      );
+    }
+  }
+}
+
+interface AttackStrikeOptions {
+  immediate?: boolean;
+  windfuryStrike?: boolean;
+}
+
+function performAttackStrike(
+  context: CombatContext,
+  ownerId: PlayerId,
+  attackerInstanceId: string,
+  options: AttackStrikeOptions = {},
+): boolean {
+  const attacker = context.boards[ownerId].find(
+    (minion) => minion.instanceId === attackerInstanceId,
+  );
+  if (!attacker || attacker.health <= 0 || attacker.attack <= 0) {
+    return false;
+  }
+
   const enemyId = opponentId(context, ownerId);
+  const enemyBoard = context.boards[enemyId];
   const target = chooseAttackTarget(context, attacker, enemyId);
   if (!target) {
-    return;
+    return false;
   }
+  const targetIndex = enemyBoard.findIndex(
+    (minion) => minion.instanceId === target.instanceId,
+  );
+  const cleaveTargets = attacker.cleave
+    ? [enemyBoard[targetIndex - 1], enemyBoard[targetIndex + 1]].filter(
+        (minion): minion is BoardMinionInstance =>
+          minion !== undefined,
+      )
+    : [];
+
   pushBattleEvent(context.events, {
     type: "attack",
     actorPlayerId: ownerId,
@@ -2228,8 +2360,10 @@ function performImmediateAttack(
     targetPlayerId: enemyId,
     targetInstanceId: target.instanceId,
     amount: attacker.attack,
-    message: `${attacker.name}立即攻击${target.name}。`,
+    message: `${attacker.name}${options.immediate ? "立即攻击" : "攻击"}${target.name}${options.windfuryStrike ? "（风怒）" : ""}。`,
   });
+  triggerRally(context, ownerId, attacker);
+
   dealCombatDamage(
     context,
     ownerId,
@@ -2248,7 +2382,29 @@ function performImmediateAttack(
     target.attack,
     target.poisonous,
   );
+  for (const adjacent of cleaveTargets) {
+    dealCombatDamage(
+      context,
+      ownerId,
+      attacker,
+      enemyId,
+      adjacent,
+      attacker.attack,
+      attacker.poisonous,
+    );
+  }
   resolveCombatDeaths(context);
+  return true;
+}
+
+function performImmediateAttack(
+  context: CombatContext,
+  ownerId: PlayerId,
+  attacker: MinionInstance,
+): void {
+  performAttackStrike(context, ownerId, attacker.instanceId, {
+    immediate: true,
+  });
 }
 
 function triggerAfterFriendlyDied(
@@ -2465,82 +2621,13 @@ function resolveOneDeathrattle(
             );
           }
         } else if (effect.kind === "getRandomMinion") {
-          const owner = findPlayer(context.state, ownerId);
-          if (!owner?.alive) {
-            continue;
-          }
-          const componentDefinition = getMinionDefinition(
-            component.definitionId,
+          resolveCombatGetRandomMinion(
+            context,
+            ownerId,
+            source,
+            component,
+            effect,
           );
-          const componentName = component.golden
-            ? `金色·${componentDefinition.name}`
-            : componentDefinition.name;
-          const gainCount =
-            effect.count *
-            (component.golden &&
-            effect.goldenMode === "doubleCount"
-              ? 2
-              : 1);
-          for (let count = 0; count < gainCount; count += 1) {
-            if (owner.hand.length >= MAX_HAND_SIZE) {
-              pushBattleEvent(context.events, {
-                type: "cardGain",
-                actorPlayerId: ownerId,
-                actorInstanceId: source.instanceId,
-                targetPlayerId: ownerId,
-                amount: 0,
-                cardGainResult: "handFull",
-                message: owner.isHuman
-                  ? `手牌已满，${componentName}未能使你获得磁力机械。`
-                  : `${componentName}未能使${owner.name}获得磁力机械。`,
-              });
-              continue;
-            }
-            const gained = drawMatchingFromPool(
-              context.state,
-              owner.tavernTier,
-              (definition) =>
-                (effect.filter.tribe === undefined ||
-                  definitionHasTribe(
-                    definition,
-                    effect.filter.tribe,
-                  )) &&
-                (effect.filter.magnetic !== true ||
-                  definition.magnetic !== undefined),
-            );
-            if (!gained) {
-              pushBattleEvent(context.events, {
-                type: "cardGain",
-                actorPlayerId: ownerId,
-                actorInstanceId: source.instanceId,
-                targetPlayerId: ownerId,
-                amount: 0,
-                cardGainResult: "noCandidate",
-                message: owner.isHuman
-                  ? `当前共享池中没有可由${componentName}获取的磁力机械。`
-                  : `${componentName}没有找到可获取的磁力机械。`,
-              });
-              continue;
-            }
-            const gainedSnapshot = cloneMinion(gained);
-            owner.hand.push(gained);
-            resolveTriples(context.state, owner);
-            pushBattleEvent(context.events, {
-              type: "cardGain",
-              actorPlayerId: ownerId,
-              actorInstanceId: source.instanceId,
-              targetPlayerId: ownerId,
-              targetInstanceId: owner.isHuman
-                ? gained.instanceId
-                : undefined,
-              amount: 1,
-              minion: owner.isHuman ? gainedSnapshot : undefined,
-              cardGainResult: "added",
-              message: owner.isHuman
-                ? `${componentName}使你获得了「${gained.name}」。`
-                : `${componentName}使${owner.name}获得了一张磁力机械。`,
-            });
-          }
         }
       }
     }
@@ -2719,7 +2806,6 @@ function simulateBattle(
   ) {
     const attackingA = attackingPlayerId === playerA.id;
     const ownBoard = attackingA ? boardA : boardB;
-    const enemyBoard = attackingA ? boardB : boardA;
     const attackerOwner = attackingA ? playerA : playerB;
     const defenderOwner = attackingA ? playerB : playerA;
     const attackIndex = availableAttackIndex(
@@ -2747,69 +2833,15 @@ function simulateBattle(
       attackCount < MAX_COMBAT_ATTACKS;
       strike += 1
     ) {
-      const currentAttacker = ownBoard.find(
-        (minion) => minion.instanceId === attackerInstanceId,
-      );
-      if (!currentAttacker || currentAttacker.attack <= 0) {
-        break;
-      }
-      const target = chooseAttackTarget(
-        context,
-        currentAttacker,
-        defenderOwner.id,
-      );
-      if (!target) {
-        break;
-      }
-      const targetIndex = enemyBoard.findIndex(
-        (minion) => minion.instanceId === target.instanceId,
-      );
-      const cleaveTargets = currentAttacker.cleave
-        ? [enemyBoard[targetIndex - 1], enemyBoard[targetIndex + 1]].filter(
-            (minion): minion is BoardMinionInstance =>
-              minion !== undefined,
-          )
-        : [];
-      pushBattleEvent(events, {
-        type: "attack",
-        actorPlayerId: attackerOwner.id,
-        actorInstanceId: currentAttacker.instanceId,
-        targetPlayerId: defenderOwner.id,
-        targetInstanceId: target.instanceId,
-        amount: currentAttacker.attack,
-        message: `${currentAttacker.name}攻击${target.name}${strike > 0 ? "（风怒）" : ""}。`,
-      });
-
-      dealCombatDamage(
+      const attacked = performAttackStrike(
         context,
         attackerOwner.id,
-        currentAttacker,
-        defenderOwner.id,
-        target,
-        currentAttacker.attack,
-        currentAttacker.poisonous,
+        attackerInstanceId,
+        { windfuryStrike: strike > 0 },
       );
-      dealCombatDamage(
-        context,
-        defenderOwner.id,
-        target,
-        attackerOwner.id,
-        currentAttacker,
-        target.attack,
-        target.poisonous,
-      );
-      for (const adjacent of cleaveTargets) {
-        dealCombatDamage(
-          context,
-          attackerOwner.id,
-          currentAttacker,
-          defenderOwner.id,
-          adjacent,
-          currentAttacker.attack,
-          currentAttacker.poisonous,
-        );
+      if (!attacked) {
+        break;
       }
-      resolveCombatDeaths(context);
       attackCount += 1;
     }
 

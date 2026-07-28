@@ -2279,7 +2279,7 @@ export default function GameClient() {
                           className="combat-reward-summary"
                           data-testid="combat-reward-summary"
                         >
-                          废铁回收：
+                          战斗奖励：
                           {combatRewardSummaryText(humanCombatRewards)}
                         </span>
                         )}
@@ -2787,7 +2787,7 @@ export default function GameClient() {
           <span>
             {[
               combatRewardNotice.addedNames.length > 0
-                ? `加入手牌：${combatRewardNotice.addedNames.join("、")}`
+                ? `战斗获取：${combatRewardNotice.addedNames.join("、")}`
                 : null,
               combatRewardNotice.handFullCount > 0
                 ? `${combatRewardNotice.handFullCount} 张因手牌已满未获得`
