@@ -9,6 +9,7 @@ import type {
   BattleEvent,
   BattleResult,
   BattleSummary,
+  BloodGemSpellInstance,
   BoardMinionInstance,
   BuffEffect,
   DiscoverDestination,
@@ -34,6 +35,7 @@ export type {
   BattleEvent,
   BattleResult,
   BattleSummary,
+  BloodGemSpellInstance,
   BoardMinionInstance,
   GameAction,
   GamePhase,
@@ -46,6 +48,7 @@ export type {
   PendingInteraction,
   PlayerId,
   PlayerState,
+  SpellFamily,
   TavernTier,
   Tribe,
   TripleRewardSpellInstance,
@@ -79,6 +82,8 @@ const REFRESH_COST = 1;
 const MAX_COMBAT_ATTACKS = 100;
 const TRIPLE_REWARD_CARD_ID = "TB_BaconShop_Triples_01" as const;
 const TRIPLE_REWARD_DEFINITION_ID = "triple-reward" as const;
+const BLOOD_GEM_CARD_ID = "BG20_GEM" as const;
+const BLOOD_GEM_DEFINITION_ID = "blood-gem" as const;
 const LOBBY_TRIBES: readonly Tribe[] = [
   "beast",
   "mech",
@@ -365,6 +370,61 @@ function createTripleRewardSpell(
   };
   state.nextInstanceId += 1;
   return instance;
+}
+
+function grantTripleRewardBeforeGeneratedCards(
+  state: GameState,
+  player: PlayerState,
+  minion: BoardMinionInstance,
+): void {
+  if (!minion.grantsTripleReward) {
+    return;
+  }
+  minion.grantsTripleReward = false;
+  if (player.hand.length < MAX_HAND_SIZE) {
+    player.hand.push(
+      createTripleRewardSpell(state, player.tavernTier),
+    );
+  }
+}
+
+function createBloodGemSpell(state: GameState): BloodGemSpellInstance {
+  const instance: BloodGemSpellInstance = {
+    kind: "bloodGem",
+    instanceId: `card-${state.nextInstanceId}`,
+    definitionId: BLOOD_GEM_DEFINITION_ID,
+    cardId: BLOOD_GEM_CARD_ID,
+    name: "鲜血宝石",
+    description: "使一个友方随从获得+1/+1。",
+    spellFamily: "bloodGem",
+  };
+  state.nextInstanceId += 1;
+  return instance;
+}
+
+function addBloodGems(
+  state: GameState,
+  player: PlayerState,
+  count: number,
+): number {
+  let added = 0;
+  for (
+    let index = 0;
+    index < count && player.hand.length < MAX_HAND_SIZE;
+    index += 1
+  ) {
+    player.hand.push(createBloodGemSpell(state));
+    added += 1;
+  }
+  return added;
+}
+
+function applyBloodGem(
+  player: PlayerState,
+  target: BoardMinionInstance,
+): void {
+  target.attack += player.bloodGemAttack;
+  target.health += player.bloodGemHealth;
 }
 
 function nextInteractionId(state: GameState): string {
@@ -700,6 +760,11 @@ function applyRecruitEffects(
     } else if (effect.kind === "gainMissingHealth") {
       source.health +=
         Math.max(0, 40 - player.health) * effect.multiplier * scale;
+    } else if (effect.kind === "gainBloodGems") {
+      addBloodGems(state, player, effect.count * scale);
+    } else if (effect.kind === "improveBloodGems") {
+      player.bloodGemAttack += effect.attack * scale;
+      player.bloodGemHealth += effect.health * scale;
     } else if (effect.kind === "summon") {
       const baseCount =
         effect.count === "sourceAttack" ? source.attack : effect.count;
@@ -750,6 +815,7 @@ function applyRecruitSummonTriggers(
 }
 
 function applyAfterFriendlyPlayed(
+  state: GameState,
   player: PlayerState,
   played: MinionInstance,
 ): void {
@@ -768,6 +834,11 @@ function applyAfterFriendlyPlayed(
       watcher.attack += (trigger.attack ?? 0) * scale;
       watcher.health += (trigger.health ?? 0) * scale;
       player.health -= (trigger.heroDamage ?? 0) * scale;
+      addBloodGems(
+        state,
+        player,
+        (trigger.gainBloodGems ?? 0) * scale,
+      );
     }
   }
 }
@@ -1008,6 +1079,12 @@ function sellMinion(
   const [minion] = player.board.splice(boardIndex, 1);
   returnMinionToPool(state, minion);
   player.gold += minion.sellValue;
+  applyRecruitEffects(
+    state,
+    player,
+    minion,
+    getMinionDefinition(minion.definitionId).afterSold,
+  );
   return true;
 }
 
@@ -1036,19 +1113,14 @@ function playMinion(
       ? player.board.length
       : Math.max(0, Math.min(boardIndex, player.board.length));
   player.board.splice(insertAt, 0, minion);
+  grantTripleRewardBeforeGeneratedCards(state, player, minion);
   const battlecry = getMinionDefinition(minion.definitionId).battlecry;
   const triggerCount = battlecry ? battlecryTriggerCount(player) : 0;
   for (let count = 0; count < triggerCount; count += 1) {
     applyRecruitEffects(state, player, minion, battlecry);
   }
-  if (minion.grantsTripleReward && player.hand.length < MAX_HAND_SIZE) {
-    minion.grantsTripleReward = false;
-    player.hand.push(
-      createTripleRewardSpell(state, player.tavernTier),
-    );
-  }
   applyRecruitSummonTriggers(player, minion);
-  applyAfterFriendlyPlayed(player, minion);
+  applyAfterFriendlyPlayed(state, player, minion);
   resolveTriples(state, player);
   beginInteractiveBattlecry(state, player, minion);
   return true;
@@ -1081,6 +1153,7 @@ function magnetizeMinion(
     throw new Error("MAGNETIZE_MINION removed a non-minion hand card");
   }
   const source = removed;
+  grantTripleRewardBeforeGeneratedCards(state, player, source);
   const battlecry = getMinionDefinition(source.definitionId).battlecry;
   const triggerCount = battlecry ? battlecryTriggerCount(player) : 0;
   for (let count = 0; count < triggerCount; count += 1) {
@@ -1089,12 +1162,7 @@ function magnetizeMinion(
 
   fuseMinionIntoHost(state, player, source, target);
 
-  if (source.grantsTripleReward && player.hand.length < MAX_HAND_SIZE) {
-    player.hand.push(
-      createTripleRewardSpell(state, player.tavernTier),
-    );
-  }
-  applyAfterFriendlyPlayed(player, source);
+  applyAfterFriendlyPlayed(state, player, source);
   applyAfterMagnetizedEffects(state, player);
   resolveTriples(state, player);
   return true;
@@ -1149,6 +1217,26 @@ function castTripleReward(
   return true;
 }
 
+function castBloodGem(
+  player: PlayerState,
+  cardInstanceId: string,
+  targetInstanceId: string,
+): boolean {
+  const handIndex = player.hand.findIndex(
+    (card) => card.instanceId === cardInstanceId,
+  );
+  const card = player.hand[handIndex];
+  const target = player.board.find(
+    (minion) => minion.instanceId === targetInstanceId,
+  );
+  if (handIndex < 0 || card?.kind !== "bloodGem" || !target) {
+    return false;
+  }
+  player.hand.splice(handIndex, 1);
+  applyBloodGem(player, target);
+  return true;
+}
+
 function playHandCard(
   state: GameState,
   player: PlayerState,
@@ -1161,9 +1249,13 @@ function playHandCard(
   if (handIndex < 0) {
     return false;
   }
-  return player.hand[handIndex].kind === "minion"
-    ? playMinion(state, player, handIndex, boardIndex)
-    : castTripleReward(state, player, handIndex);
+  const card = player.hand[handIndex];
+  if (card.kind === "minion") {
+    return playMinion(state, player, handIndex, boardIndex);
+  }
+  return card.kind === "tripleReward"
+    ? castTripleReward(state, player, handIndex)
+    : false;
 }
 
 function refreshShop(state: GameState, player: PlayerState): boolean {
@@ -1567,6 +1659,17 @@ function resolvePendingInteraction(
   return next;
 }
 
+function playBestAiBloodGem(player: PlayerState): boolean {
+  const gem = player.hand.find(
+    (card): card is BloodGemSpellInstance => card.kind === "bloodGem",
+  );
+  if (!gem || player.board.length === 0) {
+    return false;
+  }
+  const target = bestMinionByScore(player, player.board);
+  return castBloodGem(player, gem.instanceId, target.instanceId);
+}
+
 function playAiHand(state: GameState, player: PlayerState): void {
   while (player.hand.length > 0) {
     const reward = player.hand.find(
@@ -1581,6 +1684,9 @@ function playAiHand(state: GameState, player: PlayerState): void {
       (card): card is BoardMinionInstance => card.kind === "minion",
     );
     if (minions.length === 0) {
+      if (playBestAiBloodGem(player)) {
+        continue;
+      }
       break;
     }
     if (player.board.length >= MAX_BOARD_SIZE) {
@@ -1604,6 +1710,9 @@ function playAiHand(state: GameState, player: PlayerState): void {
         });
       const magnetic = magneticOptions[0];
       if (!magnetic) {
+        if (playBestAiBloodGem(player)) {
+          continue;
+        }
         break;
       }
       const target = bestMinionByScore(player, magnetic.targets);
@@ -3155,7 +3264,10 @@ function releaseEliminatedPlayer(
   state: GameState,
   player: PlayerState,
 ): void {
-  for (const minion of [...player.board, ...player.hand, ...player.shop]) {
+  const ownedMinions = player.hand.filter(
+    (card): card is BoardMinionInstance => card.kind === "minion",
+  );
+  for (const minion of [...player.board, ...ownedMinions, ...player.shop]) {
     returnMinionToPool(state, minion);
   }
   player.board = player.board.map((minion) => ({
@@ -3270,10 +3382,12 @@ export function createGame(seed?: number): GameState {
     frozen: false,
     upgradeDiscount: 0,
     tavernSpellsCastThisTurn: 0,
+    bloodGemAttack: 1,
+    bloodGemHealth: 1,
   }));
   const pool: Record<string, number> = {};
   const state: GameState = {
-    version: 5,
+    version: 6,
     contentVersion: CURRENT_ROSTER_VERSION,
     seed: normalizedSeed,
     rngState: normalizedSeed,
@@ -3353,6 +3467,13 @@ export function gameReducer(state: GameState, action: GameAction): GameState {
     case "MAGNETIZE_MINION":
       magnetizeMinion(
         next,
+        player,
+        action.cardInstanceId,
+        action.targetInstanceId,
+      );
+      break;
+    case "CAST_BLOOD_GEM":
+      castBloodGem(
         player,
         action.cardInstanceId,
         action.targetInstanceId,

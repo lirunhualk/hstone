@@ -381,7 +381,7 @@ test("classic rule fixtures remain available but never enter the live pool", () 
     new Set(MINION_DEFINITIONS.map((definition) => definition.id)).size,
     MINION_DEFINITIONS.length,
   );
-  assert.equal(createGame(1).version, 5);
+  assert.equal(createGame(1).version, 6);
 });
 
 test("Wrath Weaver, Brann, and Mama Bear use their signature recruit triggers", () => {
@@ -893,8 +893,10 @@ test("current live Battlecries and special sell prices resolve", () => {
   state = gameReducer(state, { type: "BUY_MINION", shopIndex: 0 });
   state = gameReducer(state, { type: "BUY_MINION", shopIndex: 0 });
   state = gameReducer(state, { type: "BUY_MINION", shopIndex: 0 });
-  assert.equal(humanPlayer(state).hand[0]?.golden, true);
-  assert.equal(humanPlayer(state).hand[0]?.sellValue, 6);
+  const goldenGambler = humanPlayer(state).hand[0];
+  assert.ok(goldenGambler?.kind === "minion");
+  assert.equal(goldenGambler.golden, true);
+  assert.equal(goldenGambler.sellValue, 6);
 
   state = gameReducer(state, { type: "PLAY_MINION", handIndex: 0 });
   state = gameReducer(state, { type: "SELL_MINION", boardIndex: 0 });
@@ -1273,6 +1275,7 @@ test("three normal copies combine atomically into one buff-preserving golden", (
   assert.equal(humanPlayer(state).gold, 0);
   assert.equal(humanPlayer(state).shop.length, 0);
   assert.equal(humanPlayer(state).hand.length, 1);
+  assert.ok(golden?.kind === "minion");
   assert.equal(golden.definitionId, template.definitionId);
   assert.equal(golden.golden, true);
   assert.equal(golden.poolCopies, 3);

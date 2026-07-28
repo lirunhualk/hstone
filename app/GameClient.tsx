@@ -19,6 +19,7 @@ import {
   type BattleEvent,
   type BattleResult,
   type BattleSummary,
+  type BloodGemSpellInstance,
   type BoardMinionInstance,
   type GameAction,
   type GameState,
@@ -46,8 +47,10 @@ import {
   nearestBoardSlotIndex,
 } from "../lib/game/drag-preview";
 import { projectCombatBoard } from "../lib/game/playback";
+import { migrateSchema5GameState } from "../lib/game/save";
 
-const SAVE_KEY = "hearthstone-battlegrounds-local.save.v5";
+const SAVE_KEY = "hearthstone-battlegrounds-local.save.v6";
+const LEGACY_SAVE_KEY = "hearthstone-battlegrounds-local.save.v5";
 const INITIAL_SEED = 0x53544152;
 const BOARD_LIMIT = 7;
 const MOUSE_DRAG_THRESHOLD_PX = 8;
@@ -69,6 +72,7 @@ type DragTarget =
   | { kind: "hand" }
   | { kind: "sell" }
   | { kind: "magnetic"; targetInstanceId: string }
+  | { kind: "bloodGem"; targetInstanceId: string }
   | {
       kind: "blockedMagnetic";
       targetInstanceId: string;
@@ -76,8 +80,10 @@ type DragTarget =
     }
   | null;
 
+type DraggableCard = BoardMinionInstance | BloodGemSpellInstance;
+
 type DragSession = DragSource & {
-  unit: BoardMinionInstance;
+  card: DraggableCard;
   pointerId: number;
   pointerType: string;
   startX: number;
@@ -116,6 +122,13 @@ type CombatRewardSummary = {
   noCandidateCount: number;
   addedNames: string[];
   addedInstanceIds: string[];
+};
+
+type BloodGemCastFeedback = {
+  targetInstanceId: string;
+  attack: number;
+  health: number;
+  token: string;
 };
 
 const TRIBE_HUE: Record<Tribe, number> = {
@@ -244,11 +257,24 @@ function isMagneticAttachment(
   );
 }
 
+function isBloodGemSpell(value: unknown): value is BloodGemSpellInstance {
+  return (
+    isRecord(value) &&
+    value.kind === "bloodGem" &&
+    typeof value.instanceId === "string" &&
+    value.definitionId === "blood-gem" &&
+    value.cardId === "BG20_GEM" &&
+    value.name === "鲜血宝石" &&
+    typeof value.description === "string" &&
+    value.spellFamily === "bloodGem"
+  );
+}
+
 function isGameState(value: unknown): value is GameState {
   if (!value || typeof value !== "object") return false;
   const candidate = value as Partial<GameState>;
   return (
-    candidate.version === 5 &&
+    candidate.version === 6 &&
     candidate.contentVersion === CURRENT_ROSTER_VERSION &&
     typeof candidate.seed === "number" &&
     typeof candidate.nextInteractionId === "number" &&
@@ -259,6 +285,10 @@ function isGameState(value: unknown): value is GameState {
     candidate.players.every(
       (player) =>
         typeof player.tavernSpellsCastThisTurn === "number" &&
+        typeof player.bloodGemAttack === "number" &&
+        player.bloodGemAttack >= 1 &&
+        typeof player.bloodGemHealth === "number" &&
+        player.bloodGemHealth >= 1 &&
         Array.isArray(player.board) &&
         player.board.every(
           (minion) =>
@@ -269,6 +299,7 @@ function isGameState(value: unknown): value is GameState {
         player.hand.every(
           (card) =>
             card.kind === "tripleReward" ||
+            isBloodGemSpell(card) ||
             (card.kind === "minion" &&
               Array.isArray(card.attachments) &&
               card.attachments.every(isMagneticAttachment)),
@@ -486,6 +517,11 @@ function UnitCard({
   choiceTarget = false,
   magneticTarget = false,
   magneticDropTarget = false,
+  bloodGemTarget = false,
+  bloodGemDropTarget = false,
+  bloodGemCast = false,
+  bloodGemCastLabel,
+  bloodGemCastToken,
   newlyGenerated = false,
   disabled = false,
   dragHandlers,
@@ -510,6 +546,11 @@ function UnitCard({
   choiceTarget?: boolean;
   magneticTarget?: boolean;
   magneticDropTarget?: boolean;
+  bloodGemTarget?: boolean;
+  bloodGemDropTarget?: boolean;
+  bloodGemCast?: boolean;
+  bloodGemCastLabel?: string;
+  bloodGemCastToken?: string;
   newlyGenerated?: boolean;
   disabled?: boolean;
   dragHandlers?: DragPointerHandlers;
@@ -555,7 +596,11 @@ function UnitCard({
         choiceTarget ? " is-choice-target" : ""
       }${magneticTarget ? " is-magnetic-target" : ""}${
         magneticDropTarget ? " is-magnetic-drop-target" : ""
-      }${newlyGenerated ? " is-newly-generated" : ""}${
+      }${bloodGemTarget ? " is-blood-gem-target" : ""}${
+        bloodGemDropTarget ? " is-blood-gem-drop-target" : ""
+      }${bloodGemCast ? " is-blood-gem-cast" : ""}${
+        newlyGenerated ? " is-newly-generated" : ""
+      }${
         disabled ? " is-disabled" : ""
       }`}
       aria-label={`${unit.name}，${unit.tier} 级，${printedTribeLabel(
@@ -564,13 +609,16 @@ function UnitCard({
         unit.description
       }${choiceTarget ? "，可选择为效果目标" : ""}${
         magneticTarget ? "，可作为磁力吸附目标" : ""
-      }${newlyGenerated ? "，本轮战斗新获得" : ""}`}
+      }${bloodGemTarget ? "，可作为鲜血宝石目标" : ""}${
+        newlyGenerated ? "，本轮战斗新获得" : ""
+      }`}
       aria-pressed={selected}
       aria-disabled={disabled}
       aria-describedby={
         [
           dragEnabled ? "drag-instructions" : "",
           magneticTarget ? "magnetic-target-instructions" : "",
+          bloodGemTarget ? "blood-gem-target-instructions" : "",
         ]
           .filter(Boolean)
           .join(" ") || undefined
@@ -579,6 +627,8 @@ function UnitCard({
       data-drag-enabled={dragEnabled}
       data-magnetic-target={magneticTarget || undefined}
       data-magnetic-drop-target={magneticDropTarget || undefined}
+      data-blood-gem-target={bloodGemTarget || undefined}
+      data-blood-gem-drop-target={bloodGemDropTarget || undefined}
       data-newly-generated={newlyGenerated || undefined}
       data-testid={testId}
       data-unit-instance-id={unit.instanceId}
@@ -607,6 +657,20 @@ function UnitCard({
       {magneticTarget && (
         <span className="magnetic-target-label" aria-hidden="true">
           可吸附
+        </span>
+      )}
+      {bloodGemTarget && (
+        <span className="blood-gem-target-label" aria-hidden="true">
+          使用宝石
+        </span>
+      )}
+      {bloodGemCast && bloodGemCastLabel && (
+        <span
+          className="blood-gem-cast-label"
+          aria-hidden="true"
+          key={bloodGemCastToken}
+        >
+          {bloodGemCastLabel}
         </span>
       )}
       {newlyGenerated && (
@@ -695,11 +759,78 @@ function TripleRewardCard({
   );
 }
 
+function BloodGemCardFace({
+  card,
+  attack,
+  health,
+}: {
+  card: BloodGemSpellInstance;
+  attack: number;
+  health: number;
+}) {
+  return (
+    <>
+      <CardArtwork unit={card} kind="portrait" />
+      <span className="blood-gem-cost">0</span>
+      <span className="blood-gem-name">鲜血宝石</span>
+      <span className="blood-gem-copy">
+        使一个友方随从获得
+        <strong>
+          +{attack}/+{health}
+        </strong>
+      </span>
+      <span className="blood-gem-hint">拖到随从上使用</span>
+    </>
+  );
+}
+
+function BloodGemCard({
+  card,
+  attack,
+  health,
+  selected = false,
+  disabled = false,
+  dragging = false,
+  dragHandlers,
+  testId,
+  onClick,
+}: {
+  card: BloodGemSpellInstance;
+  attack: number;
+  health: number;
+  selected?: boolean;
+  disabled?: boolean;
+  dragging?: boolean;
+  dragHandlers?: DragPointerHandlers;
+  testId?: string;
+  onClick?: () => void;
+}) {
+  return (
+    <button
+      type="button"
+      className={`blood-gem-card${selected ? " is-selected" : ""}${
+        dragHandlers ? " is-draggable" : ""
+      }${dragging ? " is-drag-source" : ""}`}
+      aria-label={`鲜血宝石，使一个友方随从获得+${attack}/+${health}。拖到友方随从上使用`}
+      aria-pressed={selected}
+      data-card-instance-id={card.instanceId}
+      data-drag-enabled={Boolean(dragHandlers)}
+      data-testid={testId}
+      disabled={disabled}
+      onClick={onClick}
+      style={{ "--card-hue": TRIBE_HUE.quilboar } as CSSProperties}
+      {...dragHandlers}
+    >
+      <BloodGemCardFace card={card} attack={attack} health={health} />
+    </button>
+  );
+}
+
 function CardArtwork({
   unit,
   kind,
 }: {
-  unit: MinionInstance;
+  unit: { cardId: string; name: string };
   kind: "portrait" | "detail";
 }) {
   const cardId = encodeURIComponent(unit.cardId);
@@ -719,7 +850,7 @@ function CardArtwork({
       className={`${kind === "detail" ? "detail-art" : "card-art"}${
         source ? " has-image" : ""
       }`}
-      data-fallback={`${unit.name} · ${printedTribeLabel(unit)}`}
+      data-fallback={unit.name}
     >
       {source ? (
         // A plain img is required for the local -> remote -> placeholder chain.
@@ -755,10 +886,14 @@ function BoardRow({
   choiceTargetIds,
   magneticTargetIds,
   magneticDropTargetId,
+  bloodGemTargetIds,
+  bloodGemDropTargetId,
+  bloodGemCastFeedback,
   getDragHandlers,
   onUnitClick,
   onChoiceTarget,
   onMagneticTarget,
+  onBloodGemTarget,
   onEmptyClick,
   interactionLocked = false,
 }: {
@@ -778,19 +913,24 @@ function BoardRow({
   choiceTargetIds?: readonly string[];
   magneticTargetIds?: readonly string[];
   magneticDropTargetId?: string;
+  bloodGemTargetIds?: readonly string[];
+  bloodGemDropTargetId?: string;
+  bloodGemCastFeedback?: BloodGemCastFeedback | null;
   getDragHandlers?: (
     source: DragSource,
-    unit: BoardMinionInstance,
+    card: DraggableCard,
   ) => DragPointerHandlers;
   onUnitClick?: (index: number) => void;
   onChoiceTarget?: (instanceId: string) => void;
   onMagneticTarget?: (instanceId: string) => void;
+  onBloodGemTarget?: (instanceId: string) => void;
   onEmptyClick?: (index: number) => void;
   interactionLocked?: boolean;
 }) {
   const boardDragPreview =
     side === "friendly" &&
     dragSession?.active === true &&
+    dragSession.card.kind === "minion" &&
     (dragSession.zone === "hand" || dragSession.zone === "board")
     ? createBoardDragPreview({
         unitCount: units.length,
@@ -824,6 +964,10 @@ function BoardRow({
         side === "friendly" && magneticTargetIds?.length
           ? " has-magnetic-targets"
           : ""
+      }${
+        side === "friendly" && bloodGemTargetIds?.length
+          ? " has-blood-gem-targets"
+          : ""
       }`}
       data-side={side}
       data-magnetic-ready={
@@ -843,6 +987,14 @@ function BoardRow({
         const isMagneticDropTarget =
           isMagneticTarget &&
           magneticDropTargetId === unit?.instanceId;
+        const isBloodGemTarget =
+          unit !== undefined &&
+          bloodGemTargetIds?.includes(unit.instanceId) === true;
+        const isBloodGemDropTarget =
+          isBloodGemTarget &&
+          bloodGemDropTargetId === unit?.instanceId;
+        const isBloodGemCast =
+          bloodGemCastFeedback?.targetInstanceId === unit?.instanceId;
         const isValidDragTarget =
           side === "friendly" &&
           dragSession?.active === true &&
@@ -891,7 +1043,7 @@ function BoardRow({
                   }
                   dragging={
                     dragSession?.active === true &&
-                    dragSession.unit.instanceId === unit.instanceId
+                    dragSession.card.instanceId === unit.instanceId
                   }
                   combatActor={unit.instanceId === actorInstanceId}
                   combatTarget={unit.instanceId === targetInstanceId}
@@ -922,6 +1074,19 @@ function BoardRow({
                   choiceTarget={isChoiceTarget}
                   magneticTarget={isMagneticTarget}
                   magneticDropTarget={isMagneticDropTarget}
+                  bloodGemTarget={isBloodGemTarget}
+                  bloodGemDropTarget={isBloodGemDropTarget}
+                  bloodGemCast={isBloodGemCast}
+                  bloodGemCastLabel={
+                    isBloodGemCast && bloodGemCastFeedback
+                      ? `+${bloodGemCastFeedback.attack}/+${bloodGemCastFeedback.health}`
+                      : undefined
+                  }
+                  bloodGemCastToken={
+                    isBloodGemCast
+                      ? bloodGemCastFeedback?.token
+                      : undefined
+                  }
                   disabled={interactionLocked && !isChoiceTarget}
                   dragHandlers={
                     side === "friendly" && getDragHandlers
@@ -934,6 +1099,8 @@ function BoardRow({
                   onClick={
                     isChoiceTarget && onChoiceTarget
                       ? () => onChoiceTarget(unit.instanceId)
+                      : isBloodGemTarget && onBloodGemTarget
+                        ? () => onBloodGemTarget(unit.instanceId)
                       : isMagneticTarget && onMagneticTarget
                         ? () => onMagneticTarget(unit.instanceId)
                       : onUnitClick
@@ -941,7 +1108,8 @@ function BoardRow({
                         : undefined
                   }
                   onKeyDown={
-                    isMagneticTarget && onMagneticTarget
+                    (isBloodGemTarget && onBloodGemTarget) ||
+                    (isMagneticTarget && onMagneticTarget)
                       ? (event) => {
                           if (
                             event.key !== "Enter" &&
@@ -950,7 +1118,11 @@ function BoardRow({
                             return;
                           }
                           event.preventDefault();
-                          onMagneticTarget(unit.instanceId);
+                          if (isBloodGemTarget && onBloodGemTarget) {
+                            onBloodGemTarget(unit.instanceId);
+                          } else {
+                            onMagneticTarget?.(unit.instanceId);
+                          }
                         }
                       : undefined
                   }
@@ -1055,6 +1227,8 @@ export default function GameClient() {
   const [showRestart, setShowRestart] = useState(false);
   const [dragSession, setDragSession] = useState<DragSession | null>(null);
   const [magneticAnnouncement, setMagneticAnnouncement] = useState("");
+  const [bloodGemCastFeedback, setBloodGemCastFeedback] =
+    useState<BloodGemCastFeedback | null>(null);
   const [battleSpeed, setBattleSpeed] = useState<BattleSpeed>(1);
   const [combatRewardNotice, setCombatRewardNotice] =
     useState<CombatRewardSummary | null>(null);
@@ -1074,6 +1248,7 @@ export default function GameClient() {
   const suppressCardClickRef = useRef(false);
   const battlePlaybackTimerRef = useRef<number | null>(null);
   const combatIntroTimerRef = useRef<number | null>(null);
+  const bloodGemCastTimerRef = useRef<number | null>(null);
   const interactionReturnFocusRef = useRef<HTMLElement | null>(null);
   const previousInteractionIdRef = useRef<string | null>(null);
   const magneticFocusTargetRef = useRef<string | null>(null);
@@ -1097,6 +1272,14 @@ export default function GameClient() {
     combatIntroTimerRef.current = null;
   }, []);
 
+  const clearBloodGemCastFeedback = useCallback(() => {
+    if (bloodGemCastTimerRef.current !== null) {
+      window.clearTimeout(bloodGemCastTimerRef.current);
+      bloodGemCastTimerRef.current = null;
+    }
+    setBloodGemCastFeedback(null);
+  }, []);
+
   const clearCombatRewardFeedback = useCallback(() => {
     setCombatRewardNotice(null);
     setNewCombatRewardIds([]);
@@ -1113,6 +1296,26 @@ export default function GameClient() {
             setStarted(true);
           } else {
             window.localStorage.removeItem(SAVE_KEY);
+          }
+        } else {
+          const legacyRaw = window.localStorage.getItem(LEGACY_SAVE_KEY);
+          if (legacyRaw) {
+            try {
+              const migrated = migrateSchema5GameState(
+                JSON.parse(legacyRaw) as unknown,
+              );
+              if (isGameState(migrated)) {
+                setGame(migrated);
+                setStarted(true);
+                window.localStorage.setItem(
+                  SAVE_KEY,
+                  JSON.stringify(migrated),
+                );
+              }
+              window.localStorage.removeItem(LEGACY_SAVE_KEY);
+            } catch {
+              window.localStorage.removeItem(LEGACY_SAVE_KEY);
+            }
           }
         }
       } catch {
@@ -1466,6 +1669,8 @@ export default function GameClient() {
     selection?.zone === "hand"
       ? human.hand[selection.index]
       : undefined;
+  const selectedBloodGem =
+    selectedHandCard?.kind === "bloodGem" ? selectedHandCard : null;
   const selectedMagneticSource =
     !interactionLocked &&
     selectedHandCard?.kind === "minion" &&
@@ -1475,8 +1680,9 @@ export default function GameClient() {
   const dragMagneticSource =
     dragSession?.active === true &&
     dragSession.zone === "hand" &&
-    isMagneticMinion(dragSession.unit)
-      ? dragSession.unit
+    dragSession.card.kind === "minion" &&
+    isMagneticMinion(dragSession.card)
+      ? dragSession.card
       : null;
   const magneticSourceForTargets =
     dragMagneticSource ?? selectedMagneticSource;
@@ -1486,6 +1692,16 @@ export default function GameClient() {
           canMagnetize(magneticSourceForTargets, target),
         )
         .map((target) => target.instanceId)
+    : [];
+  const bloodGemSourceForTargets =
+    selectedBloodGem ??
+    (dragSession?.active === true &&
+    dragSession.zone === "hand" &&
+    dragSession.card.kind === "bloodGem"
+      ? dragSession.card
+      : null);
+  const bloodGemTargetIds = bloodGemSourceForTargets
+    ? human.board.map((target) => target.instanceId)
     : [];
   const selectedMagneticTargetIds = useMemo(
     () =>
@@ -1499,13 +1715,17 @@ export default function GameClient() {
     [human.board, selectedMagneticSource],
   );
   const boardHasOpenSlot = human.board.length < BOARD_LIMIT;
-  const canDragHandMinion = (card: BoardMinionInstance) =>
+  const canDragHandCard = (card: DraggableCard) =>
     game.phase === "recruit" &&
     !interactionLocked &&
-    (boardHasOpenSlot ||
-      human.board.some((target) => canMagnetize(card, target)));
+    (card.kind === "bloodGem"
+      ? human.board.length > 0
+      : boardHasOpenSlot ||
+        human.board.some((target) => canMagnetize(card, target)));
   const infoOpen =
-    selectedUnit !== null || (infoTab === "battle" && battle !== null);
+    selectedUnit !== null ||
+    selectedBloodGem !== null ||
+    (infoTab === "battle" && battle !== null);
   const upgradeCost = getUpgradeCost(game, human.id);
   const canBuyFromShop =
     game.phase === "recruit" &&
@@ -1590,6 +1810,25 @@ export default function GameClient() {
     });
     return () => window.cancelAnimationFrame(focusFrame);
   }, [selectedMagneticSource, selectedMagneticTargetIds]);
+
+  useEffect(() => {
+    if (!selectedBloodGem || human.board.length === 0) {
+      return;
+    }
+    const firstTargetInstanceId = human.board[0].instanceId;
+    const focusFrame = window.requestAnimationFrame(() => {
+      const firstTarget = Array.from(
+        document.querySelectorAll<HTMLElement>(
+          "[data-unit-instance-id]",
+        ),
+      ).find(
+        (element) =>
+          element.dataset.unitInstanceId === firstTargetInstanceId,
+      );
+      firstTarget?.focus();
+    });
+    return () => window.cancelAnimationFrame(focusFrame);
+  }, [human.board, selectedBloodGem]);
 
   useEffect(() => {
     clearCombatIntroTimer();
@@ -1723,6 +1962,7 @@ export default function GameClient() {
   const startFreshGame = useCallback(() => {
     clearBattlePlaybackTimer();
     clearCombatIntroTimer();
+    clearBloodGemCastFeedback();
     const next = createGame(newSeed());
     window.localStorage.setItem(SAVE_KEY, JSON.stringify(next));
     setGame(next);
@@ -1743,6 +1983,7 @@ export default function GameClient() {
     preCombatHandIdsRef.current = null;
   }, [
     clearBattlePlaybackTimer,
+    clearBloodGemCastFeedback,
     clearCombatIntroTimer,
     clearCombatRewardFeedback,
   ]);
@@ -1790,6 +2031,50 @@ export default function GameClient() {
       });
     },
     [human.board, human.hand, send],
+  );
+
+  const castBloodGem = useCallback(
+    (cardInstanceId: string, targetInstanceId: string) => {
+      const card = human.hand.find(
+        (candidate) =>
+          candidate.kind === "bloodGem" &&
+          candidate.instanceId === cardInstanceId,
+      );
+      const target = human.board.find(
+        (minion) => minion.instanceId === targetInstanceId,
+      );
+      if (!card || !target) {
+        return;
+      }
+      if (bloodGemCastTimerRef.current !== null) {
+        window.clearTimeout(bloodGemCastTimerRef.current);
+      }
+      setBloodGemCastFeedback({
+        targetInstanceId,
+        attack: human.bloodGemAttack,
+        health: human.bloodGemHealth,
+        token: card.instanceId,
+      });
+      bloodGemCastTimerRef.current = window.setTimeout(() => {
+        bloodGemCastTimerRef.current = null;
+        setBloodGemCastFeedback(null);
+      }, 620);
+      setMagneticAnnouncement(
+        `已对${target.name}使用鲜血宝石，获得 +${human.bloodGemAttack}/+${human.bloodGemHealth}`,
+      );
+      send({
+        type: "CAST_BLOOD_GEM",
+        cardInstanceId,
+        targetInstanceId,
+      });
+    },
+    [
+      human.bloodGemAttack,
+      human.bloodGemHealth,
+      human.board,
+      human.hand,
+      send,
+    ],
   );
 
   const select = useCallback((nextSelection: Exclude<Selection, null>) => {
@@ -1845,6 +2130,12 @@ export default function GameClient() {
                 hoveredCard.dataset.unitInstanceId,
             )
           : undefined;
+        if (sourceCard?.kind === "bloodGem" && hoveredTarget) {
+          return {
+            kind: "bloodGem",
+            targetInstanceId: hoveredTarget.instanceId,
+          };
+        }
         if (
           sourceCard?.kind === "minion" &&
           isMagneticMinion(sourceCard) &&
@@ -1866,7 +2157,13 @@ export default function GameClient() {
       const insertionTarget = hit.closest<HTMLElement>(
         "[data-board-insert-index]",
       );
-      if (source.zone === "hand" && insertionTarget) {
+      const draggedHandCard =
+        source.zone === "hand" ? human.hand[source.index] : undefined;
+      if (
+        source.zone === "hand" &&
+        draggedHandCard?.kind === "minion" &&
+        insertionTarget
+      ) {
         const insertionIndex = Number(
           insertionTarget.dataset.boardInsertIndex,
         );
@@ -1914,6 +2211,7 @@ export default function GameClient() {
 
       if (source.zone === "hand") {
         if (
+          draggedHandCard?.kind !== "minion" ||
           human.board.length >= BOARD_LIMIT ||
           index < 0 ||
           index > human.board.length
@@ -1939,20 +2237,24 @@ export default function GameClient() {
     (
       event: ReactPointerEvent<HTMLButtonElement>,
       source: DragSource,
-      unit: BoardMinionInstance,
+      card: DraggableCard,
     ) => {
       const hasMagneticTarget =
         source.zone === "hand" &&
-        human.board.some((target) => canMagnetize(unit, target));
+        card.kind === "minion" &&
+        human.board.some((target) => canMagnetize(card, target));
+      const handCardCannotAct =
+        source.zone === "hand" &&
+        (card.kind === "bloodGem"
+          ? human.board.length === 0
+          : human.board.length >= BOARD_LIMIT && !hasMagneticTarget);
       if (
         dragSessionRef.current !== null ||
         interactionLocked ||
         game.phase !== "recruit" ||
         !event.isPrimary ||
         event.button !== 0 ||
-        (source.zone === "hand" &&
-          human.board.length >= BOARD_LIMIT &&
-          !hasMagneticTarget) ||
+        handCardCannotAct ||
         (source.zone === "shop" && !canBuyFromShop)
       ) {
         return;
@@ -1968,7 +2270,7 @@ export default function GameClient() {
       }
       writeDragSession({
         ...source,
-        unit,
+        card,
         pointerId: event.pointerId,
         pointerType: event.pointerType,
         startX: event.clientX,
@@ -2080,10 +2382,11 @@ export default function GameClient() {
       if (!target) return true;
       if (
         current.zone === "hand" &&
+        current.card.kind === "minion" &&
         target.kind === "magnetic"
       ) {
         magnetizeCard(
-          current.unit.instanceId,
+          current.card.instanceId,
           target.targetInstanceId,
         );
         return true;
@@ -2093,7 +2396,18 @@ export default function GameClient() {
         target.kind === "blockedMagnetic"
       ) {
         setMagneticAnnouncement(
-          `${current.unit.name}不能吸附到${target.targetName}，已返回手牌`,
+          `${current.card.name}不能吸附到${target.targetName}，已返回手牌`,
+        );
+        return true;
+      }
+      if (
+        current.zone === "hand" &&
+        current.card.kind === "bloodGem" &&
+        target.kind === "bloodGem"
+      ) {
+        castBloodGem(
+          current.card.instanceId,
+          target.targetInstanceId,
         );
         return true;
       }
@@ -2101,10 +2415,14 @@ export default function GameClient() {
         send({ type: "BUY_MINION", shopIndex: current.index });
         return true;
       }
-      if (current.zone === "hand" && target.kind === "board") {
+      if (
+        current.zone === "hand" &&
+        current.card.kind === "minion" &&
+        target.kind === "board"
+      ) {
         send({
           type: "PLAY_HAND_CARD",
-          cardInstanceId: current.unit.instanceId,
+          cardInstanceId: current.card.instanceId,
           boardIndex: target.index,
         });
         return true;
@@ -2126,7 +2444,13 @@ export default function GameClient() {
       }
       return true;
     },
-    [magnetizeCard, resolveDragTarget, send, writeDragSession],
+    [
+      castBloodGem,
+      magnetizeCard,
+      resolveDragTarget,
+      send,
+      writeDragSession,
+    ],
   );
 
   const finishDrag = useCallback(
@@ -2151,9 +2475,9 @@ export default function GameClient() {
   const getDragHandlers = useCallback(
     (
       source: DragSource,
-      unit: BoardMinionInstance,
+      card: DraggableCard,
     ): DragPointerHandlers => ({
-      onPointerDown: (event) => beginDrag(event, source, unit),
+      onPointerDown: (event) => beginDrag(event, source, card),
       onPointerMove: moveDrag,
       onPointerUp: (event) => finishDrag(event, false),
       onPointerCancel: (event) => finishDrag(event, true),
@@ -2215,9 +2539,13 @@ export default function GameClient() {
         cancelStaleDrag();
         return;
       }
-      if (selectedMagneticSource) {
+      if (selectedMagneticSource || selectedBloodGem) {
         setSelection(null);
-        setMagneticAnnouncement("已取消磁力目标选择");
+        setMagneticAnnouncement(
+          selectedBloodGem
+            ? "已取消鲜血宝石目标选择"
+            : "已取消磁力目标选择",
+        );
       }
     };
 
@@ -2244,6 +2572,7 @@ export default function GameClient() {
   }, [
     finishDragSession,
     moveDragSession,
+    selectedBloodGem,
     selectedMagneticSource,
   ]);
 
@@ -2274,22 +2603,30 @@ export default function GameClient() {
     dragSession?.active !== true
       ? ""
       : dragSession.target?.kind === "sell"
-        ? `松手出售${dragSession.unit.name}，获得 ${dragSession.unit.sellValue} 枚金币`
+        ? `松手出售${dragSession.card.name}，获得 ${
+            dragSession.card.kind === "minion"
+              ? dragSession.card.sellValue
+              : 0
+          } 枚金币`
         : dragSession.target?.kind === "hand"
-          ? `松手购买${dragSession.unit.name}，支付 3 枚金币`
+          ? `松手购买${dragSession.card.name}，支付 3 枚金币`
           : dragSession.target?.kind === "magnetic"
-            ? `松手将${dragSession.unit.name}吸附到${
+            ? `松手将${dragSession.card.name}吸附到${
                 dragMagneticTargetName ?? "目标随从"
               }`
+            : dragSession.target?.kind === "bloodGem"
+              ? `松手对目标随从使用鲜血宝石，获得 +${human.bloodGemAttack}/+${human.bloodGemHealth}`
             : dragSession.target?.kind === "blockedMagnetic"
-              ? `${dragSession.unit.name}不能吸附到${dragSession.target.targetName}，松手将返回手牌`
+              ? `${dragSession.card.name}不能吸附到${dragSession.target.targetName}，松手将返回手牌`
           : dragSession.target?.kind === "board"
             ? `松手放到战场第 ${dragSession.target.index + 1} 个位置`
             : dragSession.zone === "shop"
               ? "拖到发光的手牌区域购买，花费 3 枚金币"
               : dragSession.zone === "board"
                 ? "拖到战场位置来换位，或拖到鲍勃的酒馆出售"
-                : isMagneticMinion(dragSession.unit)
+                : dragSession.card.kind === "bloodGem"
+                  ? "拖到任意友方随从上使用鲜血宝石"
+                : isMagneticMinion(dragSession.card)
                   ? boardHasOpenSlot
                     ? "拖到标有“可吸附”的随从进行磁力吸附，或拖到插位线上普通上场"
                     : "战场已满，只能拖到标有“可吸附”的随从进行磁力吸附"
@@ -2303,9 +2640,15 @@ export default function GameClient() {
         ? `已选择${selectedMagneticSource.name}，当前没有可吸附目标，可以作为普通随从上场`
         : `已选择${selectedMagneticSource.name}，战场已满且当前没有可吸附目标`
     : "";
+  const bloodGemSelectionAnnouncement = selectedBloodGem
+    ? human.board.length > 0
+      ? `已选择鲜血宝石，可对 ${human.board.length} 个友方随从使用，当前效果 +${human.bloodGemAttack}/+${human.bloodGemHealth}`
+      : "已选择鲜血宝石，但场上没有可用目标"
+    : "";
   const interactionAnnouncement =
     dragAnnouncement ||
     magneticAnnouncement ||
+    bloodGemSelectionAnnouncement ||
     magneticSelectionAnnouncement ||
     (selection?.zone === "shop" && buyUnavailableReason
       ? `无法购买${selectedUnit?.name ?? "该随从"}：${buyUnavailableReason}`
@@ -2432,7 +2775,11 @@ export default function GameClient() {
             <div className="sell-drop-feedback" aria-hidden="true">
               <strong>出售给鲍勃</strong>
               <span>
-                松手获得 {dragSession?.unit.sellValue ?? 1} 枚金币
+                松手获得{" "}
+                {dragSession?.card.kind === "minion"
+                  ? dragSession.card.sellValue
+                  : 1}{" "}
+                枚金币
               </span>
             </div>
             <div className="panel-title">
@@ -2510,7 +2857,7 @@ export default function GameClient() {
                     dragEnabled={canBuyFromShop}
                     dragging={
                       dragSession?.active === true &&
-                      dragSession.unit.instanceId === unit.instanceId
+                      dragSession.card.instanceId === unit.instanceId
                     }
                     dragHandlers={
                       canBuyFromShop
@@ -2765,6 +3112,17 @@ export default function GameClient() {
                     ? dragSession.target.targetInstanceId
                     : undefined
                 }
+                bloodGemTargetIds={
+                  game.phase === "recruit" && !interactionLocked
+                    ? bloodGemTargetIds
+                    : []
+                }
+                bloodGemDropTargetId={
+                  dragSession?.target?.kind === "bloodGem"
+                    ? dragSession.target.targetInstanceId
+                    : undefined
+                }
+                bloodGemCastFeedback={bloodGemCastFeedback}
                 interactionLocked={interactionLocked}
                 canDeploy={
                   game.phase === "recruit" &&
@@ -2796,6 +3154,13 @@ export default function GameClient() {
                   if (!selectedMagneticSource) return;
                   magnetizeCard(
                     selectedMagneticSource.instanceId,
+                    targetInstanceId,
+                  );
+                }}
+                onBloodGemTarget={(targetInstanceId) => {
+                  if (!selectedBloodGem) return;
+                  castBloodGem(
+                    selectedBloodGem.instanceId,
                     targetInstanceId,
                   );
                 }}
@@ -2859,7 +3224,7 @@ export default function GameClient() {
               <span>
                 手牌
                 <small>
-                  随从拖到战场；磁力牌拖到标记目标；三连奖励点击使用
+                  随从拖到战场；鲜血宝石拖到友方随从；三连奖励点击使用
                 </small>
               </span>
               <span>{human.hand.length} / 10</span>
@@ -2879,6 +3244,34 @@ export default function GameClient() {
                       })
                     }
                   />
+                ) : card.kind === "bloodGem" ? (
+                  <BloodGemCard
+                    card={card}
+                    attack={human.bloodGemAttack}
+                    health={human.bloodGemHealth}
+                    key={card.instanceId}
+                    selected={
+                      selection?.zone === "hand" &&
+                      selection.index === index
+                    }
+                    testId={`blood-gem-card-${index}`}
+                    disabled={interactionLocked}
+                    dragging={
+                      dragSession?.active === true &&
+                      dragSession.card.instanceId === card.instanceId
+                    }
+                    dragHandlers={
+                      canDragHandCard(card)
+                        ? getDragHandlers(
+                            { zone: "hand", index },
+                            card,
+                          )
+                        : undefined
+                    }
+                    onClick={() =>
+                      selectCard({ zone: "hand", index })
+                    }
+                  />
                 ) : (
                   <UnitCard
                     unit={card}
@@ -2893,13 +3286,13 @@ export default function GameClient() {
                     newlyGenerated={newCombatRewardIds.includes(
                       card.instanceId,
                     )}
-                    dragEnabled={canDragHandMinion(card)}
+                    dragEnabled={canDragHandCard(card)}
                     dragging={
                       dragSession?.active === true &&
-                      dragSession.unit.instanceId === card.instanceId
+                      dragSession.card.instanceId === card.instanceId
                     }
                     dragHandlers={
-                      canDragHandMinion(card)
+                      canDragHandCard(card)
                         ? getDragHandlers(
                             { zone: "hand", index },
                             card,
@@ -3006,7 +3399,38 @@ export default function GameClient() {
 
             {infoTab === "details" ? (
               <div className="details-content">
-                {selectedUnit ? (
+                {selectedBloodGem ? (
+                  <>
+                    <CardArtwork
+                      key={selectedBloodGem.instanceId}
+                      unit={selectedBloodGem}
+                      kind="detail"
+                    />
+                    <h2>鲜血宝石</h2>
+                    <p className="detail-meta">
+                      0 费法术 · 当前效果 +{human.bloodGemAttack}/+
+                      {human.bloodGemHealth}
+                    </p>
+                    <p>
+                      使一个友方随从永久获得+
+                      {human.bloodGemAttack}/+{human.bloodGemHealth}。
+                    </p>
+                    <p
+                      className="blood-gem-play-hint"
+                      data-testid="blood-gem-selection-hint"
+                      role="status"
+                    >
+                      {human.board.length > 0
+                        ? `点击任意发光的友方随从，或把宝石拖到目标上使用。当前有 ${human.board.length} 个合法目标。`
+                        : "场上没有友方随从；鲜血宝石会留在手牌中。"}
+                    </p>
+                    <div className="detail-keywords">
+                      <span>鲜血宝石</span>
+                      <span>永久增益</span>
+                      <span>不是酒馆法术</span>
+                    </div>
+                  </>
+                ) : selectedUnit ? (
                   <>
                     <CardArtwork
                       key={`${selectedUnit.instanceId}-${selectedUnit.golden}`}
@@ -3243,6 +3667,9 @@ export default function GameClient() {
       <span className="sr-only" id="magnetic-target-instructions">
         这是当前磁力牌的合法目标。点击或按回车键即可完成吸附；按 Escape 键取消选择。
       </span>
+      <span className="sr-only" id="blood-gem-target-instructions">
+        这是当前鲜血宝石的合法目标。点击或按回车键即可使用；按 Escape 键取消选择。
+      </span>
       <span className="sr-only" id="buy-drop-description">
         购买随从需要 3 枚金币且手牌未满。点击商店随从后也可使用详情面板中的购买按钮。
       </span>
@@ -3287,7 +3714,11 @@ export default function GameClient() {
 
       {dragSession?.active && (
         <div
-          className={`unit-card is-compact is-dragging drag-ghost${
+          className={`${
+            dragSession.card.kind === "bloodGem"
+              ? "blood-gem-card"
+              : "unit-card is-compact"
+          } is-dragging drag-ghost${
             dragSession.pointerType === "touch" ||
             dragSession.pointerType === "pen"
               ? " is-direct-touch-drag"
@@ -3298,7 +3729,10 @@ export default function GameClient() {
           data-pointer-type={dragSession.pointerType}
           style={
             {
-              "--card-hue": TRIBE_HUE[dragSession.unit.tribe],
+              "--card-hue":
+                dragSession.card.kind === "minion"
+                  ? TRIBE_HUE[dragSession.card.tribe]
+                  : TRIBE_HUE.quilboar,
               left: dragSession.clientX - dragSession.offsetX,
               top: dragSession.clientY - dragSession.offsetY,
               width: dragSession.width,
@@ -3306,7 +3740,15 @@ export default function GameClient() {
             } as CSSProperties
           }
         >
-          <UnitCardFace unit={dragSession.unit} />
+          {dragSession.card.kind === "bloodGem" ? (
+            <BloodGemCardFace
+              card={dragSession.card}
+              attack={human.bloodGemAttack}
+              health={human.bloodGemHealth}
+            />
+          ) : (
+            <UnitCardFace unit={dragSession.card} />
+          )}
         </div>
       )}
 

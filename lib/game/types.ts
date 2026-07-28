@@ -136,6 +136,17 @@ export interface DamageAllMinionsEffect {
   goldenMode?: "doubleDamage" | "repeat";
 }
 
+export interface GainBloodGemsEffect {
+  kind: "gainBloodGems";
+  count: number;
+}
+
+export interface ImproveBloodGemsEffect {
+  kind: "improveBloodGems";
+  attack: number;
+  health: number;
+}
+
 export type MinionEffect =
   | BuffEffect
   | SummonEffect
@@ -147,7 +158,9 @@ export type MinionEffect =
   | ResummonMechsEffect
   | SummonRandomDeathrattleEffect
   | GetRandomMinionEffect
-  | DamageAllMinionsEffect;
+  | DamageAllMinionsEffect
+  | GainBloodGemsEffect
+  | ImproveBloodGemsEffect;
 
 export interface TargetedBuffBattlecry {
   kind: "targetedBuff";
@@ -182,6 +195,7 @@ export interface FriendlyTribeTrigger {
   attack?: number;
   health?: number;
   heroDamage?: number;
+  gainBloodGems?: number;
   damageEnemy?: number;
   damageTarget?: "random" | "highestHealth";
   grantShield?: boolean;
@@ -252,6 +266,7 @@ export interface MinionDefinition {
   startOfCombat?: readonly MinionEffect[];
   rally?: readonly RallyEffect[];
   endOfTurn?: EndOfTurnEffect;
+  afterSold?: readonly MinionEffect[];
   afterMagnetized?: readonly MinionEffect[];
   aura?: StatAura;
   magnetic?: MagneticSpec;
@@ -344,9 +359,22 @@ export interface TripleRewardSpellInstance extends MinionInstance {
   definitionId: "triple-reward";
 }
 
+export type SpellFamily = "bloodGem" | "tavern" | "spellcraft";
+
+export interface BloodGemSpellInstance {
+  kind: "bloodGem";
+  instanceId: string;
+  definitionId: "blood-gem";
+  cardId: "BG20_GEM";
+  name: "鲜血宝石";
+  description: string;
+  spellFamily: "bloodGem";
+}
+
 export type HandCardInstance =
   | BoardMinionInstance
-  | TripleRewardSpellInstance;
+  | TripleRewardSpellInstance
+  | BloodGemSpellInstance;
 
 export interface PlayerState {
   id: PlayerId;
@@ -362,6 +390,9 @@ export interface PlayerState {
   frozen: boolean;
   upgradeDiscount: number;
   tavernSpellsCastThisTurn: number;
+  /** Permanent per-player Blood Gem values; new Gems read these on cast. */
+  bloodGemAttack: number;
+  bloodGemHealth: number;
   lastOpponentId?: PlayerId;
   eliminatedRound?: number;
   placement?: number;
@@ -472,11 +503,7 @@ export interface BattleSummary {
 }
 
 export interface GameState {
-  /**
-   * The union keeps legacy migrations explicit while all newly created states
-   * use schema version 5.
-   */
-  version: 2 | 3 | 4 | 5;
+  version: 6;
   /** Invalidates local saves when the roster or its mechanics change. */
   contentVersion: string;
   seed: number;
@@ -510,6 +537,11 @@ export type GameAction =
     }
   | {
       type: "MAGNETIZE_MINION";
+      cardInstanceId: string;
+      targetInstanceId: string;
+    }
+  | {
+      type: "CAST_BLOOD_GEM";
       cardInstanceId: string;
       targetInstanceId: string;
     }

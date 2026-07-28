@@ -3,7 +3,7 @@ import liveRosterSnapshot from "./generated/battlegrounds-36.0.3-247416.zhCN.jso
 };
 import type { MinionDefinition, Tribe } from "./types.ts";
 
-export const CURRENT_ROSTER_VERSION = "battlegrounds-36.0.3-247416-v9";
+export const CURRENT_ROSTER_VERSION = "battlegrounds-36.0.3-247416-v10";
 /** Compatibility alias for existing save and engine imports. */
 export const CLASSIC_ROSTER_VERSION = CURRENT_ROSTER_VERSION;
 
@@ -846,6 +846,27 @@ const LEGACY_RULE_BY_CARD_ID = new Map(
 const LIVE_RULE_OVERRIDES: Readonly<
   Record<string, Partial<MinionDefinition>>
 > = {
+  BG20_100: {
+    battlecry: [{ kind: "gainBloodGems", count: 2 }],
+  },
+  BG20_301: {
+    afterSold: [{ kind: "gainBloodGems", count: 2 }],
+  },
+  BG20_203: {
+    afterFriendlyPlayed: {
+      tribe: "quilboar",
+      gainBloodGems: 1,
+    },
+  },
+  BG26_159: {
+    battlecry: [
+      {
+        kind: "improveBloodGems",
+        attack: 0,
+        health: 1,
+      },
+    ],
+  },
   BG25_016: {
     rally: [
       {
@@ -1138,6 +1159,9 @@ const LIVE_RULE_OVERRIDES: Readonly<
  * partial override from accidentally upgrading the whole card to "complete".
  */
 const FULLY_SUPPORTED_LIVE_CARD_IDS = new Set([
+  "BG20_100",
+  "BG20_203",
+  "BG20_301",
   "BG21_014",
   "BG25_001",
   "BG25_010",
@@ -1147,6 +1171,7 @@ const FULLY_SUPPORTED_LIVE_CARD_IDS = new Set([
   "BG26_146",
   "BG26_147",
   "BG26_148",
+  "BG26_159",
   "BG26_805",
   "BG26_817",
   "BG28_300",

@@ -2185,7 +2185,7 @@ test("Magnetic attachment trees survive a JSON save round-trip", () => {
   const next = gameReducer(state, magneticAction(source, target));
   const restored = JSON.parse(JSON.stringify(next)) as GameState;
   assert.deepEqual(restored, next);
-  assert.equal(restored.version, 5);
+  assert.equal(restored.version, 6);
   assert.equal(
     humanPlayer(restored).board[0].attachments[0].definitionId,
     source.definitionId,
