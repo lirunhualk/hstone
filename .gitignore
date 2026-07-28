@@ -230,3 +230,6 @@ npm-debug.log*
 .codex-dev*.log
 next-env.d.ts
 *.tsbuildinfo
+
+# Local-only Hearthstone art cache. The sync script recreates it on demand.
+/public/card-art/

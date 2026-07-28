@@ -3,19 +3,22 @@ export type PlayerId = string;
 export type GamePhase = "recruit" | "combat" | "gameOver";
 
 export type Tribe =
-  | "wild"
-  | "construct"
-  | "ember"
-  | "tide"
-  | "astral"
+  | "beast"
+  | "mech"
+  | "demon"
+  | "murloc"
+  | "dragon"
+  | "pirate"
   | "neutral";
 
 export type EffectTarget =
   | "self"
   | "randomFriendly"
+  | "randomFriendlyTribe"
   | "allFriendly"
   | "otherFriendly"
-  | "friendlyTribe";
+  | "friendlyTribe"
+  | "adjacentFriendly";
 
 export interface BuffEffect {
   kind: "buff";
@@ -23,12 +26,14 @@ export interface BuffEffect {
   attack: number;
   health: number;
   tribe?: Tribe;
+  taunt?: boolean;
 }
 
 export interface SummonEffect {
   kind: "summon";
   definitionId: string;
-  count: number;
+  count: number | "sourceAttack";
+  immediateAttack?: boolean;
 }
 
 export interface GrantShieldEffect {
@@ -41,14 +46,70 @@ export interface GainGoldEffect {
   amount: number;
 }
 
+export interface DamageHeroEffect {
+  kind: "damageHero";
+  amount: number;
+}
+
+export interface DamageEnemyEffect {
+  kind: "damageEnemy";
+  amount: number;
+  target: "random" | "highestHealth";
+}
+
+export interface GainMissingHealthEffect {
+  kind: "gainMissingHealth";
+  multiplier: number;
+}
+
+export interface ResummonMechsEffect {
+  kind: "resummonMechs";
+  count: number;
+}
+
+export interface SummonRandomDeathrattleEffect {
+  kind: "summonRandomDeathrattle";
+  count: number;
+}
+
 export type MinionEffect =
   | BuffEffect
   | SummonEffect
   | GrantShieldEffect
-  | GainGoldEffect;
+  | GainGoldEffect
+  | DamageHeroEffect
+  | DamageEnemyEffect
+  | GainMissingHealthEffect
+  | ResummonMechsEffect
+  | SummonRandomDeathrattleEffect;
+
+export interface FriendlyTribeTrigger {
+  tribe: Tribe;
+  attack?: number;
+  health?: number;
+  heroDamage?: number;
+  damageEnemy?: number;
+  damageTarget?: "random" | "highestHealth";
+  grantShield?: boolean;
+}
+
+export interface EndOfTurnEffect {
+  kind: "onePerTribe";
+  attack: number;
+  health: number;
+}
+
+export interface StatAura {
+  tribe: Tribe;
+  attack: number;
+  health: number;
+  otherOnly?: boolean;
+}
 
 export interface MinionDefinition {
   id: string;
+  /** Hearthstone CardID used only to locate the familiar card artwork. */
+  cardId: string;
   name: string;
   tier: 1 | 2 | 3 | 4 | 5 | 6;
   tribe: Tribe;
@@ -57,8 +118,21 @@ export interface MinionDefinition {
   description: string;
   taunt?: boolean;
   divineShield?: boolean;
+  reborn?: boolean;
+  poisonous?: boolean;
+  windfury?: boolean;
+  cleave?: boolean;
+  alwaysAttacksLowestAttack?: boolean;
   battlecry?: readonly MinionEffect[];
   deathrattle?: readonly MinionEffect[];
+  afterFriendlyPlayed?: FriendlyTribeTrigger;
+  afterFriendlySummoned?: FriendlyTribeTrigger;
+  afterFriendlyDied?: FriendlyTribeTrigger;
+  afterSelfDamaged?: readonly MinionEffect[];
+  endOfTurn?: EndOfTurnEffect;
+  aura?: StatAura;
+  extraBattlecries?: number;
+  extraDeathrattles?: number;
   collectible?: boolean;
 }
 
@@ -70,6 +144,7 @@ export interface MinionDefinition {
 export interface MinionInstance {
   instanceId: string;
   definitionId: string;
+  cardId: string;
   name: string;
   tier: 1 | 2 | 3 | 4 | 5 | 6;
   tribe: Tribe;
@@ -78,6 +153,11 @@ export interface MinionInstance {
   golden: boolean;
   taunt: boolean;
   divineShield: boolean;
+  reborn: boolean;
+  poisonous: boolean;
+  windfury: boolean;
+  cleave: boolean;
+  alwaysAttacksLowestAttack: boolean;
   description: string;
   /**
    * Number of base copies represented in the shared pool. It is 1 for a
@@ -153,7 +233,9 @@ export interface BattleSummary {
 }
 
 export interface GameState {
-  version: 1;
+  version: 2;
+  /** Invalidates local saves when the roster or its mechanics change. */
+  contentVersion: string;
   seed: number;
   rngState: number;
   nextInstanceId: number;

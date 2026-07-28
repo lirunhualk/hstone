@@ -12,9 +12,12 @@ import {
   type PlayerState,
   type Tribe,
 } from "../lib/game/engine";
-import { TRIBE_NAMES } from "../lib/game/content";
+import {
+  CLASSIC_ROSTER_VERSION,
+  TRIBE_NAMES,
+} from "../lib/game/content";
 
-const SAVE_KEY = "starport-battlegrounds.save.v1";
+const SAVE_KEY = "hearthstone-battlegrounds-local.save.v2";
 const INITIAL_SEED = 0x53544152;
 const BOARD_LIMIT = 7;
 
@@ -24,21 +27,13 @@ type Selection =
 
 type InfoTab = "details" | "battle";
 
-const TRIBE_ICON: Record<Tribe, string> = {
-  wild: "🦎",
-  construct: "🤖",
-  ember: "🔥",
-  tide: "🐙",
-  astral: "✨",
-  neutral: "🛰️",
-};
-
 const TRIBE_HUE: Record<Tribe, number> = {
-  wild: 116,
-  construct: 192,
-  ember: 18,
-  tide: 205,
-  astral: 268,
+  beast: 106,
+  mech: 198,
+  demon: 286,
+  murloc: 190,
+  dragon: 18,
+  pirate: 42,
   neutral: 42,
 };
 
@@ -46,7 +41,8 @@ function isGameState(value: unknown): value is GameState {
   if (!value || typeof value !== "object") return false;
   const candidate = value as Partial<GameState>;
   return (
-    candidate.version === 1 &&
+    candidate.version === 2 &&
+    candidate.contentVersion === CLASSIC_ROSTER_VERSION &&
     typeof candidate.seed === "number" &&
     Array.isArray(candidate.players) &&
     candidate.players.length === 8 &&
@@ -63,14 +59,14 @@ function newSeed(): number {
 }
 
 function resultLabel(result: BattleResult | undefined): string {
-  if (result === "win") return "交锋胜利";
-  if (result === "loss") return "防线失守";
+  if (result === "win") return "战斗胜利";
+  if (result === "loss") return "战斗失利";
   return "势均力敌";
 }
 
 function phaseLabel(phase: GameState["phase"]): string {
-  if (phase === "recruit") return "整备";
-  if (phase === "combat") return "交锋";
+  if (phase === "recruit") return "招募";
+  if (phase === "combat") return "战斗";
   return "终局";
 }
 
@@ -97,13 +93,18 @@ function UnitCard({
   testId?: string;
   onClick?: () => void;
 }) {
-  const keyword = unit.golden
-    ? "金色"
-    : unit.divineShield
-      ? "护盾"
-      : unit.taunt
-        ? "守卫"
-        : TRIBE_NAMES[unit.tribe];
+  const keyword =
+    [
+      unit.golden ? "金色" : "",
+      unit.taunt ? "嘲讽" : "",
+      unit.divineShield ? "圣盾" : "",
+      unit.reborn ? "复生" : "",
+      unit.poisonous ? "剧毒" : "",
+      unit.windfury ? "风怒" : "",
+      unit.cleave ? "顺劈" : "",
+    ]
+      .filter(Boolean)
+      .join(" · ") || TRIBE_NAMES[unit.tribe];
 
   return (
     <button
@@ -117,9 +118,7 @@ function UnitCard({
       onClick={onClick}
       style={{ "--card-hue": TRIBE_HUE[unit.tribe] } as React.CSSProperties}
     >
-      <span className="card-art" data-icon={TRIBE_ICON[unit.tribe]}>
-        <span aria-hidden="true">{TRIBE_ICON[unit.tribe]}</span>
-      </span>
+      <CardArtwork unit={unit} kind="portrait" />
       <span className="card-tier">{unit.tier}</span>
       <span className="card-name">
         {unit.golden ? "✦ " : ""}
@@ -135,6 +134,48 @@ function UnitCard({
         </span>
       </span>
     </button>
+  );
+}
+
+function CardArtwork({
+  unit,
+  kind,
+}: {
+  unit: MinionInstance;
+  kind: "portrait" | "detail";
+}) {
+  const cardId = encodeURIComponent(unit.cardId);
+  const portraitLocal = `/card-art/portraits/${cardId}.webp`;
+  const portraitRemote = `https://art.hearthstonejson.com/v1/256x/${cardId}.webp`;
+  const renderLocal = `/card-art/renders/zhCN/${cardId}.png`;
+  const renderRemote = `https://art.hearthstonejson.com/v1/render/latest/zhCN/512x/${cardId}.png`;
+  const sources =
+    kind === "detail"
+      ? [renderLocal, renderRemote, portraitLocal, portraitRemote]
+      : [portraitLocal, portraitRemote];
+  const [sourceIndex, setSourceIndex] = useState(0);
+
+  const source = sources[sourceIndex];
+  return (
+    <span
+      className={`${kind === "detail" ? "detail-art" : "card-art"}${
+        source ? " has-image" : ""
+      }`}
+      data-fallback={`${unit.name} · ${TRIBE_NAMES[unit.tribe]}`}
+    >
+      {source ? (
+        // A plain img is required for the local -> remote -> placeholder chain.
+        // eslint-disable-next-line @next/next/no-img-element
+        <img
+          src={source}
+          alt={kind === "detail" ? `${unit.name}卡牌图` : ""}
+          loading={kind === "detail" ? "eager" : "lazy"}
+          onError={() => setSourceIndex((index) => index + 1)}
+        />
+      ) : (
+        <span className="art-fallback">{unit.name}</span>
+      )}
+    </span>
   );
 }
 
@@ -223,16 +264,13 @@ function PlayerRow({
       data-opponent={player.id === opponentId}
       data-testid={`standing-${player.id}`}
     >
-      <span className="player-avatar" aria-hidden="true">
-        {player.isHuman ? "🧭" : player.alive ? "🛸" : "◇"}
-      </span>
       <span className="player-meta">
         <strong>{player.name}</strong>
         <small>
           {player.id === opponentId
             ? "本轮对手"
             : player.alive
-              ? `${player.board.length} 单位 · ${player.tavernTier}级`
+              ? `${player.board.length} 随从 · ${player.tavernTier}星`
               : `第 ${player.placement ?? rank} 名`}
         </small>
       </span>
@@ -326,6 +364,8 @@ export default function GameClient() {
       ? battle.initialBoards[opponentId] ?? opponent?.board ?? []
       : opponent?.board ?? [];
   const selectedUnit = selectionUnit(selection, human);
+  const infoOpen =
+    selectedUnit !== null || (infoTab === "battle" && battle !== null);
   const upgradeCost = getUpgradeCost(game, human.id);
   const selectedCanBuy =
     selection?.zone === "shop" && human.gold >= 3 && human.hand.length < 10;
@@ -381,8 +421,8 @@ export default function GameClient() {
     >
       <header className="top-hud">
         <div className="brand">
-          星港战阵
-          <small>第 {game.round} 回合 · 单人战局</small>
+          酒馆战棋 · 单机版
+          <small>第 {game.round} 回合 · 经典怀旧卡池</small>
         </div>
         <span className="phase-pill">{phaseLabel(game.phase)}</span>
         <div className="hud-stat" aria-label={`生命 ${human.health}`}>
@@ -393,8 +433,8 @@ export default function GameClient() {
           <small>金币</small>
           <strong>◉ {human.gold}</strong>
         </div>
-        <div className="hud-stat" aria-label={`基地等级 ${human.tavernTier}`}>
-          <small>基地</small>
+        <div className="hud-stat" aria-label={`酒馆等级 ${human.tavernTier}`}>
+          <small>酒馆</small>
           <strong>{human.tavernTier} / 6</strong>
         </div>
         <div className="hud-actions">
@@ -422,13 +462,13 @@ export default function GameClient() {
 
       <div className="main-grid">
         <section className="play-column" aria-label="游戏区域">
-          <section className="panel shop-panel" aria-label="补给站">
+          <section className="panel shop-panel" aria-label="鲍勃的酒馆">
             <div className="panel-title">
               <span>
-                补给站
-                <small>每个单位 3 金币</small>
+                鲍勃的酒馆
+                <small>每个随从 3 金币</small>
               </span>
-              <span>{human.frozen ? "已锁定" : "整备中"}</span>
+              <span>{human.frozen ? "已冻结" : "招募中"}</span>
             </div>
             <div className="shop-layout">
               <div className="shop-actions">
@@ -444,8 +484,8 @@ export default function GameClient() {
                   onClick={() => send({ type: "UPGRADE_TAVERN" })}
                 >
                   {human.tavernTier >= 6
-                    ? "基地已满级"
-                    : `升级至 ${human.tavernTier + 1}级 · ${upgradeCost}`}
+                    ? "酒馆已满级"
+                    : `升至 ${human.tavernTier + 1}星 · ${upgradeCost}`}
                 </button>
                 <button
                   type="button"
@@ -465,7 +505,7 @@ export default function GameClient() {
                   disabled={game.phase !== "recruit"}
                   onClick={() => send({ type: "TOGGLE_FREEZE" })}
                 >
-                  {human.frozen ? "解除锁定" : "锁定补给"}
+                  {human.frozen ? "解冻酒馆" : "冻结酒馆"}
                 </button>
               </div>
               <div className="card-row" data-testid="shop-row">
@@ -485,20 +525,20 @@ export default function GameClient() {
                   />
                 ))}
                 {human.shop.length === 0 && (
-                  <div className="empty-state">补给池暂时为空</div>
+                  <div className="empty-state">酒馆暂时没有随从</div>
                 )}
               </div>
             </div>
           </section>
 
-          <section className="panel board-panel" aria-label="战斗阵列">
+          <section className="panel board-panel" aria-label="战场">
             <div className="panel-title">
               <span>
-                {game.phase === "combat" ? "交锋航道" : "你的阵列"}
+                {game.phase === "combat" ? "战斗区" : "你的战场"}
                 <small>
                   {game.phase === "combat"
-                    ? `对阵 ${opponent?.name ?? "幽灵舰队"}`
-                    : "单位从左到右依次出击"}
+                    ? `对阵 ${opponent?.name ?? "克尔苏加德"}`
+                    : "随从从左到右依次攻击"}
                 </small>
               </span>
               <span>{human.board.length} / 7</span>
@@ -512,8 +552,8 @@ export default function GameClient() {
                   <strong>{resultLabel(battle.resultForHuman)}</strong>
                   <span>
                     {battleDamage > 0
-                      ? `${battleDamage} 点核心伤害`
-                      : "双方核心未受损"}
+                      ? `${battleDamage} 点英雄伤害`
+                      : "双方英雄未受伤害"}
                   </span>
                   <button
                     type="button"
@@ -521,7 +561,7 @@ export default function GameClient() {
                     data-testid="continue-after-combat"
                     onClick={() => send({ type: "CONTINUE" })}
                   >
-                    {human.alive ? "继续整备" : "查看最终名次"}
+                    {human.alive ? "继续招募" : "查看最终名次"}
                   </button>
                 </div>
               )}
@@ -542,7 +582,7 @@ export default function GameClient() {
               />
               {game.phase === "recruit" && human.board.length === 0 && (
                 <div className="empty-state board-empty">
-                  从手牌选择单位，再点空阵位部署
+                  从手牌选择随从，再点空位上场
                 </div>
               )}
             </div>
@@ -551,8 +591,8 @@ export default function GameClient() {
           <section className="panel hand-panel" aria-label="手牌">
             <div className="panel-title">
               <span>
-                战术储备
-                <small>选择单位后部署到阵列</small>
+                手牌
+                <small>选择随从后放到战场</small>
               </span>
               <span>{human.hand.length} / 10</span>
             </div>
@@ -570,7 +610,7 @@ export default function GameClient() {
                 />
               ))}
               {human.hand.length === 0 && (
-                <div className="empty-state">购买的单位会进入这里</div>
+                <div className="empty-state">购买的随从会进入这里</div>
               )}
             </div>
           </section>
@@ -598,9 +638,9 @@ export default function GameClient() {
           </section>
 
           <section
-            className="panel info-panel is-open"
-            data-open="true"
-            aria-label="单位详情与战报"
+            className={`panel info-panel${infoOpen ? " is-open" : ""}`}
+            data-open={infoOpen}
+            aria-label="随从详情与战报"
           >
             <div className="tabs" role="tablist" aria-label="信息切换">
               <button
@@ -621,19 +661,28 @@ export default function GameClient() {
               >
                 战报
               </button>
+              <button
+                type="button"
+                className="mobile-info-close"
+                aria-label="关闭详情面板"
+                onClick={() => {
+                  setSelection(null);
+                  setInfoTab("details");
+                }}
+              >
+                关闭
+              </button>
             </div>
 
             {infoTab === "details" ? (
               <div className="details-content">
                 {selectedUnit ? (
                   <>
-                    <div
-                      className="detail-art"
-                      data-icon={TRIBE_ICON[selectedUnit.tribe]}
-                      aria-hidden="true"
-                    >
-                      {TRIBE_ICON[selectedUnit.tribe]}
-                    </div>
+                    <CardArtwork
+                      key={`${selectedUnit.instanceId}-${selectedUnit.golden}`}
+                      unit={selectedUnit}
+                      kind="detail"
+                    />
                     <h2>
                       {selectedUnit.golden ? "✦ " : ""}
                       {selectedUnit.name}
@@ -645,9 +694,13 @@ export default function GameClient() {
                     </p>
                     <p>{selectedUnit.description}</p>
                     <div className="detail-keywords">
-                      {selectedUnit.taunt && <span>守卫</span>}
-                      {selectedUnit.divineShield && <span>护盾</span>}
-                      {selectedUnit.golden && <span>金色单位</span>}
+                      {selectedUnit.taunt && <span>嘲讽</span>}
+                      {selectedUnit.divineShield && <span>圣盾</span>}
+                      {selectedUnit.reborn && <span>复生</span>}
+                      {selectedUnit.poisonous && <span>剧毒</span>}
+                      {selectedUnit.windfury && <span>风怒</span>}
+                      {selectedUnit.cleave && <span>顺劈</span>}
+                      {selectedUnit.golden && <span>金色随从</span>}
                     </div>
                     <div className="detail-actions">
                       {selection?.zone === "shop" && (
@@ -674,7 +727,7 @@ export default function GameClient() {
                           disabled={!selectedCanPlay}
                           onClick={() => deploySelected()}
                         >
-                          部署到阵列
+                          部署到战场
                         </button>
                       )}
                       {selection?.zone === "board" && (
@@ -728,7 +781,7 @@ export default function GameClient() {
                   </>
                 ) : (
                   <div className="empty-state details-empty">
-                    <strong>选择一个单位</strong>
+                    <strong>选择一个随从</strong>
                     <span>查看属性、能力与可用操作</span>
                   </div>
                 )}
@@ -743,7 +796,7 @@ export default function GameClient() {
                   ))
                 ) : (
                   <div className="empty-state">
-                    点击“结束回合”后，7 名 AI 会完成整备并自动交锋。
+                    点击“结束回合”后，7 名 AI 会完成招募并自动战斗。
                   </div>
                 )}
               </div>
@@ -755,15 +808,15 @@ export default function GameClient() {
       {!started && loaded && (
         <div className="overlay" role="dialog" aria-modal="true">
           <div className="modal">
-            <span className="modal-kicker">本地单人自动战棋</span>
-            <h1>星港战阵</h1>
+            <span className="modal-kicker">非官方本地单人版本</span>
+            <h1>经典酒馆战棋</h1>
             <p>
-              你将与 7 名 AI 对战。没有回合倒计时，由你决定何时结束整备并进入交锋。
+              你将与 7 名 AI 对战。没有回合倒计时，由你决定何时结束招募并进入战斗。
             </p>
             <div className="modal-features">
               <span>8 人战局</span>
-              <span>共享补给池</span>
-              <span>三连金色单位</span>
+              <span>经典怀旧随从</span>
+              <span>三连金色随从</span>
             </div>
             <button
               type="button"
@@ -810,7 +863,7 @@ export default function GameClient() {
         <div className="overlay" role="dialog" aria-modal="true">
           <div className="modal">
             <span className="modal-kicker">
-              {game.winnerId === game.humanPlayerId ? "航道已肃清" : "战局结束"}
+              {game.winnerId === game.humanPlayerId ? "酒馆战棋胜利" : "战局结束"}
             </span>
             <h1>
               {game.winnerId === game.humanPlayerId
@@ -818,7 +871,7 @@ export default function GameClient() {
                 : `最终第 ${human.placement ?? 8} 名`}
             </h1>
             <p>
-              坚持 {game.round} 回合，最终阵列保留 {human.board.length} 个单位。
+              坚持 {game.round} 回合，最终战场保留 {human.board.length} 个随从。
             </p>
             <button
               type="button"

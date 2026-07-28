@@ -4,10 +4,11 @@ import "./globals.css";
 
 export const metadata: Metadata = {
   title: {
-    default: "星港战阵",
-    template: "%s · 星港战阵",
+    default: "经典酒馆战棋 · 单机版",
+    template: "%s · 经典酒馆战棋",
   },
-  description: "无需联网、没有倒计时，由你掌控回合节奏的八人自动战棋。",
+  description:
+    "一名玩家与七名 AI 对战、没有回合倒计时的本地经典酒馆战棋。",
 };
 
 export default function RootLayout({

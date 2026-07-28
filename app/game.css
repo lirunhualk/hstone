@@ -425,13 +425,14 @@
 }
 
 .card-art {
-  position: relative;
+  position: absolute;
+  z-index: 1;
+  inset: 0;
   display: grid;
-  flex: 1 1 auto;
-  min-height: 52px;
+  min-height: 0;
   overflow: hidden;
   place-items: center;
-  border-bottom: 1px solid hsl(var(--card-hue) 45% 60% / 30%);
+  border: 0;
   background:
     radial-gradient(circle at 36% 30%, hsl(var(--card-hue) 82% 67% / 62%), transparent 26%),
     radial-gradient(circle at 72% 76%, hsl(calc(var(--card-hue) + 68) 76% 61% / 48%), transparent 31%),
@@ -443,15 +444,12 @@
 }
 
 .card-art::before {
-  position: relative;
-  z-index: 1;
-  content: attr(data-icon);
-  filter: drop-shadow(0 7px 10px rgb(0 0 0 / 35%));
-  font-family:
-    "Segoe UI Emoji", "Segoe UI Symbol", sans-serif;
-  font-size: clamp(30px, 3.7vw, 50px);
-  line-height: 1;
-  transform: translateY(1px);
+  display: none;
+  content: "";
+}
+
+.card-art.has-image::before {
+  display: none;
 }
 
 .card-art::after {
@@ -479,6 +477,26 @@
   line-height: 1;
 }
 
+.card-art > .art-fallback {
+  max-width: 92%;
+  color: var(--text-soft);
+  font-size: clamp(10px, 1.2vw, 13px);
+  font-weight: 800;
+  line-height: 1.3;
+  text-align: center;
+}
+
+.card-art > img {
+  position: absolute;
+  z-index: 2;
+  inset: 0;
+  display: block;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  object-position: center 24%;
+}
+
 .card-tier {
   position: absolute;
   z-index: 4;
@@ -499,10 +517,18 @@
 }
 
 .card-name {
-  flex: 0 0 auto;
+  position: absolute;
+  z-index: 4;
+  right: 5px;
+  bottom: 37px;
+  left: 5px;
   overflow: hidden;
-  padding: 6px 7px 3px;
+  padding: 4px 5px;
+  border: 1px solid rgb(255 255 255 / 12%);
+  border-radius: 7px;
   color: var(--text);
+  background: rgb(3 11 20 / 82%);
+  box-shadow: 0 3px 8px rgb(0 0 0 / 24%);
   font-size: 13px;
   font-weight: 800;
   line-height: 1.15;
@@ -512,10 +538,14 @@
 }
 
 .keyword {
+  position: absolute;
+  z-index: 4;
+  top: 7px;
+  right: 6px;
   display: inline-flex;
-  max-width: calc(100% - 12px);
+  max-width: calc(100% - 42px);
   min-height: 18px;
-  margin: 0 auto 4px;
+  margin: 0;
   align-items: center;
   justify-content: center;
   overflow: hidden;
@@ -523,7 +553,7 @@
   border: 1px solid rgb(155 140 255 / 30%);
   border-radius: 999px;
   color: #ddd7ff;
-  background: rgb(155 140 255 / 12%);
+  background: rgb(24 16 54 / 82%);
   font-size: 10px;
   font-weight: 700;
   line-height: 1.15;
@@ -532,12 +562,16 @@
 }
 
 .card-stats {
+  position: absolute;
+  z-index: 4;
+  right: 5px;
+  bottom: 5px;
+  left: 5px;
   display: flex;
-  flex: 0 0 auto;
   align-items: center;
   justify-content: space-between;
   gap: 5px;
-  padding: 4px 6px 6px;
+  padding: 0;
 }
 
 .stat {
@@ -550,7 +584,7 @@
   padding: 3px 7px;
   border: 1px solid rgb(255 255 255 / 12%);
   border-radius: 8px;
-  background: rgb(3 11 20 / 62%);
+  background: rgb(3 11 20 / 88%);
   font-size: 13px;
   font-variant-numeric: tabular-nums;
   font-weight: 900;
@@ -749,7 +783,7 @@
   min-width: 0;
   min-height: 44px;
   align-items: center;
-  grid-template-columns: 24px 36px minmax(0, 1fr) auto;
+  grid-template-columns: 24px minmax(0, 1fr) auto;
   gap: 7px;
   padding: 4px 7px;
   border: 1px solid transparent;
@@ -805,22 +839,6 @@
   opacity: 0.46;
 }
 
-.player-avatar {
-  display: grid;
-  width: 34px;
-  height: 34px;
-  overflow: hidden;
-  place-items: center;
-  border: 1px solid rgb(255 255 255 / 14%);
-  border-radius: 10px;
-  background:
-    radial-gradient(circle at 30% 28%, rgb(255 255 255 / 18%), transparent 28%),
-    linear-gradient(145deg, var(--surface-3), #172139);
-  font-family:
-    "Segoe UI Emoji", "Segoe UI Symbol", sans-serif;
-  font-size: 19px;
-}
-
 .player-meta {
   display: flex;
   min-width: 0;
@@ -870,6 +888,110 @@
   gap: 8px;
 }
 
+.details-content {
+  display: flex;
+  flex: 1 1 auto;
+  min-width: 0;
+  min-height: 0;
+  overflow-x: hidden;
+  overflow-y: auto;
+  align-items: stretch;
+  padding: 2px 5px 8px;
+  flex-direction: column;
+  scrollbar-color: rgb(65 97 126 / 80%) transparent;
+  scrollbar-width: thin;
+}
+
+.detail-art {
+  position: relative;
+  display: grid;
+  flex: 0 0 clamp(190px, 28dvh, 260px);
+  width: 100%;
+  min-height: clamp(190px, 28dvh, 260px);
+  overflow: hidden;
+  place-items: center;
+  border: 1px solid rgb(246 190 85 / 28%);
+  border-radius: 14px;
+  background:
+    radial-gradient(circle at center, rgb(246 190 85 / 10%), transparent 58%),
+    rgb(3 11 20 / 42%);
+}
+
+.detail-art::before {
+  display: none;
+  content: "";
+}
+
+.detail-art.has-image::before {
+  display: none;
+}
+
+.detail-art > img {
+  position: absolute;
+  inset: 0;
+  display: block;
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+  object-position: center;
+}
+
+.detail-art > .art-fallback {
+  max-width: 82%;
+  color: var(--text-soft);
+  font-size: 15px;
+  font-weight: 800;
+  text-align: center;
+}
+
+.details-content h2 {
+  margin: 10px 0 2px;
+  color: var(--text);
+  font-size: 18px;
+  line-height: 1.2;
+}
+
+.details-content > p {
+  margin: 7px 0 0;
+  color: var(--text-soft);
+  font-size: 12px;
+  line-height: 1.45;
+}
+
+.details-content .detail-meta {
+  color: var(--gold);
+  font-size: 11px;
+  font-weight: 700;
+}
+
+.detail-keywords {
+  display: flex;
+  margin-top: 9px;
+  flex-wrap: wrap;
+  gap: 5px;
+}
+
+.detail-keywords > span {
+  padding: 3px 7px;
+  border: 1px solid rgb(155 140 255 / 30%);
+  border-radius: 999px;
+  color: #ddd7ff;
+  background: rgb(155 140 255 / 12%);
+  font-size: 10px;
+  font-weight: 750;
+}
+
+.detail-actions {
+  display: flex;
+  margin-top: 11px;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.detail-actions .action-button {
+  flex: 1 1 auto;
+}
+
 .tabs {
   display: grid;
   flex: 0 0 44px;
@@ -913,6 +1035,18 @@
   color: #dffffa;
   background: rgb(50 215 196 / 14%);
   box-shadow: inset 0 0 0 1px rgb(50 215 196 / 28%);
+}
+
+.mobile-info-close {
+  display: none;
+  min-width: 44px;
+  min-height: 38px;
+  cursor: pointer;
+  border: 0;
+  border-radius: 8px;
+  color: var(--muted);
+  background: rgb(255 255 255 / 5%);
+  font-weight: 750;
 }
 
 .battle-log {
@@ -1531,16 +1665,9 @@
   }
 
   .player-row {
-    grid-template-columns: 18px 32px minmax(0, 1fr) auto;
+    grid-template-columns: 18px minmax(0, 1fr) auto;
     gap: 5px;
     padding-inline: 4px;
-  }
-
-  .player-avatar {
-    width: 31px;
-    height: 31px;
-    border-radius: 9px;
-    font-size: 17px;
   }
 
   .player-meta > strong,
@@ -1575,7 +1702,6 @@
   }
 
   .side-rail .panel-title,
-  .player-row::before,
   .player-meta,
   .player-health {
     display: none;
@@ -1623,6 +1749,12 @@
     opacity: 1;
     pointer-events: auto;
     transform: translateX(0);
+  }
+
+  .mobile-info-close {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
   }
 }
 
