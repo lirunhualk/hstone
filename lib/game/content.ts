@@ -3,7 +3,7 @@ import liveRosterSnapshot from "./generated/battlegrounds-36.0.3-247416.zhCN.jso
 };
 import type { MinionDefinition, Tribe } from "./types.ts";
 
-export const CURRENT_ROSTER_VERSION = "battlegrounds-36.0.3-247416-v3";
+export const CURRENT_ROSTER_VERSION = "battlegrounds-36.0.3-247416-v4";
 /** Compatibility alias for existing save and engine imports. */
 export const CLASSIC_ROSTER_VERSION = CURRENT_ROSTER_VERSION;
 
@@ -846,6 +846,47 @@ const LEGACY_RULE_BY_CARD_ID = new Map(
 const LIVE_RULE_OVERRIDES: Readonly<
   Record<string, Partial<MinionDefinition>>
 > = {
+  BG26_146: {
+    endOfTurn: {
+      kind: "buff",
+      target: "self",
+      attack: 0,
+      health: 1,
+    },
+  },
+  BG26_147: {
+    startOfTurn: [{ kind: "gainGold", amount: 1 }],
+  },
+  BG31_859: {
+    magnetic: {
+      targetTribes: ["mech", "elemental"],
+    },
+  },
+  BG_DEEP_015: {
+    magnetic: {
+      targetTribes: ["mech", "undead"],
+    },
+  },
+  BG32_172: {
+    deathrattle: [
+      {
+        kind: "summon",
+        definitionId: "BG_TTN_401",
+        count: 1,
+        goldenMode: "goldenToken",
+      },
+    ],
+  },
+  BG34_175: {
+    afterMagnetized: [
+      {
+        kind: "buff",
+        target: "allFriendly",
+        attack: 5,
+        health: 5,
+      },
+    ],
+  },
   BG25_022: {
     deathrattle: [
       {
@@ -1035,14 +1076,19 @@ const FULLY_SUPPORTED_LIVE_CARD_IDS = new Set([
   "BG25_010",
   "BG25_022",
   "BG25_354",
+  "BG26_146",
+  "BG26_147",
   "BG26_805",
   "BG26_817",
   "BG28_300",
   "BG29_611",
   "BG30_125",
   "BG31_803",
+  "BG31_859",
   "BG32_235",
+  "BG32_172",
   "BG33_156",
+  "BG34_175",
   "BG34_523",
   "BG34_630",
   "BG34_636t",
@@ -1050,6 +1096,8 @@ const FULLY_SUPPORTED_LIVE_CARD_IDS = new Set([
   "BG34_731",
   "BG35_702",
   "BG_DAL_775",
+  "BG_BOT_911",
+  "BG_DEEP_015",
   "BGS_004",
   "BGS_012",
   "BGS_018",
@@ -1100,6 +1148,11 @@ function createLiveDefinition(card: LiveRosterCard): MinionDefinition {
     attack: card.attack,
     health: card.health,
     description,
+    magnetic:
+      liveRuleOverride?.magnetic ??
+      (hasMechanic(card, "MAGNETIC")
+        ? { targetTribes: ["mech"] }
+        : undefined),
     taunt: hasMechanic(card, "TAUNT"),
     divineShield: hasMechanic(card, "DIVINE_SHIELD"),
     reborn: hasMechanic(card, "REBORN"),

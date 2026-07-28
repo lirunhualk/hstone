@@ -14,6 +14,7 @@ import type {
   DiscoverFilter,
   GameAction,
   GameState,
+  MagneticAttachment,
   MinionEffect,
   MinionInstance,
   PendingDiscoverInteraction,
@@ -33,6 +34,7 @@ export type {
   GamePhase,
   GameState,
   HandCardInstance,
+  MagneticAttachment,
   MinionDefinition,
   MinionEffect,
   MinionInstance,
@@ -99,21 +101,67 @@ interface DeadMinion {
   ownerId: PlayerId;
 }
 
+interface MinionEffectSource {
+  definitionId: string;
+  golden: boolean;
+}
+
 function cloneState(state: GameState): GameState {
   return JSON.parse(JSON.stringify(state)) as GameState;
+}
+
+function cloneMagneticAttachment(
+  attachment: MagneticAttachment,
+): MagneticAttachment {
+  return {
+    ...attachment,
+    attachments: attachment.attachments.map(cloneMagneticAttachment),
+  };
 }
 
 function cloneMinion(minion: MinionInstance): BoardMinionInstance {
   if (minion.kind !== "minion") {
     throw new Error("Only minions can be cloned onto a combat board");
   }
-  return { ...minion, kind: "minion" };
+  return {
+    ...minion,
+    kind: "minion",
+    attachments: minion.attachments.map(cloneMagneticAttachment),
+  };
 }
 
 function cloneBoard(
   board: readonly BoardMinionInstance[],
 ): BoardMinionInstance[] {
   return board.map(cloneMinion);
+}
+
+function collectAttachmentEffectSources(
+  attachment: MagneticAttachment,
+  sources: MinionEffectSource[],
+): void {
+  sources.push({
+    definitionId: attachment.definitionId,
+    golden: attachment.golden,
+  });
+  for (const nested of attachment.attachments) {
+    collectAttachmentEffectSources(nested, sources);
+  }
+}
+
+function minionEffectSources(
+  minion: MinionInstance,
+): MinionEffectSource[] {
+  const sources: MinionEffectSource[] = [
+    {
+      definitionId: minion.definitionId,
+      golden: minion.golden,
+    },
+  ];
+  for (const attachment of minion.attachments) {
+    collectAttachmentEffectSources(attachment, sources);
+  }
+  return sources;
 }
 
 function minionHasTribe(
@@ -124,6 +172,22 @@ function minionHasTribe(
     return minion.tribe === "neutral";
   }
   return minion.tribes.includes("all") || minion.tribes.includes(tribe);
+}
+
+export function canMagnetize(
+  source: BoardMinionInstance,
+  target: BoardMinionInstance,
+): boolean {
+  if (source.instanceId === target.instanceId) {
+    return false;
+  }
+  const magnetic = getMinionDefinition(source.definitionId).magnetic;
+  return (
+    magnetic !== undefined &&
+    magnetic.targetTribes.some((tribe) =>
+      minionHasTribe(target, tribe),
+    )
+  );
 }
 
 function definitionIsAvailable(
@@ -234,6 +298,7 @@ function createMinionInstance(
     description: definition.description,
     grantsTripleReward: false,
     poolCopies,
+    attachments: [],
   };
   state.nextInstanceId += 1;
   return instance;
@@ -291,6 +356,7 @@ function createTripleRewardSpell(
     description: `发现一个 ${rewardTier} 级随从。`,
     grantsTripleReward: false,
     poolCopies: 0,
+    attachments: [],
   };
   state.nextInstanceId += 1;
   return instance;
@@ -302,12 +368,89 @@ function nextInteractionId(state: GameState): string {
   return interactionId;
 }
 
-function returnMinionToPool(state: GameState, minion: MinionInstance): void {
-  if (minion.poolCopies <= 0) {
-    return;
+function returnAttachmentToPool(
+  state: GameState,
+  attachment: MagneticAttachment,
+): void {
+  if (attachment.poolCopies > 0) {
+    state.pool[attachment.definitionId] =
+      (state.pool[attachment.definitionId] ?? 0) +
+      attachment.poolCopies;
   }
-  state.pool[minion.definitionId] =
-    (state.pool[minion.definitionId] ?? 0) + minion.poolCopies;
+  for (const nested of attachment.attachments) {
+    returnAttachmentToPool(state, nested);
+  }
+}
+
+function returnMinionToPool(state: GameState, minion: MinionInstance): void {
+  if (minion.poolCopies > 0) {
+    state.pool[minion.definitionId] =
+      (state.pool[minion.definitionId] ?? 0) + minion.poolCopies;
+  }
+  for (const attachment of minion.attachments) {
+    returnAttachmentToPool(state, attachment);
+  }
+}
+
+function clearAttachmentPoolCopies(
+  attachment: MagneticAttachment,
+): MagneticAttachment {
+  return {
+    ...attachment,
+    poolCopies: 0,
+    attachments: attachment.attachments.map(clearAttachmentPoolCopies),
+  };
+}
+
+function attachmentGrantedStats(
+  attachment: MagneticAttachment,
+): { attack: number; health: number } {
+  return attachment.attachments.reduce(
+    (total, nested) => {
+      const nestedStats = attachmentGrantedStats(nested);
+      return {
+        attack:
+          total.attack + nested.attackGranted + nestedStats.attack,
+        health:
+          total.health + nested.healthGranted + nestedStats.health,
+      };
+    },
+    { attack: 0, health: 0 },
+  );
+}
+
+function createMagneticAttachment(
+  source: BoardMinionInstance,
+): MagneticAttachment {
+  const nestedStats = source.attachments.reduce(
+    (total, attachment) => {
+      const descendantStats = attachmentGrantedStats(attachment);
+      return {
+        attack:
+          total.attack +
+          attachment.attackGranted +
+          descendantStats.attack,
+        health:
+          total.health +
+          attachment.healthGranted +
+          descendantStats.health,
+      };
+    },
+    { attack: 0, health: 0 },
+  );
+  return {
+    sourceInstanceId: source.instanceId,
+    definitionId: source.definitionId,
+    cardId: source.cardId,
+    name: source.name,
+    description: source.description,
+    effectSupport: source.effectSupport,
+    golden: source.golden,
+    poolCopies: 0,
+    attackGranted: source.attack - nestedStats.attack,
+    healthGranted: source.health - nestedStats.health,
+    attachments: source.attachments.map(clearAttachmentPoolCopies),
+  };
 }
 
 function drawFromPool(
@@ -504,11 +647,14 @@ function applyRecruitEffects(
   player: PlayerState,
   source: MinionInstance,
   effects: readonly MinionEffect[] | undefined,
+  scaleOverride?: number,
 ): void {
   if (!effects) {
     return;
   }
-  const scale = source.golden ? 2 : 1;
+  const scale = scaleOverride ?? (source.golden ? 2 : 1);
+  const effectSourceIsGolden =
+    scaleOverride === undefined ? source.golden : scaleOverride > 1;
   for (const effect of effects) {
     if (effect.kind === "buff") {
       for (const target of recruitEffectTargets(state, player, source, effect)) {
@@ -542,7 +688,7 @@ function applyRecruitEffects(
       const baseCount =
         effect.count === "sourceAttack" ? source.attack : effect.count;
       const doublesCount =
-        source.golden && effect.goldenMode === "doubleCount";
+        effectSourceIsGolden && effect.goldenMode === "doubleCount";
       const summonCount = baseCount * (doublesCount ? 2 : 1);
       for (
         let count = 0;
@@ -550,7 +696,7 @@ function applyRecruitEffects(
         count += 1
       ) {
         const summoned = createMinionInstance(state, effect.definitionId, 0);
-        if (source.golden && !doublesCount) {
+        if (effectSourceIsGolden && !doublesCount) {
           makeGoldenToken(summoned);
         }
         if (effect.taunt) {
@@ -568,20 +714,22 @@ function applyRecruitSummonTriggers(
   summoned: MinionInstance,
 ): void {
   for (const watcher of player.board) {
-    const trigger = getMinionDefinition(
-      watcher.definitionId,
-    ).afterFriendlySummoned;
-    if (
-      !trigger ||
-      trigger.grantShield ||
-      !minionHasTribe(summoned, trigger.tribe) ||
-      watcher.instanceId === summoned.instanceId
-    ) {
-      continue;
+    for (const component of minionEffectSources(watcher)) {
+      const trigger = getMinionDefinition(
+        component.definitionId,
+      ).afterFriendlySummoned;
+      if (
+        !trigger ||
+        trigger.grantShield ||
+        !minionHasTribe(summoned, trigger.tribe) ||
+        watcher.instanceId === summoned.instanceId
+      ) {
+        continue;
+      }
+      const scale = component.golden ? 2 : 1;
+      summoned.attack += (trigger.attack ?? 0) * scale;
+      summoned.health += (trigger.health ?? 0) * scale;
     }
-    const scale = watcher.golden ? 2 : 1;
-    summoned.attack += (trigger.attack ?? 0) * scale;
-    summoned.health += (trigger.health ?? 0) * scale;
   }
 }
 
@@ -593,16 +741,18 @@ function applyAfterFriendlyPlayed(
     if (watcher.instanceId === played.instanceId) {
       continue;
     }
-    const trigger = getMinionDefinition(
-      watcher.definitionId,
-    ).afterFriendlyPlayed;
-    if (!trigger || !minionHasTribe(played, trigger.tribe)) {
-      continue;
+    for (const component of minionEffectSources(watcher)) {
+      const trigger = getMinionDefinition(
+        component.definitionId,
+      ).afterFriendlyPlayed;
+      if (!trigger || !minionHasTribe(played, trigger.tribe)) {
+        continue;
+      }
+      const scale = component.golden ? 2 : 1;
+      watcher.attack += (trigger.attack ?? 0) * scale;
+      watcher.health += (trigger.health ?? 0) * scale;
+      player.health -= (trigger.heroDamage ?? 0) * scale;
     }
-    const scale = watcher.golden ? 2 : 1;
-    watcher.attack += (trigger.attack ?? 0) * scale;
-    watcher.health += (trigger.health ?? 0) * scale;
-    player.health -= (trigger.heroDamage ?? 0) * scale;
   }
 }
 
@@ -610,56 +760,103 @@ function battlecryTriggerCount(player: PlayerState): number {
   return (
     1 +
     player.board.reduce((largestExtra, minion) => {
-      const extra =
-        getMinionDefinition(minion.definitionId).extraBattlecries ?? 0;
-      return Math.max(
+      return minionEffectSources(minion).reduce(
+        (componentLargest, component) => {
+          const extra =
+            getMinionDefinition(component.definitionId)
+              .extraBattlecries ?? 0;
+          return Math.max(
+            componentLargest,
+            extra * (component.golden ? 2 : 1),
+          );
+        },
         largestExtra,
-        extra * (minion.golden ? 2 : 1),
       );
     }, 0)
   );
 }
 
+function applyStartOfTurnEffects(
+  state: GameState,
+  player: PlayerState,
+): void {
+  for (const source of [...player.board]) {
+    for (const component of minionEffectSources(source)) {
+      const effects =
+        getMinionDefinition(component.definitionId).startOfTurn;
+      applyRecruitEffects(
+        state,
+        player,
+        source,
+        effects,
+        component.golden ? 2 : 1,
+      );
+    }
+  }
+}
+
 function applyEndOfTurnEffects(player: PlayerState): void {
   for (const source of [...player.board]) {
-    const effect = getMinionDefinition(source.definitionId).endOfTurn;
-    if (!effect) {
-      continue;
-    }
-    const scale = source.golden ? 2 : 1;
-    if (effect.kind === "onePerTribe") {
-      const seen = new Set<Tribe>();
-      for (const target of player.board) {
-        const targetTribe =
-          target.tribes.find((tribe) => tribe !== "all") ??
-          (target.tribes.includes("all") ? "all" : "neutral");
-        if (targetTribe === "neutral" || seen.has(targetTribe)) {
-          continue;
-        }
-        seen.add(targetTribe);
-        target.attack += effect.attack * scale;
-        target.health += effect.health * scale;
+    for (const component of minionEffectSources(source)) {
+      const effect =
+        getMinionDefinition(component.definitionId).endOfTurn;
+      if (!effect) {
+        continue;
       }
-      continue;
-    }
+      const scale = component.golden ? 2 : 1;
+      if (effect.kind === "onePerTribe") {
+        const seen = new Set<Tribe>();
+        for (const target of player.board) {
+          const targetTribe =
+            target.tribes.find((tribe) => tribe !== "all") ??
+            (target.tribes.includes("all") ? "all" : "neutral");
+          if (targetTribe === "neutral" || seen.has(targetTribe)) {
+            continue;
+          }
+          seen.add(targetTribe);
+          target.attack += effect.attack * scale;
+          target.health += effect.health * scale;
+        }
+        continue;
+      }
 
-    const sourceIndex = player.board.findIndex(
-      (minion) => minion.instanceId === source.instanceId,
-    );
-    const targets =
-      effect.target === "self"
-        ? [source]
-        : player.board.filter(
-            (_, index) => Math.abs(index - sourceIndex) === 1,
-          );
-    const repetitions =
-      1 +
-      (effect.repeatPerGoldenFriendly
-        ? player.board.filter((minion) => minion.golden).length
-        : 0);
-    for (const target of targets) {
-      target.attack += effect.attack * scale * repetitions;
-      target.health += effect.health * scale * repetitions;
+      const sourceIndex = player.board.findIndex(
+        (minion) => minion.instanceId === source.instanceId,
+      );
+      const targets =
+        effect.target === "self"
+          ? [source]
+          : player.board.filter(
+              (_, index) => Math.abs(index - sourceIndex) === 1,
+            );
+      const repetitions =
+        1 +
+        (effect.repeatPerGoldenFriendly
+          ? player.board.filter((minion) => minion.golden).length
+          : 0);
+      for (const target of targets) {
+        target.attack += effect.attack * scale * repetitions;
+        target.health += effect.health * scale * repetitions;
+      }
+    }
+  }
+}
+
+function applyAfterMagnetizedEffects(
+  state: GameState,
+  player: PlayerState,
+): void {
+  for (const watcher of [...player.board]) {
+    for (const component of minionEffectSources(watcher)) {
+      const effects =
+        getMinionDefinition(component.definitionId).afterMagnetized;
+      applyRecruitEffects(
+        state,
+        player,
+        watcher,
+        effects,
+        component.golden ? 2 : 1,
+      );
     }
   }
 }
@@ -724,6 +921,36 @@ function resolveTriples(state: GameState, player: PlayerState): void {
       golden.divineShield =
         definition.divineShield === true ||
         consumed.some((minion) => minion.divineShield);
+      golden.reborn =
+        definition.reborn === true ||
+        consumed.some((minion) => minion.reborn);
+      golden.poisonous =
+        definition.poisonous === true ||
+        consumed.some((minion) => minion.poisonous);
+      golden.venomous =
+        definition.venomous === true ||
+        consumed.some((minion) => minion.venomous);
+      golden.windfury =
+        definition.windfury === true ||
+        consumed.some((minion) => minion.windfury);
+      golden.cleave =
+        definition.cleave === true ||
+        consumed.some((minion) => minion.cleave);
+      golden.alwaysAttacksLowestAttack =
+        definition.alwaysAttacksLowestAttack === true ||
+        consumed.some(
+          (minion) => minion.alwaysAttacksLowestAttack,
+        );
+      golden.attachments = consumed.flatMap((minion) =>
+        minion.attachments.map(cloneMagneticAttachment),
+      );
+      if (
+        consumed.some(
+          (minion) => minion.effectSupport === "partial",
+        )
+      ) {
+        golden.effectSupport = "partial";
+      }
       golden.sellValue =
         definition.goldenSellValue ?? definition.sellValue ?? 1;
       golden.description = describeGoldenMinion(definition.description);
@@ -808,6 +1035,71 @@ function playMinion(
   applyAfterFriendlyPlayed(player, minion);
   resolveTriples(state, player);
   beginInteractiveBattlecry(state, player, minion);
+  return true;
+}
+
+function magnetizeMinion(
+  state: GameState,
+  player: PlayerState,
+  cardInstanceId: string,
+  targetInstanceId: string,
+): boolean {
+  const handIndex = player.hand.findIndex(
+    (card) => card.instanceId === cardInstanceId,
+  );
+  const card = player.hand[handIndex];
+  const target = player.board.find(
+    (minion) => minion.instanceId === targetInstanceId,
+  );
+  if (
+    handIndex < 0 ||
+    card?.kind !== "minion" ||
+    !target ||
+    !canMagnetize(card, target)
+  ) {
+    return false;
+  }
+
+  const [removed] = player.hand.splice(handIndex, 1);
+  if (removed.kind !== "minion") {
+    throw new Error("MAGNETIZE_MINION removed a non-minion hand card");
+  }
+  const source = removed;
+  const battlecry = getMinionDefinition(source.definitionId).battlecry;
+  const triggerCount = battlecry ? battlecryTriggerCount(player) : 0;
+  for (let count = 0; count < triggerCount; count += 1) {
+    applyRecruitEffects(state, player, source, battlecry);
+  }
+
+  // Patch 27.0 changed Battlegrounds Magnetic pool behavior: every pool copy
+  // represented by the source returns immediately when it is Magnetized.
+  // The attached component therefore retains its effects but carries zero
+  // future pool contribution when the host is sold or eliminated.
+  returnMinionToPool(state, source);
+  target.attack += source.attack;
+  target.health += source.health;
+  target.taunt ||= source.taunt;
+  target.divineShield ||= source.divineShield;
+  target.reborn ||= source.reborn;
+  target.poisonous ||= source.poisonous;
+  target.venomous ||= source.venomous;
+  target.windfury ||= source.windfury;
+  target.cleave ||= source.cleave;
+  target.alwaysAttacksLowestAttack ||=
+    source.alwaysAttacksLowestAttack;
+  if (source.effectSupport === "partial") {
+    target.effectSupport = "partial";
+  }
+  target.attachments.push(createMagneticAttachment(source));
+
+  if (source.grantsTripleReward && player.hand.length < MAX_HAND_SIZE) {
+    player.hand.push(
+      createTripleRewardSpell(state, player.tavernTier),
+    );
+  }
+  applyAfterFriendlyPlayed(player, source);
+  applyAfterMagnetizedEffects(state, player);
+  resolveTriples(state, player);
   return true;
 }
 
@@ -908,11 +1200,13 @@ function minionScore(
   if (minion.windfury) {
     score += Math.max(3, minion.attack * 0.5);
   }
-  const definition = getMinionDefinition(minion.definitionId);
-  if (definition.deathrattle) {
+  const definitions = minionEffectSources(minion).map((component) =>
+    getMinionDefinition(component.definitionId),
+  );
+  if (definitions.some((definition) => definition.deathrattle)) {
     score += 2.5;
   }
-  if (definition.battlecry) {
+  if (definitions.some((definition) => definition.battlecry)) {
     score += 1.5;
   }
   const synergyTribe = minion.tribes.find(
@@ -1144,14 +1438,45 @@ function playAiHand(state: GameState, player: PlayerState): void {
       playHandCard(state, player, reward.instanceId);
       continue;
     }
-    if (player.board.length >= MAX_BOARD_SIZE) {
-      break;
-    }
     const minions = player.hand.filter(
       (card): card is BoardMinionInstance => card.kind === "minion",
     );
     if (minions.length === 0) {
       break;
+    }
+    if (player.board.length >= MAX_BOARD_SIZE) {
+      const magneticOptions = minions
+        .map((source) => ({
+          source,
+          targets: player.board.filter((target) =>
+            canMagnetize(source, target),
+          ),
+        }))
+        .filter((option) => option.targets.length > 0)
+        .sort((left, right) => {
+          const scoreDifference =
+            minionScore(player, right.source) -
+            minionScore(player, left.source);
+          return scoreDifference !== 0
+            ? scoreDifference
+            : left.source.instanceId.localeCompare(
+                right.source.instanceId,
+              );
+        });
+      const magnetic = magneticOptions[0];
+      if (!magnetic) {
+        break;
+      }
+      const target = bestMinionByScore(player, magnetic.targets);
+      if (!magnetizeMinion(
+        state,
+        player,
+        magnetic.source.instanceId,
+        target.instanceId,
+      )) {
+        break;
+      }
+      continue;
     }
     let bestIndex = 0;
     let bestScore = Number.NEGATIVE_INFINITY;
@@ -1193,12 +1518,43 @@ function bestShopIndex(player: PlayerState): number {
   return bestIndex;
 }
 
+function bestMagneticShopIndex(player: PlayerState): number {
+  let bestIndex = -1;
+  let bestScore = Number.NEGATIVE_INFINITY;
+  for (let index = 0; index < player.shop.length; index += 1) {
+    const offer = player.shop[index];
+    if (
+      !player.board.some((target) => canMagnetize(offer, target))
+    ) {
+      continue;
+    }
+    const score = minionScore(player, offer);
+    if (score > bestScore) {
+      bestScore = score;
+      bestIndex = index;
+    }
+  }
+  return bestIndex;
+}
+
 function arrangeAiBoard(player: PlayerState): void {
   player.board.sort((left, right) => {
     const leftDeathrattle =
-      getMinionDefinition(left.definitionId).deathrattle !== undefined ? 1 : 0;
+      minionEffectSources(left).some(
+        (component) =>
+          getMinionDefinition(component.definitionId).deathrattle !==
+          undefined,
+      )
+        ? 1
+        : 0;
     const rightDeathrattle =
-      getMinionDefinition(right.definitionId).deathrattle !== undefined ? 1 : 0;
+      minionEffectSources(right).some(
+        (component) =>
+          getMinionDefinition(component.definitionId).deathrattle !==
+          undefined,
+      )
+        ? 1
+        : 0;
     if (leftDeathrattle !== rightDeathrattle) {
       return rightDeathrattle - leftDeathrattle;
     }
@@ -1236,6 +1592,15 @@ function runAiRecruit(state: GameState, player: PlayerState): void {
           continue;
         }
       } else {
+        const magneticShopIndex = bestMagneticShopIndex(player);
+        if (
+          magneticShopIndex >= 0 &&
+          buyMinion(state, player, magneticShopIndex)
+        ) {
+          actions += 1;
+          playAiHand(state, player);
+          continue;
+        }
         const weakestIndex = weakestBoardIndex(player);
         const candidateScore = minionScore(player, player.shop[shopIndex]);
         const weakestScore = minionScore(player, player.board[weakestIndex]);
@@ -1377,34 +1742,36 @@ function applyStartOfCombatEffects(
   board: MinionInstance[],
 ): void {
   for (const source of [...board]) {
-    const effects =
-      getMinionDefinition(source.definitionId).startOfCombat ?? [];
-    const scale = source.golden ? 2 : 1;
-    for (const effect of effects) {
-      if (effect.kind === "buff") {
-        const targets =
-          effect.target === "self"
-            ? [source]
-            : combatBuffTargets(state, board, source, effect);
-        for (const target of targets) {
-          applyBuff(target, effect, scale);
-        }
-      } else if (effect.kind === "grantShield") {
-        if (effect.target === "self") {
-          source.divineShield = true;
-          continue;
-        }
-        const candidates = board.filter(
-          (minion) => minion.instanceId !== source.instanceId,
-        );
-        for (
-          let count = 0;
-          count < scale && candidates.length > 0;
-          count += 1
-        ) {
-          const targetIndex = randomIndex(state, candidates.length);
-          candidates[targetIndex].divineShield = true;
-          candidates.splice(targetIndex, 1);
+    for (const component of minionEffectSources(source)) {
+      const effects =
+        getMinionDefinition(component.definitionId).startOfCombat ?? [];
+      const scale = component.golden ? 2 : 1;
+      for (const effect of effects) {
+        if (effect.kind === "buff") {
+          const targets =
+            effect.target === "self"
+              ? [source]
+              : combatBuffTargets(state, board, source, effect);
+          for (const target of targets) {
+            applyBuff(target, effect, scale);
+          }
+        } else if (effect.kind === "grantShield") {
+          if (effect.target === "self") {
+            source.divineShield = true;
+            continue;
+          }
+          const candidates = board.filter(
+            (minion) => minion.instanceId !== source.instanceId,
+          );
+          for (
+            let count = 0;
+            count < scale && candidates.length > 0;
+            count += 1
+          ) {
+            const targetIndex = randomIndex(state, candidates.length);
+            candidates[targetIndex].divineShield = true;
+            candidates.splice(targetIndex, 1);
+          }
         }
       }
     }
@@ -1413,11 +1780,57 @@ function applyStartOfCombatEffects(
 
 function applyCombatAuras(board: MinionInstance[]): void {
   for (const source of board) {
-    const aura = getMinionDefinition(source.definitionId).aura;
+    for (const component of minionEffectSources(source)) {
+      const aura = getMinionDefinition(component.definitionId).aura;
+      if (!aura) {
+        continue;
+      }
+      const scale = component.golden ? 2 : 1;
+      for (const target of board) {
+        if (
+          !minionHasTribe(target, aura.tribe) ||
+          (aura.otherOnly && target.instanceId === source.instanceId)
+        ) {
+          continue;
+        }
+        target.attack += aura.attack * scale;
+        target.health += aura.health * scale;
+      }
+    }
+  }
+}
+
+function applyExistingAurasToSummoned(
+  board: readonly MinionInstance[],
+  summoned: MinionInstance,
+): void {
+  for (const source of board) {
+    for (const component of minionEffectSources(source)) {
+      const aura = getMinionDefinition(component.definitionId).aura;
+      if (
+        !aura ||
+        !minionHasTribe(summoned, aura.tribe) ||
+        (aura.otherOnly && summoned.instanceId === source.instanceId)
+      ) {
+        continue;
+      }
+      const scale = component.golden ? 2 : 1;
+      summoned.attack += aura.attack * scale;
+      summoned.health += aura.health * scale;
+    }
+  }
+}
+
+function applyNewAuraSource(
+  board: readonly MinionInstance[],
+  source: MinionInstance,
+): void {
+  for (const component of minionEffectSources(source)) {
+    const aura = getMinionDefinition(component.definitionId).aura;
     if (!aura) {
       continue;
     }
-    const scale = source.golden ? 2 : 1;
+    const scale = component.golden ? 2 : 1;
     for (const target of board) {
       if (
         !minionHasTribe(target, aura.tribe) ||
@@ -1431,69 +1844,37 @@ function applyCombatAuras(board: MinionInstance[]): void {
   }
 }
 
-function applyExistingAurasToSummoned(
-  board: readonly MinionInstance[],
-  summoned: MinionInstance,
-): void {
-  for (const source of board) {
-    const aura = getMinionDefinition(source.definitionId).aura;
-    if (
-      !aura ||
-      !minionHasTribe(summoned, aura.tribe) ||
-      (aura.otherOnly && summoned.instanceId === source.instanceId)
-    ) {
-      continue;
-    }
-    const scale = source.golden ? 2 : 1;
-    summoned.attack += aura.attack * scale;
-    summoned.health += aura.health * scale;
-  }
-}
-
-function applyNewAuraSource(
-  board: readonly MinionInstance[],
-  source: MinionInstance,
-): void {
-  const aura = getMinionDefinition(source.definitionId).aura;
-  if (!aura) {
-    return;
-  }
-  const scale = source.golden ? 2 : 1;
-  for (const target of board) {
-    if (
-      !minionHasTribe(target, aura.tribe) ||
-      (aura.otherOnly && target.instanceId === source.instanceId)
-    ) {
-      continue;
-    }
-    target.attack += aura.attack * scale;
-    target.health += aura.health * scale;
-  }
-}
-
 function removeCombatAuraSource(
   context: CombatContext,
   death: DeadMinion,
 ): void {
-  const aura = getMinionDefinition(death.minion.definitionId).aura;
-  if (!aura) {
-    return;
-  }
-  const scale = death.minion.golden ? 2 : 1;
-  for (const target of context.boards[death.ownerId]) {
-    if (!minionHasTribe(target, aura.tribe)) {
+  for (const component of minionEffectSources(death.minion)) {
+    const aura = getMinionDefinition(component.definitionId).aura;
+    if (!aura) {
       continue;
     }
-    target.attack -= aura.attack * scale;
-    target.health -= aura.health * scale;
+    const scale = component.golden ? 2 : 1;
+    for (const target of context.boards[death.ownerId]) {
+      if (!minionHasTribe(target, aura.tribe)) {
+        continue;
+      }
+      target.attack -= aura.attack * scale;
+      target.health -= aura.health * scale;
+    }
   }
 }
 
 function extraDeathrattles(board: readonly MinionInstance[]): number {
   return board.reduce((total, minion) => {
-    const extra =
-      getMinionDefinition(minion.definitionId).extraDeathrattles ?? 0;
-    return total + extra * (minion.golden ? 2 : 1);
+    return (
+      total +
+      minionEffectSources(minion).reduce((sourceTotal, component) => {
+        const extra =
+          getMinionDefinition(component.definitionId)
+            .extraDeathrattles ?? 0;
+        return sourceTotal + extra * (component.golden ? 2 : 1);
+      }, 0)
+    );
   }, 0);
 }
 
@@ -1522,20 +1903,22 @@ function triggerAfterFriendlySummoned(
     if (watcher.instanceId === summoned.instanceId) {
       continue;
     }
-    const trigger = getMinionDefinition(
-      watcher.definitionId,
-    ).afterFriendlySummoned;
-    if (!trigger || !minionHasTribe(summoned, trigger.tribe)) {
-      continue;
-    }
-    const scale = watcher.golden ? 2 : 1;
-    if (trigger.grantShield) {
-      watcher.attack += (trigger.attack ?? 0) * scale;
-      watcher.health += (trigger.health ?? 0) * scale;
-      watcher.divineShield = true;
-    } else {
-      summoned.attack += (trigger.attack ?? 0) * scale;
-      summoned.health += (trigger.health ?? 0) * scale;
+    for (const component of minionEffectSources(watcher)) {
+      const trigger = getMinionDefinition(
+        component.definitionId,
+      ).afterFriendlySummoned;
+      if (!trigger || !minionHasTribe(summoned, trigger.tribe)) {
+        continue;
+      }
+      const scale = component.golden ? 2 : 1;
+      if (trigger.grantShield) {
+        watcher.attack += (trigger.attack ?? 0) * scale;
+        watcher.health += (trigger.health ?? 0) * scale;
+        watcher.divineShield = true;
+      } else {
+        summoned.attack += (trigger.attack ?? 0) * scale;
+        summoned.health += (trigger.health ?? 0) * scale;
+      }
     }
   }
 }
@@ -1603,30 +1986,33 @@ function triggerSelfDamaged(
   ownerId: PlayerId,
   target: MinionInstance,
 ): void {
-  const effects = getMinionDefinition(target.definitionId).afterSelfDamaged;
-  if (!effects) {
-    return;
-  }
   const board = context.boards[ownerId];
   const sourceIndex = Math.max(
     0,
     board.findIndex((minion) => minion.instanceId === target.instanceId),
   );
-  for (const effect of effects) {
-    if (effect.kind !== "summon") {
+  for (const component of minionEffectSources(target)) {
+    const effects =
+      getMinionDefinition(component.definitionId).afterSelfDamaged;
+    if (!effects) {
       continue;
     }
-    const baseCount =
-      effect.count === "sourceAttack" ? target.attack : effect.count;
-    for (let count = 0; count < baseCount; count += 1) {
-      summonCombatMinion(
-        context,
-        ownerId,
-        effect.definitionId,
-        sourceIndex + 1 + count,
-        target,
-        target.golden,
-      );
+    for (const effect of effects) {
+      if (effect.kind !== "summon") {
+        continue;
+      }
+      const baseCount =
+        effect.count === "sourceAttack" ? target.attack : effect.count;
+      for (let count = 0; count < baseCount; count += 1) {
+        summonCombatMinion(
+          context,
+          ownerId,
+          effect.definitionId,
+          sourceIndex + 1 + count,
+          target,
+          component.golden,
+        );
+      }
     }
   }
 }
@@ -1737,34 +2123,36 @@ function triggerAfterFriendlyDied(
 ): void {
   const enemyId = opponentId(context, ownerId);
   for (const watcher of context.boards[ownerId]) {
-    const trigger = getMinionDefinition(
-      watcher.definitionId,
-    ).afterFriendlyDied;
-    if (!trigger || !minionHasTribe(death.minion, trigger.tribe)) {
-      continue;
-    }
-    const scale = watcher.golden ? 2 : 1;
-    watcher.attack += (trigger.attack ?? 0) * scale;
-    watcher.health += (trigger.health ?? 0) * scale;
-    if (trigger.damageEnemy) {
-      for (let hit = 0; hit < scale; hit += 1) {
-        const target = targetForEnemyDamage(
-          context,
-          enemyId,
-          trigger.damageTarget ?? "random",
-        );
-        if (!target) {
-          break;
+    for (const component of minionEffectSources(watcher)) {
+      const trigger = getMinionDefinition(
+        component.definitionId,
+      ).afterFriendlyDied;
+      if (!trigger || !minionHasTribe(death.minion, trigger.tribe)) {
+        continue;
+      }
+      const scale = component.golden ? 2 : 1;
+      watcher.attack += (trigger.attack ?? 0) * scale;
+      watcher.health += (trigger.health ?? 0) * scale;
+      if (trigger.damageEnemy) {
+        for (let hit = 0; hit < scale; hit += 1) {
+          const target = targetForEnemyDamage(
+            context,
+            enemyId,
+            trigger.damageTarget ?? "random",
+          );
+          if (!target) {
+            break;
+          }
+          dealCombatDamage(
+            context,
+            ownerId,
+            watcher,
+            enemyId,
+            target,
+            trigger.damageEnemy,
+            false,
+          );
         }
-        dealCombatDamage(
-          context,
-          ownerId,
-          watcher,
-          enemyId,
-          target,
-          trigger.damageEnemy,
-          false,
-        );
       }
     }
   }
@@ -1778,167 +2166,169 @@ function resolveOneDeathrattle(
   const ownerId = death.ownerId;
   const enemyId = opponentId(context, ownerId);
   const board = context.boards[ownerId];
-  const definition = getMinionDefinition(source.definitionId);
-  const scale = source.golden ? 2 : 1;
-  const effects = definition.deathrattle ?? [];
   const repetitions = 1 + extraDeathrattles(board);
-  for (let repetition = 0; repetition < repetitions; repetition += 1) {
-    for (const effect of effects) {
-      if (effect.kind === "summon") {
-        const baseCount =
-          effect.count === "sourceAttack" ? source.attack : effect.count;
-        const doublesCount =
-          source.golden && effect.goldenMode === "doubleCount";
-        const summonCount = baseCount * (doublesCount ? 2 : 1);
-        for (
-          let count = 0;
-          count < summonCount && board.length < MAX_BOARD_SIZE;
-          count += 1
-        ) {
-          const summoned = summonCombatMinion(
-            context,
-            ownerId,
-            effect.definitionId,
-            death.index + count,
-            source,
-            source.golden && !doublesCount,
-            effect.taunt === true,
-          );
-          if (summoned && effect.immediateAttack) {
-            performImmediateAttack(context, ownerId, summoned);
-          }
-        }
-      } else if (effect.kind === "buff") {
-        if (
-          effect.target === "friendlyTribe" &&
-          effect.tribe
-        ) {
-          const current =
-            context.tribeBuffs[ownerId][effect.tribe] ?? {
-              attack: 0,
-              health: 0,
-            };
-          context.tribeBuffs[ownerId][effect.tribe] = {
-            attack: current.attack + effect.attack * scale,
-            health: current.health + effect.health * scale,
-          };
-        }
-        for (const target of combatBuffTargets(
-          context.state,
-          board,
-          source,
-          effect,
-        )) {
-          applyBuff(target, effect, scale);
-        }
-      } else if (effect.kind === "grantShield") {
-        const candidates = [...board];
-        for (
-          let count = 0;
-          count < scale && candidates.length > 0;
-          count += 1
-        ) {
-          const targetIndex = randomIndex(context.state, candidates.length);
-          const target = candidates[targetIndex];
-          target.divineShield = true;
-          candidates.splice(targetIndex, 1);
-        }
-      } else if (effect.kind === "damageEnemy") {
-        const target = targetForEnemyDamage(context, enemyId, effect.target);
-        if (target) {
-          for (let hit = 0; hit < scale; hit += 1) {
-            const nextTarget = targetForEnemyDamage(
-              context,
-              enemyId,
-              effect.target,
-            );
-            if (!nextTarget) {
-              break;
-            }
-            dealCombatDamage(
+  for (const component of minionEffectSources(source)) {
+    const effects =
+      getMinionDefinition(component.definitionId).deathrattle ?? [];
+    const scale = component.golden ? 2 : 1;
+    for (let repetition = 0; repetition < repetitions; repetition += 1) {
+      for (const effect of effects) {
+        if (effect.kind === "summon") {
+          const baseCount =
+            effect.count === "sourceAttack" ? source.attack : effect.count;
+          const doublesCount =
+            component.golden && effect.goldenMode === "doubleCount";
+          const summonCount = baseCount * (doublesCount ? 2 : 1);
+          for (
+            let count = 0;
+            count < summonCount && board.length < MAX_BOARD_SIZE;
+            count += 1
+          ) {
+            const summoned = summonCombatMinion(
               context,
               ownerId,
+              effect.definitionId,
+              death.index + count,
               source,
-              enemyId,
-              nextTarget,
-              effect.amount,
-              false,
+              component.golden && !doublesCount,
+              effect.taunt === true,
             );
+            if (summoned && effect.immediateAttack) {
+              performImmediateAttack(context, ownerId, summoned);
+            }
           }
-        }
-      } else if (effect.kind === "damageAllMinions") {
-        const repeats =
-          source.golden && effect.goldenMode === "repeat" ? 2 : 1;
-        const amount =
-          source.golden && effect.goldenMode !== "repeat"
-            ? effect.amount * 2
-            : effect.amount;
-        for (let hit = 0; hit < repeats; hit += 1) {
-          for (const targetOwnerId of context.playerIds) {
-            for (const target of [...context.boards[targetOwnerId]]) {
-              if (
-                targetOwnerId === ownerId &&
-                effect.excludeFriendlyTribe &&
-                minionHasTribe(target, effect.excludeFriendlyTribe)
-              ) {
-                continue;
+        } else if (effect.kind === "buff") {
+          if (
+            effect.target === "friendlyTribe" &&
+            effect.tribe
+          ) {
+            const current =
+              context.tribeBuffs[ownerId][effect.tribe] ?? {
+                attack: 0,
+                health: 0,
+              };
+            context.tribeBuffs[ownerId][effect.tribe] = {
+              attack: current.attack + effect.attack * scale,
+              health: current.health + effect.health * scale,
+            };
+          }
+          for (const target of combatBuffTargets(
+            context.state,
+            board,
+            source,
+            effect,
+          )) {
+            applyBuff(target, effect, scale);
+          }
+        } else if (effect.kind === "grantShield") {
+          const candidates = [...board];
+          for (
+            let count = 0;
+            count < scale && candidates.length > 0;
+            count += 1
+          ) {
+            const targetIndex = randomIndex(context.state, candidates.length);
+            const target = candidates[targetIndex];
+            target.divineShield = true;
+            candidates.splice(targetIndex, 1);
+          }
+        } else if (effect.kind === "damageEnemy") {
+          const target = targetForEnemyDamage(context, enemyId, effect.target);
+          if (target) {
+            for (let hit = 0; hit < scale; hit += 1) {
+              const nextTarget = targetForEnemyDamage(
+                context,
+                enemyId,
+                effect.target,
+              );
+              if (!nextTarget) {
+                break;
               }
               dealCombatDamage(
                 context,
                 ownerId,
                 source,
-                targetOwnerId,
-                target,
-                amount,
+                enemyId,
+                nextTarget,
+                effect.amount,
                 false,
               );
             }
           }
-        }
-      } else if (effect.kind === "resummonMechs") {
-        const history = context.deadMechs[ownerId];
-        for (
-          let index = 0;
-          index < effect.count * scale &&
-          index < history.length &&
-          board.length < MAX_BOARD_SIZE;
-          index += 1
-        ) {
-          summonCombatMinion(
-            context,
-            ownerId,
-            history[index].definitionId,
-            death.index + index,
-            source,
-            history[index].golden,
+        } else if (effect.kind === "damageAllMinions") {
+          const repeats =
+            component.golden && effect.goldenMode === "repeat" ? 2 : 1;
+          const amount =
+            component.golden && effect.goldenMode !== "repeat"
+              ? effect.amount * 2
+              : effect.amount;
+          for (let hit = 0; hit < repeats; hit += 1) {
+            for (const targetOwnerId of context.playerIds) {
+              for (const target of [...context.boards[targetOwnerId]]) {
+                if (
+                  targetOwnerId === ownerId &&
+                  effect.excludeFriendlyTribe &&
+                  minionHasTribe(target, effect.excludeFriendlyTribe)
+                ) {
+                  continue;
+                }
+                dealCombatDamage(
+                  context,
+                  ownerId,
+                  source,
+                  targetOwnerId,
+                  target,
+                  amount,
+                  false,
+                );
+              }
+            }
+          }
+        } else if (effect.kind === "resummonMechs") {
+          const history = context.deadMechs[ownerId];
+          for (
+            let index = 0;
+            index < effect.count * scale &&
+            index < history.length &&
+            board.length < MAX_BOARD_SIZE;
+            index += 1
+          ) {
+            summonCombatMinion(
+              context,
+              ownerId,
+              history[index].definitionId,
+              death.index + index,
+              source,
+              history[index].golden,
+            );
+          }
+        } else if (effect.kind === "summonRandomDeathrattle") {
+          const candidates = MINION_DEFINITIONS.filter(
+            (candidate) =>
+              definitionIsAvailable(
+                candidate,
+                context.state.activeTribes,
+              ) &&
+              candidate.deathrattle !== undefined &&
+              candidate.id !== component.definitionId,
           );
-        }
-      } else if (effect.kind === "summonRandomDeathrattle") {
-        const candidates = MINION_DEFINITIONS.filter(
-          (candidate) =>
-            definitionIsAvailable(
-              candidate,
-              context.state.activeTribes,
-            ) &&
-            candidate.deathrattle !== undefined &&
-            candidate.id !== source.definitionId,
-        );
-        for (
-          let count = 0;
-          count < effect.count * scale &&
-          candidates.length > 0 &&
-          board.length < MAX_BOARD_SIZE;
-          count += 1
-        ) {
-          const choice =
-            candidates[randomIndex(context.state, candidates.length)];
-          summonCombatMinion(
-            context,
-            ownerId,
-            choice.id,
-            death.index + count,
-            source,
-          );
+          for (
+            let count = 0;
+            count < effect.count * scale &&
+            candidates.length > 0 &&
+            board.length < MAX_BOARD_SIZE;
+            count += 1
+          ) {
+            const choice =
+              candidates[randomIndex(context.state, candidates.length)];
+            summonCombatMinion(
+              context,
+              ownerId,
+              choice.id,
+              death.index + count,
+              source,
+            );
+          }
         }
       }
     }
@@ -2310,6 +2700,7 @@ function releaseEliminatedPlayer(
   player.board = player.board.map((minion) => ({
     ...minion,
     poolCopies: 0,
+    attachments: minion.attachments.map(clearAttachmentPoolCopies),
   }));
   player.hand = [];
   player.shop = [];
@@ -2391,6 +2782,7 @@ function beginNextRecruit(state: GameState): void {
     if (player.tavernTier < 6) {
       player.upgradeDiscount += 1;
     }
+    applyStartOfTurnEffects(state, player);
     if (player.frozen) {
       player.frozen = false;
       fillShop(state, player);
@@ -2420,7 +2812,7 @@ export function createGame(seed?: number): GameState {
   }));
   const pool: Record<string, number> = {};
   const state: GameState = {
-    version: 3,
+    version: 4,
     contentVersion: CURRENT_ROSTER_VERSION,
     seed: normalizedSeed,
     rngState: normalizedSeed,
@@ -2495,6 +2887,14 @@ export function gameReducer(state: GameState, action: GameAction): GameState {
         player,
         action.cardInstanceId,
         action.boardIndex,
+      );
+      break;
+    case "MAGNETIZE_MINION":
+      magnetizeMinion(
+        next,
+        player,
+        action.cardInstanceId,
+        action.targetInstanceId,
       );
       break;
     case "REFRESH_SHOP":

@@ -163,6 +163,10 @@ export interface StatAura {
   otherOnly?: boolean;
 }
 
+export interface MagneticSpec {
+  targetTribes: readonly Tribe[];
+}
+
 export interface MinionDefinition {
   id: string;
   /** Hearthstone CardID used only to locate the familiar card artwork. */
@@ -195,9 +199,12 @@ export interface MinionDefinition {
   afterFriendlySummoned?: FriendlyTribeTrigger;
   afterFriendlyDied?: FriendlyTribeTrigger;
   afterSelfDamaged?: readonly MinionEffect[];
+  startOfTurn?: readonly MinionEffect[];
   startOfCombat?: readonly MinionEffect[];
   endOfTurn?: EndOfTurnEffect;
+  afterMagnetized?: readonly MinionEffect[];
   aura?: StatAura;
+  magnetic?: MagneticSpec;
   extraBattlecries?: number;
   extraDeathrattles?: number;
   sellValue?: number;
@@ -250,6 +257,33 @@ export interface MinionInstance {
    * regular purchased minion, 3 for a golden minion, and 0 for combat tokens.
    */
   poolCopies: number;
+  /**
+   * Minions fused into this host through Magnetic. The tree retains each
+   * component's own Golden state while the host keeps its identity, Tavern
+   * Tier, sell value, and visible card art. Under current Battlegrounds rules,
+   * a component normally has zero poolCopies because its copies return to the
+   * shared pool immediately when Magnetized.
+   */
+  attachments: MagneticAttachment[];
+}
+
+export interface MagneticAttachment {
+  sourceInstanceId: string;
+  definitionId: string;
+  cardId: string;
+  name: string;
+  description: string;
+  effectSupport: EffectSupport;
+  golden: boolean;
+  poolCopies: number;
+  /**
+   * The component's own stat contribution, excluding nested attachments.
+   * Summing the complete attachment tree therefore reproduces the total stats
+   * that were transferred to the host.
+   */
+  attackGranted: number;
+  healthGranted: number;
+  attachments: MagneticAttachment[];
 }
 
 export type BoardMinionInstance = MinionInstance & { kind: "minion" };
@@ -365,9 +399,9 @@ export interface BattleSummary {
 export interface GameState {
   /**
    * The union keeps the legacy client-side guard type-safe while all newly
-   * created states use schema version 3.
+   * created states use schema version 4.
    */
-  version: 2 | 3;
+  version: 2 | 3 | 4;
   /** Invalidates local saves when the roster or its mechanics change. */
   contentVersion: string;
   seed: number;
@@ -398,6 +432,11 @@ export type GameAction =
       type: "PLAY_HAND_CARD";
       cardInstanceId: string;
       boardIndex?: number;
+    }
+  | {
+      type: "MAGNETIZE_MINION";
+      cardInstanceId: string;
+      targetInstanceId: string;
     }
   | {
       type: "RESOLVE_INTERACTION";

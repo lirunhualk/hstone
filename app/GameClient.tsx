@@ -12,14 +12,17 @@ import {
   type PointerEventHandler,
 } from "react";
 import {
+  canMagnetize,
   createGame,
   gameReducer,
   getUpgradeCost,
   type BattleEvent,
   type BattleResult,
   type BattleSummary,
+  type BoardMinionInstance,
   type GameAction,
   type GameState,
+  type MagneticAttachment,
   type MinionInstance,
   type PendingInteraction,
   type PlayerState,
@@ -29,12 +32,14 @@ import {
 import {
   CURRENT_ROSTER_VERSION,
   TRIBE_NAMES,
+  getMinionDefinition,
 } from "../lib/game/content";
 
-const SAVE_KEY = "hearthstone-battlegrounds-local.save.v3";
+const SAVE_KEY = "hearthstone-battlegrounds-local.save.v4";
 const INITIAL_SEED = 0x53544152;
 const BOARD_LIMIT = 7;
-const DRAG_THRESHOLD_PX = 8;
+const MOUSE_DRAG_THRESHOLD_PX = 8;
+const TOUCH_DRAG_THRESHOLD_PX = 12;
 
 type Selection =
   | { zone: "shop" | "hand" | "board"; index: number }
@@ -51,11 +56,18 @@ type DragTarget =
   | { kind: "board"; index: number }
   | { kind: "hand" }
   | { kind: "sell" }
+  | { kind: "magnetic"; targetInstanceId: string }
+  | {
+      kind: "blockedMagnetic";
+      targetInstanceId: string;
+      targetName: string;
+    }
   | null;
 
 type DragSession = DragSource & {
-  unit: MinionInstance;
+  unit: BoardMinionInstance;
   pointerId: number;
+  pointerType: string;
   startX: number;
   startY: number;
   clientX: number;
@@ -143,11 +155,32 @@ function isPendingInteraction(
   );
 }
 
+function isMagneticAttachment(
+  value: unknown,
+): value is MagneticAttachment {
+  return (
+    isRecord(value) &&
+    typeof value.sourceInstanceId === "string" &&
+    typeof value.definitionId === "string" &&
+    typeof value.cardId === "string" &&
+    typeof value.name === "string" &&
+    typeof value.description === "string" &&
+    (value.effectSupport === "complete" ||
+      value.effectSupport === "partial") &&
+    typeof value.golden === "boolean" &&
+    typeof value.poolCopies === "number" &&
+    typeof value.attackGranted === "number" &&
+    typeof value.healthGranted === "number" &&
+    Array.isArray(value.attachments) &&
+    value.attachments.every(isMagneticAttachment)
+  );
+}
+
 function isGameState(value: unknown): value is GameState {
   if (!value || typeof value !== "object") return false;
   const candidate = value as Partial<GameState>;
   return (
-    candidate.version === 3 &&
+    candidate.version === 4 &&
     candidate.contentVersion === CURRENT_ROSTER_VERSION &&
     typeof candidate.seed === "number" &&
     typeof candidate.nextInteractionId === "number" &&
@@ -158,10 +191,25 @@ function isGameState(value: unknown): value is GameState {
     candidate.players.every(
       (player) =>
         typeof player.tavernSpellsCastThisTurn === "number" &&
+        Array.isArray(player.board) &&
+        player.board.every(
+          (minion) =>
+            Array.isArray(minion.attachments) &&
+            minion.attachments.every(isMagneticAttachment),
+        ) &&
         Array.isArray(player.hand) &&
         player.hand.every(
           (card) =>
-            card.kind === "minion" || card.kind === "tripleReward",
+            card.kind === "tripleReward" ||
+            (card.kind === "minion" &&
+              Array.isArray(card.attachments) &&
+              card.attachments.every(isMagneticAttachment)),
+        ) &&
+        Array.isArray(player.shop) &&
+        player.shop.every(
+          (minion) =>
+            Array.isArray(minion.attachments) &&
+            minion.attachments.every(isMagneticAttachment),
         ),
     ) &&
     (candidate.pendingInteraction === null ||
@@ -183,6 +231,35 @@ function printedTribeLabel(unit: MinionInstance): string {
     return TRIBE_NAMES.neutral;
   }
   return unit.tribes.map((tribe) => TRIBE_NAMES[tribe]).join(" / ");
+}
+
+function isMagneticMinion(unit: MinionInstance): boolean {
+  return (
+    unit.kind === "minion" &&
+    getMinionDefinition(unit.definitionId).magnetic !== undefined
+  );
+}
+
+function isBoardMinionInstance(
+  unit: MinionInstance,
+): unit is BoardMinionInstance {
+  return unit.kind === "minion";
+}
+
+function dragThreshold(pointerType: string): number {
+  return pointerType === "touch" || pointerType === "pen"
+    ? TOUCH_DRAG_THRESHOLD_PX
+    : MOUSE_DRAG_THRESHOLD_PX;
+}
+
+function countMagneticAttachments(
+  attachments: readonly MagneticAttachment[],
+): number {
+  return attachments.reduce(
+    (count, attachment) =>
+      count + 1 + countMagneticAttachments(attachment.attachments),
+    0,
+  );
 }
 
 function newSeed(): number {
@@ -240,6 +317,7 @@ function unitKeyword(unit: MinionInstance): string {
   return (
     [
       unit.golden ? "金色" : "",
+      isMagneticMinion(unit) ? "磁力" : "",
       unit.taunt ? "嘲讽" : "",
       unit.divineShield ? "圣盾" : "",
       unit.reborn ? "复生" : "",
@@ -282,10 +360,13 @@ function UnitCard({
   combatActor = false,
   combatTarget = false,
   choiceTarget = false,
+  magneticTarget = false,
+  magneticDropTarget = false,
   disabled = false,
   dragHandlers,
   testId,
   onClick,
+  onKeyDown,
 }: {
   unit: MinionInstance;
   selected?: boolean;
@@ -296,10 +377,15 @@ function UnitCard({
   combatActor?: boolean;
   combatTarget?: boolean;
   choiceTarget?: boolean;
+  magneticTarget?: boolean;
+  magneticDropTarget?: boolean;
   disabled?: boolean;
   dragHandlers?: DragPointerHandlers;
   testId?: string;
   onClick?: () => void;
+  onKeyDown?: (
+    event: ReactKeyboardEvent<HTMLButtonElement>,
+  ) => void;
 }) {
   return (
     <button
@@ -312,15 +398,26 @@ function UnitCard({
         combatActor ? " is-combat-actor" : ""
       }${combatTarget ? " is-combat-target" : ""}${
         choiceTarget ? " is-choice-target" : ""
+      }${magneticTarget ? " is-magnetic-target" : ""}${
+        magneticDropTarget ? " is-magnetic-drop-target" : ""
       }${disabled ? " is-disabled" : ""}`}
       aria-label={`${unit.name}，${unit.tier} 级，${printedTribeLabel(
         unit,
       )}，${unit.attack} 攻击，${unit.health} 生命，${
         unit.description
-      }${choiceTarget ? "，可选择为效果目标" : ""}`}
+      }${choiceTarget ? "，可选择为效果目标" : ""}${
+        magneticTarget ? "，可作为磁力吸附目标" : ""
+      }`}
       aria-pressed={selected}
       aria-disabled={disabled}
-      aria-describedby={dragEnabled ? "drag-instructions" : undefined}
+      aria-describedby={
+        [
+          dragEnabled ? "drag-instructions" : "",
+          magneticTarget ? "magnetic-target-instructions" : "",
+        ]
+          .filter(Boolean)
+          .join(" ") || undefined
+      }
       data-combat-role={
         combatActor && combatTarget
           ? "actor target"
@@ -331,15 +428,68 @@ function UnitCard({
               : undefined
       }
       data-drag-enabled={dragEnabled}
+      data-magnetic-target={magneticTarget || undefined}
+      data-magnetic-drop-target={magneticDropTarget || undefined}
       data-testid={testId}
       data-unit-instance-id={unit.instanceId}
       onClick={onClick}
+      onKeyDown={onKeyDown}
       disabled={disabled}
       style={{ "--card-hue": TRIBE_HUE[unit.tribe] } as CSSProperties}
       {...dragHandlers}
     >
       <UnitCardFace unit={unit} />
+      {magneticTarget && (
+        <span className="magnetic-target-label" aria-hidden="true">
+          可吸附
+        </span>
+      )}
     </button>
+  );
+}
+
+function MagneticAttachmentList({
+  attachments,
+}: {
+  attachments: readonly MagneticAttachment[];
+}) {
+  return (
+    <ul className="magnetic-attachment-list">
+      {attachments.map((attachment) => (
+        <li key={attachment.sourceInstanceId}>
+          <div className="magnetic-attachment-row">
+            <span>
+              <strong>
+                {attachment.golden ? "金色 " : ""}
+                {attachment.name}
+              </strong>
+              {attachment.attachments.length > 0 && (
+                <small>
+                  含 {countMagneticAttachments(attachment.attachments)} 个附件
+                </small>
+              )}
+            </span>
+            <span
+              className="magnetic-attachment-stats"
+              aria-label={`自身贡献 ${attachment.attackGranted} 攻击和 ${attachment.healthGranted} 生命`}
+            >
+              +{attachment.attackGranted}/+{attachment.healthGranted}
+            </span>
+          </div>
+          <p className="magnetic-attachment-description">
+            {attachment.description}
+          </p>
+          {attachment.effectSupport === "partial" && (
+            <small className="magnetic-attachment-support">
+              部分专属文字效果仍在适配
+            </small>
+          )}
+          {attachment.attachments.length > 0 && (
+            <MagneticAttachmentList attachments={attachment.attachments} />
+          )}
+        </li>
+      ))}
+    </ul>
   );
 }
 
@@ -427,13 +577,16 @@ function BoardRow({
   actorInstanceId,
   targetInstanceId,
   choiceTargetIds,
+  magneticTargetIds,
+  magneticDropTargetId,
   getDragHandlers,
   onUnitClick,
   onChoiceTarget,
+  onMagneticTarget,
   onEmptyClick,
   interactionLocked = false,
 }: {
-  units: MinionInstance[];
+  units: readonly BoardMinionInstance[];
   side: "enemy" | "friendly";
   selection?: Selection;
   canDeploy?: boolean;
@@ -441,20 +594,30 @@ function BoardRow({
   actorInstanceId?: string;
   targetInstanceId?: string;
   choiceTargetIds?: readonly string[];
+  magneticTargetIds?: readonly string[];
+  magneticDropTargetId?: string;
   getDragHandlers?: (
     source: DragSource,
-    unit: MinionInstance,
+    unit: BoardMinionInstance,
   ) => DragPointerHandlers;
   onUnitClick?: (index: number) => void;
   onChoiceTarget?: (instanceId: string) => void;
+  onMagneticTarget?: (instanceId: string) => void;
   onEmptyClick?: (index: number) => void;
   interactionLocked?: boolean;
 }) {
+  const draggingMagneticFromHand =
+    side === "friendly" &&
+    dragSession?.active === true &&
+    dragSession.zone === "hand" &&
+    isMagneticMinion(dragSession.unit);
   const slotCount =
     side === "enemy"
       ? units.length
       : dragSession?.active && dragSession.zone === "hand"
-        ? Math.min(BOARD_LIMIT, units.length + 1)
+        ? draggingMagneticFromHand
+          ? Math.max(1, units.length)
+          : Math.min(BOARD_LIMIT, units.length + 1)
         : canDeploy && units.length < BOARD_LIMIT
           ? units.length + 1
           : units.length;
@@ -463,14 +626,27 @@ function BoardRow({
     <div
       className={`board-row${side === "enemy" ? " enemy" : ""}${
         side === "friendly" && dragSession?.active ? " is-drag-active" : ""
+      }${
+        side === "friendly" && magneticTargetIds?.length
+          ? " has-magnetic-targets"
+          : ""
       }`}
       data-side={side}
+      data-magnetic-ready={
+        side === "friendly" && Boolean(magneticTargetIds?.length)
+      }
     >
       {Array.from({ length: slotCount }, (_, index) => {
         const unit = units[index];
         const isChoiceTarget =
           unit !== undefined &&
           choiceTargetIds?.includes(unit.instanceId) === true;
+        const isMagneticTarget =
+          unit !== undefined &&
+          magneticTargetIds?.includes(unit.instanceId) === true;
+        const isMagneticDropTarget =
+          isMagneticTarget &&
+          magneticDropTargetId === unit?.instanceId;
         const isValidDragTarget =
           side === "friendly" &&
           dragSession?.active === true &&
@@ -483,6 +659,10 @@ function BoardRow({
           isValidDragTarget &&
           dragSession?.target?.kind === "board" &&
           dragSession.target.index === index;
+        const isAfterDropTarget =
+          draggingMagneticFromHand &&
+          dragSession?.target?.kind === "board" &&
+          dragSession.target.index === units.length;
         const slotProps = {
           "data-board-slot-index":
             side === "friendly" ? index : undefined,
@@ -492,6 +672,27 @@ function BoardRow({
         if (unit) {
           return (
             <div className="slot" key={unit.instanceId} {...slotProps}>
+              {side === "friendly" &&
+                dragSession?.active === true &&
+                dragSession.zone === "hand" &&
+                units.length < BOARD_LIMIT && (
+                  <span
+                    className="board-insert-target"
+                    aria-hidden="true"
+                    data-board-slot-index={index}
+                    data-target={isDropTarget}
+                  />
+                )}
+              {draggingMagneticFromHand &&
+                units.length < BOARD_LIMIT &&
+                index === units.length - 1 && (
+                  <span
+                    className="board-insert-target is-after"
+                    aria-hidden="true"
+                    data-board-slot-index={units.length}
+                    data-target={isAfterDropTarget}
+                  />
+                )}
               <UnitCard
                 unit={unit}
                 compact
@@ -511,6 +712,8 @@ function BoardRow({
                 combatActor={unit.instanceId === actorInstanceId}
                 combatTarget={unit.instanceId === targetInstanceId}
                 choiceTarget={isChoiceTarget}
+                magneticTarget={isMagneticTarget}
+                magneticDropTarget={isMagneticDropTarget}
                 disabled={interactionLocked && !isChoiceTarget}
                 dragHandlers={
                   side === "friendly" && getDragHandlers
@@ -520,9 +723,25 @@ function BoardRow({
                 onClick={
                   isChoiceTarget && onChoiceTarget
                     ? () => onChoiceTarget(unit.instanceId)
+                    : isMagneticTarget && onMagneticTarget
+                      ? () => onMagneticTarget(unit.instanceId)
                     : onUnitClick
                       ? () => onUnitClick(index)
                       : undefined
+                }
+                onKeyDown={
+                  isMagneticTarget && onMagneticTarget
+                    ? (event) => {
+                        if (
+                          event.key !== "Enter" &&
+                          event.key !== " "
+                        ) {
+                          return;
+                        }
+                        event.preventDefault();
+                        onMagneticTarget(unit.instanceId);
+                      }
+                    : undefined
                 }
               />
             </div>
@@ -597,6 +816,7 @@ export default function GameClient() {
   const [infoTab, setInfoTab] = useState<InfoTab>("details");
   const [showRestart, setShowRestart] = useState(false);
   const [dragSession, setDragSession] = useState<DragSession | null>(null);
+  const [magneticAnnouncement, setMagneticAnnouncement] = useState("");
   const [battleSpeed, setBattleSpeed] = useState<BattleSpeed>(1);
   const [battlePlayback, setBattlePlayback] =
     useState<BattlePlaybackState>({
@@ -610,6 +830,8 @@ export default function GameClient() {
   const battlePlaybackTimerRef = useRef<number | null>(null);
   const interactionReturnFocusRef = useRef<HTMLElement | null>(null);
   const previousInteractionIdRef = useRef<string | null>(null);
+  const magneticFocusTargetRef = useRef<string | null>(null);
+  const previousMagneticSelectionRef = useRef<string | null>(null);
 
   const writeDragSession = useCallback((next: DragSession | null) => {
     dragSessionRef.current = next;
@@ -731,6 +953,26 @@ export default function GameClient() {
     }
   }, [humanInteraction]);
 
+  useEffect(() => {
+    const targetInstanceId = magneticFocusTargetRef.current;
+    if (!targetInstanceId) return;
+    const focusFrame = window.requestAnimationFrame(() => {
+      const target = Array.from(
+        document.querySelectorAll<HTMLElement>(
+          "[data-unit-instance-id]",
+        ),
+      ).find(
+        (element) =>
+          element.dataset.unitInstanceId === targetInstanceId,
+      );
+      if (target) {
+        magneticFocusTargetRef.current = null;
+        target.focus();
+      }
+    });
+    return () => window.cancelAnimationFrame(focusFrame);
+  }, [game.players]);
+
   const trapDiscoverFocus = useCallback(
     (event: ReactKeyboardEvent<HTMLDivElement>) => {
       if (event.key !== "Tab") return;
@@ -784,7 +1026,11 @@ export default function GameClient() {
   const opponent = game.players.find((player) => player.id === opponentId);
   const opponentBoard =
     battle && opponentId
-      ? battle.initialBoards[opponentId] ?? opponent?.board ?? []
+      ? (
+          battle.initialBoards[opponentId] ??
+          opponent?.board ??
+          []
+        ).filter(isBoardMinionInstance)
       : opponent?.board ?? [];
   const playbackEvents = useMemo(
     () => battle?.events.filter(isPlaybackEvent) ?? [],
@@ -815,7 +1061,9 @@ export default function GameClient() {
       : undefined;
   const friendlyCombatBoard =
     game.phase === "combat" && battle
-      ? battle.initialBoards[human.id] ?? human.board
+      ? (battle.initialBoards[human.id] ?? human.board).filter(
+          isBoardMinionInstance,
+        )
       : human.board;
   const revealedBattleLogEvents = battle
     ? game.phase !== "combat" || battlePlaybackComplete
@@ -823,6 +1071,48 @@ export default function GameClient() {
       : playbackEvents.slice(0, revealedBattleEventCount)
     : [];
   const selectedUnit = selectionUnit(selection, human);
+  const selectedHandCard =
+    selection?.zone === "hand"
+      ? human.hand[selection.index]
+      : undefined;
+  const selectedMagneticSource =
+    !interactionLocked &&
+    selectedHandCard?.kind === "minion" &&
+    isMagneticMinion(selectedHandCard)
+      ? selectedHandCard
+      : null;
+  const dragMagneticSource =
+    dragSession?.active === true &&
+    dragSession.zone === "hand" &&
+    isMagneticMinion(dragSession.unit)
+      ? dragSession.unit
+      : null;
+  const magneticSourceForTargets =
+    dragMagneticSource ?? selectedMagneticSource;
+  const magneticTargetIds = magneticSourceForTargets
+    ? human.board
+        .filter((target) =>
+          canMagnetize(magneticSourceForTargets, target),
+        )
+        .map((target) => target.instanceId)
+    : [];
+  const selectedMagneticTargetIds = useMemo(
+    () =>
+      selectedMagneticSource
+        ? human.board
+            .filter((target) =>
+              canMagnetize(selectedMagneticSource, target),
+            )
+            .map((target) => target.instanceId)
+        : [],
+    [human.board, selectedMagneticSource],
+  );
+  const boardHasOpenSlot = human.board.length < BOARD_LIMIT;
+  const canDragHandMinion = (card: BoardMinionInstance) =>
+    game.phase === "recruit" &&
+    !interactionLocked &&
+    (boardHasOpenSlot ||
+      human.board.some((target) => canMagnetize(card, target)));
   const infoOpen =
     selectedUnit !== null || (infoTab === "battle" && battle !== null);
   const upgradeCost = getUpgradeCost(game, human.id);
@@ -867,6 +1157,35 @@ export default function GameClient() {
           }牌`
         : "发现一个随从"
     : "";
+
+  useEffect(() => {
+    const sourceInstanceId =
+      selectedMagneticSource?.instanceId ?? null;
+    if (!sourceInstanceId) {
+      previousMagneticSelectionRef.current = null;
+      return;
+    }
+    if (
+      previousMagneticSelectionRef.current === sourceInstanceId ||
+      selectedMagneticTargetIds.length === 0
+    ) {
+      return;
+    }
+    previousMagneticSelectionRef.current = sourceInstanceId;
+    const firstTargetInstanceId = selectedMagneticTargetIds[0];
+    const focusFrame = window.requestAnimationFrame(() => {
+      const firstTarget = Array.from(
+        document.querySelectorAll<HTMLElement>(
+          "[data-unit-instance-id]",
+        ),
+      ).find(
+        (element) =>
+          element.dataset.unitInstanceId === firstTargetInstanceId,
+      );
+      firstTarget?.focus();
+    });
+    return () => window.cancelAnimationFrame(focusFrame);
+  }, [selectedMagneticSource, selectedMagneticTargetIds]);
 
   useEffect(() => {
     clearBattlePlaybackTimer();
@@ -941,6 +1260,8 @@ export default function GameClient() {
     setSelection(null);
     setShowRestart(false);
     setInfoTab("details");
+    setMagneticAnnouncement("");
+    magneticFocusTargetRef.current = null;
   }, []);
 
   const deploySelected = useCallback(
@@ -948,6 +1269,7 @@ export default function GameClient() {
       if (selection?.zone !== "hand" || interactionLocked) return;
       const card = human.hand[selection.index];
       if (card?.kind !== "minion") return;
+      setMagneticAnnouncement("");
       send({
         type: "PLAY_HAND_CARD",
         cardInstanceId: card.instanceId,
@@ -955,6 +1277,36 @@ export default function GameClient() {
       });
     },
     [human.hand, interactionLocked, selection, send],
+  );
+
+  const magnetizeCard = useCallback(
+    (cardInstanceId: string, targetInstanceId: string) => {
+      const source = human.hand.find(
+        (card) =>
+          card.kind === "minion" &&
+          card.instanceId === cardInstanceId,
+      );
+      const target = human.board.find(
+        (minion) => minion.instanceId === targetInstanceId,
+      );
+      if (
+        source?.kind !== "minion" ||
+        !target ||
+        !canMagnetize(source, target)
+      ) {
+        return;
+      }
+      magneticFocusTargetRef.current = targetInstanceId;
+      setMagneticAnnouncement(
+        `已将${source.name}吸附到${target.name}，贡献 +${source.attack}/+${source.health}`,
+      );
+      send({
+        type: "MAGNETIZE_MINION",
+        cardInstanceId,
+        targetInstanceId,
+      });
+    },
+    [human.board, human.hand, send],
   );
 
   const select = useCallback((nextSelection: Exclude<Selection, null>) => {
@@ -969,6 +1321,7 @@ export default function GameClient() {
         suppressCardClickRef.current = false;
         return;
       }
+      setMagneticAnnouncement("");
       select(nextSelection);
     },
     [interactionLocked, select],
@@ -997,6 +1350,36 @@ export default function GameClient() {
         return { kind: "sell" };
       }
 
+      if (source.zone === "hand") {
+        const sourceCard = human.hand[source.index];
+        const hoveredCard = hit.closest<HTMLElement>(
+          "[data-unit-instance-id]",
+        );
+        const hoveredTarget = hoveredCard
+          ? human.board.find(
+              (minion) =>
+                minion.instanceId ===
+                hoveredCard.dataset.unitInstanceId,
+            )
+          : undefined;
+        if (
+          sourceCard?.kind === "minion" &&
+          isMagneticMinion(sourceCard) &&
+          hoveredTarget
+        ) {
+          return canMagnetize(sourceCard, hoveredTarget)
+            ? {
+                kind: "magnetic",
+                targetInstanceId: hoveredTarget.instanceId,
+              }
+            : {
+                kind: "blockedMagnetic",
+                targetInstanceId: hoveredTarget.instanceId,
+                targetName: hoveredTarget.name,
+              };
+        }
+      }
+
       const slot = hit.closest<HTMLElement>("[data-board-slot-index]");
       if (!slot) return null;
       const index = Number(slot.dataset.boardSlotIndex);
@@ -1022,26 +1405,33 @@ export default function GameClient() {
       }
       return null;
     },
-    [canBuyFromShop, human.board.length],
+    [canBuyFromShop, human.board, human.hand],
   );
 
   const beginDrag = useCallback(
     (
       event: ReactPointerEvent<HTMLButtonElement>,
       source: DragSource,
-      unit: MinionInstance,
+      unit: BoardMinionInstance,
     ) => {
+      const hasMagneticTarget =
+        source.zone === "hand" &&
+        human.board.some((target) => canMagnetize(unit, target));
       if (
         dragSessionRef.current !== null ||
         interactionLocked ||
         game.phase !== "recruit" ||
-        (event.pointerType === "mouse" && event.button !== 0) ||
-        (source.zone === "hand" && human.board.length >= BOARD_LIMIT) ||
+        !event.isPrimary ||
+        event.button !== 0 ||
+        (source.zone === "hand" &&
+          human.board.length >= BOARD_LIMIT &&
+          !hasMagneticTarget) ||
         (source.zone === "shop" && !canBuyFromShop)
       ) {
         return;
       }
 
+      setMagneticAnnouncement("");
       const rect = event.currentTarget.getBoundingClientRect();
       dragCaptureElementRef.current = event.currentTarget;
       try {
@@ -1053,6 +1443,7 @@ export default function GameClient() {
         ...source,
         unit,
         pointerId: event.pointerId,
+        pointerType: event.pointerType,
         startX: event.clientX,
         startY: event.clientY,
         clientX: event.clientX,
@@ -1068,7 +1459,7 @@ export default function GameClient() {
     [
       canBuyFromShop,
       game.phase,
-      human.board.length,
+      human.board,
       interactionLocked,
       writeDragSession,
     ],
@@ -1083,7 +1474,9 @@ export default function GameClient() {
         clientX - current.startX,
         clientY - current.startY,
       );
-      const active = current.active || distance >= DRAG_THRESHOLD_PX;
+      const active =
+        current.active ||
+        distance >= dragThreshold(current.pointerType);
       if (!active) return false;
       if (
         current.active &&
@@ -1134,7 +1527,9 @@ export default function GameClient() {
         clientX - current.startX,
         clientY - current.startY,
       );
-      const wasActive = current.active || distance >= DRAG_THRESHOLD_PX;
+      const wasActive =
+        current.active ||
+        distance >= dragThreshold(current.pointerType);
       const target = cancelled || !wasActive
         ? null
         : resolveDragTarget(clientX, clientY, current);
@@ -1156,6 +1551,25 @@ export default function GameClient() {
       }, 0);
 
       if (!target) return true;
+      if (
+        current.zone === "hand" &&
+        target.kind === "magnetic"
+      ) {
+        magnetizeCard(
+          current.unit.instanceId,
+          target.targetInstanceId,
+        );
+        return true;
+      }
+      if (
+        current.zone === "hand" &&
+        target.kind === "blockedMagnetic"
+      ) {
+        setMagneticAnnouncement(
+          `${current.unit.name}不能吸附到${target.targetName}，已返回手牌`,
+        );
+        return true;
+      }
       if (current.zone === "shop" && target.kind === "hand") {
         send({ type: "BUY_MINION", shopIndex: current.index });
         return true;
@@ -1185,7 +1599,7 @@ export default function GameClient() {
       }
       return true;
     },
-    [resolveDragTarget, send, writeDragSession],
+    [magnetizeCard, resolveDragTarget, send, writeDragSession],
   );
 
   const finishDrag = useCallback(
@@ -1210,7 +1624,7 @@ export default function GameClient() {
   const getDragHandlers = useCallback(
     (
       source: DragSource,
-      unit: MinionInstance,
+      unit: BoardMinionInstance,
     ): DragPointerHandlers => ({
       onPointerDown: (event) => beginDrag(event, source, unit),
       onPointerMove: moveDrag,
@@ -1269,7 +1683,15 @@ export default function GameClient() {
       suppressCardClickRef.current = false;
     };
     const handleEscape = (event: KeyboardEvent) => {
-      if (event.key === "Escape") cancelStaleDrag();
+      if (event.key !== "Escape") return;
+      if (dragSessionRef.current) {
+        cancelStaleDrag();
+        return;
+      }
+      if (selectedMagneticSource) {
+        setSelection(null);
+        setMagneticAnnouncement("已取消磁力目标选择");
+      }
     };
 
     window.addEventListener("pointermove", handleWindowPointerMove, {
@@ -1292,7 +1714,11 @@ export default function GameClient() {
       window.removeEventListener("blur", cancelStaleDrag);
       window.removeEventListener("keydown", handleEscape);
     };
-  }, [finishDragSession, moveDragSession]);
+  }, [
+    finishDragSession,
+    moveDragSession,
+    selectedMagneticSource,
+  ]);
 
   useEffect(() => {
     const current = dragSessionRef.current;
@@ -1306,6 +1732,17 @@ export default function GameClient() {
     }
   }, [finishDragSession, game.phase, interactionLocked]);
 
+  const dragMagneticTargetInstanceId =
+    dragSession?.target?.kind === "magnetic"
+      ? dragSession.target.targetInstanceId
+      : undefined;
+  const dragMagneticTargetName =
+    dragMagneticTargetInstanceId
+      ? human.board.find(
+          (minion) =>
+            minion.instanceId === dragMagneticTargetInstanceId,
+        )?.name
+      : undefined;
   const dragAnnouncement =
     dragSession?.active !== true
       ? ""
@@ -1313,15 +1750,36 @@ export default function GameClient() {
         ? `松手出售${dragSession.unit.name}，获得 ${dragSession.unit.sellValue} 枚金币`
         : dragSession.target?.kind === "hand"
           ? `松手购买${dragSession.unit.name}，支付 3 枚金币`
+          : dragSession.target?.kind === "magnetic"
+            ? `松手将${dragSession.unit.name}吸附到${
+                dragMagneticTargetName ?? "目标随从"
+              }`
+            : dragSession.target?.kind === "blockedMagnetic"
+              ? `${dragSession.unit.name}不能吸附到${dragSession.target.targetName}，松手将返回手牌`
           : dragSession.target?.kind === "board"
             ? `松手放到战场第 ${dragSession.target.index + 1} 个位置`
             : dragSession.zone === "shop"
               ? "拖到发光的手牌区域购买，花费 3 枚金币"
               : dragSession.zone === "board"
                 ? "拖到战场位置来换位，或拖到鲍勃的酒馆出售"
-                : "拖到发光的战场位置上场";
+                : isMagneticMinion(dragSession.unit)
+                  ? boardHasOpenSlot
+                    ? "拖到标有“可吸附”的随从进行磁力吸附，或拖到插位线上普通上场"
+                    : "战场已满，只能拖到标有“可吸附”的随从进行磁力吸附"
+                  : "拖到发光的战场位置上场";
+  const magneticSelectionAnnouncement = selectedMagneticSource
+    ? selectedMagneticTargetIds.length > 0
+      ? boardHasOpenSlot
+        ? `已选择${selectedMagneticSource.name}，场上有 ${selectedMagneticTargetIds.length} 个可吸附目标。点击发光随从吸附，或点击空阵位普通上场`
+        : `已选择${selectedMagneticSource.name}，场上有 ${selectedMagneticTargetIds.length} 个可吸附目标。战场已满，只能点击发光随从吸附`
+      : boardHasOpenSlot
+        ? `已选择${selectedMagneticSource.name}，当前没有可吸附目标，可以作为普通随从上场`
+        : `已选择${selectedMagneticSource.name}，战场已满且当前没有可吸附目标`
+    : "";
   const interactionAnnouncement =
     dragAnnouncement ||
+    magneticAnnouncement ||
+    magneticSelectionAnnouncement ||
     (selection?.zone === "shop" && buyUnavailableReason
       ? `无法购买${selectedUnit?.name ?? "该随从"}：${buyUnavailableReason}`
       : "");
@@ -1660,6 +2118,16 @@ export default function GameClient() {
                 choiceTargetIds={
                   targetInteraction?.optionInstanceIds
                 }
+                magneticTargetIds={
+                  game.phase === "recruit" && !interactionLocked
+                    ? magneticTargetIds
+                    : []
+                }
+                magneticDropTargetId={
+                  dragSession?.target?.kind === "magnetic"
+                    ? dragSession.target.targetInstanceId
+                    : undefined
+                }
                 interactionLocked={interactionLocked}
                 canDeploy={
                   game.phase === "recruit" &&
@@ -1685,6 +2153,13 @@ export default function GameClient() {
                     interactionId: targetInteraction.interactionId,
                     optionInstanceId: instanceId,
                   });
+                }}
+                onMagneticTarget={(targetInstanceId) => {
+                  if (!selectedMagneticSource) return;
+                  magnetizeCard(
+                    selectedMagneticSource.instanceId,
+                    targetInstanceId,
+                  );
                 }}
                 onEmptyClick={deploySelected}
               />
@@ -1744,7 +2219,9 @@ export default function GameClient() {
             <div className="panel-title">
               <span>
                 手牌
-                <small>随从拖到战场；三连奖励点击使用</small>
+                <small>
+                  随从拖到战场；磁力牌拖到标记目标；三连奖励点击使用
+                </small>
               </span>
               <span>{human.hand.length} / 10</span>
             </div>
@@ -1774,19 +2251,13 @@ export default function GameClient() {
                     }
                     testId={`hand-card-${index}`}
                     disabled={interactionLocked}
-                    dragEnabled={
-                      game.phase === "recruit" &&
-                      !interactionLocked &&
-                      human.board.length < BOARD_LIMIT
-                    }
+                    dragEnabled={canDragHandMinion(card)}
                     dragging={
                       dragSession?.active === true &&
                       dragSession.unit.instanceId === card.instanceId
                     }
                     dragHandlers={
-                      game.phase === "recruit" &&
-                      !interactionLocked &&
-                      human.board.length < BOARD_LIMIT
+                      canDragHandMinion(card)
                         ? getDragHandlers(
                             { zone: "hand", index },
                             card,
@@ -1893,6 +2364,7 @@ export default function GameClient() {
                       </p>
                     )}
                     <div className="detail-keywords">
+                      {isMagneticMinion(selectedUnit) && <span>磁力</span>}
                       {selectedUnit.taunt && <span>嘲讽</span>}
                       {selectedUnit.divineShield && <span>圣盾</span>}
                       {selectedUnit.reborn && <span>复生</span>}
@@ -1901,7 +2373,47 @@ export default function GameClient() {
                       {selectedUnit.windfury && <span>风怒</span>}
                       {selectedUnit.cleave && <span>顺劈</span>}
                       {selectedUnit.golden && <span>金色随从</span>}
+                      {selectedUnit.attachments.length > 0 && (
+                        <span>
+                          已吸附{" "}
+                          {countMagneticAttachments(
+                            selectedUnit.attachments,
+                          )}
+                        </span>
+                      )}
                     </div>
+                    {selectedUnit.attachments.length > 0 && (
+                      <section
+                        className="magnetic-attachments"
+                        aria-label="磁力附件"
+                      >
+                        <h3>
+                          磁力附件 ·{" "}
+                          {countMagneticAttachments(
+                            selectedUnit.attachments,
+                          )}
+                        </h3>
+                        <MagneticAttachmentList
+                          attachments={selectedUnit.attachments}
+                        />
+                      </section>
+                    )}
+                    {selection?.zone === "hand" &&
+                      selectedMagneticSource && (
+                        <p
+                          className="magnetic-play-hint"
+                          data-testid="magnetic-selection-hint"
+                          role="status"
+                        >
+                          {selectedMagneticTargetIds.length > 0
+                            ? boardHasOpenSlot
+                              ? `场上有 ${selectedMagneticTargetIds.length} 个可吸附目标。点击标有“可吸附”的随从，或把它作为普通随从上场。`
+                              : `场上有 ${selectedMagneticTargetIds.length} 个可吸附目标。战场已满，只能点击标有“可吸附”的随从。`
+                            : boardHasOpenSlot
+                              ? "场上暂时没有可吸附目标，仍可把它作为普通随从上场。"
+                              : "战场已满，且当前没有可吸附目标。"}
+                        </p>
+                      )}
                     <div className="detail-actions">
                       {selection?.zone === "shop" && (
                         <button
@@ -1927,7 +2439,7 @@ export default function GameClient() {
                           disabled={!selectedCanPlay}
                           onClick={() => deploySelected()}
                         >
-                          部署到战场
+                          作为随从上场
                         </button>
                       )}
                       {selection?.zone === "board" && (
@@ -2012,20 +2524,34 @@ export default function GameClient() {
       </div>
 
       <span className="sr-only" id="drag-instructions">
-        可按住并拖动。商店随从拖到手牌区域购买；手牌拖到战场上场；场上随从可拖动换位，或拖到鲍勃的酒馆出售。也可点击卡牌后使用详情面板中的按钮。
+        可按住并拖动。商店随从拖到手牌区域购买；普通手牌拖到战场插位线上场；磁力随从拖到标有“可吸附”的友方随从进行吸附，拖到插位线则普通上场；场上随从可拖动换位，或拖到鲍勃的酒馆出售。也可点击卡牌后使用详情面板中的按钮。
+      </span>
+      <span className="sr-only" id="magnetic-target-instructions">
+        这是当前磁力牌的合法目标。点击或按回车键即可完成吸附；按 Escape 键取消选择。
       </span>
       <span className="sr-only" id="buy-drop-description">
         购买随从需要 3 枚金币且手牌未满。点击商店随从后也可使用详情面板中的购买按钮。
       </span>
-      <span className="sr-only" role="status" aria-live="polite">
+      <span
+        className="sr-only"
+        role="status"
+        aria-live="polite"
+        aria-atomic="true"
+      >
         {interactionAnnouncement}
       </span>
 
       {dragSession?.active && (
         <div
-          className="unit-card is-compact is-dragging drag-ghost"
+          className={`unit-card is-compact is-dragging drag-ghost${
+            dragSession.pointerType === "touch" ||
+            dragSession.pointerType === "pen"
+              ? " is-direct-touch-drag"
+              : ""
+          }`}
           aria-hidden="true"
           data-testid="drag-ghost"
+          data-pointer-type={dragSession.pointerType}
           style={
             {
               "--card-hue": TRIBE_HUE[dragSession.unit.tribe],
@@ -2105,6 +2631,7 @@ export default function GameClient() {
               <span>每局开放 5 个种族</span>
               <span>鼠标与触控拖拽</span>
               <span>三连奖励与发现</span>
+              <span>磁力吸附</span>
             </div>
             <button
               type="button"

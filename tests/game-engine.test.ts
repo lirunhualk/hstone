@@ -196,6 +196,7 @@ function tripleRewardFixture(
     description: "发现一个比你当前酒馆等级高一级的随从。",
     grantsTripleReward: false,
     poolCopies: 0,
+    attachments: [],
   };
 }
 
@@ -378,7 +379,7 @@ test("classic rule fixtures remain available but never enter the live pool", () 
     new Set(MINION_DEFINITIONS.map((definition) => definition.id)).size,
     MINION_DEFINITIONS.length,
   );
-  assert.equal(createGame(1).version, 3);
+  assert.equal(createGame(1).version, 4);
 });
 
 test("Wrath Weaver, Brann, and Mama Bear use their signature recruit triggers", () => {
@@ -991,15 +992,25 @@ test("Golden repeated damage keeps separate hits for Divine Shield", () => {
           ),
         ]
       : [
-          fixtureMinion(template, `blaster-killer-${player.id}`, {
-            attack: 100,
-            health: 100,
-          }),
-          fixtureMinion(template, `blaster-shield-${player.id}`, {
-            attack: 0,
-            health: 20,
-            divineShield: true,
-          }),
+          definitionMinion(
+            template,
+            "tabbycat-token",
+            `blaster-killer-${player.id}`,
+            {
+              attack: 100,
+              health: 100,
+            },
+          ),
+          definitionMinion(
+            template,
+            "tabbycat-token",
+            `blaster-shield-${player.id}`,
+            {
+              attack: 0,
+              health: 20,
+              divineShield: true,
+            },
+          ),
         ];
   }
 
