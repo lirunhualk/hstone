@@ -34,3 +34,37 @@ export function combatIntroOpponent(
     opponentIsGhost: battle.isGhost,
   };
 }
+
+export function projectCombatHealth({
+  battle,
+  playerId,
+  revealedEvents,
+  playbackComplete,
+}: {
+  battle: BattleSummary;
+  playerId: PlayerId;
+  revealedEvents: readonly BattleEvent[];
+  playbackComplete: boolean;
+}): number | null {
+  const isPlayerA = battle.playerAId === playerId;
+  const isPlayerB = battle.playerBId === playerId;
+  if (!isPlayerA && !isPlayerB) return null;
+
+  const healthBefore = isPlayerA
+    ? battle.playerAHealthBefore
+    : battle.playerBHealthBefore;
+  const healthAfter = isPlayerA
+    ? battle.playerAHealthAfter
+    : battle.playerBHealthAfter;
+  const damageRevealed = revealedEvents.some(
+    (event) =>
+      event.type === "heroDamage" &&
+      event.targetPlayerId === playerId,
+  );
+  const projectedHealth =
+    playbackComplete || damageRevealed ? healthAfter : healthBefore;
+
+  return Number.isFinite(projectedHealth)
+    ? Math.max(0, projectedHealth)
+    : 0;
+}

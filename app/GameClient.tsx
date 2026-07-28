@@ -39,6 +39,7 @@ import {
   combatIntroOpponent,
   initialCombatPlayback,
   isCombatPlaybackEvent,
+  projectCombatHealth,
 } from "../lib/game/combat-presentation";
 import {
   createBoardDragPreview,
@@ -994,21 +995,38 @@ function PlayerRow({
   humanId,
   opponentId,
   rank,
+  displayHealth,
+  displayAlive,
+  takingHeroDamage = false,
 }: {
   player: PlayerState;
   humanId: string;
   opponentId?: string;
   rank: number;
+  displayHealth?: number;
+  displayAlive?: boolean;
+  takingHeroDamage?: boolean;
 }) {
+  const renderedHealth = Math.max(
+    0,
+    displayHealth ?? player.health,
+  );
+  const renderedAlive = displayAlive ?? player.alive;
+
   return (
     <div
       className={`player-row${player.id === humanId ? " is-player" : ""}${
-        !player.alive ? " is-dead" : ""
-      }${player.id === opponentId ? " is-opponent" : ""}`}
-      data-rank={player.placement ?? rank}
+        !renderedAlive ? " is-dead" : ""
+      }${player.id === opponentId ? " is-opponent" : ""}${
+        takingHeroDamage ? " is-taking-hero-damage" : ""
+      }`}
+      data-rank={
+        renderedAlive ? rank : (player.placement ?? rank)
+      }
       data-player={player.id === humanId ? "human" : "ai"}
-      data-eliminated={!player.alive}
+      data-eliminated={!renderedAlive}
       data-opponent={player.id === opponentId}
+      data-displayed-health={renderedHealth}
       data-testid={`standing-${player.id}`}
     >
       <span className="player-meta">
@@ -1016,13 +1034,13 @@ function PlayerRow({
         <small>
           {player.id === opponentId
             ? "本轮对手"
-            : player.alive
+            : renderedAlive
               ? `${player.board.length} 随从 · ${player.tavernTier}星`
               : `第 ${player.placement ?? rank} 名`}
         </small>
       </span>
       <span className="player-health">
-        生命 {Math.max(0, player.health)}
+        生命 {renderedHealth}
       </span>
     </div>
   );
@@ -1253,25 +1271,6 @@ export default function GameClient() {
     [],
   );
 
-  const standings = useMemo(
-    () =>
-      [...game.players].sort((left, right) => {
-        if (left.alive !== right.alive) return left.alive ? -1 : 1;
-        if (left.alive) {
-          return (
-            right.health - left.health ||
-            right.tavernTier - left.tavernTier ||
-            left.id.localeCompare(right.id)
-          );
-        }
-        return (
-          (left.placement ?? 99) - (right.placement ?? 99) ||
-          left.id.localeCompare(right.id)
-        );
-      }),
-    [game.players],
-  );
-
   const battle = game.lastBattle;
   const combatIntroActive =
     started &&
@@ -1346,6 +1345,74 @@ export default function GameClient() {
     battle && game.phase === "combat"
       ? playbackEvents.slice(0, revealedBattleEventCount)
       : [];
+  const displayedHumanHealth =
+    game.phase === "combat" && battle
+      ? (projectCombatHealth({
+          battle,
+          playerId: human.id,
+          revealedEvents: revealedPlaybackEvents,
+          playbackComplete: battlePlaybackComplete,
+        }) ?? Math.max(0, human.health))
+      : Math.max(0, human.health);
+  const displayedOpponentHealth =
+    game.phase === "combat" && battle && opponentId
+      ? projectCombatHealth({
+          battle,
+          playerId: opponentId,
+          revealedEvents: revealedPlaybackEvents,
+          playbackComplete: battlePlaybackComplete,
+        })
+      : null;
+  const currentHeroDamageTargetId =
+    !battlePlaybackComplete &&
+    currentBattleEvent?.type === "heroDamage"
+      ? currentBattleEvent.targetPlayerId
+      : undefined;
+  const projectedStandingHealth = (player: PlayerState) =>
+    game.phase === "combat" && battle
+      ? player.id === human.id
+        ? displayedHumanHealth
+        : player.id === opponentId
+          ? (displayedOpponentHealth ?? player.health)
+          : player.health
+      : player.health;
+  const projectedStandingAlive = (player: PlayerState) =>
+    game.phase === "combat" &&
+    battle &&
+    (player.id === human.id || player.id === opponentId)
+      ? projectedStandingHealth(player) > 0
+      : player.alive;
+  const standings = [...game.players].sort((left, right) => {
+    const leftAlive = projectedStandingAlive(left);
+    const rightAlive = projectedStandingAlive(right);
+    if (leftAlive !== rightAlive) return leftAlive ? -1 : 1;
+    if (leftAlive) {
+      return (
+        projectedStandingHealth(right) -
+          projectedStandingHealth(left) ||
+        right.tavernTier - left.tavernTier ||
+        left.id.localeCompare(right.id)
+      );
+    }
+    return (
+      (left.placement ?? 99) - (right.placement ?? 99) ||
+      left.id.localeCompare(right.id)
+    );
+  });
+  const displayedAlivePlayerCount = game.players.filter((player) => {
+    if (
+      game.phase !== "combat" ||
+      !battle ||
+      (player.id !== human.id && player.id !== opponentId)
+    ) {
+      return player.alive;
+    }
+    const displayedHealth =
+      player.id === human.id
+        ? displayedHumanHealth
+        : (displayedOpponentHealth ?? player.health);
+    return displayedHealth > 0;
+  }).length;
   const opponentBoard =
     battle && opponentId
       ? projectCombatBoard(
@@ -2283,9 +2350,22 @@ export default function GameClient() {
           </small>
         </div>
         <span className="phase-pill">{phaseLabel(game.phase)}</span>
-        <div className="hud-stat" aria-label={`生命 ${human.health}`}>
+        <div
+          className={`hud-stat health${
+            currentHeroDamageTargetId === human.id
+              ? " is-taking-hero-damage"
+              : ""
+          }`}
+          aria-atomic="true"
+          aria-label={`生命 ${displayedHumanHealth}`}
+          aria-live="polite"
+          data-displayed-health={displayedHumanHealth}
+          data-stat="health"
+          data-testid="human-health"
+          role="status"
+        >
           <small>生命</small>
-          <strong>{Math.max(0, human.health)}</strong>
+          <strong>{displayedHumanHealth}</strong>
         </div>
         <div className="hud-stat" aria-label={`金币 ${human.gold}`}>
           <small>金币</small>
@@ -2847,7 +2927,7 @@ export default function GameClient() {
           <section className="panel standings-panel">
             <div className="panel-title">
               <span>8 人战局</span>
-              <span>{game.players.filter((player) => player.alive).length} 存活</span>
+              <span>{displayedAlivePlayerCount} 存活</span>
             </div>
             <div className="standings" data-testid="standings">
               {standings.map((player, index) => (
@@ -2856,6 +2936,29 @@ export default function GameClient() {
                   humanId={game.humanPlayerId}
                   opponentId={
                     game.phase === "combat" ? opponentId : undefined
+                  }
+                  displayHealth={
+                    game.phase === "combat" && battle
+                      ? player.id === human.id
+                        ? displayedHumanHealth
+                        : player.id === opponentId
+                          ? (displayedOpponentHealth ?? undefined)
+                          : undefined
+                      : undefined
+                  }
+                  displayAlive={
+                    game.phase === "combat" &&
+                    battle &&
+                    (player.id === human.id ||
+                      player.id === opponentId)
+                      ? (player.id === human.id
+                          ? displayedHumanHealth
+                          : (displayedOpponentHealth ??
+                            player.health)) > 0
+                      : undefined
+                  }
+                  takingHeroDamage={
+                    currentHeroDamageTargetId === player.id
                   }
                   rank={index + 1}
                   key={player.id}

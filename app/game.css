@@ -252,6 +252,10 @@
   color: #ffb6bb;
 }
 
+.hud-stat.is-taking-hero-damage > strong {
+  animation: hero-health-damage 650ms cubic-bezier(0.22, 1, 0.36, 1);
+}
+
 .hud-actions {
   display: flex;
   min-width: 0;
@@ -1680,6 +1684,28 @@
   font-size: 12px;
   font-variant-numeric: tabular-nums;
   font-weight: 850;
+}
+
+.player-row.is-taking-hero-damage .player-health {
+  animation: hero-health-damage 650ms cubic-bezier(0.22, 1, 0.36, 1);
+}
+
+@keyframes hero-health-damage {
+  0% {
+    color: #fff4f5;
+    filter: drop-shadow(0 0 0 rgb(255 76 86 / 0%));
+    transform: scale(1.18);
+  }
+
+  36% {
+    color: #ff6b73;
+    filter: drop-shadow(0 0 9px rgb(255 76 86 / 78%));
+  }
+
+  100% {
+    filter: drop-shadow(0 0 0 rgb(255 76 86 / 0%));
+    transform: scale(1);
+  }
 }
 
 .info-panel {

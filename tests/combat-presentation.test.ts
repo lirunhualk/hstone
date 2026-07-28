@@ -6,6 +6,7 @@ import {
   combatIntroOpponent,
   initialCombatPlayback,
   isCombatPlaybackEvent,
+  projectCombatHealth,
 } from "../lib/game/combat-presentation.ts";
 import type {
   BattleEvent,
@@ -91,5 +92,157 @@ test("combat intro duration and opponent label match the current transition cont
       opponentName: "海盗船长",
       opponentIsGhost: true,
     },
+  );
+});
+
+test("combat health stays at the pre-combat value until hero damage is revealed", () => {
+  const summary = battle({
+    playerAHealthBefore: 31,
+    playerBHealthBefore: 27,
+    playerAHealthAfter: 31,
+    playerBHealthAfter: 18,
+  });
+  const attack = event("attack", 1);
+  const heroDamage: BattleEvent = {
+    ...event("heroDamage", 2),
+    targetPlayerId: "human",
+    amount: 7,
+  };
+
+  assert.equal(
+    projectCombatHealth({
+      battle: summary,
+      playerId: "human",
+      revealedEvents: [],
+      playbackComplete: false,
+    }),
+    27,
+  );
+  assert.equal(
+    projectCombatHealth({
+      battle: summary,
+      playerId: "human",
+      revealedEvents: [attack],
+      playbackComplete: false,
+    }),
+    27,
+  );
+  assert.equal(
+    projectCombatHealth({
+      battle: summary,
+      playerId: "human",
+      revealedEvents: [attack, heroDamage],
+      playbackComplete: false,
+    }),
+    18,
+  );
+  assert.equal(
+    projectCombatHealth({
+      battle: summary,
+      playerId: "ai-1",
+      revealedEvents: [attack, heroDamage],
+      playbackComplete: false,
+    }),
+    31,
+  );
+});
+
+test("combat health selects the correct side and ignores non-target events", () => {
+  const summary = battle({
+    playerAHealthBefore: 31,
+    playerAHealthAfter: 24,
+    playerBHealthBefore: 27,
+    playerBHealthAfter: 19,
+  });
+  const fakeAttackDamage: BattleEvent = {
+    ...event("attack", 1),
+    targetPlayerId: "ai-1",
+    amount: 7,
+  };
+  const enemyDamage: BattleEvent = {
+    ...event("heroDamage", 2),
+    targetPlayerId: "human",
+    amount: 8,
+  };
+  const playerADamage: BattleEvent = {
+    ...event("heroDamage", 3),
+    targetPlayerId: "ai-1",
+    amount: 2,
+  };
+
+  assert.equal(
+    projectCombatHealth({
+      battle: summary,
+      playerId: "ai-1",
+      revealedEvents: [fakeAttackDamage, enemyDamage],
+      playbackComplete: false,
+    }),
+    31,
+  );
+  assert.equal(
+    projectCombatHealth({
+      battle: summary,
+      playerId: "ai-1",
+      revealedEvents: [
+        fakeAttackDamage,
+        enemyDamage,
+        playerADamage,
+      ],
+      playbackComplete: false,
+    }),
+    24,
+  );
+});
+
+test("combat health uses each summary result when playback completes", () => {
+  const summary = battle({
+    playerAHealthBefore: 31,
+    playerAHealthAfter: -2,
+    playerBHealthAfter: 13,
+  });
+
+  assert.equal(
+    projectCombatHealth({
+      battle: summary,
+      playerId: "ai-1",
+      revealedEvents: [],
+      playbackComplete: true,
+    }),
+    0,
+  );
+  assert.equal(
+    projectCombatHealth({
+      battle: summary,
+      playerId: "human",
+      revealedEvents: [],
+      playbackComplete: true,
+    }),
+    13,
+  );
+  assert.equal(
+    projectCombatHealth({
+      battle: summary,
+      playerId: "not-in-this-battle",
+      revealedEvents: [],
+      playbackComplete: false,
+    }),
+    null,
+  );
+});
+
+test("a matching hero damage event reveals the authoritative summary health", () => {
+  const damageWithoutAmount: BattleEvent = {
+    ...event("heroDamage", 1),
+    targetPlayerId: "human",
+  };
+
+  assert.equal(
+    projectCombatHealth({
+      battle: battle({ playerBHealthAfter: 11 }),
+      playerId: "human",
+      revealedEvents: [damageWithoutAmount],
+      playbackComplete: false,
+    }),
+    11,
   );
 });
