@@ -41,8 +41,11 @@ export const SPELLCRAFT_DEFINITIONS = [
   {
     id: "spellcraft-sick-riffs",
     cardId: "BG26_501t",
+    goldenCardId: "BG26_501_Gt",
     name: "精彩即兴",
-    description: "直到下个回合，使一个随从获得等同于你当前酒馆等级的属性值。",
+    description: "直到下个回合，使一个随从获得等同于你当前等级的属性值。",
+    goldenDescription:
+      "直到下个回合，使一个随从获得等同于你当前等级两倍的属性值。",
     sourceTier: 2,
     effect: "sickRiffs",
     target: "friendly",

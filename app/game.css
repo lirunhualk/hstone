@@ -2369,6 +2369,24 @@
     inset 0 1px 0 rgb(255 255 255 / 16%);
 }
 
+.spellcraft-card.is-golden {
+  border-color: rgb(255 220 93 / 96%);
+  background:
+    radial-gradient(circle at 50% 24%, rgb(255 246 154 / 38%), transparent 42%),
+    linear-gradient(180deg, rgb(147 104 26 / 62%), rgb(46 25 4 / 98%)),
+    var(--surface-1);
+  box-shadow:
+    0 9px 21px rgb(0 0 0 / 34%),
+    0 0 0 1px rgb(255 228 116 / 48%),
+    0 0 25px rgb(255 195 45 / 32%),
+    inset 0 1px 0 rgb(255 255 255 / 25%);
+}
+
+.spellcraft-card.is-golden .tavern-spell-name {
+  border-color: rgb(255 229 130 / 55%);
+  background: rgb(92 54 5 / 92%);
+}
+
 .spellcraft-card .tavern-spell-name {
   border-color: rgb(111 224 255 / 45%);
   background: rgb(10 45 84 / 90%);
@@ -2676,6 +2694,25 @@
   min-height: 22px;
   padding: 2px 5px;
   font-size: 11px;
+}
+
+.hand-panel
+  :is(
+    .unit-card,
+    .blood-gem-card,
+    .tavern-spell-card,
+    .triple-reward-card
+  ).is-playable:not(
+    .is-selected
+  ):not(.is-drag-source):not(.is-turn-locked):not(:focus-visible):not(
+    [disabled]
+  ) {
+  border-color: rgb(112 255 151 / 96%);
+  box-shadow:
+    0 10px 24px rgb(0 0 0 / 34%),
+    0 0 0 2px rgb(80 246 126 / 76%),
+    0 0 24px rgb(48 230 114 / 52%),
+    inset 0 0 14px rgb(77 255 135 / 12%);
 }
 
 .standings {

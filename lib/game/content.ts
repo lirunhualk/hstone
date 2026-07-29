@@ -3,7 +3,7 @@ import liveRosterSnapshot from "./generated/battlegrounds-36.0.3-247416.zhCN.jso
 };
 import type { MinionDefinition, Tribe } from "./types.ts";
 
-export const CURRENT_ROSTER_VERSION = "battlegrounds-36.0.3-247416-v16";
+export const CURRENT_ROSTER_VERSION = "battlegrounds-36.0.3-247416-v17";
 /** Compatibility alias for existing save and engine imports. */
 export const CLASSIC_ROSTER_VERSION = CURRENT_ROSTER_VERSION;
 
@@ -1026,6 +1026,30 @@ const LIVE_RULE_OVERRIDES: Readonly<
       },
     ],
   },
+  BG26_501: {
+    spellcraft: {
+      definitionId: "spellcraft-sick-riffs",
+    },
+  },
+  BG29_300: {
+    afterSelfDamaged: [
+      {
+        kind: "buffRandomHandMinion",
+        attack: 2,
+        health: 1,
+      },
+    ],
+  },
+  BG32_170: {
+    deathrattle: [
+      {
+        kind: "gainTavernSpell",
+        definitionId: "tavern-spell-pointy-arrow",
+        count: 1,
+        goldenMode: "doubleCount",
+      },
+    ],
+  },
   BG31_175: {
     rally: [
       {
@@ -1312,12 +1336,14 @@ const FULLY_SUPPORTED_LIVE_CARD_IDS = new Set([
   "BG26_147",
   "BG26_148",
   "BG26_159",
+  "BG26_501",
   "BG26_805",
   "BG26_817",
   "BG27_005",
   "BG28_300",
   "BG29_503",
   "BG29_611",
+  "BG29_300",
   "BG30_125",
   "BG31_175",
   "BG31_803",
@@ -1326,6 +1352,7 @@ const FULLY_SUPPORTED_LIVE_CARD_IDS = new Set([
   "BG31_818",
   "BG31_859",
   "BG32_235",
+  "BG32_170",
   "BG32_172",
   "BG33_156",
   "BG33_140",

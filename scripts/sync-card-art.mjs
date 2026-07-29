@@ -32,10 +32,13 @@ const allCardIds = [
   ...new Set([
     ...MINION_DEFINITIONS.map((definition) => definition.cardId),
     ...HERO_POWER_DEFINITIONS.map((definition) => definition.cardId),
-    ...SPELLCRAFT_DEFINITIONS.map((definition) => definition.cardId),
+    ...SPELLCRAFT_DEFINITIONS.flatMap((definition) => [
+      definition.cardId,
+      definition.goldenCardId,
+    ]),
     ...TAVERN_SPELL_DEFINITIONS.map((definition) => definition.cardId),
     ...CORE_SPELL_CARD_IDS,
-  ]),
+  ].filter((cardId) => typeof cardId === "string")),
 ].sort();
 const startupPlayer = STARTUP
   ? createGame(0x53544152).players.find((player) => player.isHuman)

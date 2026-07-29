@@ -28,6 +28,8 @@ export const LEGACY_SCHEMA_10_CONTENT_VERSION =
   "battlegrounds-36.0.3-247416-v14";
 export const LEGACY_SCHEMA_11_CONTENT_VERSION =
   "battlegrounds-36.0.3-247416-v15";
+export const LEGACY_SCHEMA_11_CONTENT_VERSION_V16 =
+  "battlegrounds-36.0.3-247416-v16";
 
 const SPELL_POOL_COPIES_BY_TIER = [0, 5, 7, 9, 11, 7, 5] as const;
 
@@ -55,6 +57,9 @@ function refreshOwnedMinions(migrated: Record<string, unknown>): boolean {
     if (!isRecord(player)) {
       return false;
     }
+    // v16 and earlier had no deferred Spellcraft state, so no queue from
+    // those payloads is trustworthy or meaningful.
+    player.pendingSpellcraft = [];
     for (const zone of ["board", "hand", "shop"] as const) {
       const cards = player[zone];
       if (!Array.isArray(cards)) {
@@ -675,7 +680,8 @@ export function migrateSchema11GameState(value: unknown): unknown {
   if (
     !isRecord(value) ||
     value.version !== 11 ||
-    value.contentVersion !== LEGACY_SCHEMA_11_CONTENT_VERSION ||
+    (value.contentVersion !== LEGACY_SCHEMA_11_CONTENT_VERSION &&
+      value.contentVersion !== LEGACY_SCHEMA_11_CONTENT_VERSION_V16) ||
     !Array.isArray(value.players)
   ) {
     return null;

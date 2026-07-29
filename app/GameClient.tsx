@@ -512,10 +512,52 @@ function isSpellcraftSpell(
   }
   try {
     const definition = getSpellcraftDefinition(value.definitionId);
+    const effectMultiplier = value.effectMultiplier ?? 1;
+    if (effectMultiplier !== 1 && effectMultiplier !== 2) {
+      return false;
+    }
+    if (
+      effectMultiplier === 2 &&
+      (!definition.goldenCardId || !definition.goldenDescription)
+    ) {
+      return false;
+    }
+    const expectedCardId =
+      effectMultiplier === 2
+        ? definition.goldenCardId
+        : definition.cardId;
+    const expectedDescription =
+      effectMultiplier === 2
+        ? definition.goldenDescription
+        : definition.description;
     return (
-      definition.cardId === value.cardId &&
+      expectedCardId === value.cardId &&
       definition.name === value.name &&
+      expectedDescription === value.description &&
       definition.target === value.target
+    );
+  } catch {
+    return false;
+  }
+}
+
+function isPendingSpellcraftGrant(value: unknown): boolean {
+  if (
+    !isRecord(value) ||
+    typeof value.sourceInstanceId !== "string" ||
+    typeof value.definitionId !== "string" ||
+    typeof value.golden !== "boolean" ||
+    !Number.isInteger(value.round) ||
+    (value.round as number) < 1
+  ) {
+    return false;
+  }
+  try {
+    const definition = getSpellcraftDefinition(value.definitionId);
+    return (
+      value.golden === false ||
+      (definition.goldenCardId !== undefined &&
+        definition.goldenDescription !== undefined)
     );
   } catch {
     return false;
@@ -546,6 +588,8 @@ function isGameState(value: unknown): value is GameState {
         typeof player.maxGold === "number" &&
         player.maxGold >= 10 &&
         typeof player.pendingNextTurnGold === "number" &&
+        Array.isArray(player.pendingSpellcraft) &&
+        player.pendingSpellcraft.every(isPendingSpellcraftGrant) &&
         typeof player.freeRefreshes === "number" &&
         typeof player.helpfulRefreshes === "number" &&
         player.helpfulRefreshes >= 0 &&
@@ -715,13 +759,15 @@ function summarizeCombatRewards(
       (event) => event.cardGainResult === "noCandidate",
     ).length,
     addedNames: rewardEvents.flatMap((event) =>
-      event.cardGainResult === "added" && event.minion
-        ? [event.minion.name]
+      event.cardGainResult === "added" &&
+      (event.minion || event.cardName)
+        ? [event.minion?.name ?? event.cardName ?? ""]
         : [],
     ),
     addedInstanceIds: rewardEvents.flatMap((event) =>
-      event.cardGainResult === "added" && event.minion
-        ? [event.minion.instanceId]
+      event.cardGainResult === "added" &&
+      (event.minion || event.targetInstanceId)
+        ? [event.minion?.instanceId ?? event.targetInstanceId ?? ""]
         : [],
     ),
   };
@@ -732,8 +778,8 @@ function combatRewardSummaryText(
 ): string {
   const parts = [
     summary.addedCount > 0
-      ? `获得 ${summary.addedCount} 张磁力机械牌`
-      : "未获得磁力机械牌",
+      ? `战斗中获得 ${summary.addedCount} 张卡牌`
+      : "战斗中未获得卡牌",
   ];
   if (summary.handFullCount > 0) {
     parts.push(`手牌已满 ${summary.handFullCount} 次`);
@@ -755,6 +801,8 @@ function battleEventDelay(
         ? 800
         : event?.type === "buff"
           ? 620
+          : event?.type === "handBuff"
+            ? 620
           : event?.type === "keywordRemoved"
             ? 620
             : event?.type === "shieldBroken"
@@ -828,6 +876,7 @@ function UnitCard({
   selected = false,
   unaffordable = false,
   compact = false,
+  playable = false,
   dragEnabled = false,
   dragging = false,
   combatActor = false,
@@ -864,6 +913,7 @@ function UnitCard({
   selected?: boolean;
   unaffordable?: boolean;
   compact?: boolean;
+  playable?: boolean;
   dragEnabled?: boolean;
   dragging?: boolean;
   combatActor?: boolean;
@@ -921,6 +971,8 @@ function UnitCard({
       className={`unit-card${selected ? " is-selected" : ""}${
         unaffordable ? " is-unaffordable" : ""
       }${compact ? " is-compact" : ""}${
+        playable ? " is-playable" : ""
+      }${
         dragEnabled ? " is-draggable" : ""
       }${dragging ? " is-drag-source" : ""}${
         combatActor ? " is-combat-actor" : ""
@@ -1120,7 +1172,9 @@ function TripleRewardCard({
   return (
     <button
       type="button"
-      className="triple-reward-card"
+      className={`triple-reward-card${
+        disabled ? "" : " is-playable"
+      }`}
       aria-label={`三连奖励，发现一个 ${card.tier} 级随从`}
       data-testid={testId}
       disabled={disabled}
@@ -1152,7 +1206,9 @@ function ConsolationCoinCard({
   return (
     <button
       type="button"
-      className="tavern-spell-card consolation-coin-card"
+      className={`tavern-spell-card consolation-coin-card${
+        disabled ? "" : " is-playable"
+      }`}
       aria-label={`${card.name}，0费法术，${card.description}，点击使用`}
       data-testid={testId}
       disabled={disabled}
@@ -1214,6 +1270,7 @@ function BloodGemCard({
   attack,
   health,
   selected = false,
+  playable = false,
   disabled = false,
   dragging = false,
   dragHandlers,
@@ -1224,6 +1281,7 @@ function BloodGemCard({
   attack: number;
   health: number;
   selected?: boolean;
+  playable?: boolean;
   disabled?: boolean;
   dragging?: boolean;
   dragHandlers?: DragPointerHandlers;
@@ -1236,6 +1294,8 @@ function BloodGemCard({
       className={`blood-gem-card${
         bloodGemBonusText(card) ? " has-bonus" : ""
       }${selected ? " is-selected" : ""}${
+        playable ? " is-playable" : ""
+      }${
         dragHandlers ? " is-draggable" : ""
       }${dragging ? " is-drag-source" : ""}`}
       aria-label={`鲜血宝石，使一个友方随从获得+${attack}/+${health}。${bloodGemBonusText(
@@ -1278,6 +1338,7 @@ function SpellcraftCardFace({
 function SpellcraftCard({
   card,
   selected = false,
+  playable = false,
   disabled = false,
   dragging = false,
   dragHandlers,
@@ -1286,6 +1347,7 @@ function SpellcraftCard({
 }: {
   card: SpellcraftSpellInstance;
   selected?: boolean;
+  playable?: boolean;
   disabled?: boolean;
   dragging?: boolean;
   dragHandlers?: DragPointerHandlers;
@@ -1296,11 +1358,17 @@ function SpellcraftCard({
     <button
       type="button"
       className={`tavern-spell-card spellcraft-card${
+        (card.effectMultiplier ?? 1) > 1 ? " is-golden" : ""
+      }${
         selected ? " is-selected" : ""
-      }${dragHandlers ? " is-draggable" : ""}${
+      }${playable ? " is-playable" : ""}${
+        dragHandlers ? " is-draggable" : ""
+      }${
         dragging ? " is-drag-source" : ""
       }`}
-      aria-label={`${card.name}，0费塑造法术，${card.description}`}
+      aria-label={`${(card.effectMultiplier ?? 1) > 1 ? "金色" : ""}${
+        card.name
+      }，0费塑造法术，${card.description}`}
       aria-pressed={selected}
       data-card-instance-id={card.instanceId}
       data-drag-enabled={Boolean(dragHandlers)}
@@ -1354,6 +1422,7 @@ function TavernSpellCard({
   card,
   inShop = false,
   selected = false,
+  playable = false,
   unaffordable = false,
   disabled = false,
   dragging = false,
@@ -1364,6 +1433,7 @@ function TavernSpellCard({
   card: TavernSpellInstance;
   inShop?: boolean;
   selected?: boolean;
+  playable?: boolean;
   unaffordable?: boolean;
   disabled?: boolean;
   dragging?: boolean;
@@ -1377,7 +1447,9 @@ function TavernSpellCard({
       type="button"
       className={`tavern-spell-card${inShop ? " is-shop-offer" : ""}${
         selected ? " is-selected" : ""
-      }${unaffordable ? " is-unaffordable" : ""}${
+      }${playable ? " is-playable" : ""}${
+        unaffordable ? " is-unaffordable" : ""
+      }${
         dragHandlers ? " is-draggable" : ""
       }${dragging ? " is-drag-source" : ""}`}
       aria-label={`${card.name}，${card.tier}级酒馆法术，费用${card.cost}${
@@ -4737,7 +4809,19 @@ export default function GameClient() {
                   随从拖到战场；酒馆法术、塑造法术和鲜血宝石拖放施放；三连奖励点击使用
                 </small>
               </span>
-              <span>{human.hand.length} / 10</span>
+              <span
+                title={
+                  human.pendingSpellcraft.length > 0
+                    ? `${human.pendingSpellcraft.length} 张塑造法术正在等待手牌空位`
+                    : undefined
+                }
+                data-testid="hand-capacity"
+              >
+                {human.hand.length} / 10
+                {human.pendingSpellcraft.length > 0
+                  ? ` · 塑造等待 ${human.pendingSpellcraft.length}`
+                  : ""}
+              </span>
             </div>
             <div className="card-row" data-testid="hand-row">
               {human.hand.map((card, index) =>
@@ -4777,6 +4861,7 @@ export default function GameClient() {
                       selection?.zone === "hand" &&
                       selection.index === index
                     }
+                    playable={canDragHandCard(card)}
                     testId={`blood-gem-card-${index}`}
                     disabled={interactionLocked}
                     dragging={
@@ -4803,6 +4888,7 @@ export default function GameClient() {
                       selection?.zone === "hand" &&
                       selection.index === index
                     }
+                    playable={canDragHandCard(card)}
                     testId={`tavern-spell-card-${index}`}
                     disabled={interactionLocked}
                     dragging={
@@ -4829,6 +4915,7 @@ export default function GameClient() {
                       selection?.zone === "hand" &&
                       selection.index === index
                     }
+                    playable={canDragHandCard(card)}
                     testId={`spellcraft-card-${index}`}
                     disabled={interactionLocked}
                     dragging={
@@ -4864,6 +4951,7 @@ export default function GameClient() {
                     locked={
                       (card.playableFromRound ?? 0) > game.round
                     }
+                    playable={canDragHandCard(card)}
                     dragEnabled={canDragHandCard(card)}
                     dragging={
                       dragSession?.active === true &&
@@ -5464,8 +5552,8 @@ export default function GameClient() {
         >
           <strong>
             {combatRewardNotice.addedCount > 0
-              ? `本轮获得 ${combatRewardNotice.addedCount} 张磁力机械牌`
-              : "本轮未获得磁力机械牌"}
+              ? `本轮战斗获得 ${combatRewardNotice.addedCount} 张卡牌`
+              : "本轮战斗未获得卡牌"}
           </strong>
           <span>
             {[
@@ -5495,6 +5583,11 @@ export default function GameClient() {
                 : dragSession.card.kind === "spellcraft"
                   ? "tavern-spell-card spellcraft-card"
               : "unit-card is-compact"
+          }${
+            dragSession.card.kind === "spellcraft" &&
+            (dragSession.card.effectMultiplier ?? 1) > 1
+              ? " is-golden"
+              : ""
           } is-dragging drag-ghost${
             liftedDragPreview.directTouch
               ? " is-direct-touch-drag"

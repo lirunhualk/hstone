@@ -29,12 +29,14 @@ import type {
   BloodGemBonusKeyword,
   BloodGemSpellInstance,
   BoardMinionInstance,
+  BuffRandomHandMinionEffect,
   BuffEffect,
   ConsolationCoinSpellInstance,
   DiscoverDestination,
   DiscoverFilter,
   GameAction,
   GameState,
+  GainTavernSpellEffect,
   GetRandomMinionEffect,
   HelpfulRefreshKind,
   HeroPowerDefinition,
@@ -588,16 +590,24 @@ function createConsolationCoin(
 function createSpellcraftSpell(
   state: GameState,
   definition: SpellcraftDefinition,
+  golden = false,
 ): SpellcraftSpellInstance {
   const instance: SpellcraftSpellInstance = {
     kind: "spellcraft",
     instanceId: `card-${state.nextInstanceId}`,
     definitionId: definition.id,
-    cardId: definition.cardId,
+    cardId:
+      golden && definition.goldenCardId
+        ? definition.goldenCardId
+        : definition.cardId,
     name: definition.name,
-    description: definition.description,
+    description:
+      golden && definition.goldenDescription
+        ? definition.goldenDescription
+        : definition.description,
     spellFamily: "spellcraft",
     target: definition.target,
+    effectMultiplier: golden ? 2 : 1,
   };
   state.nextInstanceId += 1;
   return instance;
@@ -705,6 +715,82 @@ function addRandomSpellcraftSpells(
     added += 1;
   }
   return added;
+}
+
+function addMinionSpellcraft(
+  state: GameState,
+  player: PlayerState,
+  sourceInstanceId: string,
+  component: MinionEffectSource,
+): boolean {
+  const spellcraft =
+    getMinionDefinition(component.definitionId).spellcraft;
+  if (!spellcraft) {
+    return false;
+  }
+  player.pendingSpellcraft.push({
+    sourceInstanceId,
+    definitionId: spellcraft.definitionId,
+    golden: component.golden,
+    round: state.round,
+  });
+  flushPendingSpellcraft(state, player);
+  return true;
+}
+
+function flushPendingSpellcraft(
+  state: GameState,
+  player: PlayerState,
+): void {
+  player.pendingSpellcraft = player.pendingSpellcraft.filter(
+    (pending) => {
+      if (pending.round !== state.round) {
+        return false;
+      }
+      const source = player.board.find(
+        (minion) => minion.instanceId === pending.sourceInstanceId,
+      );
+      return (
+        source !== undefined &&
+        minionEffectSources(source).some(
+          (component) =>
+            getMinionDefinition(component.definitionId).spellcraft
+              ?.definitionId === pending.definitionId,
+        )
+      );
+    },
+  );
+  while (
+    player.hand.length < MAX_HAND_SIZE &&
+    player.pendingSpellcraft.length > 0
+  ) {
+    const pending = player.pendingSpellcraft.shift();
+    if (!pending) {
+      break;
+    }
+    player.hand.push(
+      createSpellcraftSpell(
+        state,
+        getSpellcraftDefinition(pending.definitionId),
+        pending.golden,
+      ),
+    );
+  }
+}
+
+function grantPlayedMinionSpellcraft(
+  state: GameState,
+  player: PlayerState,
+  minion: BoardMinionInstance,
+): void {
+  for (const component of minionEffectSources(minion)) {
+    addMinionSpellcraft(
+      state,
+      player,
+      minion.instanceId,
+      component,
+    );
+  }
 }
 
 function applyBloodGem(
@@ -1566,6 +1652,12 @@ function applyStartOfTurnEffects(
 ): void {
   for (const source of [...player.board]) {
     for (const component of minionEffectSources(source)) {
+      addMinionSpellcraft(
+        state,
+        player,
+        source.instanceId,
+        component,
+      );
       const effects =
         getMinionDefinition(component.definitionId).startOfTurn;
       applyRecruitEffects(
@@ -1931,6 +2023,7 @@ function playMinion(
       : Math.max(0, Math.min(boardIndex, player.board.length));
   player.board.splice(insertAt, 0, minion);
   grantTripleRewardBeforeGeneratedCards(state, player, minion);
+  grantPlayedMinionSpellcraft(state, player, minion);
   const battlecry = getMinionDefinition(minion.definitionId).battlecry;
   const triggerCount = battlecry ? battlecryTriggerCount(player) : 0;
   for (let count = 0; count < triggerCount; count += 1) {
@@ -2303,6 +2396,7 @@ function castSpellcraft(
     return false;
   }
   const definition = getSpellcraftDefinition(card.definitionId);
+  const effectMultiplier = card.effectMultiplier ?? 1;
   const legalTargets = spellcraftLegalTargets(player, definition);
   const target = targetInstanceId
     ? legalTargets.find(
@@ -2342,8 +2436,8 @@ function castSpellcraft(
       if (target) {
         applyTemporarySpellcraftBuff(
           target,
-          player.tavernTier,
-          player.tavernTier,
+          player.tavernTier * effectMultiplier,
+          player.tavernTier * effectMultiplier,
         );
       }
       break;
@@ -4532,7 +4626,14 @@ function playBestAiTavernSpell(
 }
 
 function playAiHand(state: GameState, player: PlayerState): void {
-  while (player.hand.length > 0) {
+  while (
+    player.hand.length > 0 ||
+    player.pendingSpellcraft.length > 0
+  ) {
+    flushPendingSpellcraft(state, player);
+    if (player.hand.length === 0) {
+      break;
+    }
     const consolationCoin = player.hand.find(
       (card): card is ConsolationCoinSpellInstance =>
         card.kind === "consolationCoin",
@@ -4589,6 +4690,9 @@ function playAiHand(state: GameState, player: PlayerState): void {
       const magnetic = magneticOptions[0];
       if (!magnetic) {
         if (playBestAiTavernSpell(state, player)) {
+          continue;
+        }
+        if (playBestAiSpellcraft(state, player)) {
           continue;
         }
         if (playBestAiBloodGem(player)) {
@@ -4995,6 +5099,8 @@ interface CombatContext {
   state: GameState;
   events: BattleEvent[];
   playerIds: readonly [PlayerId, PlayerId];
+  /** A ghost board fights normally but must never mutate its former owner. */
+  ghostOwnerId?: PlayerId;
   boards: Record<PlayerId, MinionInstance[]>;
   deadMechs: Record<PlayerId, MinionInstance[]>;
   tribeBuffs: Record<PlayerId, Partial<Record<Tribe, CombatStatBuff>>>;
@@ -5005,6 +5111,17 @@ function opponentId(context: CombatContext, ownerId: PlayerId): PlayerId {
   return context.playerIds[0] === ownerId
     ? context.playerIds[1]
     : context.playerIds[0];
+}
+
+function persistentCombatOwner(
+  context: CombatContext,
+  ownerId: PlayerId,
+): PlayerState | undefined {
+  if (context.ghostOwnerId === ownerId) {
+    return undefined;
+  }
+  const owner = findPlayer(context.state, ownerId);
+  return owner?.alive ? owner : undefined;
 }
 
 function combatBuffTargets(
@@ -5382,6 +5499,16 @@ function triggerSelfDamaged(
       continue;
     }
     for (const effect of effects) {
+      if (effect.kind === "buffRandomHandMinion") {
+        resolveCombatHandBuff(
+          context,
+          ownerId,
+          target,
+          component,
+          effect,
+        );
+        continue;
+      }
       if (effect.kind !== "summon") {
         continue;
       }
@@ -5399,6 +5526,52 @@ function triggerSelfDamaged(
       }
     }
   }
+}
+
+function resolveCombatHandBuff(
+  context: CombatContext,
+  ownerId: PlayerId,
+  source: MinionInstance,
+  component: MinionEffectSource,
+  effect: BuffRandomHandMinionEffect,
+): void {
+  const owner = persistentCombatOwner(context, ownerId);
+  if (!owner) {
+    return;
+  }
+  const candidates = owner.hand.filter(
+    (card): card is BoardMinionInstance => card.kind === "minion",
+  );
+  if (candidates.length === 0) {
+    return;
+  }
+  const target =
+    candidates[randomIndex(context.state, candidates.length)];
+  const scale = component.golden ? 2 : 1;
+  const attackDelta = effect.attack * scale;
+  const healthDelta = effect.health * scale;
+  target.attack += attackDelta;
+  target.health += healthDelta;
+  const componentDefinition = getMinionDefinition(
+    component.definitionId,
+  );
+  const sourceLabel = component.golden
+    ? `金色·${componentDefinition.name}`
+    : componentDefinition.name;
+  pushBattleEvent(context.events, {
+    type: "handBuff",
+    actorPlayerId: ownerId,
+    actorInstanceId: source.instanceId,
+    targetPlayerId: ownerId,
+    targetInstanceId: owner.isHuman ? target.instanceId : undefined,
+    attackDelta,
+    healthDelta,
+    cardName: owner.isHuman ? target.name : undefined,
+    cardKind: "minion",
+    message: owner.isHuman
+      ? `${sourceLabel}使你手牌中的「${target.name}」获得+${attackDelta}/+${healthDelta}。`
+      : `${sourceLabel}使${owner.name}手牌中的一张随从牌获得+${attackDelta}/+${healthDelta}。`,
+  });
 }
 
 function dealCombatDamage(
@@ -5468,8 +5641,8 @@ function resolveCombatGetRandomMinion(
   effect: GetRandomMinionEffect,
   triggerLabel?: string,
 ): void {
-  const owner = findPlayer(context.state, ownerId);
-  if (!owner?.alive) {
+  const owner = persistentCombatOwner(context, ownerId);
+  if (!owner) {
     return;
   }
   const componentDefinition = getMinionDefinition(
@@ -5545,6 +5718,68 @@ function resolveCombatGetRandomMinion(
       message: owner.isHuman
         ? `${sourceLabel}使你获得了「${gained.name}」。`
         : `${sourceLabel}使${owner.name}获得了一张磁力机械。`,
+    });
+  }
+}
+
+function resolveCombatGainTavernSpell(
+  context: CombatContext,
+  ownerId: PlayerId,
+  source: MinionInstance,
+  component: MinionEffectSource,
+  effect: GainTavernSpellEffect,
+): void {
+  const owner = persistentCombatOwner(context, ownerId);
+  if (!owner) {
+    return;
+  }
+  const componentDefinition = getMinionDefinition(
+    component.definitionId,
+  );
+  const sourceLabel = component.golden
+    ? `金色·${componentDefinition.name}`
+    : componentDefinition.name;
+  const spellDefinition = getTavernSpellDefinition(
+    effect.definitionId,
+  );
+  const gainCount =
+    effect.count *
+    (component.golden && effect.goldenMode === "doubleCount" ? 2 : 1);
+
+  for (let count = 0; count < gainCount; count += 1) {
+    if (owner.hand.length >= MAX_HAND_SIZE) {
+      pushBattleEvent(context.events, {
+        type: "cardGain",
+        actorPlayerId: ownerId,
+        actorInstanceId: source.instanceId,
+        targetPlayerId: ownerId,
+        amount: 0,
+        cardName: owner.isHuman ? spellDefinition.name : undefined,
+        cardKind: "tavernSpell",
+        cardGainResult: "handFull",
+        message: owner.isHuman
+          ? `手牌已满，${sourceLabel}未能使你获得「${spellDefinition.name}」。`
+          : `${sourceLabel}未能使${owner.name}获得一张酒馆法术。`,
+      });
+      continue;
+    }
+    const gained = createTavernSpell(context.state, spellDefinition);
+    owner.hand.push(gained);
+    pushBattleEvent(context.events, {
+      type: "cardGain",
+      actorPlayerId: ownerId,
+      actorInstanceId: source.instanceId,
+      targetPlayerId: ownerId,
+      targetInstanceId: owner.isHuman
+        ? gained.instanceId
+        : undefined,
+      amount: 1,
+      cardName: owner.isHuman ? gained.name : undefined,
+      cardKind: "tavernSpell",
+      cardGainResult: "added",
+      message: owner.isHuman
+        ? `${sourceLabel}使你获得了「${gained.name}」。`
+        : `${sourceLabel}使${owner.name}获得了一张酒馆法术。`,
     });
   }
 }
@@ -6087,6 +6322,14 @@ function resolveOneDeathrattle(
             component,
             effect,
           );
+        } else if (effect.kind === "gainTavernSpell") {
+          resolveCombatGainTavernSpell(
+            context,
+            ownerId,
+            source,
+            component,
+            effect,
+          );
         }
       }
     }
@@ -6339,6 +6582,7 @@ function simulateBattle(
     state,
     events,
     playerIds: [playerA.id, playerB.id],
+    ...(isGhost ? { ghostOwnerId: playerB.id } : {}),
     boards: {
       [playerA.id]: boardA,
       [playerB.id]: boardB,
@@ -6602,6 +6846,7 @@ function releaseEliminatedPlayer(
     attachments: minion.attachments.map(clearAttachmentPoolCopies),
   }));
   player.hand = [];
+  player.pendingSpellcraft = [];
   player.shop = [];
   player.spellShop = null;
   player.additionalSpellShop = [];
@@ -6641,6 +6886,7 @@ function endTurn(state: GameState): void {
     human.hand = human.hand.filter(
       (card) => card.kind !== "spellcraft",
     );
+    human.pendingSpellcraft = [];
   }
   const aiPlayers = state.players.filter(
     (player) => player.alive && !player.isHuman,
@@ -6652,6 +6898,7 @@ function endTurn(state: GameState): void {
     player.hand = player.hand.filter(
       (card) => card.kind !== "spellcraft",
     );
+    player.pendingSpellcraft = [];
   }
 
   const pairings = buildPairings(state);
@@ -6762,6 +7009,7 @@ export function createGame(seed?: number): GameState {
     gold: 3,
     board: [],
     hand: [],
+    pendingSpellcraft: [],
     shop: [],
     spellShop: null,
     additionalSpellShop: [],
@@ -6852,6 +7100,9 @@ export function createGame(seed?: number): GameState {
 export function gameReducer(state: GameState, action: GameAction): GameState {
   if (action.type === "RESOLVE_INTERACTION") {
     const resolved = resolvePendingInteraction(state, action);
+    if (resolved !== state && resolved.phase === "recruit") {
+      flushPendingSpellcraft(resolved, humanPlayer(resolved));
+    }
     if (
       resolved !== state &&
       resolved.pendingInteraction === null &&
@@ -6956,6 +7207,9 @@ export function gameReducer(state: GameState, action: GameAction): GameState {
     case "END_TURN":
       endTurn(next);
       break;
+  }
+  if (next.phase === "recruit") {
+    flushPendingSpellcraft(next, player);
   }
   return next;
 }

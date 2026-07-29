@@ -74,6 +74,12 @@ export interface GainTavernSpellEffect {
   goldenMode?: "doubleCount";
 }
 
+export interface BuffRandomHandMinionEffect {
+  kind: "buffRandomHandMinion";
+  attack: number;
+  health: number;
+}
+
 export interface GainMinionEffect {
   kind: "gainMinion";
   definitionId: string;
@@ -194,6 +200,7 @@ export type MinionEffect =
   | GainGoldEffect
   | GainNextTurnGoldEffect
   | GainTavernSpellEffect
+  | BuffRandomHandMinionEffect
   | GainMinionEffect
   | DamageHeroEffect
   | DamageEnemyEffect
@@ -282,6 +289,10 @@ export interface MagneticSpec {
   targetTribes: readonly Tribe[];
 }
 
+export interface SpellcraftSpec {
+  definitionId: string;
+}
+
 export interface MinionDefinition {
   id: string;
   /** Hearthstone CardID used only to locate the familiar card artwork. */
@@ -327,6 +338,7 @@ export interface MinionDefinition {
   afterMagnetized?: readonly MinionEffect[];
   aura?: StatAura;
   magnetic?: MagneticSpec;
+  spellcraft?: SpellcraftSpec;
   extraBattlecries?: number;
   extraDeathrattles?: number;
   sellValue?: number;
@@ -482,8 +494,10 @@ export type SpellcraftTarget = "none" | "friendly";
 export interface SpellcraftDefinition {
   id: string;
   cardId: string;
+  goldenCardId?: string;
   name: string;
   description: string;
+  goldenDescription?: string;
   /** Tavern Tier of the active Naga that normally generates this spell. */
   sourceTier: TavernTier;
   effect: SpellcraftEffect;
@@ -499,6 +513,8 @@ export interface SpellcraftSpellInstance {
   description: string;
   spellFamily: "spellcraft";
   target: SpellcraftTarget;
+  /** Missing on older saves means the ordinary x1 version. */
+  effectMultiplier?: number;
 }
 
 export type TavernSpellEffect =
@@ -642,6 +658,13 @@ export type HelpfulRefreshKind =
   | "utility"
   | "allSpells";
 
+export interface PendingSpellcraftGrant {
+  sourceInstanceId: string;
+  definitionId: string;
+  golden: boolean;
+  round: number;
+}
+
 export interface PlayerState {
   id: PlayerId;
   name: string;
@@ -656,6 +679,11 @@ export interface PlayerState {
   gold: number;
   board: BoardMinionInstance[];
   hand: HandCardInstance[];
+  /**
+   * Spellcraft waits here when the hand is full and materializes as soon as a
+   * slot opens during the same Recruit turn.
+   */
+  pendingSpellcraft: PendingSpellcraftGrant[];
   shop: BoardMinionInstance[];
   /** One extra Tavern Spell offer, matching the live Battlegrounds shop. */
   spellShop: TavernSpellInstance | null;
@@ -712,6 +740,7 @@ export type BattleEventType =
   | "battleStart"
   | "attack"
   | "buff"
+  | "handBuff"
   | "keywordRemoved"
   | "shieldBroken"
   | "death"
@@ -743,6 +772,8 @@ export interface BattleEvent {
   healthDelta?: number;
   boardIndex?: number;
   minion?: MinionInstance;
+  cardName?: string;
+  cardKind?: "minion" | "tavernSpell";
   summonReason?: "reborn" | "rallyFromHand" | "beetle" | "spellcraft";
   removedKeywords?: RallyRemovedKeyword[];
   cardGainResult?: CardGainResult;

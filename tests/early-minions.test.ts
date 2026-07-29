@@ -12,6 +12,7 @@ import {
 import { getMinionDefinition } from "../lib/game/content.ts";
 import {
   LEGACY_SCHEMA_11_CONTENT_VERSION,
+  LEGACY_SCHEMA_11_CONTENT_VERSION_V16,
   migrateLegacyGameState,
   migrateSchema11GameState,
   normalizePersistedGameState,
@@ -158,6 +159,26 @@ test("v15 saves refresh newly completed early minions without losing the run", (
 
   const current = createGame(0xe0fe);
   assert.equal(normalizePersistedGameState(current), current);
+});
+
+test("v16 saves gain an empty pending Spellcraft queue during v17 migration", () => {
+  const state = createGame(0xe0fd);
+  state.contentVersion = LEGACY_SCHEMA_11_CONTENT_VERSION_V16;
+  for (const player of state.players) {
+    delete (player as Partial<PlayerState>).pendingSpellcraft;
+  }
+
+  const migrated = normalizePersistedGameState(
+    JSON.parse(JSON.stringify(state)),
+  ) as GameState | null;
+  assert.ok(migrated);
+  assert.ok(
+    migrated.players.every(
+      (player) =>
+        Array.isArray(player.pendingSpellcraft) &&
+        player.pendingSpellcraft.length === 0,
+    ),
+  );
 });
 
 test("Southsea Busker grants next-turn Gold with Golden and Brann scaling", () => {
