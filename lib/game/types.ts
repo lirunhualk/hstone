@@ -312,6 +312,11 @@ export interface MinionInstance {
   cleave: boolean;
   alwaysAttacksLowestAttack: boolean;
   description: string;
+  /** Total permanent stats on this minion that came specifically from Blood Gems. */
+  bloodGemAttack: number;
+  bloodGemHealth: number;
+  /** A hand minion cannot be played before this Recruit round. */
+  playableFromRound?: number;
   /**
    * True only for a Golden minion produced by combining three owned copies.
    * Combat/token Golden minions never grant a Triple Reward.
@@ -359,7 +364,11 @@ export interface TripleRewardSpellInstance extends MinionInstance {
   definitionId: "triple-reward";
 }
 
-export type SpellFamily = "bloodGem" | "tavern" | "spellcraft";
+export type SpellFamily =
+  | "bloodGem"
+  | "tavern"
+  | "spellcraft"
+  | "coin";
 
 export interface BloodGemSpellInstance {
   kind: "bloodGem";
@@ -371,6 +380,16 @@ export interface BloodGemSpellInstance {
   spellFamily: "bloodGem";
 }
 
+export interface ConsolationCoinSpellInstance {
+  kind: "consolationCoin";
+  instanceId: string;
+  definitionId: "consolation-coin";
+  cardId: "BG28_521t";
+  name: "补贴铸币";
+  description: string;
+  spellFamily: "coin";
+}
+
 export type TavernSpellEffect =
   | "discoverTierOne"
   | "stealRandomShopMinion"
@@ -380,6 +399,9 @@ export type TavernSpellEffect =
   | "gainOneGold"
   | "tavernDishBanana"
   | "themApples"
+  | "chefsChoice"
+  | "hastyExcavation"
+  | "searchThePast"
   | "freeRefreshes"
   | "mightOfStormwind"
   | "increaseMaxGold"
@@ -393,6 +415,12 @@ export type TavernSpellEffect =
   | "staffOfEnrichment"
   | "trickyTrousers"
   | "gainTwoGold"
+  | "planarTelescope"
+  | "hubris"
+  | "carefulMutation"
+  | "timeManagement"
+  | "stackedAvalanche"
+  | "bloodGemBarrage"
   | "backToBack"
   | "deepwaterClan"
   | "defendersRites"
@@ -416,6 +444,10 @@ export interface TavernSpellDefinition {
   description: string;
   effect: TavernSpellEffect;
   target: TavernSpellTarget;
+  /** Omitted for Gold. Hasty Excavation is bought with Health instead. */
+  purchaseCurrency?: "health";
+  /** Tribe-gated spells enter only lobbies containing one of these types. */
+  associatedTribes?: readonly Tribe[];
 }
 
 export interface TavernSpellInstance {
@@ -435,6 +467,7 @@ export type HandCardInstance =
   | BoardMinionInstance
   | TripleRewardSpellInstance
   | BloodGemSpellInstance
+  | ConsolationCoinSpellInstance
   | TavernSpellInstance;
 
 export interface PlayerState {
@@ -461,6 +494,13 @@ export interface PlayerState {
   tavernMinionHealthBonus: number;
   nextCombatAttackBonus: number;
   nextCombatHealthBonus: number;
+  nextCombatWinGold: number;
+  nextCombatTieGold: number;
+  nextTurnBoardAttackBonus: number;
+  nextTurnBoardHealthBonus: number;
+  nextTurnBoardBuffPulses: number;
+  tavernBloodGemBarrageAttack: number;
+  tavernBloodGemBarrageHealth: number;
   backToBackBonus: number;
   /** Permanent per-player Blood Gem values; new Gems read these on cast. */
   bloodGemAttack: number;
@@ -479,6 +519,7 @@ export type BattleEventType =
   | "death"
   | "summon"
   | "cardGain"
+  | "goldReward"
   | "heroDamage"
   | "battleEnd";
 
@@ -536,7 +577,7 @@ export interface DiscoverFilter {
 }
 
 export type DiscoverDestination =
-  | { kind: "hand" }
+  | { kind: "hand"; playableFromRound?: number }
   | { kind: "magnetize"; targetInstanceId: string };
 
 export interface PendingDiscoverInteraction extends PendingInteractionBase {
@@ -547,10 +588,22 @@ export interface PendingDiscoverInteraction extends PendingInteractionBase {
   destination: DiscoverDestination;
 }
 
+export type TavernSpellChoiceId =
+  | "timeManagementNow"
+  | "timeManagementNextTurn";
+
+export interface PendingTavernSpellChoiceInteraction
+  extends PendingInteractionBase {
+  kind: "tavernSpellChoice";
+  definitionId: string;
+  optionIds: TavernSpellChoiceId[];
+}
+
 export type PendingInteraction =
   | PendingTargetInteraction
   | PendingMagnetizeTargetInteraction
-  | PendingDiscoverInteraction;
+  | PendingDiscoverInteraction
+  | PendingTavernSpellChoiceInteraction;
 
 export type BattleResult = "win" | "loss" | "tie";
 
@@ -575,7 +628,7 @@ export interface BattleSummary {
 }
 
 export interface GameState {
-  version: 7;
+  version: 8;
   /** Invalidates local saves when the roster or its mechanics change. */
   contentVersion: string;
   seed: number;

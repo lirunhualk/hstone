@@ -58,6 +58,8 @@ function definitionMinion(
     poolCopies: 0,
     attachments: [],
     ...overrides,
+    bloodGemAttack: overrides.bloodGemAttack ?? 0,
+    bloodGemHealth: overrides.bloodGemHealth ?? 0,
   };
 }
 

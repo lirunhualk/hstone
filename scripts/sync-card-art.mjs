@@ -20,7 +20,11 @@ const RENDER_CARD_ID_FALLBACKS = {
   BG_LOE_077: "LOE_077",
 };
 const RENDER_UNAVAILABLE = new Set(["BGS_034", "BG31_803"]);
-const CORE_SPELL_CARD_IDS = ["BG20_GEM", "TB_BaconShop_Triples_01"];
+const CORE_SPELL_CARD_IDS = [
+  "BG20_GEM",
+  "BG28_521t",
+  "TB_BaconShop_Triples_01",
+];
 
 const allCardIds = [
   ...new Set([

@@ -15,16 +15,20 @@ import {
   canMagnetize,
   createGame,
   gameReducer,
+  getLegalTavernSpellTargetIds,
   getRefreshCost,
+  getTavernSpellPurchaseQuote,
   getTavernSpellDefinition,
   getUpgradeCost,
   tavernSpellCanTargetShop,
   tavernSpellNeedsTarget,
+  tavernSpellPurchaseCurrency,
   type BattleEvent,
   type BattleResult,
   type BattleSummary,
   type BloodGemSpellInstance,
   type BoardMinionInstance,
+  type ConsolationCoinSpellInstance,
   type GameAction,
   type GameState,
   type MagneticAttachment,
@@ -54,8 +58,9 @@ import {
 import { projectCombatBoard } from "../lib/game/playback";
 import { migrateLegacyGameState } from "../lib/game/save";
 
-const SAVE_KEY = "hearthstone-battlegrounds-local.save.v7";
+const SAVE_KEY = "hearthstone-battlegrounds-local.save.v8";
 const LEGACY_SAVE_KEYS = [
+  "hearthstone-battlegrounds-local.save.v7",
   "hearthstone-battlegrounds-local.save.v6",
   "hearthstone-battlegrounds-local.save.v5",
 ] as const;
@@ -63,6 +68,31 @@ const INITIAL_SEED = 0x53544152;
 const BOARD_LIMIT = 7;
 const MOUSE_DRAG_THRESHOLD_PX = 8;
 const TOUCH_DRAG_THRESHOLD_PX = 12;
+
+function safeReadLocalStorage(key: string): string | null {
+  try {
+    return window.localStorage.getItem(key);
+  } catch {
+    return null;
+  }
+}
+
+function safeWriteLocalStorage(key: string, value: string): boolean {
+  try {
+    window.localStorage.setItem(key, value);
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+function safeRemoveLocalStorage(key: string): void {
+  try {
+    window.localStorage.removeItem(key);
+  } catch {
+    // Storage can be unavailable under private or restricted browser policies.
+  }
+}
 
 type Selection =
   | { zone: "shop" | "spellShop" | "hand" | "board"; index: number }
@@ -180,6 +210,16 @@ function isRecord(value: unknown): value is Record<string, unknown> {
   return value !== null && typeof value === "object";
 }
 
+function hasSchema8MinionState(value: unknown): boolean {
+  return (
+    isRecord(value) &&
+    typeof value.bloodGemAttack === "number" &&
+    typeof value.bloodGemHealth === "number" &&
+    (value.playableFromRound === undefined ||
+      typeof value.playableFromRound === "number")
+  );
+}
+
 function isPendingInteraction(
   value: unknown,
 ): value is PendingInteraction {
@@ -216,6 +256,18 @@ function isPendingInteraction(
       value.remainingDiscoveries > 0
     );
   }
+  if (value.kind === "tavernSpellChoice") {
+    return (
+      typeof value.definitionId === "string" &&
+      Array.isArray(value.optionIds) &&
+      value.optionIds.length === 2 &&
+      value.optionIds.every(
+        (optionId) =>
+          optionId === "timeManagementNow" ||
+          optionId === "timeManagementNextTurn",
+      )
+    );
+  }
   if (value.kind !== "discover") {
     return false;
   }
@@ -231,7 +283,8 @@ function isPendingInteraction(
       (option) =>
         isRecord(option) &&
         option.kind === "minion" &&
-        typeof option.instanceId === "string",
+        typeof option.instanceId === "string" &&
+        hasSchema8MinionState(option),
     ) &&
     isRecord(value.filter) &&
     validDestination &&
@@ -256,6 +309,12 @@ function pendingInteractionMatchesPlayer(
     return (
       interaction.destination.kind === "hand" ||
       boardIds.has(interaction.destination.targetInstanceId)
+    );
+  }
+  if (interaction.kind === "tavernSpellChoice") {
+    return (
+      interaction.definitionId === "tavern-spell-time-management" &&
+      interaction.optionIds.length === 2
     );
   }
   return (
@@ -300,6 +359,21 @@ function isBloodGemSpell(value: unknown): value is BloodGemSpellInstance {
   );
 }
 
+function isConsolationCoin(
+  value: unknown,
+): value is ConsolationCoinSpellInstance {
+  return (
+    isRecord(value) &&
+    value.kind === "consolationCoin" &&
+    typeof value.instanceId === "string" &&
+    value.definitionId === "consolation-coin" &&
+    value.cardId === "BG28_521t" &&
+    value.name === "补贴铸币" &&
+    typeof value.description === "string" &&
+    value.spellFamily === "coin"
+  );
+}
+
 function isTavernSpell(
   value: unknown,
 ): value is TavernSpellInstance {
@@ -340,7 +414,7 @@ function isGameState(value: unknown): value is GameState {
   if (!value || typeof value !== "object") return false;
   const candidate = value as Partial<GameState>;
   return (
-    candidate.version === 7 &&
+    candidate.version === 8 &&
     candidate.contentVersion === CURRENT_ROSTER_VERSION &&
     typeof candidate.seed === "number" &&
     typeof candidate.nextInteractionId === "number" &&
@@ -360,6 +434,13 @@ function isGameState(value: unknown): value is GameState {
         typeof player.tavernMinionHealthBonus === "number" &&
         typeof player.nextCombatAttackBonus === "number" &&
         typeof player.nextCombatHealthBonus === "number" &&
+        typeof player.nextCombatWinGold === "number" &&
+        typeof player.nextCombatTieGold === "number" &&
+        typeof player.nextTurnBoardAttackBonus === "number" &&
+        typeof player.nextTurnBoardHealthBonus === "number" &&
+        typeof player.nextTurnBoardBuffPulses === "number" &&
+        typeof player.tavernBloodGemBarrageAttack === "number" &&
+        typeof player.tavernBloodGemBarrageHealth === "number" &&
         typeof player.backToBackBonus === "number" &&
         typeof player.bloodGemAttack === "number" &&
         player.bloodGemAttack >= 1 &&
@@ -369,23 +450,28 @@ function isGameState(value: unknown): value is GameState {
         player.board.every(
           (minion) =>
             Array.isArray(minion.attachments) &&
-            minion.attachments.every(isMagneticAttachment),
+            minion.attachments.every(isMagneticAttachment) &&
+            hasSchema8MinionState(minion),
         ) &&
         Array.isArray(player.hand) &&
         player.hand.every(
           (card) =>
-            card.kind === "tripleReward" ||
+            (card.kind === "tripleReward" &&
+              hasSchema8MinionState(card)) ||
             isBloodGemSpell(card) ||
+            isConsolationCoin(card) ||
             isTavernSpell(card) ||
             (card.kind === "minion" &&
               Array.isArray(card.attachments) &&
-              card.attachments.every(isMagneticAttachment)),
+              card.attachments.every(isMagneticAttachment) &&
+              hasSchema8MinionState(card)),
         ) &&
         Array.isArray(player.shop) &&
         player.shop.every(
           (minion) =>
             Array.isArray(minion.attachments) &&
-            minion.attachments.every(isMagneticAttachment),
+            minion.attachments.every(isMagneticAttachment) &&
+            hasSchema8MinionState(minion),
         ) &&
         (player.spellShop === null ||
           isTavernSpell(player.spellShop)),
@@ -408,22 +494,6 @@ function printedTribeLabel(unit: MinionInstance): string {
     return TRIBE_NAMES.neutral;
   }
   return unit.tribes.map((tribe) => TRIBE_NAMES[tribe]).join(" / ");
-}
-
-function tavernSpellLegalTargetIds(
-  player: PlayerState,
-  spell: TavernSpellInstance,
-): string[] {
-  if (!tavernSpellNeedsTarget(spell)) {
-    return [];
-  }
-  const boardTargetIds = player.board.map((minion) => minion.instanceId);
-  return tavernSpellCanTargetShop(spell)
-    ? [
-        ...boardTargetIds,
-        ...player.shop.map((minion) => minion.instanceId),
-      ]
-    : boardTargetIds;
 }
 
 function isMagneticMinion(unit: MinionInstance): boolean {
@@ -623,6 +693,7 @@ function UnitCard({
   tavernSpellCastLabel,
   tavernSpellCastToken,
   newlyGenerated = false,
+  locked = false,
   disabled = false,
   dragHandlers,
   testId,
@@ -657,6 +728,7 @@ function UnitCard({
   tavernSpellCastLabel?: string;
   tavernSpellCastToken?: string;
   newlyGenerated?: boolean;
+  locked?: boolean;
   disabled?: boolean;
   dragHandlers?: DragPointerHandlers;
   testId?: string;
@@ -710,6 +782,8 @@ function UnitCard({
       }${
         newlyGenerated ? " is-newly-generated" : ""
       }${
+        locked ? " is-turn-locked" : ""
+      }${
         disabled ? " is-disabled" : ""
       }`}
       aria-label={`${unit.name}，${unit.tier} 级，${printedTribeLabel(
@@ -722,6 +796,8 @@ function UnitCard({
         tavernSpellTarget ? "，可作为酒馆法术目标" : ""
       }${
         newlyGenerated ? "，本轮战斗新获得" : ""
+      }${
+        locked ? "，锁定至下个招募回合" : ""
       }`}
       aria-pressed={selected}
       aria-disabled={disabled}
@@ -744,6 +820,7 @@ function UnitCard({
       data-tavern-spell-target={tavernSpellTarget || undefined}
       data-tavern-spell-drop-target={tavernSpellDropTarget || undefined}
       data-newly-generated={newlyGenerated || undefined}
+      data-turn-locked={locked || undefined}
       data-testid={testId}
       data-unit-instance-id={unit.instanceId}
       onClick={onClick}
@@ -753,6 +830,11 @@ function UnitCard({
       {...dragHandlers}
     >
       <UnitCardFace unit={unit} />
+      {locked && (
+        <span className="turn-lock-label" aria-hidden="true">
+          本回合锁定
+        </span>
+      )}
       {combatBuffTarget && combatBuffLabel && (
         <span className="combat-buff-label" aria-hidden="true">
           {combatBuffLabel}
@@ -887,6 +969,36 @@ function TripleRewardCard({
   );
 }
 
+function ConsolationCoinCard({
+  card,
+  disabled = false,
+  testId,
+  onPlay,
+}: {
+  card: ConsolationCoinSpellInstance;
+  disabled?: boolean;
+  testId?: string;
+  onPlay: () => void;
+}) {
+  return (
+    <button
+      type="button"
+      className="tavern-spell-card consolation-coin-card"
+      aria-label={`${card.name}，0费法术，${card.description}，点击使用`}
+      data-testid={testId}
+      disabled={disabled}
+      onClick={onPlay}
+      style={{ "--card-hue": 42 } as CSSProperties}
+    >
+      <CardArtwork unit={card} kind="portrait" />
+      <span className="tavern-spell-cost">0</span>
+      <span className="tavern-spell-name">{card.name}</span>
+      <span className="tavern-spell-copy">{card.description}</span>
+      <span className="tavern-spell-hint">点击使用</span>
+    </button>
+  );
+}
+
 function BloodGemCardFace({
   card,
   attack,
@@ -961,16 +1073,26 @@ function TavernSpellCardFace({
   card: TavernSpellInstance;
   inShop?: boolean;
 }) {
+  const purchaseCurrency = tavernSpellPurchaseCurrency(card);
   return (
     <>
       <CardArtwork unit={card} kind="portrait" />
-      <span className="tavern-spell-cost">{card.cost}</span>
+      <span
+        className={`tavern-spell-cost${
+          purchaseCurrency === "health" ? " is-health-cost" : ""
+        }`}
+      >
+        {purchaseCurrency === "health" ? "♥" : ""}
+        {card.cost}
+      </span>
       <span className="tavern-spell-tier">{card.tier}</span>
       <span className="tavern-spell-name">{card.name}</span>
       <span className="tavern-spell-copy">{card.description}</span>
       <span className="tavern-spell-hint">
         {inShop
-          ? `购买 · ${card.cost}`
+          ? purchaseCurrency === "health"
+            ? `购买 · ${card.cost} 生命`
+            : `购买 · ${card.cost}`
           : tavernSpellNeedsTarget(card)
             ? "拖到随从上施放"
             : "拖到战场或点击施放"}
@@ -1000,6 +1122,7 @@ function TavernSpellCard({
   testId?: string;
   onClick?: () => void;
 }) {
+  const purchaseCurrency = tavernSpellPurchaseCurrency(card);
   return (
     <button
       type="button"
@@ -1008,7 +1131,9 @@ function TavernSpellCard({
       }${unaffordable ? " is-unaffordable" : ""}${
         dragHandlers ? " is-draggable" : ""
       }${dragging ? " is-drag-source" : ""}`}
-      aria-label={`${card.name}，${card.tier}级酒馆法术，费用${card.cost}，${card.description}`}
+      aria-label={`${card.name}，${card.tier}级酒馆法术，费用${card.cost}${
+        purchaseCurrency === "health" ? "点生命" : "枚金币"
+      }，${card.description}`}
       aria-pressed={selected}
       data-card-instance-id={card.instanceId}
       data-drag-enabled={Boolean(dragHandlers)}
@@ -1537,7 +1662,7 @@ export default function GameClient() {
   useEffect(() => {
     const hydrationTimer = window.setTimeout(() => {
       try {
-        const raw = window.localStorage.getItem(SAVE_KEY);
+        const raw = safeReadLocalStorage(SAVE_KEY);
         let restored = false;
         if (raw) {
           const saved: unknown = JSON.parse(raw);
@@ -1546,12 +1671,12 @@ export default function GameClient() {
             setStarted(true);
             restored = true;
           } else {
-            window.localStorage.removeItem(SAVE_KEY);
+            safeRemoveLocalStorage(SAVE_KEY);
           }
         }
         if (!restored) {
           for (const legacyKey of LEGACY_SAVE_KEYS) {
-            const legacyRaw = window.localStorage.getItem(legacyKey);
+            const legacyRaw = safeReadLocalStorage(legacyKey);
             if (!legacyRaw) {
               continue;
             }
@@ -1563,24 +1688,24 @@ export default function GameClient() {
                 if (isGameState(migrated)) {
                   setGame(migrated);
                   setStarted(true);
-                  window.localStorage.setItem(
+                  safeWriteLocalStorage(
                     SAVE_KEY,
                     JSON.stringify(migrated),
                   );
                   restored = true;
                 }
-                window.localStorage.removeItem(legacyKey);
+                safeRemoveLocalStorage(legacyKey);
                 if (restored) {
                   break;
                 }
               } catch {
-                window.localStorage.removeItem(legacyKey);
+                safeRemoveLocalStorage(legacyKey);
               }
             }
           }
         }
       } catch {
-        window.localStorage.removeItem(SAVE_KEY);
+        safeRemoveLocalStorage(SAVE_KEY);
       } finally {
         setLoaded(true);
       }
@@ -1590,7 +1715,7 @@ export default function GameClient() {
 
   useEffect(() => {
     if (!loaded || !started) return;
-    window.localStorage.setItem(SAVE_KEY, JSON.stringify(game));
+    safeWriteLocalStorage(SAVE_KEY, JSON.stringify(game));
   }, [game, loaded, started]);
 
   useEffect(() => {
@@ -1607,7 +1732,7 @@ export default function GameClient() {
       setGame((current) => {
         const next = gameReducer(current, action);
         if (started) {
-          window.localStorage.setItem(SAVE_KEY, JSON.stringify(next));
+          safeWriteLocalStorage(SAVE_KEY, JSON.stringify(next));
         }
         return next;
       });
@@ -1659,6 +1784,10 @@ export default function GameClient() {
     magnetizeTargetInteraction ?? targetInteraction;
   const discoverInteraction =
     humanInteraction?.kind === "discover" ? humanInteraction : null;
+  const tavernSpellChoiceInteraction =
+    humanInteraction?.kind === "tavernSpellChoice"
+      ? humanInteraction
+      : null;
   const interactionLocked = game.pendingInteraction !== null;
 
   useEffect(() => {
@@ -1679,6 +1808,10 @@ export default function GameClient() {
             ? document.querySelector<HTMLElement>(
                 '[data-testid="discover-option-0"]',
               )
+            : humanInteraction.kind === "tavernSpellChoice"
+              ? document.querySelector<HTMLElement>(
+                  '[data-testid="time-management-now"]',
+                )
             : Array.from(
                 document.querySelectorAll<HTMLElement>(
                   "[data-unit-instance-id]",
@@ -1964,6 +2097,7 @@ export default function GameClient() {
   const selectedMagneticSource =
     !interactionLocked &&
     selectedHandCard?.kind === "minion" &&
+    (selectedHandCard.playableFromRound ?? 0) <= game.round &&
     isMagneticMinion(selectedHandCard)
       ? selectedHandCard
       : null;
@@ -2007,9 +2141,13 @@ export default function GameClient() {
   const tavernSpellTargetIds = useMemo(
     () =>
       tavernSpellSourceForTargets
-        ? tavernSpellLegalTargetIds(human, tavernSpellSourceForTargets)
+        ? getLegalTavernSpellTargetIds(
+            game,
+            human.id,
+            tavernSpellSourceForTargets,
+          )
         : [],
-    [human, tavernSpellSourceForTargets],
+    [game, human.id, tavernSpellSourceForTargets],
   );
   const selectedMagneticTargetIds = useMemo(
     () =>
@@ -2023,16 +2161,25 @@ export default function GameClient() {
     [human.board, selectedMagneticSource],
   );
   const boardHasOpenSlot = human.board.length < BOARD_LIMIT;
-  const canDragHandCard = (card: DraggableCard) =>
-    game.phase === "recruit" &&
-    !interactionLocked &&
-    (card.kind === "bloodGem"
-      ? human.board.length > 0
-      : card.kind === "tavernSpell"
-        ? !tavernSpellNeedsTarget(card) ||
-          tavernSpellLegalTargetIds(human, card).length > 0
-      : boardHasOpenSlot ||
-        human.board.some((target) => canMagnetize(card, target)));
+  const canDragHandCard = (card: DraggableCard) => {
+    if (game.phase !== "recruit" || interactionLocked) {
+      return false;
+    }
+    if (card.kind === "bloodGem") {
+      return human.board.length > 0;
+    }
+    if (card.kind === "tavernSpell") {
+      return (
+        !tavernSpellNeedsTarget(card) ||
+        getLegalTavernSpellTargetIds(game, human.id, card).length > 0
+      );
+    }
+    return (
+      (card.playableFromRound ?? 0) <= game.round &&
+      (boardHasOpenSlot ||
+        human.board.some((target) => canMagnetize(card, target)))
+    );
+  };
   const infoOpen =
     selectedUnit !== null ||
     selectedBloodGem !== null ||
@@ -2040,6 +2187,10 @@ export default function GameClient() {
     (infoTab === "battle" && battle !== null);
   const upgradeCost = getUpgradeCost(game, human.id);
   const refreshCost = getRefreshCost(game, human.id);
+  const tavernSpellPurchaseQuote = getTavernSpellPurchaseQuote(
+    game,
+    human.id,
+  );
   const canBuyFromShop =
     game.phase === "recruit" &&
     !interactionLocked &&
@@ -2048,9 +2199,7 @@ export default function GameClient() {
   const canBuyTavernSpell =
     game.phase === "recruit" &&
     !interactionLocked &&
-    human.spellShop !== null &&
-    human.gold >= human.spellShop.cost &&
-    human.hand.length < 10;
+    tavernSpellPurchaseQuote?.affordable === true;
   const selectedCanBuy =
     (selection?.zone === "shop" && canBuyFromShop) ||
     (selection?.zone === "spellShop" && canBuyTavernSpell);
@@ -2058,17 +2207,26 @@ export default function GameClient() {
     !interactionLocked &&
     selection?.zone === "hand" &&
     selectedUnit?.kind === "minion" &&
-    human.board.length < BOARD_LIMIT;
+    human.board.length < BOARD_LIMIT &&
+    (selectedUnit.playableFromRound ?? 0) <= game.round;
   const selectedOfferCost =
     selection?.zone === "spellShop"
       ? (human.spellShop?.cost ?? 0)
       : 3;
+  const selectedOfferCurrency =
+    selection?.zone === "spellShop"
+      ? (tavernSpellPurchaseQuote?.currency ?? "gold")
+      : "gold";
   const buyUnavailableReason =
     interactionLocked
       ? "请先完成当前选择"
       : human.hand.length >= 10
       ? "手牌已满"
-      : human.gold < selectedOfferCost
+      : selectedOfferCurrency === "health" &&
+          human.health <= selectedOfferCost
+        ? `生命值不足，需要保留至少 1 点生命（购买消耗 ${selectedOfferCost} 点）`
+      : selectedOfferCurrency === "gold" &&
+          human.gold < selectedOfferCost
         ? `金币不足，需要 ${selectedOfferCost} 枚金币`
         : null;
   const targetSource = boardChoiceInteraction
@@ -2097,13 +2255,15 @@ export default function GameClient() {
       ? `${discoverSource?.name ?? "战吼"} · 发现机械并吸附到${
           discoverMagnetizeTarget?.name ?? "目标机械"
         }`
+      : discoverInteraction.destination.playableFromRound !== undefined
+        ? `搜寻时光 · 发现一个 ${discoverInteraction.filter.exactTier} 级随从`
       : discoverInteraction.filter.exactTier
       ? discoverInteraction.filter.exactTier === 1 &&
         !discoverSource
         ? "新生幼苗 · 发现一个等级1的随从"
         : `三连奖励 · 发现一个 ${discoverInteraction.filter.exactTier} 级随从`
       : discoverInteraction.filter.tribe
-        ? `${discoverSource?.name ?? "战吼"} · 发现一张${
+        ? `${discoverSource?.name ?? "位面望远镜"} · 发现一张${
             TRIBE_NAMES[discoverInteraction.filter.tribe]
           }牌`
         : "发现一个随从"
@@ -2302,7 +2462,7 @@ export default function GameClient() {
     clearBloodGemCastFeedback();
     clearTavernSpellCastFeedback();
     const next = createGame(newSeed());
-    window.localStorage.setItem(SAVE_KEY, JSON.stringify(next));
+    safeWriteLocalStorage(SAVE_KEY, JSON.stringify(next));
     setGame(next);
     setStarted(true);
     setLoaded(true);
@@ -2331,7 +2491,12 @@ export default function GameClient() {
     (boardIndex?: number) => {
       if (selection?.zone !== "hand" || interactionLocked) return;
       const card = human.hand[selection.index];
-      if (card?.kind !== "minion") return;
+      if (
+        card?.kind !== "minion" ||
+        (card.playableFromRound ?? 0) > game.round
+      ) {
+        return;
+      }
       setMagneticAnnouncement("");
       send({
         type: "PLAY_HAND_CARD",
@@ -2339,7 +2504,7 @@ export default function GameClient() {
         boardIndex,
       });
     },
-    [human.hand, interactionLocked, selection, send],
+    [game.round, human.hand, interactionLocked, selection, send],
   );
 
   const magnetizeCard = useCallback(
@@ -2355,6 +2520,7 @@ export default function GameClient() {
       if (
         source?.kind !== "minion" ||
         !target ||
+        (source.playableFromRound ?? 0) > game.round ||
         !canMagnetize(source, target)
       ) {
         return;
@@ -2369,7 +2535,7 @@ export default function GameClient() {
         targetInstanceId,
       });
     },
-    [human.board, human.hand, send],
+    [game.round, human.board, human.hand, send],
   );
 
   const castBloodGem = useCallback(
@@ -2426,17 +2592,26 @@ export default function GameClient() {
       if (!card) {
         return;
       }
+      const legalTargetIds = getLegalTavernSpellTargetIds(
+        game,
+        human.id,
+        card,
+      );
+      const needsTarget = tavernSpellNeedsTarget(card);
       const target = targetInstanceId
-        ? (human.board.find(
-            (minion) => minion.instanceId === targetInstanceId,
-          ) ??
-          (tavernSpellCanTargetShop(card)
-            ? human.shop.find(
-                (minion) => minion.instanceId === targetInstanceId,
-              )
-            : undefined))
+        ? legalTargetIds.includes(targetInstanceId)
+          ? (human.board.find(
+              (minion) => minion.instanceId === targetInstanceId,
+            ) ??
+            human.shop.find(
+              (minion) => minion.instanceId === targetInstanceId,
+            ))
+          : undefined
         : undefined;
-      if (tavernSpellNeedsTarget(card) && !target) {
+      if (
+        (needsTarget && !target) ||
+        (!needsTarget && targetInstanceId !== undefined)
+      ) {
         return;
       }
       if (tavernSpellCastTimerRef.current !== null) {
@@ -2464,7 +2639,7 @@ export default function GameClient() {
         targetInstanceId,
       });
     },
-    [human.board, human.hand, human.shop, send],
+    [game, human.board, human.hand, human.id, human.shop, send],
   );
 
   const select = useCallback((nextSelection: Exclude<Selection, null>) => {
@@ -2546,7 +2721,12 @@ export default function GameClient() {
         if (
           sourceCard?.kind === "tavernSpell" &&
           tavernSpellNeedsTarget(sourceCard) &&
-          hoveredTavernSpellTarget
+          hoveredTavernSpellTarget &&
+          getLegalTavernSpellTargetIds(
+            game,
+            human.id,
+            sourceCard,
+          ).includes(hoveredTavernSpellTarget.instanceId)
         ) {
           return {
             kind: "tavernSpell",
@@ -2586,6 +2766,7 @@ export default function GameClient() {
         );
         if (
           Number.isInteger(insertionIndex) &&
+          (draggedHandCard.playableFromRound ?? 0) <= game.round &&
           human.board.length < BOARD_LIMIT &&
           insertionIndex >= 0 &&
           insertionIndex <= human.board.length
@@ -2636,6 +2817,7 @@ export default function GameClient() {
       if (source.zone === "hand") {
         if (
           draggedHandCard?.kind !== "minion" ||
+          (draggedHandCard.playableFromRound ?? 0) > game.round ||
           human.board.length >= BOARD_LIMIT ||
           index < 0 ||
           index > human.board.length
@@ -2657,8 +2839,10 @@ export default function GameClient() {
     [
       canBuyFromShop,
       canBuyTavernSpell,
+      game,
       human.board,
       human.hand,
+      human.id,
       human.shop,
     ],
   );
@@ -2675,11 +2859,18 @@ export default function GameClient() {
         human.board.some((target) => canMagnetize(card, target));
       const handCardCannotAct =
         source.zone === "hand" &&
-        (card.kind === "bloodGem"
+        (card.kind === "minion" &&
+        (card.playableFromRound ?? 0) > game.round
+          ? true
+          : card.kind === "bloodGem"
           ? human.board.length === 0
           : card.kind === "tavernSpell"
             ? tavernSpellNeedsTarget(card) &&
-              tavernSpellLegalTargetIds(human, card).length === 0
+              getLegalTavernSpellTargetIds(
+                game,
+                human.id,
+                card,
+              ).length === 0
           : human.board.length >= BOARD_LIMIT && !hasMagneticTarget);
       if (
         dragSessionRef.current !== null ||
@@ -2722,7 +2913,7 @@ export default function GameClient() {
     [
       canBuyFromShop,
       canBuyTavernSpell,
-      game.phase,
+      game,
       human,
       interactionLocked,
       writeDragSession,
@@ -3075,11 +3266,14 @@ export default function GameClient() {
               : 0
           } 枚金币`
         : dragSession.target?.kind === "hand"
-          ? `松手购买${dragSession.card.name}，支付 ${
-              dragSession.card.kind === "tavernSpell"
-                ? dragSession.card.cost
-                : 3
-            } 枚金币`
+          ? dragSession.card.kind === "tavernSpell" &&
+            tavernSpellPurchaseCurrency(dragSession.card) === "health"
+            ? `松手购买${dragSession.card.name}，支付 ${dragSession.card.cost} 点生命`
+            : `松手购买${dragSession.card.name}，支付 ${
+                dragSession.card.kind === "tavernSpell"
+                  ? dragSession.card.cost
+                  : 3
+              } 枚金币`
           : dragSession.target?.kind === "magnetic"
             ? `松手将${dragSession.card.name}吸附到${
                 dragMagneticTargetName ?? "目标随从"
@@ -3098,7 +3292,11 @@ export default function GameClient() {
               ? "拖到发光的手牌区域购买，花费 3 枚金币"
               : dragSession.zone === "spellShop" &&
                   dragSession.card.kind === "tavernSpell"
-                ? `拖到发光的手牌区域购买，花费 ${dragSession.card.cost} 枚金币`
+                ? tavernSpellPurchaseCurrency(
+                    dragSession.card,
+                  ) === "health"
+                  ? `拖到发光的手牌区域购买，花费 ${dragSession.card.cost} 点生命`
+                  : `拖到发光的手牌区域购买，花费 ${dragSession.card.cost} 枚金币`
               : dragSession.zone === "board"
                 ? "拖到战场位置来换位，或拖到鲍勃的酒馆出售"
                 : dragSession.card.kind === "bloodGem"
@@ -3469,8 +3667,7 @@ export default function GameClient() {
                         inShop
                         selected={selection?.zone === "spellShop"}
                         unaffordable={
-                          human.gold < offer.spell.cost ||
-                          human.hand.length >= 10
+                          tavernSpellPurchaseQuote?.affordable !== true
                         }
                         disabled={interactionLocked}
                         testId="tavern-spell-offer"
@@ -3881,11 +4078,16 @@ export default function GameClient() {
                   selection?.zone === "spellShop") &&
                 buyUnavailableReason
                   ? buyUnavailableReason
-                  : `松手支付 ${
-                      dragSession?.card.kind === "tavernSpell"
-                        ? dragSession.card.cost
-                        : selectedOfferCost
-                    } 枚金币`}
+                  : dragSession?.card.kind === "tavernSpell" &&
+                      tavernSpellPurchaseCurrency(
+                        dragSession.card,
+                      ) === "health"
+                    ? `松手支付 ${dragSession.card.cost} 点生命`
+                    : `松手支付 ${
+                        dragSession?.card.kind === "tavernSpell"
+                          ? dragSession.card.cost
+                          : selectedOfferCost
+                      } 枚金币`}
               </span>
             </div>
             <div className="panel-title">
@@ -3904,6 +4106,19 @@ export default function GameClient() {
                     card={card}
                     key={card.instanceId}
                     testId={`triple-reward-card-${index}`}
+                    disabled={interactionLocked}
+                    onPlay={() =>
+                      send({
+                        type: "PLAY_HAND_CARD",
+                        cardInstanceId: card.instanceId,
+                      })
+                    }
+                  />
+                ) : card.kind === "consolationCoin" ? (
+                  <ConsolationCoinCard
+                    card={card}
+                    key={card.instanceId}
+                    testId={`consolation-coin-card-${index}`}
                     disabled={interactionLocked}
                     onPlay={() =>
                       send({
@@ -3980,6 +4195,9 @@ export default function GameClient() {
                     newlyGenerated={newCombatRewardIds.includes(
                       card.instanceId,
                     )}
+                    locked={
+                      (card.playableFromRound ?? 0) > game.round
+                    }
                     dragEnabled={canDragHandCard(card)}
                     dragging={
                       dragSession?.active === true &&
@@ -4103,7 +4321,12 @@ export default function GameClient() {
                     <h2>{selectedTavernSpell.name}</h2>
                     <p className="detail-meta">
                       {selectedTavernSpell.tier} 级酒馆法术 ·{" "}
-                      {selectedTavernSpell.cost} 枚金币
+                      {selectedTavernSpell.cost}{" "}
+                      {tavernSpellPurchaseCurrency(
+                        selectedTavernSpell,
+                      ) === "health"
+                        ? "点生命"
+                        : "枚金币"}
                     </p>
                     <p>{selectedTavernSpell.description}</p>
                     {selection?.zone === "hand" && (
@@ -4144,6 +4367,11 @@ export default function GameClient() {
                           }
                         >
                           购买 · {selectedTavernSpell.cost}
+                          {tavernSpellPurchaseCurrency(
+                            selectedTavernSpell,
+                          ) === "health"
+                            ? " 生命"
+                            : " 金币"}
                         </button>
                       )}
                       {selection?.zone === "hand" && (
@@ -4215,6 +4443,15 @@ export default function GameClient() {
                       {selectedUnit.attack} / HP {selectedUnit.health}
                     </p>
                     <p>{selectedUnit.description}</p>
+                    {(selectedUnit.playableFromRound ?? 0) >
+                      game.round && (
+                      <p
+                        className="turn-lock-note"
+                        data-testid="selected-minion-turn-lock"
+                      >
+                        搜寻时光将这张牌锁定在手牌中；下个招募回合才能打出或磁力吸附。
+                      </p>
+                    )}
                     {selectedUnit.effectSupport === "partial" && (
                       <p
                         className="rules-support-note"
@@ -4233,6 +4470,8 @@ export default function GameClient() {
                       {selectedUnit.windfury && <span>风怒</span>}
                       {selectedUnit.cleave && <span>顺劈</span>}
                       {selectedUnit.golden && <span>金色随从</span>}
+                      {(selectedUnit.playableFromRound ?? 0) >
+                        game.round && <span>本回合锁定</span>}
                       {selectedUnit.attachments.length > 0 && (
                         <span>
                           已吸附{" "}
@@ -4445,7 +4684,7 @@ export default function GameClient() {
         这是当前酒馆法术的合法目标。点击或按回车键即可施放；按 Escape 键取消选择。
       </span>
       <span className="sr-only" id="buy-drop-description">
-        购买随从需要 3 枚金币且手牌未满。点击商店随从后也可使用详情面板中的购买按钮。
+        购买随从需要 3 枚金币；酒馆法术按卡面费用支付，拼命发掘改为消耗生命值。购买时手牌必须未满，也可点击卡牌后使用详情面板中的购买按钮。
       </span>
       <span
         className="sr-only"
@@ -4563,6 +4802,74 @@ export default function GameClient() {
         </div>
       )}
 
+      {tavernSpellChoiceInteraction && (
+        <div
+          className="overlay interaction-overlay"
+          role="dialog"
+          aria-modal="true"
+          aria-labelledby="tavern-spell-choice-title"
+          aria-describedby="tavern-spell-choice-description"
+          data-testid="time-management-dialog"
+          onKeyDown={trapDiscoverFocus}
+        >
+          <div className="modal tavern-spell-choice-modal">
+            <span className="discover-kicker">抉择</span>
+            <h2
+              className="discover-title"
+              id="tavern-spell-choice-title"
+            >
+              时间管理 · 选择生效时机
+            </h2>
+            <p
+              className="discover-copy"
+              id="tavern-spell-choice-description"
+            >
+              没有倒计时。选择完成前，酒馆中的其他操作会保持锁定。
+            </p>
+            <div className="tavern-spell-choice-options">
+              <button
+                type="button"
+                className="tavern-spell-choice"
+                data-testid="time-management-now"
+                onClick={() =>
+                  send({
+                    type: "RESOLVE_INTERACTION",
+                    interactionId:
+                      tavernSpellChoiceInteraction.interactionId,
+                    optionInstanceId: "timeManagementNow",
+                  })
+                }
+              >
+                <strong>立即生效</strong>
+                <span>使你当前的所有随从获得 +2/+2。</span>
+                <small>现在提高下一场战斗的战力</small>
+              </button>
+              <button
+                type="button"
+                className="tavern-spell-choice"
+                data-testid="time-management-next-turn"
+                onClick={() =>
+                  send({
+                    type: "RESOLVE_INTERACTION",
+                    interactionId:
+                      tavernSpellChoiceInteraction.interactionId,
+                    optionInstanceId:
+                      "timeManagementNextTurn",
+                  })
+                }
+              >
+                <strong>留到下回合</strong>
+                <span>
+                  下个招募回合开始时，使届时场上的所有随从获得
+                  +2/+2，触发两次。
+                </span>
+                <small>合计 +4/+4，但本场战斗不生效</small>
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
       {discoverInteraction && (
         <div
           className="overlay interaction-overlay"
@@ -4662,7 +4969,7 @@ export default function GameClient() {
             </p>
             <div className="modal-features">
               <span>8 人战局</span>
-              <span>36.0.3 · 237 张随从</span>
+              <span>36.0.3 · 237 随从 · 65 法术数据</span>
               <span>每局开放 5 个种族</span>
               <span>鼠标与触控拖拽</span>
               <span>三连奖励与发现</span>
@@ -4673,7 +4980,7 @@ export default function GameClient() {
               className="action-button primary"
               data-testid="start-game"
               onClick={() => {
-                window.localStorage.setItem(SAVE_KEY, JSON.stringify(game));
+                safeWriteLocalStorage(SAVE_KEY, JSON.stringify(game));
                 setStarted(true);
               }}
             >

@@ -35,6 +35,26 @@ const EXPECTED_COUNTS = Object.freeze({
     6: 35,
   }),
 });
+const EXPECTED_TAVERN_SPELL_COUNTS = Object.freeze({
+  rawPoolSpells: 72,
+  duosExcluded: 3,
+  soloPoolSpells: 69,
+  tierSevenExcluded: 4,
+  snapshotSpells: 65,
+  byTier: Object.freeze({
+    1: 8,
+    2: 6,
+    3: 16,
+    4: 16,
+    5: 14,
+    6: 5,
+  }),
+});
+const DUOS_TAVERN_SPELL_IDS = new Set([
+  "BG31_242",
+  "BG31_243",
+  "BG31_244",
+]);
 
 function fail(message) {
   throw new Error(`Battlegrounds data validation failed: ${message}`);
@@ -89,7 +109,7 @@ function countByTier(minions) {
   );
 }
 
-function validateSourceCard(card) {
+function validateSourceMinion(card) {
   expect(typeof card.id === "string" && card.id.length > 0, "card missing id");
   expect(
     Number.isInteger(card.dbfId) && card.dbfId > 0,
@@ -116,7 +136,38 @@ function validateSourceCard(card) {
   expect(card.type === "MINION", `${card.id} is not a minion`);
 }
 
-function normalizeCard(card) {
+function validateSourceTavernSpell(card) {
+  expect(typeof card.id === "string" && card.id.length > 0, "spell missing id");
+  expect(
+    Number.isInteger(card.dbfId) && card.dbfId > 0,
+    `${card.id} has invalid dbfId`,
+  );
+  expect(
+    typeof card.name === "string" && card.name.length > 0,
+    `${card.id} has no localized name`,
+  );
+  expect(
+    Number.isInteger(card.techLevel) &&
+      card.techLevel >= 1 &&
+      card.techLevel <= 7,
+    `${card.id} has invalid techLevel`,
+  );
+  expect(
+    Number.isInteger(card.cost) && card.cost >= 0,
+    `${card.id} has invalid cost`,
+  );
+  expect(typeof card.text === "string", `${card.id} has no localized text`);
+  expect(
+    card.type === "BATTLEGROUND_SPELL",
+    `${card.id} is not a Battlegrounds spell`,
+  );
+  expect(
+    card.spellSchool === "TAVERN",
+    `${card.id} is not a Tavern Spell`,
+  );
+}
+
+function normalizeMinion(card) {
   return {
     id: card.id,
     dbfId: card.dbfId,
@@ -137,8 +188,22 @@ function normalizeCard(card) {
   };
 }
 
-function validateUnique(minions, field) {
-  const values = minions.map((card) => card[field]);
+function normalizeTavernSpell(card) {
+  return {
+    id: card.id,
+    dbfId: card.dbfId,
+    name: card.name,
+    tier: card.techLevel,
+    cost: card.cost,
+    associatedRaces: card.battlegroundsAssociatedRaces ?? [],
+    mechanics: card.mechanics ?? [],
+    referencedTags: card.referencedTags ?? [],
+    text: card.text,
+  };
+}
+
+function validateUnique(cards, field) {
+  const values = cards.map((card) => card[field]);
   expect(
     new Set(values).size === values.length,
     `snapshot contains duplicate ${field} values`,
@@ -159,7 +224,7 @@ function buildSnapshot(cards) {
     tagged.length === EXPECTED_COUNTS.rawPoolMinions,
     `expected ${EXPECTED_COUNTS.rawPoolMinions} tagged minions, got ${tagged.length}`,
   );
-  tagged.forEach(validateSourceCard);
+  tagged.forEach(validateSourceMinion);
 
   const duos = tagged.filter((card) => card.id.startsWith("BGDUO"));
   expect(
@@ -209,13 +274,67 @@ function buildSnapshot(cards) {
     "36.0.3 removed-minion sentinel 睡梦织棘者 is still active",
   );
 
-  const normalized = tavern.map(normalizeCard);
-  validateUnique(normalized, "id");
-  validateUnique(normalized, "dbfId");
-  validateUnique(normalized, "premiumDbfId");
+  const normalizedMinions = tavern.map(normalizeMinion);
+  validateUnique(normalizedMinions, "id");
+  validateUnique(normalizedMinions, "dbfId");
+  validateUnique(normalizedMinions, "premiumDbfId");
+
+  const taggedSpells = cards.filter(
+    (card) => card.isBattlegroundsPoolSpell === true,
+  );
+  expect(
+    taggedSpells.length === EXPECTED_TAVERN_SPELL_COUNTS.rawPoolSpells,
+    `expected ${EXPECTED_TAVERN_SPELL_COUNTS.rawPoolSpells} tagged Tavern Spells, got ${taggedSpells.length}`,
+  );
+  taggedSpells.forEach(validateSourceTavernSpell);
+
+  const duosSpells = taggedSpells.filter((card) =>
+    DUOS_TAVERN_SPELL_IDS.has(card.id),
+  );
+  expect(
+    duosSpells.length === EXPECTED_TAVERN_SPELL_COUNTS.duosExcluded,
+    `expected ${EXPECTED_TAVERN_SPELL_COUNTS.duosExcluded} Duos Tavern Spells, got ${duosSpells.length}`,
+  );
+  const soloSpells = taggedSpells.filter(
+    (card) => !DUOS_TAVERN_SPELL_IDS.has(card.id),
+  );
+  expect(
+    soloSpells.length === EXPECTED_TAVERN_SPELL_COUNTS.soloPoolSpells,
+    `expected ${EXPECTED_TAVERN_SPELL_COUNTS.soloPoolSpells} Solo Tavern Spells, got ${soloSpells.length}`,
+  );
+  const tierSevenSpells = soloSpells.filter(
+    (card) => card.techLevel === 7,
+  );
+  expect(
+    tierSevenSpells.length === EXPECTED_TAVERN_SPELL_COUNTS.tierSevenExcluded,
+    `expected ${EXPECTED_TAVERN_SPELL_COUNTS.tierSevenExcluded} Solo Tier 7 Tavern Spells, got ${tierSevenSpells.length}`,
+  );
+  const tavernSpells = soloSpells
+    .filter((card) => card.techLevel >= 1 && card.techLevel <= 6)
+    .sort(
+      (left, right) =>
+        left.techLevel - right.techLevel ||
+        left.id.localeCompare(right.id, "en"),
+    );
+  expect(
+    tavernSpells.length === EXPECTED_TAVERN_SPELL_COUNTS.snapshotSpells,
+    `expected ${EXPECTED_TAVERN_SPELL_COUNTS.snapshotSpells} Solo Tavern Spells, got ${tavernSpells.length}`,
+  );
+  expect(
+    JSON.stringify(countByTier(tavernSpells)) ===
+      JSON.stringify(EXPECTED_TAVERN_SPELL_COUNTS.byTier),
+    "Tavern Spell Tier distribution changed",
+  );
+  expect(
+    !tavernSpells.some((card) => DUOS_TAVERN_SPELL_IDS.has(card.id)),
+    "Duos-only Tavern Spell entered the Solo snapshot",
+  );
+  const normalizedTavernSpells = tavernSpells.map(normalizeTavernSpell);
+  validateUnique(normalizedTavernSpells, "id");
+  validateUnique(normalizedTavernSpells, "dbfId");
 
   return {
-    schemaVersion: 1,
+    schemaVersion: 2,
     source: {
       patch: PATCH,
       build: BUILD,
@@ -225,7 +344,9 @@ function buildSnapshot(cards) {
       sha256: SOURCE_SHA256,
     },
     counts: EXPECTED_COUNTS,
-    minions: normalized,
+    tavernSpellCounts: EXPECTED_TAVERN_SPELL_COUNTS,
+    minions: normalizedMinions,
+    tavernSpells: normalizedTavernSpells,
   };
 }
 
@@ -259,6 +380,6 @@ if (previous === serialized) {
 } else {
   await writeFile(OUTPUT_PATH, serialized, "utf8");
   console.log(
-    `Wrote ${snapshot.minions.length} minions to ${OUTPUT_PATH}`,
+    `Wrote ${snapshot.minions.length} minions and ${snapshot.tavernSpells.length} Tavern Spells to ${OUTPUT_PATH}`,
   );
 }

@@ -7,7 +7,13 @@ const snapshotUrl = new URL(
   import.meta.url,
 );
 const snapshot = JSON.parse(await readFile(snapshotUrl, "utf8"));
-const { source, counts, minions } = snapshot;
+const {
+  source,
+  counts,
+  tavernSpellCounts,
+  minions,
+  tavernSpells,
+} = snapshot;
 
 function byTier(cards) {
   return Object.fromEntries(
@@ -19,7 +25,7 @@ function byTier(cards) {
 }
 
 test("pins the verified 36.0.3 / build 247416 source", () => {
-  assert.equal(snapshot.schemaVersion, 1);
+  assert.equal(snapshot.schemaVersion, 2);
   assert.deepEqual(source, {
     patch: "36.0.3",
     build: 247416,
@@ -29,6 +35,72 @@ test("pins the verified 36.0.3 / build 247416 source", () => {
     sha256:
       "5E48186C2E1702B474088958978D560026A6CDC3990F181CAB790D42A7727013",
   });
+});
+
+test("records the complete current Solo Tavern Spell pool", () => {
+  assert.deepEqual(tavernSpellCounts, {
+    rawPoolSpells: 72,
+    duosExcluded: 3,
+    soloPoolSpells: 69,
+    tierSevenExcluded: 4,
+    snapshotSpells: 65,
+    byTier: {
+      1: 8,
+      2: 6,
+      3: 16,
+      4: 16,
+      5: 14,
+      6: 5,
+    },
+  });
+  assert.equal(tavernSpells.length, 65);
+  assert.deepEqual(byTier(tavernSpells), tavernSpellCounts.byTier);
+  assert.ok(
+    tavernSpells.every(
+      (card) =>
+        Number.isInteger(card.tier) && card.tier >= 1 && card.tier <= 6,
+    ),
+  );
+  for (const duosCardId of ["BG31_242", "BG31_243", "BG31_244"]) {
+    assert.equal(
+      tavernSpells.some((card) => card.id === duosCardId),
+      false,
+    );
+  }
+});
+
+test("preserves stable Tavern Spell facts and tribe associations", () => {
+  for (const card of tavernSpells) {
+    assert.match(card.id, /^[A-Za-z0-9_]+$/);
+    assert.ok(Number.isInteger(card.dbfId) && card.dbfId > 0);
+    assert.ok(typeof card.name === "string" && card.name.length > 0);
+    assert.ok(Number.isInteger(card.cost) && card.cost >= 0);
+    assert.ok(Array.isArray(card.associatedRaces));
+    assert.ok(Array.isArray(card.mechanics));
+    assert.ok(Array.isArray(card.referencedTags));
+    assert.equal(typeof card.text, "string");
+  }
+  assert.equal(
+    tavernSpells.filter((card) => card.associatedRaces.length > 0).length,
+    24,
+  );
+  assert.deepEqual(
+    tavernSpells.find((card) => card.id === "BG34_689"),
+    {
+      id: "BG34_689",
+      dbfId: 126676,
+      name: "鲜血宝石弹幕",
+      tier: 3,
+      cost: 1,
+      associatedRaces: ["QUILBOAR"],
+      mechanics: [],
+      referencedTags: [
+        "BACON_REFRESH_TOOLTIP",
+        "BACON_BLOOD_GEM_TOOLTIP",
+      ],
+      text: "在本局对战中，在酒馆<b>刷新</b>后，使其中的随从获得+1/+1的<b>鲜血宝石</b>。",
+    },
+  );
 });
 
 test("records the complete source-to-Solo filtering counts", () => {
@@ -103,15 +175,17 @@ test("preserves the fields needed by the future live-roster engine", () => {
 });
 
 test("is sorted deterministically by Tier and CardID", () => {
-  const actual = minions.map((card) => `${card.tier}:${card.id}`);
-  const sorted = [...minions]
-    .sort(
-      (left, right) =>
-        left.tier - right.tier ||
-        left.id.localeCompare(right.id, "en"),
-    )
-    .map((card) => `${card.tier}:${card.id}`);
-  assert.deepEqual(actual, sorted);
+  for (const cards of [minions, tavernSpells]) {
+    const actual = cards.map((card) => `${card.tier}:${card.id}`);
+    const sorted = [...cards]
+      .sort(
+        (left, right) =>
+          left.tier - right.tier ||
+          left.id.localeCompare(right.id, "en"),
+      )
+      .map((card) => `${card.tier}:${card.id}`);
+    assert.deepEqual(actual, sorted);
+  }
 });
 
 test("matches the 36.0.3 returning and removed minion sentinels", () => {

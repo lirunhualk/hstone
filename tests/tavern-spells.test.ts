@@ -5,7 +5,10 @@ import {
   TAVERN_SPELL_DEFINITIONS,
   createGame,
   gameReducer,
+  getLegalTavernSpellTargetIds,
+  getTavernSpellPurchaseQuote,
   getTavernSpellDefinition,
+  tavernSpellIsAvailable,
   type BloodGemSpellInstance,
   type BoardMinionInstance,
   type GameState,
@@ -20,8 +23,10 @@ import {
 import {
   LEGACY_SCHEMA_5_CONTENT_VERSION,
   LEGACY_SCHEMA_6_CONTENT_VERSION,
+  LEGACY_SCHEMA_7_CONTENT_VERSION,
   migrateSchema5GameState,
   migrateSchema6GameState,
+  migrateSchema7GameState,
 } from "../lib/game/save.ts";
 
 const SPELL_POOL_COPIES_BY_TIER = [0, 5, 7, 9, 11, 7, 5] as const;
@@ -129,6 +134,32 @@ function totalSpellCopies(state: GameState, definitionId: string): number {
   );
 }
 
+function keepOnlyOneOpponent(
+  state: GameState,
+  opponentBoard: BoardMinionInstance[],
+): PlayerState {
+  const opponent = state.players.find((player) => !player.isHuman);
+  assert.ok(opponent);
+  for (const player of state.players) {
+    player.gold = 0;
+    player.shop = [];
+    player.spellShop = null;
+    player.frozen = false;
+    if (player.id === opponent.id) {
+      player.alive = true;
+      player.health = 40;
+      player.hand = [];
+      player.board = opponentBoard;
+    } else if (!player.isHuman) {
+      player.alive = false;
+      player.health = 0;
+      player.hand = [];
+      player.board = [];
+    }
+  }
+  return opponent;
+}
+
 function firstXorshiftRandom(seed: number): number {
   let value = seed >>> 0;
   value ^= value << 13;
@@ -202,10 +233,43 @@ function legacyState(
   return legacy;
 }
 
-function assertMigratedSchema7(value: unknown): asserts value is GameState {
+function removeSchema8MinionFields(value: unknown): void {
+  if (Array.isArray(value)) {
+    value.forEach(removeSchema8MinionFields);
+    return;
+  }
+  if (value === null || typeof value !== "object") {
+    return;
+  }
+  const record = value as Record<string, unknown>;
+  if (record.kind === "minion" || record.kind === "tripleReward") {
+    delete record.bloodGemAttack;
+    delete record.bloodGemHealth;
+    delete record.playableFromRound;
+  }
+  Object.values(record).forEach(removeSchema8MinionFields);
+}
+
+function assertSchema8MinionFields(value: unknown): void {
+  if (Array.isArray(value)) {
+    value.forEach(assertSchema8MinionFields);
+    return;
+  }
+  if (value === null || typeof value !== "object") {
+    return;
+  }
+  const record = value as Record<string, unknown>;
+  if (record.kind === "minion" || record.kind === "tripleReward") {
+    assert.equal(typeof record.bloodGemAttack, "number");
+    assert.equal(typeof record.bloodGemHealth, "number");
+  }
+  Object.values(record).forEach(assertSchema8MinionFields);
+}
+
+function assertMigratedSchema8(value: unknown): asserts value is GameState {
   assert.ok(value !== null && typeof value === "object");
   const migrated = value as GameState;
-  assert.equal(migrated.version, 7);
+  assert.equal(migrated.version, 8);
   assert.equal(migrated.contentVersion, CURRENT_ROSTER_VERSION);
   assert.equal(humanPlayer(migrated).gold, 7);
   assert.equal(
@@ -224,17 +288,115 @@ function assertMigratedSchema7(value: unknown): asserts value is GameState {
     assert.equal(player.tavernMinionHealthBonus, 0);
     assert.equal(player.nextCombatAttackBonus, 0);
     assert.equal(player.nextCombatHealthBonus, 0);
+    assert.equal(player.nextCombatWinGold, 0);
+    assert.equal(player.nextCombatTieGold, 0);
+    assert.equal(player.nextTurnBoardAttackBonus, 0);
+    assert.equal(player.nextTurnBoardHealthBonus, 0);
+    assert.equal(player.nextTurnBoardBuffPulses, 0);
+    assert.equal(player.tavernBloodGemBarrageAttack, 0);
+    assert.equal(player.tavernBloodGemBarrageHealth, 0);
     assert.equal(player.backToBackBonus, 0);
   }
   for (const definition of TAVERN_SPELL_DEFINITIONS) {
     assert.equal(
       totalSpellCopies(migrated, definition.id),
-      SPELL_POOL_COPIES_BY_TIER[definition.tier],
+      tavernSpellIsAvailable(definition, migrated.activeTribes)
+        ? SPELL_POOL_COPIES_BY_TIER[definition.tier]
+        : 0,
       `${definition.name} must conserve its shared pool during migration`,
     );
   }
   assert.deepEqual(JSON.parse(JSON.stringify(migrated)), migrated);
 }
+
+test("the playable Tavern Spell pool covers every current Solo Tier 1-3 spell", () => {
+  const expected = [
+    ["tavern-spell-chefs-choice", "BG28_518", 2, 2, "主厨甄选", []],
+    ["tavern-spell-hasty-excavation", "BG28_571", 2, 3, "拼命发掘", []],
+    ["tavern-spell-search-the-past", "BG34_330", 2, 2, "搜寻时光", []],
+    ["tavern-spell-planar-telescope", "BG28_521", 3, 4, "位面望远镜", []],
+    ["tavern-spell-hubris", "BG28_884", 3, 1, "自负", []],
+    ["tavern-spell-careful-mutation", "BG30_804", 3, 1, "稳健异变", []],
+    ["tavern-spell-time-management", "BG31_881", 3, 4, "时间管理", []],
+    [
+      "tavern-spell-stacked-avalanche",
+      "BG33_899",
+      3,
+      2,
+      "累叠雪崩",
+      ["elemental"],
+    ],
+    [
+      "tavern-spell-blood-gem-barrage",
+      "BG34_689",
+      3,
+      1,
+      "鲜血宝石弹幕",
+      ["quilboar"],
+    ],
+  ] as const;
+
+  for (const [
+    definitionId,
+    cardId,
+    tier,
+    cost,
+    name,
+    associatedTribes,
+  ] of expected) {
+    const definition = getTavernSpellDefinition(definitionId);
+    assert.equal(definition.cardId, cardId);
+    assert.equal(definition.tier, tier);
+    assert.equal(definition.cost, cost);
+    assert.equal(definition.name, name);
+    assert.deepEqual(
+      (definition as { associatedTribes?: readonly string[] })
+        .associatedTribes ?? [],
+      associatedTribes,
+    );
+  }
+
+  assert.deepEqual(
+    Object.fromEntries(
+      [1, 2, 3].map((tier) => [
+        tier,
+        TAVERN_SPELL_DEFINITIONS.filter(
+          (definition) => definition.tier === tier,
+        ).length,
+      ]),
+    ),
+    { 1: 8, 2: 6, 3: 16 },
+  );
+});
+
+test("playable Tavern Spell text removes client-only dynamic branches", () => {
+  assert.deepEqual(
+    Object.fromEntries(
+      [
+        "tavern-spell-fortify",
+        "tavern-spell-pointy-arrow",
+        "tavern-spell-healthy-bounty",
+        "tavern-spell-hostile-bounty",
+        "tavern-spell-sanctify",
+      ].map((definitionId) => {
+        const definition = getTavernSpellDefinition(definitionId);
+        return [definition.cardId, definition.description];
+      }),
+    ),
+    {
+      BG28_503: "使一个随从获得+3生命值和嘲讽。",
+      EBG_Spell_014: "使一个随从获得+4攻击力。",
+      BG33_811: "使四个友方随从获得+4生命值。",
+      BG33_812: "使四个友方随从获得+4攻击力。",
+      BG33_817: "使你具有圣盾的随从获得+6攻击力。",
+    },
+  );
+  assert.ok(
+    TAVERN_SPELL_DEFINITIONS.every(
+      (definition) => !definition.description.includes("\n"),
+    ),
+  );
+});
 
 test("every player gets an independent, tier-legal Tavern Spell offer", () => {
   const state = createGame(0x7110);
@@ -263,7 +425,9 @@ test("the shared Tavern Spell pool is tier-weighted and reserves shop offers", (
   for (const definition of TAVERN_SPELL_DEFINITIONS) {
     assert.equal(
       totalSpellCopies(state, definition.id),
-      SPELL_POOL_COPIES_BY_TIER[definition.tier],
+      tavernSpellIsAvailable(definition, state.activeTribes)
+        ? SPELL_POOL_COPIES_BY_TIER[definition.tier]
+        : 0,
     );
   }
 
@@ -340,6 +504,60 @@ test("Tavern Spell purchases are atomic when gold or hand space is missing", () 
   assert.deepEqual(
     gameReducer(fullHand, { type: "BUY_TAVERN_SPELL" }),
     fullHand,
+  );
+});
+
+test("Hasty Excavation is bought with nonlethal Health and then grants Gold", () => {
+  const state = createGame(0x7152);
+  const player = humanPlayer(state);
+  player.health = 4;
+  player.gold = 0;
+  player.hand = [];
+  const offer = replaceSpellOffer(
+    state,
+    player,
+    "tavern-spell-hasty-excavation",
+  );
+  const poolBefore = state.spellPool[offer.definitionId];
+  assert.deepEqual(getTavernSpellPurchaseQuote(state, player.id), {
+    currency: "health",
+    cost: 3,
+    affordable: true,
+  });
+
+  let next = gameReducer(state, { type: "BUY_TAVERN_SPELL" });
+  let nextPlayer = humanPlayer(next);
+  assert.equal(nextPlayer.health, 1);
+  assert.equal(nextPlayer.gold, 0);
+  assert.equal(nextPlayer.hand[0]?.instanceId, offer.instanceId);
+  assert.equal(next.spellPool[offer.definitionId], poolBefore + 1);
+
+  next = gameReducer(next, {
+    type: "CAST_TAVERN_SPELL",
+    cardInstanceId: offer.instanceId,
+  });
+  nextPlayer = humanPlayer(next);
+  assert.equal(nextPlayer.health, 1);
+  assert.equal(nextPlayer.gold, 1);
+  assert.equal(nextPlayer.hand.length, 0);
+
+  const lethal = createGame(0x7153);
+  const lethalPlayer = humanPlayer(lethal);
+  lethalPlayer.health = 3;
+  lethalPlayer.gold = 10;
+  lethalPlayer.hand = [];
+  replaceSpellOffer(
+    lethal,
+    lethalPlayer,
+    "tavern-spell-hasty-excavation",
+  );
+  assert.equal(
+    getTavernSpellPurchaseQuote(lethal, lethalPlayer.id)?.affordable,
+    false,
+  );
+  assert.deepEqual(
+    gameReducer(lethal, { type: "BUY_TAVERN_SPELL" }),
+    lethal,
   );
 });
 
@@ -450,6 +668,301 @@ test("spells that say any minion can target Tavern offers", () => {
     targetInstanceId: "shop-buff-target",
   });
   assert.deepEqual(state, beforeFriendlyOnlyCast);
+});
+
+test("Chef's Choice draws a different matching type or gives a Consolation Coin", () => {
+  let state = createGame(0x7173);
+  let player = humanPlayer(state);
+  const template = player.shop[0];
+  assert.ok(template);
+  state.activeTribes = [
+    "beast",
+    "mech",
+    "elemental",
+    "murloc",
+    "quilboar",
+  ];
+  player.tavernTier = 2;
+  player.board = [
+    definitionMinion(template, "BG27_004", "chef-beast-target"),
+  ];
+  player.hand = [
+    tavernSpell("tavern-spell-chefs-choice", "chef-choice"),
+  ];
+  for (const definitionId of Object.keys(state.pool)) {
+    state.pool[definitionId] = 0;
+  }
+  state.pool.BG26_805 = 1;
+
+  state = gameReducer(state, {
+    type: "CAST_TAVERN_SPELL",
+    cardInstanceId: "chef-choice",
+    targetInstanceId: "chef-beast-target",
+  });
+  player = humanPlayer(state);
+  assert.equal(player.hand.length, 1);
+  assert.equal(player.hand[0]?.kind, "minion");
+  assert.equal(player.hand[0]?.definitionId, "BG26_805");
+  assert.equal(state.pool.BG26_805, 0);
+
+  const empty = createGame(0x7174);
+  const emptyPlayer = humanPlayer(empty);
+  const emptyTemplate = emptyPlayer.shop[0];
+  assert.ok(emptyTemplate);
+  empty.activeTribes = [...state.activeTribes];
+  emptyPlayer.board = [
+    definitionMinion(
+      emptyTemplate,
+      "BG27_004",
+      "chef-empty-target",
+    ),
+  ];
+  emptyPlayer.hand = [
+    tavernSpell("tavern-spell-chefs-choice", "chef-empty"),
+  ];
+  emptyPlayer.gold = 2;
+  for (const definitionId of Object.keys(empty.pool)) {
+    empty.pool[definitionId] = 0;
+  }
+  const compensated = gameReducer(empty, {
+    type: "CAST_TAVERN_SPELL",
+    cardInstanceId: "chef-empty",
+    targetInstanceId: "chef-empty-target",
+  });
+  const compensatedPlayer = humanPlayer(compensated);
+  assert.equal(compensatedPlayer.gold, 2);
+  assert.equal(compensatedPlayer.hand.length, 1);
+  assert.equal(compensatedPlayer.hand[0]?.kind, "consolationCoin");
+  assert.equal(compensatedPlayer.hand[0]?.cardId, "BG28_521t");
+  assert.equal(compensatedPlayer.tavernSpellsCastThisTurn, 1);
+  const paid = gameReducer(compensated, {
+    type: "PLAY_HAND_CARD",
+    cardInstanceId: compensatedPlayer.hand[0].instanceId,
+  });
+  assert.equal(humanPlayer(paid).gold, 3);
+  assert.equal(humanPlayer(paid).hand.length, 0);
+  assert.equal(humanPlayer(paid).tavernSpellsCastThisTurn, 1);
+});
+
+test("Planar Telescope discovers only the majority minion type", () => {
+  let state = createGame(0x7175);
+  let player = humanPlayer(state);
+  const template = player.shop[0];
+  assert.ok(template);
+  state.activeTribes = [
+    "beast",
+    "murloc",
+    "mech",
+    "elemental",
+    "quilboar",
+  ];
+  player.tavernTier = 2;
+  player.board = [
+    definitionMinion(template, "BG27_004", "majority-beast-one"),
+    definitionMinion(template, "BG31_803", "majority-beast-two"),
+    definitionMinion(template, "BG32_330", "minority-murloc"),
+  ];
+  player.hand = [
+    tavernSpell("tavern-spell-planar-telescope", "telescope"),
+  ];
+  for (const definitionId of Object.keys(state.pool)) {
+    state.pool[definitionId] = 0;
+  }
+  state.pool.BG26_805 = 1;
+  state.pool.BG22_202 = 1;
+
+  state = gameReducer(state, {
+    type: "CAST_TAVERN_SPELL",
+    cardInstanceId: "telescope",
+  });
+  const pending = state.pendingInteraction;
+  assert.equal(pending?.kind, "discover");
+  assert.ok(pending?.kind === "discover");
+  assert.deepEqual(
+    pending.options.map((option) => option.definitionId),
+    ["BG26_805"],
+  );
+  state = gameReducer(state, {
+    type: "RESOLVE_INTERACTION",
+    interactionId: pending.interactionId,
+    optionInstanceId: pending.options[0].instanceId,
+  });
+  player = humanPlayer(state);
+  assert.equal(player.hand[0]?.definitionId, "BG26_805");
+  assert.equal(state.pool.BG22_202, 1);
+
+  const noCandidate = createGame(0x7176);
+  const noCandidatePlayer = humanPlayer(noCandidate);
+  const noCandidateTemplate = noCandidatePlayer.shop[0];
+  assert.ok(noCandidateTemplate);
+  noCandidate.activeTribes = [...state.activeTribes];
+  noCandidatePlayer.board = [
+    definitionMinion(
+      noCandidateTemplate,
+      "BG27_004",
+      "telescope-empty-majority",
+    ),
+  ];
+  noCandidatePlayer.hand = [
+    tavernSpell(
+      "tavern-spell-planar-telescope",
+      "telescope-empty",
+    ),
+  ];
+  for (const definitionId of Object.keys(noCandidate.pool)) {
+    noCandidate.pool[definitionId] = 0;
+  }
+  const compensated = gameReducer(noCandidate, {
+    type: "CAST_TAVERN_SPELL",
+    cardInstanceId: "telescope-empty",
+  });
+  assert.equal(compensated.pendingInteraction, null);
+  assert.equal(humanPlayer(compensated).hand.length, 1);
+  assert.equal(
+    humanPlayer(compensated).hand[0]?.kind,
+    "consolationCoin",
+  );
+});
+
+test("Search the Past locks an exact-Tier discover until the next Recruit turn", () => {
+  let state = createGame(0x7176);
+  let player = humanPlayer(state);
+  state.activeTribes = [
+    "beast",
+    "murloc",
+    "mech",
+    "elemental",
+    "quilboar",
+  ];
+  player.tavernTier = 2;
+  player.board = [];
+  player.hand = [
+    tavernSpell("tavern-spell-search-the-past", "search-past"),
+  ];
+  for (const definitionId of Object.keys(state.pool)) {
+    state.pool[definitionId] = 0;
+  }
+  state.pool.BG26_805 = 1;
+
+  state = gameReducer(state, {
+    type: "CAST_TAVERN_SPELL",
+    cardInstanceId: "search-past",
+  });
+  const pending = state.pendingInteraction;
+  assert.equal(pending?.kind, "discover");
+  assert.ok(pending?.kind === "discover");
+  assert.equal(pending.filter.exactTier, 2);
+  state = gameReducer(state, {
+    type: "RESOLVE_INTERACTION",
+    interactionId: pending.interactionId,
+    optionInstanceId: pending.options[0].instanceId,
+  });
+  player = humanPlayer(state);
+  const locked = player.hand[0];
+  assert.ok(locked?.kind === "minion");
+  assert.equal(locked.playableFromRound, 2);
+  assert.deepEqual(
+    gameReducer(state, {
+      type: "PLAY_HAND_CARD",
+      cardInstanceId: locked.instanceId,
+    }),
+    state,
+  );
+
+  keepOnlyOneOpponent(state, []);
+  state = gameReducer(state, { type: "END_TURN" });
+  state = gameReducer(state, { type: "CONTINUE" });
+  assert.equal(state.round, 2);
+  state = gameReducer(state, {
+    type: "PLAY_HAND_CARD",
+    cardInstanceId: locked.instanceId,
+  });
+  player = humanPlayer(state);
+  assert.equal(player.hand.length, 0);
+  assert.equal(player.board[0]?.definitionId, "BG26_805");
+});
+
+test("AI leaves Search the Past minions locked instead of retrying them forever", () => {
+  const state = createGame(0x7177);
+  const template = humanPlayer(state).shop[0];
+  assert.ok(template);
+  const ai = state.players.find((player) => !player.isHuman);
+  assert.ok(ai);
+  for (const player of state.players) {
+    player.gold = 0;
+    player.shop = [];
+    player.spellShop = null;
+    player.hand = [];
+    player.board = [];
+  }
+  const locked = definitionMinion(
+    template,
+    template.definitionId,
+    "ai-locked-minion",
+    { playableFromRound: state.round + 1 },
+  );
+  ai.hand = [locked];
+
+  const combat = gameReducer(state, { type: "END_TURN" });
+  const recruitedAi = combat.players.find(
+    (player) => player.id === ai.id,
+  );
+  assert.ok(recruitedAi);
+  assert.equal(recruitedAi.board.length, 0);
+  assert.deepEqual(
+    recruitedAi.hand.map((card) => card.instanceId),
+    ["ai-locked-minion"],
+  );
+});
+
+test("a Search the Past triple keeps the latest hand lock", () => {
+  let state = createGame(0x7178);
+  let player = humanPlayer(state);
+  const template = player.shop[0];
+  assert.ok(template);
+  state.activeTribes = [
+    "beast",
+    "murloc",
+    "mech",
+    "elemental",
+    "quilboar",
+  ];
+  player.tavernTier = 2;
+  player.hand = [
+    definitionMinion(template, "BG26_805", "triple-copy-one"),
+    definitionMinion(template, "BG26_805", "triple-copy-two"),
+    tavernSpell("tavern-spell-search-the-past", "triple-search"),
+  ];
+  for (const definitionId of Object.keys(state.pool)) {
+    state.pool[definitionId] = 0;
+  }
+  state.pool.BG26_805 = 1;
+  state = gameReducer(state, {
+    type: "CAST_TAVERN_SPELL",
+    cardInstanceId: "triple-search",
+  });
+  const pending = state.pendingInteraction;
+  assert.ok(pending?.kind === "discover");
+  state = gameReducer(state, {
+    type: "RESOLVE_INTERACTION",
+    interactionId: pending.interactionId,
+    optionInstanceId: pending.options[0].instanceId,
+  });
+  player = humanPlayer(state);
+  assert.equal(player.hand.length, 1);
+  assert.equal(player.hand[0]?.kind, "minion");
+  assert.equal(
+    player.hand[0]?.kind === "minion"
+      ? player.hand[0].golden
+      : false,
+    true,
+  );
+  assert.equal(
+    player.hand[0]?.kind === "minion"
+      ? player.hand[0].playableFromRound
+      : undefined,
+    2,
+  );
 });
 
 test("Natural Blessing buffs matching types across the board and Tavern", () => {
@@ -601,6 +1114,298 @@ test("illegal Tavern Spell targets never consume the card or increment casts", (
   }
 });
 
+test("Careful Mutation preserves final stats while replacing identity and pool ownership", () => {
+  let state = createGame(0x7181);
+  let player = humanPlayer(state);
+  const template = player.shop[0];
+  assert.ok(template);
+  state.activeTribes = [
+    "beast",
+    "murloc",
+    "mech",
+    "elemental",
+    "quilboar",
+  ];
+  const target = definitionMinion(
+    template,
+    "BG27_004",
+    "mutation-target",
+    {
+      attack: 11,
+      health: 13,
+      taunt: true,
+      bloodGemAttack: 3,
+      bloodGemHealth: 4,
+      poolCopies: 1,
+    },
+  );
+  player.board = [target];
+  player.hand = [
+    tavernSpell("tavern-spell-careful-mutation", "mutation"),
+  ];
+  for (const definitionId of Object.keys(state.pool)) {
+    state.pool[definitionId] = 0;
+  }
+  state.pool.BG26_805 = 1;
+
+  state = gameReducer(state, {
+    type: "CAST_TAVERN_SPELL",
+    cardInstanceId: "mutation",
+    targetInstanceId: target.instanceId,
+  });
+  player = humanPlayer(state);
+  const transformed = player.board[0];
+  assert.equal(transformed.instanceId, "mutation-target");
+  assert.equal(transformed.definitionId, "BG26_805");
+  assert.equal(transformed.attack, 11);
+  assert.equal(transformed.health, 13);
+  assert.equal(transformed.bloodGemAttack, 0);
+  assert.equal(transformed.bloodGemHealth, 0);
+  assert.equal(
+    transformed.taunt,
+    getMinionDefinition("BG26_805").taunt === true,
+  );
+  assert.equal(state.pool.BG27_004, 1);
+  assert.equal(state.pool.BG26_805, 0);
+
+  const tierSix = definitionMinion(
+    template,
+    "BG33_885",
+    "tier-six-mutation-target",
+    { poolCopies: 1 },
+  );
+  player.board = [tierSix];
+  player.shop = [];
+  player.hand = [
+    tavernSpell(
+      "tavern-spell-careful-mutation",
+      "tier-six-mutation",
+    ),
+  ];
+  for (const definitionId of Object.keys(state.pool)) {
+    state.pool[definitionId] = 0;
+  }
+  state.pool.BG26_175 = 1;
+  const mutation = tavernSpell(
+    "tavern-spell-careful-mutation",
+    "tier-six-mutation",
+  );
+  assert.deepEqual(
+    getLegalTavernSpellTargetIds(
+      state,
+      player.id,
+      mutation,
+    ),
+    ["tier-six-mutation-target"],
+  );
+  state = gameReducer(state, {
+    type: "CAST_TAVERN_SPELL",
+    cardInstanceId: "tier-six-mutation",
+    targetInstanceId: "tier-six-mutation-target",
+  });
+  player = humanPlayer(state);
+  assert.equal(player.board[0].definitionId, "BG26_175");
+  assert.equal(player.board[0].tier, 6);
+  assert.equal(state.pool.BG33_885, 1);
+  assert.equal(state.pool.BG26_175, 0);
+
+  let shopState = createGame(0x71811);
+  let shopPlayer = humanPlayer(shopState);
+  const shopTemplate = shopPlayer.shop[0];
+  assert.ok(shopTemplate);
+  shopState.activeTribes = [...state.activeTribes];
+  shopPlayer.tavernTier = 2;
+  shopPlayer.tavernMinionAttackBonus = 2;
+  shopPlayer.tavernMinionHealthBonus = 2;
+  shopPlayer.shop = [
+    definitionMinion(
+      shopTemplate,
+      "BG27_004",
+      "shop-mutation-target",
+      { attack: 7, health: 9, poolCopies: 1 },
+    ),
+  ];
+  shopPlayer.hand = [
+    tavernSpell(
+      "tavern-spell-careful-mutation",
+      "shop-mutation",
+    ),
+  ];
+  for (const definitionId of Object.keys(shopState.pool)) {
+    shopState.pool[definitionId] = 0;
+  }
+  shopState.pool.BG26_805 = 1;
+  shopState = gameReducer(shopState, {
+    type: "CAST_TAVERN_SPELL",
+    cardInstanceId: "shop-mutation",
+    targetInstanceId: "shop-mutation-target",
+  });
+  shopPlayer = humanPlayer(shopState);
+  assert.deepEqual(
+    [shopPlayer.shop[0].attack, shopPlayer.shop[0].health],
+    [9, 11],
+    "the transformed Tavern minion keeps its old final stats and receives the persistent Tavern bonus again",
+  );
+});
+
+test("Time Management resolves exactly once through either immediate or delayed choice", () => {
+  let immediate = createGame(0x7182);
+  let immediatePlayer = humanPlayer(immediate);
+  const immediateTemplate = immediatePlayer.shop[0];
+  assert.ok(immediateTemplate);
+  immediatePlayer.board = [
+    definitionMinion(
+      immediateTemplate,
+      immediateTemplate.definitionId,
+      "time-now-target",
+      { attack: 3, health: 5 },
+    ),
+  ];
+  immediatePlayer.hand = [
+    tavernSpell("tavern-spell-time-management", "time-now"),
+  ];
+
+  immediate = gameReducer(immediate, {
+    type: "CAST_TAVERN_SPELL",
+    cardInstanceId: "time-now",
+  });
+  const immediatePending = immediate.pendingInteraction;
+  assert.equal(immediatePending?.kind, "tavernSpellChoice");
+  assert.ok(immediatePending?.kind === "tavernSpellChoice");
+  assert.equal(humanPlayer(immediate).tavernSpellsCastThisTurn, 0);
+  assert.deepEqual(
+    gameReducer(immediate, {
+      type: "RESOLVE_INTERACTION",
+      interactionId: immediatePending.interactionId,
+      optionInstanceId: "not-a-choice",
+    }),
+    immediate,
+  );
+  immediate = gameReducer(immediate, {
+    type: "RESOLVE_INTERACTION",
+    interactionId: immediatePending.interactionId,
+    optionInstanceId: "timeManagementNow",
+  });
+  immediatePlayer = humanPlayer(immediate);
+  assert.equal(immediate.pendingInteraction, null);
+  assert.deepEqual(
+    [immediatePlayer.board[0].attack, immediatePlayer.board[0].health],
+    [5, 7],
+  );
+  assert.equal(immediatePlayer.tavernSpellsCastThisTurn, 1);
+
+  let delayed = createGame(0x7183);
+  let delayedPlayer = humanPlayer(delayed);
+  const delayedTemplate = delayedPlayer.shop[0];
+  assert.ok(delayedTemplate);
+  delayedPlayer.board = [
+    definitionMinion(
+      delayedTemplate,
+      delayedTemplate.definitionId,
+      "time-later-target",
+      { attack: 2, health: 4 },
+    ),
+  ];
+  delayedPlayer.hand = [
+    tavernSpell("tavern-spell-time-management", "time-later"),
+  ];
+  delayed = gameReducer(delayed, {
+    type: "CAST_TAVERN_SPELL",
+    cardInstanceId: "time-later",
+  });
+  const delayedPending = delayed.pendingInteraction;
+  assert.ok(delayedPending?.kind === "tavernSpellChoice");
+  delayed = gameReducer(delayed, {
+    type: "RESOLVE_INTERACTION",
+    interactionId: delayedPending.interactionId,
+    optionInstanceId: "timeManagementNextTurn",
+  });
+  delayedPlayer = humanPlayer(delayed);
+  assert.deepEqual(
+    [delayedPlayer.board[0].attack, delayedPlayer.board[0].health],
+    [2, 4],
+  );
+  assert.deepEqual(
+    [
+      delayedPlayer.nextTurnBoardAttackBonus,
+      delayedPlayer.nextTurnBoardHealthBonus,
+      delayedPlayer.nextTurnBoardBuffPulses,
+    ],
+    [4, 4, 2],
+  );
+
+  keepOnlyOneOpponent(delayed, []);
+  delayed = gameReducer(delayed, { type: "END_TURN" });
+  delayed = gameReducer(delayed, { type: "CONTINUE" });
+  delayedPlayer = humanPlayer(delayed);
+  assert.deepEqual(
+    [delayedPlayer.board[0].attack, delayedPlayer.board[0].health],
+    [6, 8],
+  );
+  assert.deepEqual(
+    [
+      delayedPlayer.nextTurnBoardAttackBonus,
+      delayedPlayer.nextTurnBoardHealthBonus,
+      delayedPlayer.nextTurnBoardBuffPulses,
+    ],
+    [0, 0, 0],
+  );
+});
+
+test("Stacked Avalanche performs a real sale before buffing the leftmost Elemental", () => {
+  let state = createGame(0x7184);
+  let player = humanPlayer(state);
+  const template = player.shop[0];
+  assert.ok(template);
+  const sold = definitionMinion(
+    template,
+    "BG27_004",
+    "avalanche-sale",
+    {
+      attack: 7,
+      health: 9,
+      poolCopies: 1,
+    },
+  );
+  const elemental = definitionMinion(
+    template,
+    "BG31_815",
+    "avalanche-elemental",
+    { attack: 2, health: 3 },
+  );
+  player.board = [sold, elemental];
+  player.gold = 0;
+  player.hand = [
+    tavernSpell("tavern-spell-stacked-avalanche", "avalanche"),
+  ];
+  state.pool.BG27_004 = 0;
+  assert.deepEqual(
+    getLegalTavernSpellTargetIds(
+      state,
+      player.id,
+      player.hand[0] as TavernSpellInstance,
+    ),
+    ["avalanche-sale"],
+  );
+
+  state = gameReducer(state, {
+    type: "CAST_TAVERN_SPELL",
+    cardInstanceId: "avalanche",
+    targetInstanceId: "avalanche-sale",
+  });
+  player = humanPlayer(state);
+  assert.equal(player.gold, sold.sellValue);
+  assert.equal(state.pool.BG27_004, 1);
+  assert.deepEqual(
+    player.board.map((minion) => [
+      minion.instanceId,
+      minion.attack,
+      minion.health,
+    ]),
+    [["avalanche-elemental", 9, 12]],
+  );
+});
+
 test("Blood Gems remain separate from Tavern Spell cast counters", () => {
   const state = createGame(0x7190);
   const player = humanPlayer(state);
@@ -731,6 +1536,237 @@ test("core economy spells track free refreshes, max Gold, and next-turn Gold", (
   assert.equal(player.pendingNextTurnGold, 0);
 });
 
+test("Hubris pays only the next combat result and clears every wager", () => {
+  const scenarios = [
+    { result: "win", copies: 2, reward: 6 },
+    { result: "tie", copies: 1, reward: 1 },
+    { result: "loss", copies: 1, reward: 0 },
+  ] as const;
+
+  for (const [index, scenario] of scenarios.entries()) {
+    let state = createGame(0x71b1 + index);
+    let player = humanPlayer(state);
+    const template = player.shop[0];
+    assert.ok(template);
+    const humanBoard =
+      scenario.result === "win"
+        ? [
+            definitionMinion(
+              template,
+              template.definitionId,
+              `hubris-human-${index}`,
+            ),
+          ]
+        : [];
+    const opponentBoard =
+      scenario.result === "loss"
+        ? [
+            definitionMinion(
+              template,
+              template.definitionId,
+              `hubris-opponent-${index}`,
+            ),
+          ]
+        : [];
+    player.board = humanBoard;
+    player.hand = Array.from({ length: scenario.copies }, (_, copy) =>
+      tavernSpell(
+        "tavern-spell-hubris",
+        `hubris-${index}-${copy}`,
+      ),
+    );
+    for (const card of [...player.hand]) {
+      state = gameReducer(state, {
+        type: "CAST_TAVERN_SPELL",
+        cardInstanceId: card.instanceId,
+      });
+    }
+    player = humanPlayer(state);
+    assert.equal(player.nextCombatWinGold, scenario.copies * 3);
+    assert.equal(player.nextCombatTieGold, scenario.copies);
+    keepOnlyOneOpponent(state, opponentBoard);
+
+    state = gameReducer(state, { type: "END_TURN" });
+    player = humanPlayer(state);
+    assert.equal(state.lastBattle?.resultForHuman, scenario.result);
+    assert.equal(player.nextCombatWinGold, 0);
+    assert.equal(player.nextCombatTieGold, 0);
+    assert.equal(player.pendingNextTurnGold, scenario.reward);
+    const rewards =
+      state.lastBattle?.events.filter(
+        (event) =>
+          event.type === "goldReward" &&
+          event.actorPlayerId === player.id,
+      ) ?? [];
+    assert.equal(rewards.length, scenario.reward > 0 ? 1 : 0);
+    assert.equal(rewards[0]?.amount, scenario.reward || undefined);
+
+    state = gameReducer(state, { type: "CONTINUE" });
+    assert.equal(humanPlayer(state).gold, 4 + scenario.reward);
+  }
+});
+
+test("Blood Gem Barrage banks cast-time values and triggers on any real Tavern refill", () => {
+  let state = createGame(0x71b4);
+  let player = humanPlayer(state);
+  const template = player.shop[0];
+  assert.ok(template);
+  state.activeTribes = [
+    "quilboar",
+    "beast",
+    "mech",
+    "elemental",
+    "murloc",
+  ];
+  player.gold = 20;
+  player.bloodGemAttack = 2;
+  player.bloodGemHealth = 3;
+  player.shop = [
+    definitionMinion(template, "BG20_100", "pre-barrage-shop", {
+      attack: 1,
+      health: 1,
+      poolCopies: 0,
+    }),
+  ];
+  player.hand = [
+    tavernSpell("tavern-spell-blood-gem-barrage", "barrage"),
+  ];
+  for (const definitionId of Object.keys(state.pool)) {
+    state.pool[definitionId] = 0;
+  }
+  state.pool.BG20_100 = 20;
+
+  state = gameReducer(state, {
+    type: "CAST_TAVERN_SPELL",
+    cardInstanceId: "barrage",
+  });
+  player = humanPlayer(state);
+  assert.deepEqual(
+    [player.shop[0].attack, player.shop[0].health],
+    [1, 1],
+  );
+  assert.deepEqual(
+    [
+      player.tavernBloodGemBarrageAttack,
+      player.tavernBloodGemBarrageHealth,
+    ],
+    [2, 3],
+  );
+
+  state = gameReducer(state, { type: "REFRESH_SHOP" });
+  player = humanPlayer(state);
+  const base = getMinionDefinition("BG20_100");
+  assert.equal(player.shop.length, 3);
+  assert.ok(
+    player.shop.every(
+      (minion) =>
+        minion.attack === base.attack + 2 &&
+        minion.health === base.health + 3 &&
+        minion.bloodGemAttack === 2 &&
+        minion.bloodGemHealth === 3,
+    ),
+  );
+
+  player.bloodGemAttack = 7;
+  player.bloodGemHealth = 8;
+  state = gameReducer(state, { type: "REFRESH_SHOP" });
+  player = humanPlayer(state);
+  assert.ok(
+    player.shop.every(
+      (minion) =>
+        minion.attack === base.attack + 2 &&
+        minion.health === base.health + 3 &&
+        minion.bloodGemAttack === 2 &&
+        minion.bloodGemHealth === 3,
+    ),
+    "later Blood Gem upgrades must not change the banked Barrage value",
+  );
+
+  for (const [index, ai] of state.players
+    .filter((candidate) => !candidate.isHuman)
+    .entries()) {
+    ai.gold = 0;
+    ai.shop = [];
+    ai.spellShop = null;
+    ai.hand = [];
+    ai.board = [];
+    ai.alive = index === 0;
+    ai.health = index === 0 ? 40 : 0;
+  }
+  state = gameReducer(state, { type: "TOGGLE_FREEZE" });
+  const fullyFrozenStats = humanPlayer(state).shop.map((minion) => [
+    minion.instanceId,
+    minion.attack,
+    minion.health,
+  ]);
+  state = gameReducer(state, { type: "END_TURN" });
+  state = gameReducer(state, { type: "CONTINUE" });
+  assert.deepEqual(
+    humanPlayer(state).shop.map((minion) => [
+      minion.instanceId,
+      minion.attack,
+      minion.health,
+    ]),
+    fullyFrozenStats,
+    "a full frozen Tavern must not retrigger Barrage",
+  );
+
+  player = humanPlayer(state);
+  player.gold = 10;
+  state = gameReducer(state, { type: "BUY_TAVERN_SPELL" });
+  player = humanPlayer(state);
+  assert.equal(player.spellShop, null);
+  state = gameReducer(state, { type: "TOGGLE_FREEZE" });
+  const spellOnlyFrozenStats = new Map(
+    humanPlayer(state).shop.map((minion) => [
+      minion.instanceId,
+      { attack: minion.attack, health: minion.health },
+    ]),
+  );
+  state = gameReducer(state, { type: "END_TURN" });
+  state = gameReducer(state, { type: "CONTINUE" });
+  player = humanPlayer(state);
+  assert.ok(player.spellShop);
+  for (const minion of player.shop) {
+    const before = spellOnlyFrozenStats.get(minion.instanceId);
+    assert.ok(before);
+    assert.deepEqual(
+      [minion.attack, minion.health],
+      [before.attack + 2, before.health + 3],
+      "refilling only the bought Tavern Spell slot must retrigger Barrage on every frozen minion",
+    );
+  }
+
+  player = humanPlayer(state);
+  player.gold = 10;
+  state = gameReducer(state, { type: "BUY_MINION", shopIndex: 0 });
+  state = gameReducer(state, { type: "TOGGLE_FREEZE" });
+  const survivingFrozen = new Map(
+    humanPlayer(state).shop.map((minion) => [
+      minion.instanceId,
+      { attack: minion.attack, health: minion.health },
+    ]),
+  );
+  state = gameReducer(state, { type: "END_TURN" });
+  state = gameReducer(state, { type: "CONTINUE" });
+  player = humanPlayer(state);
+  assert.equal(player.shop.length, 3);
+  for (const minion of player.shop) {
+    const before = survivingFrozen.get(minion.instanceId);
+    if (before) {
+      assert.deepEqual(
+        [minion.attack, minion.health],
+        [before.attack + 2, before.health + 3],
+      );
+    } else {
+      assert.deepEqual(
+        [minion.bloodGemAttack, minion.bloodGemHealth],
+        [2, 3],
+      );
+    }
+  }
+});
+
 test("Trainee and Lasso add real pool/shop minions to hand deterministically", () => {
   let traineeState = createGame(0x71c0);
   let traineePlayer = humanPlayer(traineeState);
@@ -823,9 +1859,48 @@ test("AI buys and casts useful Tavern Spells through the normal recruit path", (
   assert.equal(recruitedAi.tavernSpellsCastThisTurn, 1);
 });
 
-test("schema 6 saves migrate to schema 7 and survive a JSON round-trip", () => {
+test("schema 7 saves migrate every minion zone and pending discover to schema 8", () => {
+  let current = createGame(0x71df);
+  const player = humanPlayer(current);
+  player.gold = 7;
+  player.hand = [
+    tavernSpell("tavern-spell-new-sprout", "legacy-discover"),
+  ];
+  current = gameReducer(current, {
+    type: "CAST_TAVERN_SPELL",
+    cardInstanceId: "legacy-discover",
+  });
+  assert.equal(current.pendingInteraction?.kind, "discover");
+
+  const legacy = jsonClone(current) as unknown as Record<string, unknown>;
+  legacy.version = 7;
+  legacy.contentVersion = LEGACY_SCHEMA_7_CONTENT_VERSION;
+  const players = legacy.players;
+  assert.ok(Array.isArray(players));
+  for (const legacyPlayer of players) {
+    assert.ok(
+      legacyPlayer !== null && typeof legacyPlayer === "object",
+    );
+    const record = legacyPlayer as Record<string, unknown>;
+    delete record.nextCombatWinGold;
+    delete record.nextCombatTieGold;
+    delete record.nextTurnBoardAttackBonus;
+    delete record.nextTurnBoardHealthBonus;
+    delete record.nextTurnBoardBuffPulses;
+    delete record.tavernBloodGemBarrageAttack;
+    delete record.tavernBloodGemBarrageHealth;
+  }
+  removeSchema8MinionFields(legacy);
+
+  const migrated = migrateSchema7GameState(legacy);
+  assertMigratedSchema8(migrated);
+  assert.equal(migrated.pendingInteraction?.kind, "discover");
+  assertSchema8MinionFields(migrated);
+});
+
+test("schema 6 saves migrate to schema 8 and survive a JSON round-trip", () => {
   const migrated = migrateSchema6GameState(legacyState(6, 0x71e0));
-  assertMigratedSchema7(migrated);
+  assertMigratedSchema8(migrated);
   assert.equal(humanPlayer(migrated).bloodGemAttack, 1);
   assert.equal(humanPlayer(migrated).bloodGemHealth, 1);
 });
@@ -846,15 +1921,17 @@ test("schema 6 migration does not reserve Tavern Spells for eliminated players",
   for (const definition of TAVERN_SPELL_DEFINITIONS) {
     assert.equal(
       totalSpellCopies(state, definition.id),
-      SPELL_POOL_COPIES_BY_TIER[definition.tier],
+      tavernSpellIsAvailable(definition, state.activeTribes)
+        ? SPELL_POOL_COPIES_BY_TIER[definition.tier]
+        : 0,
       `${definition.name} must not be locked by an eliminated player`,
     );
   }
 });
 
-test("schema 5 saves migrate through schema 6 to schema 7", () => {
+test("schema 5 saves migrate through schema 6 to schema 8", () => {
   const migrated = migrateSchema5GameState(legacyState(5, 0x71e1));
-  assertMigratedSchema7(migrated);
+  assertMigratedSchema8(migrated);
   assert.equal(humanPlayer(migrated).bloodGemAttack, 1);
   assert.equal(humanPlayer(migrated).bloodGemHealth, 1);
   assert.equal(migrateSchema5GameState({ version: 5 }), null);

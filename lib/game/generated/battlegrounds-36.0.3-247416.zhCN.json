@@ -1,5 +1,5 @@
 {
-  "schemaVersion": 1,
+  "schemaVersion": 2,
   "source": {
     "patch": "36.0.3",
     "build": 247416,
@@ -21,6 +21,21 @@
       "4": 50,
       "5": 57,
       "6": 35
+    }
+  },
+  "tavernSpellCounts": {
+    "rawPoolSpells": 72,
+    "duosExcluded": 3,
+    "soloPoolSpells": 69,
+    "tierSevenExcluded": 4,
+    "snapshotSpells": 65,
+    "byTier": {
+      "1": 8,
+      "2": 6,
+      "3": 16,
+      "4": 16,
+      "5": 14,
+      "6": 5
     }
   },
   "minions": [
@@ -4435,6 +4450,828 @@
       ],
       "referencedTags": [],
       "text": "<b>亡语：</b>在本场战斗的剩余时间内，你的野兽拥有+8/+8。"
+    }
+  ],
+  "tavernSpells": [
+    {
+      "id": "BG28_503",
+      "dbfId": 103791,
+      "name": "强固",
+      "tier": 1,
+      "cost": 1,
+      "associatedRaces": [],
+      "mechanics": [],
+      "referencedTags": [
+        "TAUNT"
+      ],
+      "text": "使一个随从获得+3生命值和\n<b>嘲讽</b>。0使一个随从获得+0/+3和<b>嘲讽</b>。"
+    },
+    {
+      "id": "BG28_504",
+      "dbfId": 103793,
+      "name": "招募新人",
+      "tier": 1,
+      "cost": 2,
+      "associatedRaces": [],
+      "mechanics": [],
+      "referencedTags": [],
+      "text": "随机获取一张等级1的随从牌。"
+    },
+    {
+      "id": "BG28_512",
+      "dbfId": 104502,
+      "name": "附魔链索",
+      "tier": 1,
+      "cost": 2,
+      "associatedRaces": [],
+      "mechanics": [],
+      "referencedTags": [],
+      "text": "随机偷取酒馆中的一个随从。"
+    },
+    {
+      "id": "BG28_810",
+      "dbfId": 104436,
+      "name": "酒馆币",
+      "tier": 1,
+      "cost": 1,
+      "associatedRaces": [],
+      "mechanics": [],
+      "referencedTags": [],
+      "text": "获得1枚铸币。"
+    },
+    {
+      "id": "BG28_897",
+      "dbfId": 105752,
+      "name": "香蕉果盘",
+      "tier": 1,
+      "cost": 1,
+      "associatedRaces": [],
+      "mechanics": [],
+      "referencedTags": [],
+      "text": "使一个随从获得+2/+2。"
+    },
+    {
+      "id": "BG28_966",
+      "dbfId": 105903,
+      "name": "意外之果",
+      "tier": 1,
+      "cost": 1,
+      "associatedRaces": [],
+      "mechanics": [],
+      "referencedTags": [],
+      "text": "使酒馆中的随从获得+1/+2。"
+    },
+    {
+      "id": "BG33_101",
+      "dbfId": 122864,
+      "name": "新生幼苗",
+      "tier": 1,
+      "cost": 3,
+      "associatedRaces": [],
+      "mechanics": [],
+      "referencedTags": [
+        "DISCOVER"
+      ],
+      "text": "<b>发现</b>一个等级1的随从。"
+    },
+    {
+      "id": "EBG_Spell_014",
+      "dbfId": 100596,
+      "name": "尖利箭矢",
+      "tier": 1,
+      "cost": 1,
+      "associatedRaces": [],
+      "mechanics": [],
+      "referencedTags": [],
+      "text": "使一个随从获得+4攻击力。4使一个随从获得+4/+0。"
+    },
+    {
+      "id": "BG28_518",
+      "dbfId": 105664,
+      "name": "主厨甄选",
+      "tier": 2,
+      "cost": 2,
+      "associatedRaces": [],
+      "mechanics": [],
+      "referencedTags": [],
+      "text": "选择一个随从。获取相同类型的另一张随从牌。"
+    },
+    {
+      "id": "BG28_571",
+      "dbfId": 104559,
+      "name": "拼命发掘",
+      "tier": 2,
+      "cost": 3,
+      "associatedRaces": [],
+      "mechanics": [],
+      "referencedTags": [],
+      "text": "获得1枚铸币。购买本牌会消耗生命值，而非铸币。"
+    },
+    {
+      "id": "BG28_805",
+      "dbfId": 104029,
+      "name": "钻探原油",
+      "tier": 2,
+      "cost": 3,
+      "associatedRaces": [],
+      "mechanics": [],
+      "referencedTags": [],
+      "text": "你的铸币上限提高1枚。"
+    },
+    {
+      "id": "BG28_827",
+      "dbfId": 104446,
+      "name": "快速浏览",
+      "tier": 2,
+      "cost": 1,
+      "associatedRaces": [],
+      "mechanics": [],
+      "referencedTags": [
+        "BACON_REFRESH_TOOLTIP"
+      ],
+      "text": "获得2次免费的<b>刷新</b>。"
+    },
+    {
+      "id": "BG34_330",
+      "dbfId": 127288,
+      "name": "搜寻时光",
+      "tier": 2,
+      "cost": 2,
+      "associatedRaces": [],
+      "mechanics": [],
+      "referencedTags": [
+        "DISCOVER"
+      ],
+      "text": "<b>发现</b>一张你当前等级的随从牌，将其锁入你的手牌1个\n回合。"
+    },
+    {
+      "id": "BG35_951",
+      "dbfId": 131152,
+      "name": "暴风城之力",
+      "tier": 2,
+      "cost": 2,
+      "associatedRaces": [],
+      "mechanics": [],
+      "referencedTags": [],
+      "text": "随机使四个友方随从获得+1/+2。"
+    },
+    {
+      "id": "BG28_168",
+      "dbfId": 109230,
+      "name": "闪亮的戒指",
+      "tier": 3,
+      "cost": 2,
+      "associatedRaces": [],
+      "mechanics": [],
+      "referencedTags": [],
+      "text": "使你的随从获得+1/+1。"
+    },
+    {
+      "id": "BG28_519",
+      "dbfId": 105665,
+      "name": "瞬息活力",
+      "tier": 3,
+      "cost": 1,
+      "associatedRaces": [],
+      "mechanics": [
+        "START_OF_COMBAT"
+      ],
+      "referencedTags": [],
+      "text": "<b>战斗开始时：</b>使你的随从获得+2/+1。"
+    },
+    {
+      "id": "BG28_520",
+      "dbfId": 105667,
+      "name": "搞怪裤",
+      "tier": 3,
+      "cost": 1,
+      "associatedRaces": [],
+      "mechanics": [],
+      "referencedTags": [
+        "TAUNT"
+      ],
+      "text": "使一个随从获得+1/+2和<b>嘲讽</b>。如果它已经拥有<b>嘲讽</b>，则移除。"
+    },
+    {
+      "id": "BG28_521",
+      "dbfId": 105669,
+      "name": "位面望远镜",
+      "tier": 3,
+      "cost": 4,
+      "associatedRaces": [],
+      "mechanics": [],
+      "referencedTags": [
+        "DISCOVER"
+      ],
+      "text": "<b>发现</b>一个你的多数随从的类型的随从。"
+    },
+    {
+      "id": "BG28_800",
+      "dbfId": 103779,
+      "name": "慎重投资",
+      "tier": 3,
+      "cost": 1,
+      "associatedRaces": [],
+      "mechanics": [],
+      "referencedTags": [],
+      "text": "下回合获得2枚铸币。"
+    },
+    {
+      "id": "BG28_884",
+      "dbfId": 105267,
+      "name": "自负",
+      "tier": 3,
+      "cost": 1,
+      "associatedRaces": [],
+      "mechanics": [],
+      "referencedTags": [],
+      "text": "如果你在你下一场战斗中获胜，获得3枚铸币。如果平局，获得1枚。"
+    },
+    {
+      "id": "BG28_886",
+      "dbfId": 105276,
+      "name": "富足之杖",
+      "tier": 3,
+      "cost": 2,
+      "associatedRaces": [],
+      "mechanics": [],
+      "referencedTags": [],
+      "text": "使酒馆中的随从在本局对战中获得+2/+2。"
+    },
+    {
+      "id": "BG30_804",
+      "dbfId": 113901,
+      "name": "稳健异变",
+      "tier": 3,
+      "cost": 1,
+      "associatedRaces": [],
+      "mechanics": [],
+      "referencedTags": [],
+      "text": "选择一个随从，随机将其变形成为高一级的随从并保留其属性值。"
+    },
+    {
+      "id": "BG31_881",
+      "dbfId": 117573,
+      "name": "时间管理",
+      "tier": 3,
+      "cost": 4,
+      "associatedRaces": [],
+      "mechanics": [
+        "CHOOSE_ONE"
+      ],
+      "referencedTags": [],
+      "text": "<b>抉择：</b>使你的随从获得+2/+2；或者在你的下个回合开始时，使你的随从获得+2/+2，触发两次。"
+    },
+    {
+      "id": "BG33_811",
+      "dbfId": 122182,
+      "name": "生命悬赏令",
+      "tier": 3,
+      "cost": 2,
+      "associatedRaces": [
+        "PIRATE"
+      ],
+      "mechanics": [],
+      "referencedTags": [],
+      "text": "使四个友方随从获得+4生命值。0使四个友方随从获得+0/+4。"
+    },
+    {
+      "id": "BG33_812",
+      "dbfId": 122183,
+      "name": "敌对悬赏令",
+      "tier": 3,
+      "cost": 2,
+      "associatedRaces": [
+        "PIRATE"
+      ],
+      "mechanics": [],
+      "referencedTags": [],
+      "text": "使四个友方随从获得+4攻击力。4使四个友方随从获得+4/+0。"
+    },
+    {
+      "id": "BG33_813",
+      "dbfId": 122184,
+      "name": "谋私悬赏令",
+      "tier": 3,
+      "cost": 2,
+      "associatedRaces": [
+        "PIRATE"
+      ],
+      "mechanics": [],
+      "referencedTags": [],
+      "text": "使你最左边的随从获得+6/+6。"
+    },
+    {
+      "id": "BG33_814",
+      "dbfId": 122185,
+      "name": "友方悬赏令",
+      "tier": 3,
+      "cost": 2,
+      "associatedRaces": [
+        "PIRATE"
+      ],
+      "mechanics": [],
+      "referencedTags": [],
+      "text": "随机获取一张你的多数随从的类型的随从牌"
+    },
+    {
+      "id": "BG33_815",
+      "dbfId": 122186,
+      "name": "财富悬赏令",
+      "tier": 3,
+      "cost": 2,
+      "associatedRaces": [
+        "PIRATE"
+      ],
+      "mechanics": [],
+      "referencedTags": [],
+      "text": "获得2枚铸币。"
+    },
+    {
+      "id": "BG33_899",
+      "dbfId": 122862,
+      "name": "累叠雪崩",
+      "tier": 3,
+      "cost": 2,
+      "associatedRaces": [
+        "ELEMENTAL"
+      ],
+      "mechanics": [],
+      "referencedTags": [],
+      "text": "出售一个友方随从，使你最左边的元素获得其属性值。"
+    },
+    {
+      "id": "BG34_689",
+      "dbfId": 126676,
+      "name": "鲜血宝石弹幕",
+      "tier": 3,
+      "cost": 1,
+      "associatedRaces": [
+        "QUILBOAR"
+      ],
+      "mechanics": [],
+      "referencedTags": [
+        "BACON_REFRESH_TOOLTIP",
+        "BACON_BLOOD_GEM_TOOLTIP"
+      ],
+      "text": "在本局对战中，在酒馆<b>刷新</b>后，使其中的随从获得+1/+1的<b>鲜血宝石</b>。"
+    },
+    {
+      "id": "BG28_601",
+      "dbfId": 110400,
+      "name": "克隆螺号",
+      "tier": 4,
+      "cost": 4,
+      "associatedRaces": [
+        "MURLOC"
+      ],
+      "mechanics": [],
+      "referencedTags": [],
+      "text": "随机获取一张鱼人牌和一张它的复制。"
+    },
+    {
+      "id": "BG28_603",
+      "dbfId": 110401,
+      "name": "甲虫恩泽",
+      "tier": 4,
+      "cost": 1,
+      "associatedRaces": [
+        "BEAST"
+      ],
+      "mechanics": [
+        "START_OF_COMBAT"
+      ],
+      "referencedTags": [
+        "TAUNT"
+      ],
+      "text": "当你在战斗中有空位时，召唤两只2/2的甲虫并使其获得<b>嘲讽</b>。<i>（还剩2只！）</i>"
+    },
+    {
+      "id": "BG28_606",
+      "dbfId": 110406,
+      "name": "恶鳞套餐",
+      "tier": 4,
+      "cost": 2,
+      "associatedRaces": [
+        "NAGA"
+      ],
+      "mechanics": [],
+      "referencedTags": [
+        "BACON_SPELLCRAFT_ID"
+      ],
+      "text": "随机获取3张<b>塑造法术</b>的\n法术牌。"
+    },
+    {
+      "id": "BG28_698",
+      "dbfId": 110642,
+      "name": "查抄宝石",
+      "tier": 4,
+      "cost": 1,
+      "associatedRaces": [
+        "QUILBOAR"
+      ],
+      "mechanics": [],
+      "referencedTags": [
+        "BACON_BLOOD_GEM_TOOLTIP"
+      ],
+      "text": "本牌对一个随从使用2张<b>鲜血宝石</b>，并使其偷取相邻随从的所有<b>鲜血宝石</b>。"
+    },
+    {
+      "id": "BG28_825",
+      "dbfId": 104445,
+      "name": "防御者的仪式",
+      "tier": 4,
+      "cost": 2,
+      "associatedRaces": [],
+      "mechanics": [],
+      "referencedTags": [
+        "TAUNT"
+      ],
+      "text": "使一个友方随从获得+6/+6\n和<b>嘲讽</b>。"
+    },
+    {
+      "id": "BG28_845",
+      "dbfId": 104472,
+      "name": "自然祝福",
+      "tier": 4,
+      "cost": 4,
+      "associatedRaces": [],
+      "mechanics": [],
+      "referencedTags": [],
+      "text": "选择一个随从，使所有该类型的随从获得+3/+3。"
+    },
+    {
+      "id": "BG28_888",
+      "dbfId": 105271,
+      "name": "乱放的茶具",
+      "tier": 4,
+      "cost": 2,
+      "associatedRaces": [],
+      "mechanics": [],
+      "referencedTags": [],
+      "text": "使每个类型的各一个友方随从获得+2/+2。"
+    },
+    {
+      "id": "BG31_819",
+      "dbfId": 117670,
+      "name": "寒热骤变",
+      "tier": 4,
+      "cost": 4,
+      "associatedRaces": [
+        "ELEMENTAL"
+      ],
+      "mechanics": [],
+      "referencedTags": [],
+      "text": "获取一张火焰投球手和一张冰雪投球手。"
+    },
+    {
+      "id": "BG32_815",
+      "dbfId": 120900,
+      "name": "变换之潮",
+      "tier": 4,
+      "cost": 1,
+      "associatedRaces": [
+        "NAGA"
+      ],
+      "mechanics": [],
+      "referencedTags": [],
+      "text": "使一个随从获得+1/+1，触发两次。如果该随从是纳迦，重复此效果。"
+    },
+    {
+      "id": "BG34_444",
+      "dbfId": 126909,
+      "name": "乘借东风",
+      "tier": 4,
+      "cost": 1,
+      "associatedRaces": [
+        "ELEMENTAL"
+      ],
+      "mechanics": [],
+      "referencedTags": [
+        "BACON_REFRESH_TOOLTIP"
+      ],
+      "text": "在本局对战中，在酒馆<b>刷新</b>后，使酒馆中一个随机随从获得+6/+6。"
+    },
+    {
+      "id": "BG34_888",
+      "dbfId": 126957,
+      "name": "惊扰墓穴",
+      "tier": 4,
+      "cost": 2,
+      "associatedRaces": [
+        "UNDEAD"
+      ],
+      "mechanics": [],
+      "referencedTags": [
+        "DISCOVER"
+      ],
+      "text": "<b>发现</b>一张亡灵牌。如果你在本回合中使用发现的这张牌，则该随从会死亡。"
+    },
+    {
+      "id": "BG35_149",
+      "dbfId": 131218,
+      "name": "深水族群",
+      "tier": 4,
+      "cost": 2,
+      "associatedRaces": [
+        "MURLOC"
+      ],
+      "mechanics": [],
+      "referencedTags": [],
+      "text": "使一个随从获得+2/+2。使你的鱼人获得+2/+2。"
+    },
+    {
+      "id": "BG35_910",
+      "dbfId": 130310,
+      "name": "燃焰",
+      "tier": 4,
+      "cost": 2,
+      "associatedRaces": [
+        "ELEMENTAL"
+      ],
+      "mechanics": [],
+      "referencedTags": [],
+      "text": "使一个随从获得+4/+4。<i>（在本回合中，你每使用过一张元素牌都会提升！）</i>"
+    },
+    {
+      "id": "BG35_911",
+      "dbfId": 130311,
+      "name": "奥术吸收",
+      "tier": 4,
+      "cost": 1,
+      "associatedRaces": [
+        "ELEMENTAL"
+      ],
+      "mechanics": [],
+      "referencedTags": [],
+      "text": "使一个友方元素获得酒馆中生命值最高的随从的一半\n属性值。"
+    },
+    {
+      "id": "BG35_912",
+      "dbfId": 130312,
+      "name": "艾欧娜尔的眷顾",
+      "tier": 4,
+      "cost": 2,
+      "associatedRaces": [],
+      "mechanics": [],
+      "referencedTags": [],
+      "text": "选择一个随从。在本局对战中，使酒馆中该类型的随从获得+3/+3。"
+    },
+    {
+      "id": "BG35_952",
+      "dbfId": 131153,
+      "name": "背靠背",
+      "tier": 4,
+      "cost": 1,
+      "associatedRaces": [],
+      "mechanics": [],
+      "referencedTags": [],
+      "text": "使一个随从获得+4/+4。你此后的背靠背使随从额外获得+4/+4。"
+    },
+    {
+      "id": "BG28_500",
+      "dbfId": 103785,
+      "name": "护甲储备",
+      "tier": 5,
+      "cost": 3,
+      "associatedRaces": [],
+      "mechanics": [],
+      "referencedTags": [],
+      "text": "将你的护甲值变为5点。"
+    },
+    {
+      "id": "BG28_573",
+      "dbfId": 104560,
+      "name": "优势压制",
+      "tier": 5,
+      "cost": 3,
+      "associatedRaces": [],
+      "mechanics": [
+        "START_OF_COMBAT"
+      ],
+      "referencedTags": [],
+      "text": "<b>战斗开始时：</b>随机将一个敌方随从的生命值变为1。"
+    },
+    {
+      "id": "BG28_604",
+      "dbfId": 110412,
+      "name": "宰割",
+      "tier": 5,
+      "cost": 2,
+      "associatedRaces": [
+        "UNDEAD"
+      ],
+      "mechanics": [],
+      "referencedTags": [],
+      "text": "消灭一个友方亡灵。在本局对战中，你的亡灵拥有+5攻击力<i>（无论它们在哪）。</i>5消灭一个友方亡灵。在本局对战中，你的亡灵拥有+5/+0<i>（无论它们在哪）。</i>"
+    },
+    {
+      "id": "BG28_607",
+      "dbfId": 110407,
+      "name": "腐化糕点",
+      "tier": 5,
+      "cost": 4,
+      "associatedRaces": [
+        "DEMON"
+      ],
+      "mechanics": [],
+      "referencedTags": [],
+      "text": "选择一个友方恶魔，使其吞食酒馆中的3个随机随从，获得其属性值。"
+    },
+    {
+      "id": "BG28_830",
+      "dbfId": 104448,
+      "name": "点金之触",
+      "tier": 5,
+      "cost": 5,
+      "associatedRaces": [],
+      "mechanics": [],
+      "referencedTags": [],
+      "text": "随机使酒馆中的一个随从变为金色。"
+    },
+    {
+      "id": "BG28_849",
+      "dbfId": 104494,
+      "name": "顶尖好酒",
+      "tier": 5,
+      "cost": 2,
+      "associatedRaces": [],
+      "mechanics": [],
+      "referencedTags": [
+        "BACON_REFRESH_TOOLTIP"
+      ],
+      "text": "<b>刷新</b>酒馆，\n使其中变为酒馆\n法术牌。"
+    },
+    {
+      "id": "BG28_882",
+      "dbfId": 105265,
+      "name": "预订遗体",
+      "tier": 5,
+      "cost": 3,
+      "associatedRaces": [],
+      "mechanics": [
+        "DISCOVER"
+      ],
+      "referencedTags": [
+        "DEATHRATTLE"
+      ],
+      "text": "<b>发现</b>一张<b>亡语</b>随从牌。"
+    },
+    {
+      "id": "BG28_GIL_836",
+      "dbfId": 105264,
+      "name": "猎头招聘",
+      "tier": 5,
+      "cost": 3,
+      "associatedRaces": [],
+      "mechanics": [
+        "DISCOVER"
+      ],
+      "referencedTags": [
+        "BATTLECRY"
+      ],
+      "text": "<b>发现</b>一张<b>战吼</b>随从牌。"
+    },
+    {
+      "id": "BG33_817",
+      "dbfId": 122899,
+      "name": "圣洁庇护",
+      "tier": 5,
+      "cost": 1,
+      "associatedRaces": [
+        "MECHANICAL"
+      ],
+      "mechanics": [],
+      "referencedTags": [
+        "DIVINE_SHIELD"
+      ],
+      "text": "使你具有<b>圣盾</b>的随从获得+6\n攻击力。6使你具有<b>圣盾</b>的随从获得\n+6/+0。"
+    },
+    {
+      "id": "BG34_889",
+      "dbfId": 127503,
+      "name": "诺兹多姆的子嗣",
+      "tier": 5,
+      "cost": 2,
+      "associatedRaces": [
+        "DRAGON"
+      ],
+      "mechanics": [
+        "START_OF_COMBAT"
+      ],
+      "referencedTags": [],
+      "text": "<b>战斗开始时：</b>使你最左边的随从的攻击力翻倍。"
+    },
+    {
+      "id": "BG34_990",
+      "dbfId": 127506,
+      "name": "黄金狂潮",
+      "tier": 5,
+      "cost": 2,
+      "associatedRaces": [
+        "PIRATE"
+      ],
+      "mechanics": [],
+      "referencedTags": [],
+      "text": "使你的随从获得+3/+2。使你的金色随从额外获得+3/+2。"
+    },
+    {
+      "id": "BG35_922",
+      "dbfId": 130713,
+      "name": "女王的命令",
+      "tier": 5,
+      "cost": 2,
+      "associatedRaces": [
+        "NAGA"
+      ],
+      "mechanics": [],
+      "referencedTags": [],
+      "text": "使你的随从获得+2/+2。使你的所有纳迦额外获得+2/+2。"
+    },
+    {
+      "id": "EBG_Spell_032",
+      "dbfId": 100899,
+      "name": "祈请吞噬者",
+      "tier": 5,
+      "cost": 4,
+      "associatedRaces": [],
+      "mechanics": [],
+      "referencedTags": [],
+      "text": "出售一个友方随从，使一个随机友方随从获得其属性值。"
+    },
+    {
+      "id": "EBG_Spell_037",
+      "dbfId": 100910,
+      "name": "身份揭晓",
+      "tier": 5,
+      "cost": 3,
+      "associatedRaces": [],
+      "mechanics": [
+        "DISCOVER"
+      ],
+      "referencedTags": [],
+      "text": "<b>发现</b>一个新的英雄技能。"
+    },
+    {
+      "id": "BG28_169",
+      "dbfId": 109232,
+      "name": "艾泽里特强化",
+      "tier": 6,
+      "cost": 4,
+      "associatedRaces": [],
+      "mechanics": [],
+      "referencedTags": [],
+      "text": "使你的随从获得+2/+2，触发\n两次。"
+    },
+    {
+      "id": "BG28_838",
+      "dbfId": 104601,
+      "name": "完美形象",
+      "tier": 6,
+      "cost": 2,
+      "associatedRaces": [],
+      "mechanics": [],
+      "referencedTags": [],
+      "text": "将一个随从的属性值变为20/20。"
+    },
+    {
+      "id": "BG30_802",
+      "dbfId": 113902,
+      "name": "冒牌的智慧之球",
+      "tier": 6,
+      "cost": 4,
+      "associatedRaces": [],
+      "mechanics": [
+        "TRIGGER_VISUAL"
+      ],
+      "referencedTags": [
+        "BACON_REFRESH_TOOLTIP"
+      ],
+      "text": "你的下2次<b>刷新</b>均为有用的刷新！ <i>（还剩2次！）</i>"
+    },
+    {
+      "id": "EBG_Spell_017",
+      "dbfId": 100601,
+      "name": "大地母亲之眼",
+      "tier": 6,
+      "cost": 4,
+      "associatedRaces": [],
+      "mechanics": [],
+      "referencedTags": [],
+      "text": "选择一个等级4或以下的友方随从，将其变为金色。"
+    },
+    {
+      "id": "EBG_Spell_038",
+      "dbfId": 100911,
+      "name": "哈缪尔遗失的法杖",
+      "tier": 6,
+      "cost": 2,
+      "associatedRaces": [],
+      "mechanics": [],
+      "referencedTags": [
+        "BACON_REFRESH_TOOLTIP"
+      ],
+      "text": "选择一个随从。<b>刷新</b>酒馆，使其中的牌变为该类型的随从。"
     }
   ]
 }
