@@ -5,6 +5,12 @@ import {
   MINION_DEFINITIONS,
   getMinionDefinition,
 } from "./content.ts";
+import {
+  TAVERN_SPELL_DEFINITIONS,
+  getTavernSpellDefinition,
+  tavernSpellCanTargetShop,
+  tavernSpellNeedsTarget,
+} from "./tavern-spells.ts";
 import type {
   BattleEvent,
   BattleResult,
@@ -26,6 +32,8 @@ import type {
   RallyRemoveTargetKeywordsEffect,
   RallyRemovedKeyword,
   RallySummonFromHandEffect,
+  TavernSpellDefinition,
+  TavernSpellInstance,
   TavernTier,
   Tribe,
   TripleRewardSpellInstance,
@@ -49,10 +57,21 @@ export type {
   PlayerId,
   PlayerState,
   SpellFamily,
+  TavernSpellDefinition,
+  TavernSpellEffect,
+  TavernSpellInstance,
+  TavernSpellTarget,
   TavernTier,
   Tribe,
   TripleRewardSpellInstance,
 } from "./types.ts";
+
+export {
+  TAVERN_SPELL_DEFINITIONS,
+  getTavernSpellDefinition,
+  tavernSpellCanTargetShop,
+  tavernSpellNeedsTarget,
+} from "./tavern-spells.ts";
 
 const HUMAN_PLAYER_ID = "player-0";
 const PLAYER_NAMES = [
@@ -66,13 +85,14 @@ const PLAYER_NAMES = [
   "野兽驯养师",
 ] as const;
 
-// Tavern spells occupy the extra card slot documented in Patch 34.2. This
-// minion-only game keeps the real minion-offer counts from beneath that slot.
+// Tavern Spells occupy the extra card slot documented in Patch 34.2. The UI
+// interleaves that offer with these normal minion offers, as the live game does.
 // Patch 23.6 reduced Tier 1 to 15 copies, matching Tier 2; the remaining copy
 // counts retain the 13/11/9/7 distribution.
 const SHOP_SIZE_BY_TIER = [0, 3, 4, 4, 5, 5, 6] as const;
 const UPGRADE_BASE_COST = [0, 5, 7, 8, 11, 12, 0] as const;
 const POOL_COPIES_BY_TIER = [0, 15, 15, 13, 11, 9, 7] as const;
+const SPELL_POOL_COPIES_BY_TIER = [0, 5, 7, 9, 11, 7, 5] as const;
 const TIER_UP_ROUND = [0, 0, 2, 4, 6, 9, 11] as const;
 const DEFAULT_SEED = 0x4853544e;
 const MAX_BOARD_SIZE = 7;
@@ -402,6 +422,57 @@ function createBloodGemSpell(state: GameState): BloodGemSpellInstance {
   return instance;
 }
 
+function createTavernSpell(
+  state: GameState,
+  definition: TavernSpellDefinition,
+): TavernSpellInstance {
+  const instance: TavernSpellInstance = {
+    kind: "tavernSpell",
+    instanceId: `card-${state.nextInstanceId}`,
+    definitionId: definition.id,
+    cardId: definition.cardId,
+    name: definition.name,
+    tier: definition.tier,
+    cost: definition.cost,
+    description: definition.description,
+    spellFamily: "tavern",
+    target: definition.target,
+  };
+  state.nextInstanceId += 1;
+  return instance;
+}
+
+function drawTavernSpell(
+  state: GameState,
+  tavernTier: TavernTier,
+): TavernSpellInstance | null {
+  const eligible = TAVERN_SPELL_DEFINITIONS.filter(
+    (definition) =>
+      definition.tier <= tavernTier &&
+      (state.spellPool[definition.id] ?? 0) > 0,
+  );
+  const totalCopies = eligible.reduce(
+    (total, definition) =>
+      total + (state.spellPool[definition.id] ?? 0),
+    0,
+  );
+  if (totalCopies <= 0) {
+    return null;
+  }
+  let roll = Math.floor(nextRandom(state) * totalCopies);
+  let definition = eligible[0];
+  for (const candidate of eligible) {
+    const copies = state.spellPool[candidate.id] ?? 0;
+    if (roll < copies) {
+      definition = candidate;
+      break;
+    }
+    roll -= copies;
+  }
+  state.spellPool[definition.id] -= 1;
+  return createTavernSpell(state, definition);
+}
+
 function addBloodGems(
   state: GameState,
   player: PlayerState,
@@ -628,6 +699,11 @@ function releaseShop(state: GameState, player: PlayerState): void {
     returnMinionToPool(state, minion);
   }
   player.shop = [];
+  if (player.spellShop) {
+    state.spellPool[player.spellShop.definitionId] =
+      (state.spellPool[player.spellShop.definitionId] ?? 0) + 1;
+  }
+  player.spellShop = null;
 }
 
 function fillShop(state: GameState, player: PlayerState): void {
@@ -637,7 +713,12 @@ function fillShop(state: GameState, player: PlayerState): void {
     if (!minion) {
       break;
     }
+    minion.attack += player.tavernMinionAttackBonus;
+    minion.health += player.tavernMinionHealthBonus;
     player.shop.push(minion);
+  }
+  if (player.spellShop === null) {
+    player.spellShop = drawTavernSpell(state, player.tavernTier);
   }
 }
 
@@ -651,6 +732,14 @@ export function getUpgradeCost(
   }
   const baseCost = UPGRADE_BASE_COST[player.tavernTier];
   return Math.max(0, baseCost - player.upgradeDiscount);
+}
+
+export function getRefreshCost(
+  state: GameState,
+  playerId: PlayerId,
+): number {
+  const player = findPlayer(state, playerId);
+  return player?.freeRefreshes ? 0 : REFRESH_COST;
 }
 
 function applyBuff(target: MinionInstance, effect: BuffEffect, scale: number): void {
@@ -1068,6 +1157,26 @@ function buyMinion(
   return true;
 }
 
+function buyTavernSpell(
+  state: GameState,
+  player: PlayerState,
+): boolean {
+  const spell = player.spellShop;
+  if (
+    !spell ||
+    player.gold < spell.cost ||
+    player.hand.length >= MAX_HAND_SIZE
+  ) {
+    return false;
+  }
+  player.gold -= spell.cost;
+  state.spellPool[spell.definitionId] =
+    (state.spellPool[spell.definitionId] ?? 0) + 1;
+  player.hand.push(spell);
+  player.spellShop = null;
+  return true;
+}
+
 function sellMinion(
   state: GameState,
   player: PlayerState,
@@ -1237,6 +1346,333 @@ function castBloodGem(
   return true;
 }
 
+function randomBoardSubset(
+  state: GameState,
+  board: readonly BoardMinionInstance[],
+  count: number,
+): BoardMinionInstance[] {
+  const candidates = [...board];
+  const selected: BoardMinionInstance[] = [];
+  while (candidates.length > 0 && selected.length < count) {
+    selected.push(candidates.splice(randomIndex(state, candidates.length), 1)[0]);
+  }
+  return selected;
+}
+
+function buffMinions(
+  minions: readonly BoardMinionInstance[],
+  attack: number,
+  health: number,
+): void {
+  for (const minion of minions) {
+    minion.attack += attack;
+    minion.health += health;
+  }
+}
+
+function mostCommonBoardTribe(player: PlayerState): Tribe | null {
+  let best: Tribe | null = null;
+  let bestCount = 0;
+  for (const tribe of LOBBY_TRIBES) {
+    const count = player.board.filter((minion) =>
+      minionHasTribe(minion, tribe),
+    ).length;
+    if (count > bestCount) {
+      best = tribe;
+      bestCount = count;
+    }
+  }
+  return best;
+}
+
+function addDrawnMinionToHand(
+  state: GameState,
+  player: PlayerState,
+  minion: BoardMinionInstance | null,
+): void {
+  if (!minion) {
+    return;
+  }
+  if (player.hand.length >= MAX_HAND_SIZE) {
+    returnMinionToPool(state, minion);
+    return;
+  }
+  player.hand.push(minion);
+  resolveTriples(state, player);
+}
+
+function applyAfterTavernSpellCastTriggers(player: PlayerState): void {
+  for (const source of player.board) {
+    for (const component of minionEffectSources(source)) {
+      if (component.definitionId !== "BG27_005") {
+        continue;
+      }
+      buffMinions(player.board, component.golden ? 2 : 1, 0);
+    }
+  }
+}
+
+function applyTavernSpellEffect(
+  state: GameState,
+  player: PlayerState,
+  spell: TavernSpellInstance,
+  definition: TavernSpellDefinition,
+  target: BoardMinionInstance | undefined,
+): void {
+  switch (definition.effect) {
+    case "discoverTierOne":
+      beginDiscoverInteraction(
+        state,
+        player,
+        spell.instanceId,
+        { exactTier: 1 },
+        1,
+        { kind: "hand" },
+      );
+      break;
+    case "stealRandomShopMinion": {
+      if (player.shop.length === 0) {
+        break;
+      }
+      const [stolen] = player.shop.splice(
+        randomIndex(state, player.shop.length),
+        1,
+      );
+      addDrawnMinionToHand(state, player, stolen);
+      break;
+    }
+    case "fortify":
+      if (target) {
+        target.health += 3;
+        target.taunt = true;
+      }
+      break;
+    case "pointyArrow":
+      if (target) {
+        target.attack += 4;
+      }
+      break;
+    case "recruitTrainee":
+      addDrawnMinionToHand(
+        state,
+        player,
+        drawMatchingFromPool(state, 1, (candidate) => candidate.tier === 1),
+      );
+      break;
+    case "gainOneGold":
+      player.gold += 1;
+      break;
+    case "tavernDishBanana":
+      if (target) {
+        target.attack += 2;
+        target.health += 2;
+      }
+      break;
+    case "themApples":
+      buffMinions(player.shop, 1, 2);
+      break;
+    case "freeRefreshes":
+      player.freeRefreshes += 2;
+      break;
+    case "mightOfStormwind":
+      buffMinions(randomBoardSubset(state, player.board, 4), 1, 2);
+      break;
+    case "increaseMaxGold":
+      player.maxGold += 1;
+      break;
+    case "carefulInvestment":
+      player.pendingNextTurnGold += 2;
+      break;
+    case "fleetingVigor":
+      player.nextCombatAttackBonus += 2;
+      player.nextCombatHealthBonus += 1;
+      break;
+    case "friendlyBounty": {
+      const tribe = mostCommonBoardTribe(player);
+      addDrawnMinionToHand(
+        state,
+        player,
+        tribe
+          ? drawMatchingFromPool(
+              state,
+              player.tavernTier,
+              (candidate) => definitionHasTribe(candidate, tribe),
+            )
+          : null,
+      );
+      break;
+    }
+    case "healthyBounty":
+      buffMinions(randomBoardSubset(state, player.board, 4), 0, 4);
+      break;
+    case "hostileBounty":
+      buffMinions(randomBoardSubset(state, player.board, 4), 4, 0);
+      break;
+    case "selfishBounty":
+      if (player.board[0]) {
+        buffMinions([player.board[0]], 6, 6);
+      }
+      break;
+    case "shinyRing":
+      buffMinions(player.board, 1, 1);
+      break;
+    case "staffOfEnrichment":
+      player.tavernMinionAttackBonus += 2;
+      player.tavernMinionHealthBonus += 2;
+      buffMinions(player.shop, 2, 2);
+      break;
+    case "trickyTrousers":
+      if (target) {
+        target.attack += 1;
+        target.health += 2;
+        target.taunt = !target.taunt;
+      }
+      break;
+    case "gainTwoGold":
+      player.gold += 2;
+      break;
+    case "backToBack":
+      if (target) {
+        const amount = 4 + player.backToBackBonus;
+        buffMinions([target], amount, amount);
+        player.backToBackBonus += 4;
+      }
+      break;
+    case "deepwaterClan":
+      if (target) {
+        buffMinions([target], 2, 2);
+        buffMinions(
+          player.board.filter((minion) =>
+            minionHasTribe(minion, "murloc"),
+          ),
+          2,
+          2,
+        );
+      }
+      break;
+    case "defendersRites":
+      if (target) {
+        buffMinions([target], 6, 6);
+        target.taunt = true;
+      }
+      break;
+    case "misplacedTeaSet": {
+      const selectedIds = new Set<string>();
+      const selected: BoardMinionInstance[] = [];
+      for (const tribe of LOBBY_TRIBES) {
+        const candidates = player.board.filter(
+          (minion) =>
+            !selectedIds.has(minion.instanceId) &&
+            minionHasTribe(minion, tribe),
+        );
+        if (candidates.length === 0) {
+          continue;
+        }
+        const chosen = candidates[randomIndex(state, candidates.length)];
+        selectedIds.add(chosen.instanceId);
+        selected.push(chosen);
+      }
+      buffMinions(selected, 2, 2);
+      break;
+    }
+    case "naturalBlessing":
+      if (target) {
+        const allRecruitMinions = [...player.board, ...player.shop];
+        const targetTribes = target.tribes.filter(
+          (tribe) => tribe !== "neutral" && tribe !== "all",
+        );
+        const matches = target.tribes.includes("all")
+          ? allRecruitMinions.filter((minion) =>
+              minion.tribes.some((tribe) => tribe !== "neutral"),
+            )
+          : targetTribes.length === 0
+            ? []
+            : allRecruitMinions.filter((minion) =>
+                targetTribes.some((tribe) =>
+                  minionHasTribe(minion, tribe),
+                ),
+              );
+        buffMinions(matches, 3, 3);
+      }
+      break;
+    case "shiftingTide":
+      if (target) {
+        const repetitions = minionHasTribe(target, "naga") ? 4 : 2;
+        buffMinions([target], repetitions, repetitions);
+      }
+      break;
+    case "queensCommand":
+      buffMinions(player.board, 2, 2);
+      buffMinions(
+        player.board.filter((minion) => minionHasTribe(minion, "naga")),
+        2,
+        2,
+      );
+      break;
+    case "sanctify":
+      buffMinions(
+        player.board.filter((minion) => minion.divineShield),
+        6,
+        0,
+      );
+      break;
+    case "waveOfGold":
+      buffMinions(player.board, 3, 2);
+      buffMinions(
+        player.board.filter((minion) => minion.golden),
+        3,
+        2,
+      );
+      break;
+    case "azeriteEmpowerment":
+      buffMinions(player.board, 4, 4);
+      break;
+    case "perfectVision":
+      if (target) {
+        target.attack = 20;
+        target.health = 20;
+      }
+      break;
+  }
+}
+
+function castTavernSpell(
+  state: GameState,
+  player: PlayerState,
+  cardInstanceId: string,
+  targetInstanceId?: string,
+): boolean {
+  const handIndex = player.hand.findIndex(
+    (card) => card.instanceId === cardInstanceId,
+  );
+  const card = player.hand[handIndex];
+  if (handIndex < 0 || card?.kind !== "tavernSpell") {
+    return false;
+  }
+  const definition = getTavernSpellDefinition(card.definitionId);
+  const target = targetInstanceId
+    ? (player.board.find(
+        (minion) => minion.instanceId === targetInstanceId,
+      ) ??
+      (tavernSpellCanTargetShop(definition)
+        ? player.shop.find(
+            (minion) => minion.instanceId === targetInstanceId,
+          )
+        : undefined))
+    : undefined;
+  if (
+    (tavernSpellNeedsTarget(definition) && !target) ||
+    (!tavernSpellNeedsTarget(definition) && targetInstanceId !== undefined)
+  ) {
+    return false;
+  }
+  player.hand.splice(handIndex, 1);
+  applyTavernSpellEffect(state, player, card, definition, target);
+  player.tavernSpellsCastThisTurn += 1;
+  applyAfterTavernSpellCastTriggers(player);
+  return true;
+}
+
 function playHandCard(
   state: GameState,
   player: PlayerState,
@@ -1259,10 +1695,15 @@ function playHandCard(
 }
 
 function refreshShop(state: GameState, player: PlayerState): boolean {
-  if (player.gold < REFRESH_COST) {
+  const refreshCost = player.freeRefreshes > 0 ? 0 : REFRESH_COST;
+  if (player.gold < refreshCost) {
     return false;
   }
-  player.gold -= REFRESH_COST;
+  if (player.freeRefreshes > 0) {
+    player.freeRefreshes -= 1;
+  } else {
+    player.gold -= refreshCost;
+  }
   player.frozen = false;
   releaseShop(state, player);
   fillShop(state, player);
@@ -1670,6 +2111,35 @@ function playBestAiBloodGem(player: PlayerState): boolean {
   return castBloodGem(player, gem.instanceId, target.instanceId);
 }
 
+function playBestAiTavernSpell(
+  state: GameState,
+  player: PlayerState,
+): boolean {
+  const spells = player.hand.filter(
+    (card): card is TavernSpellInstance => card.kind === "tavernSpell",
+  );
+  for (const spell of spells) {
+    const definition = getTavernSpellDefinition(spell.definitionId);
+    if (tavernSpellNeedsTarget(definition)) {
+      const targets = tavernSpellCanTargetShop(definition)
+        ? [...player.board, ...player.shop]
+        : player.board;
+      if (targets.length === 0) {
+        continue;
+      }
+      const target = bestMinionByScore(player, targets);
+      return castTavernSpell(
+        state,
+        player,
+        spell.instanceId,
+        target.instanceId,
+      );
+    }
+    return castTavernSpell(state, player, spell.instanceId);
+  }
+  return false;
+}
+
 function playAiHand(state: GameState, player: PlayerState): void {
   while (player.hand.length > 0) {
     const reward = player.hand.find(
@@ -1684,6 +2154,9 @@ function playAiHand(state: GameState, player: PlayerState): void {
       (card): card is BoardMinionInstance => card.kind === "minion",
     );
     if (minions.length === 0) {
+      if (playBestAiTavernSpell(state, player)) {
+        continue;
+      }
       if (playBestAiBloodGem(player)) {
         continue;
       }
@@ -1710,6 +2183,9 @@ function playAiHand(state: GameState, player: PlayerState): void {
         });
       const magnetic = magneticOptions[0];
       if (!magnetic) {
+        if (playBestAiTavernSpell(state, player)) {
+          continue;
+        }
         if (playBestAiBloodGem(player)) {
           continue;
         }
@@ -1738,6 +2214,70 @@ function playAiHand(state: GameState, player: PlayerState): void {
     const chosen = minions[bestIndex];
     playHandCard(state, player, chosen.instanceId);
   }
+}
+
+function tavernSpellAiScore(
+  player: PlayerState,
+  spell: TavernSpellInstance,
+): number {
+  const effect = getTavernSpellDefinition(spell.definitionId).effect;
+  const boardSize = player.board.length;
+  const targetCount =
+    boardSize + (tavernSpellCanTargetShop(spell) ? player.shop.length : 0);
+  switch (effect) {
+    case "discoverTierOne":
+    case "recruitTrainee":
+      return 4;
+    case "stealRandomShopMinion":
+      return player.shop.length > 0 ? 7 : 0;
+    case "fortify":
+    case "pointyArrow":
+    case "tavernDishBanana":
+    case "trickyTrousers":
+      return targetCount > 0 ? 6 : 0;
+    case "backToBack":
+    case "defendersRites":
+    case "shiftingTide":
+    case "perfectVision":
+      return targetCount > 0 ? 10 : 0;
+    case "deepwaterClan":
+    case "naturalBlessing":
+      return targetCount > 0 ? 12 : 0;
+    case "gainOneGold":
+      return 1.5;
+    case "gainTwoGold":
+      return 3;
+    case "freeRefreshes":
+      return 4;
+    case "increaseMaxGold":
+      return stateRoundValue(player);
+    case "carefulInvestment":
+      return 3;
+    case "themApples":
+      return player.shop.length * 2.5;
+    case "staffOfEnrichment":
+      return player.shop.length * 3 + 5;
+    case "friendlyBounty":
+      return mostCommonBoardTribe(player) ? 6 : 0;
+    case "selfishBounty":
+      return boardSize > 0 ? 12 : 0;
+    case "fleetingVigor":
+    case "shinyRing":
+    case "azeriteEmpowerment":
+      return boardSize * 3;
+    case "mightOfStormwind":
+    case "healthyBounty":
+    case "hostileBounty":
+    case "misplacedTeaSet":
+    case "queensCommand":
+    case "sanctify":
+    case "waveOfGold":
+      return boardSize * 4;
+  }
+}
+
+function stateRoundValue(player: PlayerState): number {
+  return player.maxGold < 13 ? 5 : 1;
 }
 
 function weakestBoardIndex(player: PlayerState): number {
@@ -1832,6 +2372,18 @@ function runAiRecruit(state: GameState, player: PlayerState): void {
   let refreshes = 0;
   while (actions < 50) {
     playAiHand(state, player);
+    const spellOffer = player.spellShop;
+    if (
+      spellOffer &&
+      player.hand.length < MAX_HAND_SIZE &&
+      player.gold >= spellOffer.cost &&
+      tavernSpellAiScore(player, spellOffer) >=
+        Math.max(1.5, spellOffer.cost * 1.7) &&
+      buyTavernSpell(state, player)
+    ) {
+      actions += 1;
+      continue;
+    }
     const shopIndex = bestShopIndex(player);
     if (shopIndex >= 0 && player.gold >= BUY_COST) {
       if (player.board.length < MAX_BOARD_SIZE) {
@@ -1863,7 +2415,11 @@ function runAiRecruit(state: GameState, player: PlayerState): void {
       }
     }
 
-    if (player.gold >= BUY_COST + REFRESH_COST && refreshes < 3) {
+    const refreshCost = player.freeRefreshes > 0 ? 0 : REFRESH_COST;
+    if (
+      player.gold >= BUY_COST + refreshCost &&
+      refreshes < 3
+    ) {
       refreshShop(state, player);
       refreshes += 1;
       actions += 1;
@@ -3074,6 +3630,20 @@ function simulateBattle(
   const boardA = cloneBoard(playerA.board);
   const boardB = cloneBoard(playerB.board);
   const events: BattleEvent[] = [];
+  buffMinions(
+    boardA,
+    playerA.nextCombatAttackBonus,
+    playerA.nextCombatHealthBonus,
+  );
+  buffMinions(
+    boardB,
+    playerB.nextCombatAttackBonus,
+    playerB.nextCombatHealthBonus,
+  );
+  playerA.nextCombatAttackBonus = 0;
+  playerA.nextCombatHealthBonus = 0;
+  playerB.nextCombatAttackBonus = 0;
+  playerB.nextCombatHealthBonus = 0;
   applyStartOfCombatEffects(state, boardA);
   applyStartOfCombatEffects(state, boardB);
   applyCombatAuras(boardA);
@@ -3270,6 +3840,10 @@ function releaseEliminatedPlayer(
   for (const minion of [...player.board, ...ownedMinions, ...player.shop]) {
     returnMinionToPool(state, minion);
   }
+  if (player.spellShop) {
+    state.spellPool[player.spellShop.definitionId] =
+      (state.spellPool[player.spellShop.definitionId] ?? 0) + 1;
+  }
   player.board = player.board.map((minion) => ({
     ...minion,
     poolCopies: 0,
@@ -3277,6 +3851,7 @@ function releaseEliminatedPlayer(
   }));
   player.hand = [];
   player.shop = [];
+  player.spellShop = null;
   player.frozen = false;
 }
 
@@ -3350,7 +3925,10 @@ function beginNextRecruit(state: GameState): void {
   state.lastBattle = null;
   state.lastRoundBattles = [];
   for (const player of alivePlayers) {
-    player.gold = Math.min(10, state.round + 2);
+    player.gold =
+      Math.min(player.maxGold, state.round + 2) +
+      player.pendingNextTurnGold;
+    player.pendingNextTurnGold = 0;
     player.tavernSpellsCastThisTurn = 0;
     if (player.tavernTier < 6) {
       player.upgradeDiscount += 1;
@@ -3379,15 +3957,25 @@ export function createGame(seed?: number): GameState {
     board: [],
     hand: [],
     shop: [],
+    spellShop: null,
     frozen: false,
     upgradeDiscount: 0,
     tavernSpellsCastThisTurn: 0,
+    maxGold: 10,
+    pendingNextTurnGold: 0,
+    freeRefreshes: 0,
+    tavernMinionAttackBonus: 0,
+    tavernMinionHealthBonus: 0,
+    nextCombatAttackBonus: 0,
+    nextCombatHealthBonus: 0,
+    backToBackBonus: 0,
     bloodGemAttack: 1,
     bloodGemHealth: 1,
   }));
   const pool: Record<string, number> = {};
+  const spellPool: Record<string, number> = {};
   const state: GameState = {
-    version: 6,
+    version: 7,
     contentVersion: CURRENT_ROSTER_VERSION,
     seed: normalizedSeed,
     rngState: normalizedSeed,
@@ -3399,6 +3987,7 @@ export function createGame(seed?: number): GameState {
     activeTribes: [],
     players,
     pool,
+    spellPool,
     pendingInteraction: null,
     lastBattle: null,
     lastRoundBattles: [],
@@ -3417,6 +4006,10 @@ export function createGame(seed?: number): GameState {
     )
       ? POOL_COPIES_BY_TIER[definition.tier]
       : 0;
+  }
+  for (const definition of TAVERN_SPELL_DEFINITIONS) {
+    spellPool[definition.id] =
+      SPELL_POOL_COPIES_BY_TIER[definition.tier];
   }
   for (const player of state.players) {
     fillShop(state, player);
@@ -3450,6 +4043,9 @@ export function gameReducer(state: GameState, action: GameAction): GameState {
     case "BUY_MINION":
       buyMinion(next, player, action.shopIndex);
       break;
+    case "BUY_TAVERN_SPELL":
+      buyTavernSpell(next, player);
+      break;
     case "SELL_MINION":
       sellMinion(next, player, action.boardIndex);
       break;
@@ -3474,6 +4070,14 @@ export function gameReducer(state: GameState, action: GameAction): GameState {
       break;
     case "CAST_BLOOD_GEM":
       castBloodGem(
+        player,
+        action.cardInstanceId,
+        action.targetInstanceId,
+      );
+      break;
+    case "CAST_TAVERN_SPELL":
+      castTavernSpell(
+        next,
         player,
         action.cardInstanceId,
         action.targetInstanceId,

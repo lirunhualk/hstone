@@ -371,10 +371,71 @@ export interface BloodGemSpellInstance {
   spellFamily: "bloodGem";
 }
 
+export type TavernSpellEffect =
+  | "discoverTierOne"
+  | "stealRandomShopMinion"
+  | "fortify"
+  | "pointyArrow"
+  | "recruitTrainee"
+  | "gainOneGold"
+  | "tavernDishBanana"
+  | "themApples"
+  | "freeRefreshes"
+  | "mightOfStormwind"
+  | "increaseMaxGold"
+  | "carefulInvestment"
+  | "fleetingVigor"
+  | "friendlyBounty"
+  | "healthyBounty"
+  | "hostileBounty"
+  | "selfishBounty"
+  | "shinyRing"
+  | "staffOfEnrichment"
+  | "trickyTrousers"
+  | "gainTwoGold"
+  | "backToBack"
+  | "deepwaterClan"
+  | "defendersRites"
+  | "misplacedTeaSet"
+  | "naturalBlessing"
+  | "shiftingTide"
+  | "queensCommand"
+  | "sanctify"
+  | "waveOfGold"
+  | "azeriteEmpowerment"
+  | "perfectVision";
+
+export type TavernSpellTarget = "none" | "friendly" | "anyMinion";
+
+export interface TavernSpellDefinition {
+  id: string;
+  cardId: string;
+  name: string;
+  tier: TavernTier;
+  cost: number;
+  description: string;
+  effect: TavernSpellEffect;
+  target: TavernSpellTarget;
+}
+
+export interface TavernSpellInstance {
+  kind: "tavernSpell";
+  instanceId: string;
+  definitionId: string;
+  cardId: string;
+  name: string;
+  tier: TavernTier;
+  cost: number;
+  description: string;
+  spellFamily: "tavern";
+  target: TavernSpellTarget;
+}
+
 export type HandCardInstance =
   | BoardMinionInstance
   | TripleRewardSpellInstance
-  | BloodGemSpellInstance;
+  | BloodGemSpellInstance
+  | TavernSpellInstance;
 
 export interface PlayerState {
   id: PlayerId;
@@ -387,9 +448,20 @@ export interface PlayerState {
   board: BoardMinionInstance[];
   hand: HandCardInstance[];
   shop: BoardMinionInstance[];
+  /** One extra Tavern Spell offer, matching the live Battlegrounds shop. */
+  spellShop: TavernSpellInstance | null;
   frozen: boolean;
   upgradeDiscount: number;
   tavernSpellsCastThisTurn: number;
+  /** Recruit-turn economy and persistent Tavern Spell counters. */
+  maxGold: number;
+  pendingNextTurnGold: number;
+  freeRefreshes: number;
+  tavernMinionAttackBonus: number;
+  tavernMinionHealthBonus: number;
+  nextCombatAttackBonus: number;
+  nextCombatHealthBonus: number;
+  backToBackBonus: number;
   /** Permanent per-player Blood Gem values; new Gems read these on cast. */
   bloodGemAttack: number;
   bloodGemHealth: number;
@@ -503,7 +575,7 @@ export interface BattleSummary {
 }
 
 export interface GameState {
-  version: 6;
+  version: 7;
   /** Invalidates local saves when the roster or its mechanics change. */
   contentVersion: string;
   seed: number;
@@ -518,6 +590,8 @@ export interface GameState {
   players: PlayerState[];
   /** Available (not owned and not reserved in a shop) copies by definition ID. */
   pool: Record<string, number>;
+  /** Tavern Spells reserved in shops use their own tier-weighted shared pool. */
+  spellPool: Record<string, number>;
   pendingInteraction: PendingInteraction | null;
   /** The human player's most recently resolved battle. */
   lastBattle: BattleSummary | null;
@@ -528,6 +602,7 @@ export interface GameState {
 
 export type GameAction =
   | { type: "BUY_MINION"; shopIndex: number }
+  | { type: "BUY_TAVERN_SPELL" }
   | { type: "SELL_MINION"; boardIndex: number }
   | { type: "PLAY_MINION"; handIndex: number; boardIndex?: number }
   | {
@@ -544,6 +619,11 @@ export type GameAction =
       type: "CAST_BLOOD_GEM";
       cardInstanceId: string;
       targetInstanceId: string;
+    }
+  | {
+      type: "CAST_TAVERN_SPELL";
+      cardInstanceId: string;
+      targetInstanceId?: string;
     }
   | {
       type: "RESOLVE_INTERACTION";

@@ -427,6 +427,35 @@
   gap: 8px;
 }
 
+.shop-spell-slot {
+  position: relative;
+  display: flex;
+  align-self: stretch;
+  flex: 1 1 0;
+  min-width: 0;
+  max-width: 120px;
+  height: 100%;
+  min-height: 0;
+  align-items: stretch;
+}
+
+.shop-spell-slot > .tavern-spell-card {
+  flex: 1 1 0;
+  width: 100%;
+  min-width: 0;
+  max-width: none;
+  height: 100%;
+}
+
+.shop-panel.is-frozen .tavern-spell-card {
+  border-color: rgb(174 232 255 / 78%);
+  filter: saturate(0.78) contrast(1.06) brightness(1.04);
+  box-shadow:
+    0 8px 18px rgb(0 0 0 / 24%),
+    0 0 0 2px rgb(117 214 255 / 18%),
+    0 0 18px rgb(91 184 255 / 20%);
+}
+
 .unit-card {
   --card-hue: 186;
   position: relative;
@@ -813,6 +842,191 @@
   }
 }
 
+.unit-card.is-tavern-spell-target {
+  z-index: 11;
+  cursor: pointer;
+  touch-action: manipulation;
+  border-color: #cdbdff;
+  filter: brightness(1.1) saturate(1.18);
+  box-shadow:
+    0 14px 30px rgb(0 0 0 / 34%),
+    0 0 0 3px rgb(176 125 255 / 72%),
+    0 0 34px rgb(123 82 220 / 50%);
+  transform: translateY(-6px) scale(1.03);
+}
+
+.unit-card.is-tavern-spell-target:hover,
+.unit-card.is-tavern-spell-target:focus-visible {
+  z-index: 13;
+  border-color: #f2eaff;
+  outline: none;
+  filter: brightness(1.2) saturate(1.24);
+  box-shadow:
+    0 17px 36px rgb(0 0 0 / 40%),
+    0 0 0 4px rgb(218 195 255 / 90%),
+    0 0 44px rgb(163 104 255 / 62%);
+  transform: translateY(-9px) scale(1.05);
+}
+
+.unit-card.is-tavern-spell-drop-target {
+  z-index: 15;
+  border-color: #fff0bd;
+  filter: brightness(1.25) saturate(1.3);
+  box-shadow:
+    0 19px 40px rgb(0 0 0 / 44%),
+    0 0 0 5px rgb(220 188 255 / 94%),
+    0 0 54px rgb(150 86 255 / 76%),
+    0 0 72px rgb(246 190 85 / 30%);
+  transform: translateY(-11px) scale(1.07);
+  animation: tavern-spell-target-pulse 900ms ease-in-out infinite;
+}
+
+.tavern-spell-target-label {
+  position: absolute;
+  z-index: 27;
+  top: 34px;
+  right: 5px;
+  max-width: calc(100% - 10px);
+  overflow: hidden;
+  padding: 3px 7px;
+  border: 1px solid rgb(243 234 255 / 90%);
+  border-radius: 999px;
+  pointer-events: none;
+  color: #221039;
+  background: linear-gradient(135deg, #f6efff, #c6a3ff 58%, #f6ce72);
+  box-shadow:
+    0 4px 12px rgb(0 0 0 / 40%),
+    0 0 20px rgb(171 105 255 / 54%);
+  font-size: 9px;
+  font-weight: 950;
+  letter-spacing: 0.04em;
+  line-height: 1.2;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.unit-card.is-tavern-spell-drop-target .tavern-spell-target-label {
+  border-color: #fff9dc;
+  color: #2b1805;
+  background: linear-gradient(135deg, #fff8d8, #e0b2ff 52%, #f6be55);
+  box-shadow:
+    0 5px 15px rgb(0 0 0 / 44%),
+    0 0 26px rgb(205 146 255 / 74%);
+}
+
+@keyframes tavern-spell-target-pulse {
+  0%,
+  100% {
+    box-shadow:
+      0 19px 40px rgb(0 0 0 / 44%),
+      0 0 0 4px rgb(206 170 255 / 82%),
+      0 0 42px rgb(148 82 255 / 58%);
+  }
+  50% {
+    box-shadow:
+      0 19px 40px rgb(0 0 0 / 44%),
+      0 0 0 6px rgb(244 228 255 / 96%),
+      0 0 62px rgb(171 105 255 / 84%),
+      0 0 82px rgb(246 190 85 / 28%);
+  }
+}
+
+.unit-card.is-tavern-spell-cast {
+  z-index: 17;
+  animation: tavern-spell-card-impact 650ms cubic-bezier(0.2, 0.9, 0.3, 1);
+}
+
+.unit-card.is-tavern-spell-cast::before {
+  position: absolute;
+  z-index: 24;
+  inset: 10% 5%;
+  border-radius: 50%;
+  pointer-events: none;
+  content: "";
+  background:
+    radial-gradient(circle, rgb(255 248 218 / 98%) 0 4%, transparent 5% 22%),
+    repeating-conic-gradient(
+      from 8deg,
+      rgb(205 158 255 / 92%) 0deg 6deg,
+      transparent 7deg 22deg
+    );
+  filter:
+    drop-shadow(0 0 8px rgb(209 160 255 / 90%))
+    drop-shadow(0 0 15px rgb(246 190 85 / 52%));
+  opacity: 0;
+  animation: tavern-spell-burst 620ms ease-out both;
+}
+
+.tavern-spell-cast-label {
+  position: absolute;
+  z-index: 31;
+  top: 8px;
+  left: 50%;
+  max-width: calc(100% - 10px);
+  overflow: hidden;
+  padding: 5px 9px;
+  border: 1px solid rgb(250 241 255 / 94%);
+  border-radius: 999px;
+  pointer-events: none;
+  color: #27103f;
+  background: linear-gradient(135deg, #fbf5ff, #c69aff 58%, #f6ce72);
+  box-shadow:
+    0 5px 16px rgb(0 0 0 / 44%),
+    0 0 27px rgb(178 112 255 / 76%);
+  font-size: 11px;
+  font-weight: 950;
+  line-height: 1;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  transform: translateX(-50%);
+  animation: tavern-spell-label-pop 720ms cubic-bezier(0.2, 0.9, 0.3, 1) both;
+}
+
+@keyframes tavern-spell-card-impact {
+  0%,
+  100% {
+    filter: none;
+    transform: translateY(0) scale(1);
+  }
+  34% {
+    filter: brightness(1.48) saturate(1.38);
+    transform: translateY(-6px) scale(1.06);
+  }
+}
+
+@keyframes tavern-spell-burst {
+  0% {
+    opacity: 0;
+    transform: scale(0.16) rotate(-24deg);
+  }
+  28% {
+    opacity: 1;
+  }
+  100% {
+    opacity: 0;
+    transform: scale(1.5) rotate(14deg);
+  }
+}
+
+@keyframes tavern-spell-label-pop {
+  0% {
+    opacity: 0;
+    transform: translate(-50%, 18px) scale(0.72);
+  }
+  34% {
+    opacity: 1;
+    transform: translate(-50%, -7px) scale(1.12);
+  }
+  78% {
+    opacity: 1;
+    transform: translate(-50%, -13px) scale(1);
+  }
+  100% {
+    opacity: 0;
+    transform: translate(-50%, -24px) scale(0.94);
+  }
+}
+
 .unit-card.is-combat-actor {
   z-index: 9;
   border-color: var(--gold);
@@ -948,6 +1162,64 @@
 
 .drag-ghost.is-direct-touch-drag {
   transform: translateY(-42px) rotate(1.5deg) scale(1.04);
+}
+
+.spell-aim-arrow {
+  position: fixed;
+  z-index: 290;
+  inset: 0;
+  width: 100vw;
+  height: 100dvh;
+  overflow: visible;
+  pointer-events: none;
+  color: #d94857;
+}
+
+.spell-aim-arrow-path {
+  fill: none;
+  stroke: #d94857;
+  stroke-width: 8;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  filter:
+    drop-shadow(0 2px 2px rgb(0 0 0 / 78%))
+    drop-shadow(0 0 5px rgb(180 30 53 / 86%))
+    drop-shadow(0 0 11px rgb(112 13 40 / 62%));
+  opacity: 0.88;
+  vector-effect: non-scaling-stroke;
+}
+
+.spell-aim-arrow marker path {
+  fill: #d94857;
+  stroke: rgb(255 222 224 / 72%);
+  stroke-width: 0.65;
+  filter:
+    drop-shadow(0 1px 1px rgb(0 0 0 / 78%))
+    drop-shadow(0 0 4px rgb(180 30 53 / 88%));
+}
+
+.spell-aim-arrow.is-valid {
+  color: #ff4f5f;
+}
+
+.spell-aim-arrow.is-valid .spell-aim-arrow-path {
+  stroke: #ff4f5f;
+  stroke-width: 9;
+  filter:
+    drop-shadow(0 2px 2px rgb(0 0 0 / 82%))
+    drop-shadow(0 0 6px rgb(255 73 91 / 96%))
+    drop-shadow(0 0 15px rgb(255 37 73 / 78%))
+    drop-shadow(0 0 26px rgb(255 196 113 / 36%));
+  opacity: 1;
+}
+
+.spell-aim-arrow.is-valid marker path {
+  fill: #ff4f5f;
+  stroke: #fff0d2;
+  filter:
+    drop-shadow(0 1px 1px rgb(0 0 0 / 82%))
+    drop-shadow(0 0 6px rgb(255 80 96 / 98%))
+    drop-shadow(0 0 12px rgb(255 198 112 / 50%));
 }
 
 .card-art {
@@ -1195,6 +1467,23 @@
     0 0 15px rgb(50 215 196 / 10%);
 }
 
+.board-row.has-tavern-spell-targets
+  .slot
+  .board-card-motion
+  > .unit-card:not(.is-tavern-spell-target) {
+  filter: saturate(0.62) brightness(0.72);
+  opacity: 0.62;
+}
+
+.board-row.has-tavern-spell-targets.is-drag-active
+  .slot[data-valid="true"] {
+  border-color: rgb(185 137 255 / 42%);
+  background: rgb(150 86 255 / 5%);
+  box-shadow:
+    inset 0 0 0 1px rgb(198 155 255 / 18%),
+    0 0 16px rgb(150 86 255 / 12%);
+}
+
 .board-row.is-drag-active .slot[data-valid="true"]::after {
   position: absolute;
   z-index: 5;
@@ -1208,6 +1497,13 @@
   background: var(--accent);
   box-shadow: 0 0 12px rgb(50 215 196 / 72%);
   opacity: 0.4;
+}
+
+.board-row.has-tavern-spell-targets.is-drag-active
+  .slot[data-valid="true"]::after {
+  background: #bd93ff;
+  box-shadow: 0 0 12px rgb(177 116 255 / 68%);
+  opacity: 0.18;
 }
 
 .board-row.enemy,
@@ -1895,6 +2191,301 @@
   white-space: nowrap;
 }
 
+.tavern-spell-card {
+  --spell-accent: #b77cff;
+  --spell-accent-soft: #d7b9ff;
+  position: relative;
+  isolation: isolate;
+  display: flex;
+  flex: 1 1 0;
+  width: 100%;
+  min-width: 72px;
+  max-width: 94px;
+  height: 100%;
+  min-height: 96px;
+  overflow: hidden;
+  cursor: pointer;
+  touch-action: none;
+  align-items: stretch;
+  padding: 0;
+  border: 1px solid rgb(190 143 255 / 82%);
+  border-radius: var(--card-radius);
+  outline: none;
+  color: var(--text);
+  background:
+    radial-gradient(circle at 50% 26%, rgb(190 137 255 / 26%), transparent 38%),
+    linear-gradient(180deg, rgb(66 34 112 / 42%), rgb(16 8 31 / 98%)),
+    var(--surface-1);
+  box-shadow:
+    0 9px 21px rgb(0 0 0 / 32%),
+    0 0 0 1px rgb(177 116 255 / 23%),
+    inset 0 1px 0 rgb(255 255 255 / 14%);
+  transform: translateZ(0);
+  transform-origin: center bottom;
+  transition:
+    border-color 150ms ease,
+    box-shadow 150ms ease,
+    filter 150ms ease,
+    opacity 150ms ease,
+    transform 150ms ease;
+}
+
+.tavern-spell-card::before {
+  position: absolute;
+  z-index: 2;
+  inset: 3px;
+  border: 1px solid rgb(231 215 255 / 22%);
+  border-radius: calc(var(--card-radius) - 4px);
+  pointer-events: none;
+  content: "";
+  background:
+    radial-gradient(circle at 50% 16%, rgb(255 248 215 / 18%) 0 2%, transparent 3%),
+    repeating-conic-gradient(
+      from 18deg at 50% 42%,
+      rgb(227 199 255 / 7%) 0deg 5deg,
+      transparent 6deg 28deg
+    );
+  opacity: 0.86;
+}
+
+.tavern-spell-card::after {
+  position: absolute;
+  z-index: 3;
+  inset: 0;
+  border: 1px solid transparent;
+  border-radius: inherit;
+  pointer-events: none;
+  content: "";
+  background:
+    linear-gradient(
+        135deg,
+        rgb(250 239 255 / 32%),
+        transparent 27% 62%,
+        rgb(246 190 85 / 22%)
+      )
+      border-box;
+  mask:
+    linear-gradient(#000 0 0) padding-box,
+    linear-gradient(#000 0 0);
+  mask-composite: exclude;
+}
+
+@media (hover: hover) and (pointer: fine) {
+  .tavern-spell-card:hover:not([disabled]):not(.is-unaffordable) {
+    z-index: 7;
+    border-color: #eadbff;
+    filter: brightness(1.12) saturate(1.18);
+    box-shadow:
+      0 15px 31px rgb(0 0 0 / 38%),
+      0 0 0 3px rgb(182 123 255 / 66%),
+      0 0 35px rgb(153 87 255 / 48%);
+    transform: translateY(-7px) scale(1.025);
+  }
+}
+
+.tavern-spell-card:focus-visible,
+.tavern-spell-card.is-selected {
+  z-index: 8;
+  border-color: #fff0bd;
+  outline: none;
+  filter: brightness(1.13) saturate(1.18);
+  box-shadow:
+    0 16px 32px rgb(0 0 0 / 40%),
+    0 0 0 3px rgb(205 159 255 / 80%),
+    0 0 38px rgb(155 93 255 / 52%),
+    0 0 48px rgb(246 190 85 / 18%);
+  transform: translateY(-8px) scale(1.03);
+}
+
+.tavern-spell-card.is-shop-offer {
+  min-height: 0;
+  border-color: rgb(206 164 255 / 86%);
+  box-shadow:
+    0 9px 22px rgb(0 0 0 / 34%),
+    0 0 0 1px rgb(178 117 255 / 26%),
+    0 0 24px rgb(145 78 245 / 16%),
+    inset 0 1px 0 rgb(255 255 255 / 14%);
+}
+
+.tavern-spell-card.is-unaffordable,
+.tavern-spell-card[disabled] {
+  cursor: not-allowed;
+  filter: grayscale(0.24) saturate(0.42) brightness(0.74);
+  opacity: 0.54;
+}
+
+.tavern-spell-card.is-unaffordable .tavern-spell-cost {
+  border-color: rgb(255 178 186 / 66%);
+  color: #fff0f2;
+  background: radial-gradient(circle at 35% 28%, #f19cac, #8f2948 64%, #461428);
+  box-shadow:
+    0 4px 10px rgb(0 0 0 / 42%),
+    0 0 15px rgb(255 107 115 / 36%);
+}
+
+.tavern-spell-card.is-draggable {
+  cursor: grab;
+}
+
+.tavern-spell-card.is-draggable:active {
+  cursor: grabbing;
+}
+
+.tavern-spell-card.is-drag-source {
+  filter: saturate(0.48);
+  opacity: 0.2;
+  transform: scale(0.95);
+}
+
+.tavern-spell-card.is-dragging {
+  border-color: #f4eaff;
+  filter: brightness(1.14) saturate(1.2);
+  opacity: 0.95;
+  box-shadow:
+    0 23px 46px rgb(0 0 0 / 46%),
+    0 0 0 3px rgb(198 145 255 / 84%),
+    0 0 38px rgb(153 87 255 / 58%);
+}
+
+.tavern-spell-card.is-dragging.drag-ghost:not(.is-direct-touch-drag) {
+  transform: translateY(-12px) rotate(1.5deg) scale(1.04);
+}
+
+.tavern-spell-card.is-dragging.drag-ghost.is-direct-touch-drag {
+  transform: translateY(-42px) rotate(1.5deg) scale(1.04);
+}
+
+.tavern-spell-card > .card-art {
+  position: absolute;
+  z-index: 1;
+  inset: 0;
+  overflow: hidden;
+  border-radius: inherit;
+}
+
+.tavern-spell-card > .card-art::after {
+  z-index: 3;
+  background:
+    linear-gradient(
+      180deg,
+      transparent 12%,
+      rgb(34 14 58 / 12%) 38%,
+      rgb(15 7 28 / 96%) 100%
+    );
+  transform: none;
+}
+
+.tavern-spell-card > .card-art img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  object-position: center 18%;
+  filter: saturate(1.15) contrast(1.06) brightness(1.02);
+}
+
+.tavern-spell-cost,
+.tavern-spell-tier {
+  position: absolute;
+  z-index: 6;
+  top: 5px;
+  display: grid;
+  width: 28px;
+  height: 28px;
+  place-items: center;
+  border: 1px solid rgb(245 236 255 / 52%);
+  color: #fff;
+  box-shadow:
+    0 4px 11px rgb(0 0 0 / 42%),
+    0 0 16px rgb(173 106 255 / 36%);
+  font-size: 12px;
+  font-variant-numeric: tabular-nums;
+  font-weight: 950;
+  line-height: 1;
+}
+
+.tavern-spell-cost {
+  left: 5px;
+  border-radius: 50%;
+  background:
+    radial-gradient(circle at 34% 28%, #9ceeff, #237ac8 56%, #243b89 76%, #18244f);
+}
+
+.tavern-spell-tier {
+  right: 5px;
+  border-radius: 8px;
+  color: #2c1904;
+  background:
+    linear-gradient(145deg, #fff1b9, #f6be55 58%, #a96719);
+  box-shadow:
+    0 4px 11px rgb(0 0 0 / 42%),
+    0 0 15px rgb(246 190 85 / 34%);
+}
+
+.tavern-spell-name,
+.tavern-spell-copy,
+.tavern-spell-hint {
+  position: absolute;
+  z-index: 6;
+  right: 5px;
+  left: 5px;
+  overflow: hidden;
+  text-align: center;
+}
+
+.tavern-spell-name {
+  bottom: 51px;
+  padding: 3px 4px;
+  border: 1px solid rgb(213 175 255 / 36%);
+  border-radius: 7px;
+  color: #faf2ff;
+  background: rgb(38 19 65 / 89%);
+  box-shadow:
+    0 3px 10px rgb(0 0 0 / 36%),
+    inset 0 1px 0 rgb(255 255 255 / 8%);
+  font-size: 11px;
+  font-weight: 950;
+  line-height: 1.15;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.tavern-spell-copy {
+  bottom: 23px;
+  display: -webkit-box;
+  color: #eee2f8;
+  font-size: 8px;
+  font-weight: 720;
+  line-height: 1.2;
+  text-shadow: 0 1px 5px rgb(0 0 0 / 92%);
+  white-space: normal;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+}
+
+.tavern-spell-hint {
+  bottom: 5px;
+  min-height: 15px;
+  padding: 2px 3px;
+  border: 1px solid rgb(255 246 205 / 24%);
+  border-radius: 5px;
+  color: #2b1605;
+  background: linear-gradient(135deg, #f2ddff, #c69cff 58%, #f6c85e);
+  box-shadow: 0 2px 7px rgb(0 0 0 / 28%);
+  font-size: 8px;
+  font-weight: 950;
+  letter-spacing: 0.01em;
+  line-height: 1.25;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.hand-panel .tavern-spell-card {
+  flex: 1 1 0;
+  min-width: 0;
+  max-width: 94px;
+  height: 100%;
+}
+
 .hand-panel .card-name {
   padding-top: 4px;
   font-size: 11px;
@@ -2268,6 +2859,19 @@
   background:
     linear-gradient(135deg, rgb(91 184 255 / 12%), rgb(155 140 255 / 9%)),
     rgb(3 11 20 / 30%);
+  font-size: 10px;
+  line-height: 1.45;
+}
+
+.details-content .tavern-spell-play-hint {
+  padding: 8px 9px;
+  border: 1px solid rgb(191 139 255 / 42%);
+  border-radius: 9px;
+  color: #efe3ff;
+  background:
+    linear-gradient(135deg, rgb(153 87 255 / 15%), rgb(246 190 85 / 8%)),
+    rgb(15 7 28 / 36%);
+  box-shadow: inset 0 1px 0 rgb(255 255 255 / 5%);
   font-size: 10px;
   line-height: 1.45;
 }
@@ -3597,6 +4201,25 @@
     max-width: 106px;
   }
 
+  .shop-spell-slot {
+    flex-basis: 0;
+    min-width: 0;
+    max-width: 106px;
+  }
+
+  .tavern-spell-name {
+    bottom: 48px;
+    font-size: 10px;
+  }
+
+  .tavern-spell-copy {
+    font-size: 7px;
+  }
+
+  .tavern-spell-hint {
+    font-size: 7px;
+  }
+
   .card-name {
     padding-block: 4px 2px;
     font-size: 11px;
@@ -3697,6 +4320,22 @@
 
   .card-row {
     gap: 5px;
+  }
+
+  .tavern-spell-cost,
+  .tavern-spell-tier {
+    width: 25px;
+    height: 25px;
+    font-size: 10px;
+  }
+
+  .tavern-spell-name {
+    font-size: 10px;
+  }
+
+  .tavern-spell-copy,
+  .tavern-spell-hint {
+    font-size: 7px;
   }
 
   .card-name {
@@ -3867,6 +4506,7 @@
     max-width: calc(100% - 16px);
     padding-inline: 12px;
   }
+
 }
 
 @media (pointer: coarse) {
@@ -3889,6 +4529,7 @@
 
   .triple-reward-card,
   .blood-gem-card,
+  .tavern-spell-card,
   .discover-option {
     min-height: 48px;
   }
@@ -3903,6 +4544,27 @@
     min-height: 24px;
     padding: 5px 8px;
     font-size: 10px;
+  }
+
+  .tavern-spell-target-label {
+    min-height: 24px;
+    padding: 5px 8px;
+    font-size: 10px;
+  }
+
+  .tavern-spell-cost,
+  .tavern-spell-tier {
+    width: 30px;
+    height: 30px;
+    font-size: 12px;
+  }
+
+  .spell-aim-arrow-path {
+    stroke-width: 10;
+  }
+
+  .spell-aim-arrow.is-valid .spell-aim-arrow-path {
+    stroke-width: 11;
   }
 }
 
@@ -3934,7 +4596,13 @@
   .unit-card.is-blood-gem-target,
   .unit-card.is-blood-gem-drop-target,
   .unit-card.is-blood-gem-cast,
+  .unit-card.is-tavern-spell-target,
+  .unit-card.is-tavern-spell-drop-target,
+  .unit-card.is-tavern-spell-cast,
   .unit-card.is-newly-generated,
+  .tavern-spell-card.is-selected,
+  .tavern-spell-card.is-drag-source,
+  .tavern-spell-card.is-dragging,
   .drag-ghost.is-direct-touch-drag {
     transform: none;
   }
@@ -3946,6 +4614,11 @@
   }
 
   .blood-gem-cast-label {
+    animation: none;
+  }
+
+  .tavern-spell-cast-label,
+  .spell-aim-arrow-path {
     animation: none;
   }
 

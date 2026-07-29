@@ -4,6 +4,7 @@ import { fileURLToPath } from "node:url";
 
 import { MINION_DEFINITIONS } from "../lib/game/content.ts";
 import { createGame } from "../lib/game/engine.ts";
+import { TAVERN_SPELL_DEFINITIONS } from "../lib/game/tavern-spells.ts";
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const STARTUP = process.argv.includes("--startup");
@@ -24,17 +25,20 @@ const CORE_SPELL_CARD_IDS = ["BG20_GEM", "TB_BaconShop_Triples_01"];
 const allCardIds = [
   ...new Set([
     ...MINION_DEFINITIONS.map((definition) => definition.cardId),
+    ...TAVERN_SPELL_DEFINITIONS.map((definition) => definition.cardId),
     ...CORE_SPELL_CARD_IDS,
   ]),
 ].sort();
-const startupCardIds = STARTUP
+const startupPlayer = STARTUP
+  ? createGame(0x53544152).players.find((player) => player.isHuman)
+  : null;
+const startupCardIds = startupPlayer
   ? new Set(
       [
         ...CORE_SPELL_CARD_IDS,
-        ...(createGame(0x53544152)
-          .players.find((player) => player.isHuman)
-          ?.shop.map((minion) => minion.cardId) ?? []),
-      ],
+        ...startupPlayer.shop.map((minion) => minion.cardId),
+        startupPlayer.spellShop?.cardId,
+      ].filter((cardId) => typeof cardId === "string"),
     )
   : null;
 const cardIds = startupCardIds

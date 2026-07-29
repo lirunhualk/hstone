@@ -15,7 +15,11 @@ import {
   canMagnetize,
   createGame,
   gameReducer,
+  getRefreshCost,
+  getTavernSpellDefinition,
   getUpgradeCost,
+  tavernSpellCanTargetShop,
+  tavernSpellNeedsTarget,
   type BattleEvent,
   type BattleResult,
   type BattleSummary,
@@ -27,6 +31,7 @@ import {
   type MinionInstance,
   type PendingInteraction,
   type PlayerState,
+  type TavernSpellInstance,
   type TripleRewardSpellInstance,
   type Tribe,
 } from "../lib/game/engine";
@@ -47,23 +52,26 @@ import {
   nearestBoardSlotIndex,
 } from "../lib/game/drag-preview";
 import { projectCombatBoard } from "../lib/game/playback";
-import { migrateSchema5GameState } from "../lib/game/save";
+import { migrateLegacyGameState } from "../lib/game/save";
 
-const SAVE_KEY = "hearthstone-battlegrounds-local.save.v6";
-const LEGACY_SAVE_KEY = "hearthstone-battlegrounds-local.save.v5";
+const SAVE_KEY = "hearthstone-battlegrounds-local.save.v7";
+const LEGACY_SAVE_KEYS = [
+  "hearthstone-battlegrounds-local.save.v6",
+  "hearthstone-battlegrounds-local.save.v5",
+] as const;
 const INITIAL_SEED = 0x53544152;
 const BOARD_LIMIT = 7;
 const MOUSE_DRAG_THRESHOLD_PX = 8;
 const TOUCH_DRAG_THRESHOLD_PX = 12;
 
 type Selection =
-  | { zone: "shop" | "hand" | "board"; index: number }
+  | { zone: "shop" | "spellShop" | "hand" | "board"; index: number }
   | null;
 
 type InfoTab = "details" | "battle";
 
 type DragSource = {
-  zone: "shop" | "hand" | "board";
+  zone: "shop" | "spellShop" | "hand" | "board";
   index: number;
 };
 
@@ -73,6 +81,8 @@ type DragTarget =
   | { kind: "sell" }
   | { kind: "magnetic"; targetInstanceId: string }
   | { kind: "bloodGem"; targetInstanceId: string }
+  | { kind: "tavernSpell"; targetInstanceId: string }
+  | { kind: "castTavernSpell" }
   | {
       kind: "blockedMagnetic";
       targetInstanceId: string;
@@ -80,7 +90,21 @@ type DragTarget =
     }
   | null;
 
-type DraggableCard = BoardMinionInstance | BloodGemSpellInstance;
+type DraggableCard =
+  | BoardMinionInstance
+  | BloodGemSpellInstance
+  | TavernSpellInstance;
+
+type ShopDisplayOffer =
+  | {
+      kind: "minion";
+      unit: BoardMinionInstance;
+      shopIndex: number;
+    }
+  | {
+      kind: "tavernSpell";
+      spell: TavernSpellInstance;
+    };
 
 type DragSession = DragSource & {
   card: DraggableCard;
@@ -128,6 +152,12 @@ type BloodGemCastFeedback = {
   targetInstanceId: string;
   attack: number;
   health: number;
+  token: string;
+};
+
+type TavernSpellCastFeedback = {
+  targetInstanceId: string;
+  label: string;
   token: string;
 };
 
@@ -270,14 +300,51 @@ function isBloodGemSpell(value: unknown): value is BloodGemSpellInstance {
   );
 }
 
+function isTavernSpell(
+  value: unknown,
+): value is TavernSpellInstance {
+  if (
+    !isRecord(value) ||
+    value.kind !== "tavernSpell" ||
+    typeof value.instanceId !== "string" ||
+    typeof value.definitionId !== "string" ||
+    typeof value.cardId !== "string" ||
+    typeof value.name !== "string" ||
+    typeof value.tier !== "number" ||
+    typeof value.cost !== "number" ||
+    typeof value.description !== "string" ||
+    value.spellFamily !== "tavern" ||
+    value.target !== "none" &&
+    value.target !== "friendly" &&
+    value.target !== "anyMinion"
+  ) {
+    return false;
+  }
+  try {
+    const definition = getTavernSpellDefinition(value.definitionId);
+    return (
+      definition.cardId === value.cardId &&
+      definition.name === value.name &&
+      definition.tier === value.tier &&
+      definition.cost === value.cost &&
+      (definition.target === value.target ||
+        (definition.target === "anyMinion" &&
+          value.target === "friendly"))
+    );
+  } catch {
+    return false;
+  }
+}
+
 function isGameState(value: unknown): value is GameState {
   if (!value || typeof value !== "object") return false;
   const candidate = value as Partial<GameState>;
   return (
-    candidate.version === 6 &&
+    candidate.version === 7 &&
     candidate.contentVersion === CURRENT_ROSTER_VERSION &&
     typeof candidate.seed === "number" &&
     typeof candidate.nextInteractionId === "number" &&
+    isRecord(candidate.spellPool) &&
     Array.isArray(candidate.activeTribes) &&
     candidate.activeTribes.length === 5 &&
     Array.isArray(candidate.players) &&
@@ -285,6 +352,15 @@ function isGameState(value: unknown): value is GameState {
     candidate.players.every(
       (player) =>
         typeof player.tavernSpellsCastThisTurn === "number" &&
+        typeof player.maxGold === "number" &&
+        player.maxGold >= 10 &&
+        typeof player.pendingNextTurnGold === "number" &&
+        typeof player.freeRefreshes === "number" &&
+        typeof player.tavernMinionAttackBonus === "number" &&
+        typeof player.tavernMinionHealthBonus === "number" &&
+        typeof player.nextCombatAttackBonus === "number" &&
+        typeof player.nextCombatHealthBonus === "number" &&
+        typeof player.backToBackBonus === "number" &&
         typeof player.bloodGemAttack === "number" &&
         player.bloodGemAttack >= 1 &&
         typeof player.bloodGemHealth === "number" &&
@@ -300,6 +376,7 @@ function isGameState(value: unknown): value is GameState {
           (card) =>
             card.kind === "tripleReward" ||
             isBloodGemSpell(card) ||
+            isTavernSpell(card) ||
             (card.kind === "minion" &&
               Array.isArray(card.attachments) &&
               card.attachments.every(isMagneticAttachment)),
@@ -309,7 +386,9 @@ function isGameState(value: unknown): value is GameState {
           (minion) =>
             Array.isArray(minion.attachments) &&
             minion.attachments.every(isMagneticAttachment),
-        ),
+        ) &&
+        (player.spellShop === null ||
+          isTavernSpell(player.spellShop)),
     ) &&
     (candidate.pendingInteraction === null ||
       (isPendingInteraction(candidate.pendingInteraction) &&
@@ -329,6 +408,22 @@ function printedTribeLabel(unit: MinionInstance): string {
     return TRIBE_NAMES.neutral;
   }
   return unit.tribes.map((tribe) => TRIBE_NAMES[tribe]).join(" / ");
+}
+
+function tavernSpellLegalTargetIds(
+  player: PlayerState,
+  spell: TavernSpellInstance,
+): string[] {
+  if (!tavernSpellNeedsTarget(spell)) {
+    return [];
+  }
+  const boardTargetIds = player.board.map((minion) => minion.instanceId);
+  return tavernSpellCanTargetShop(spell)
+    ? [
+        ...boardTargetIds,
+        ...player.shop.map((minion) => minion.instanceId),
+      ]
+    : boardTargetIds;
 }
 
 function isMagneticMinion(unit: MinionInstance): boolean {
@@ -457,7 +552,7 @@ function selectionUnit(
   selection: Selection,
   player: PlayerState,
 ): MinionInstance | null {
-  if (!selection) return null;
+  if (!selection || selection.zone === "spellShop") return null;
   const card = player[selection.zone][selection.index];
   return card?.kind === "minion" ? card : null;
 }
@@ -522,6 +617,11 @@ function UnitCard({
   bloodGemCast = false,
   bloodGemCastLabel,
   bloodGemCastToken,
+  tavernSpellTarget = false,
+  tavernSpellDropTarget = false,
+  tavernSpellCast = false,
+  tavernSpellCastLabel,
+  tavernSpellCastToken,
   newlyGenerated = false,
   disabled = false,
   dragHandlers,
@@ -551,6 +651,11 @@ function UnitCard({
   bloodGemCast?: boolean;
   bloodGemCastLabel?: string;
   bloodGemCastToken?: string;
+  tavernSpellTarget?: boolean;
+  tavernSpellDropTarget?: boolean;
+  tavernSpellCast?: boolean;
+  tavernSpellCastLabel?: string;
+  tavernSpellCastToken?: string;
   newlyGenerated?: boolean;
   disabled?: boolean;
   dragHandlers?: DragPointerHandlers;
@@ -599,6 +704,10 @@ function UnitCard({
       }${bloodGemTarget ? " is-blood-gem-target" : ""}${
         bloodGemDropTarget ? " is-blood-gem-drop-target" : ""
       }${bloodGemCast ? " is-blood-gem-cast" : ""}${
+        tavernSpellTarget ? " is-tavern-spell-target" : ""
+      }${tavernSpellDropTarget ? " is-tavern-spell-drop-target" : ""}${
+        tavernSpellCast ? " is-tavern-spell-cast" : ""
+      }${
         newlyGenerated ? " is-newly-generated" : ""
       }${
         disabled ? " is-disabled" : ""
@@ -610,6 +719,8 @@ function UnitCard({
       }${choiceTarget ? "，可选择为效果目标" : ""}${
         magneticTarget ? "，可作为磁力吸附目标" : ""
       }${bloodGemTarget ? "，可作为鲜血宝石目标" : ""}${
+        tavernSpellTarget ? "，可作为酒馆法术目标" : ""
+      }${
         newlyGenerated ? "，本轮战斗新获得" : ""
       }`}
       aria-pressed={selected}
@@ -619,6 +730,7 @@ function UnitCard({
           dragEnabled ? "drag-instructions" : "",
           magneticTarget ? "magnetic-target-instructions" : "",
           bloodGemTarget ? "blood-gem-target-instructions" : "",
+          tavernSpellTarget ? "tavern-spell-target-instructions" : "",
         ]
           .filter(Boolean)
           .join(" ") || undefined
@@ -629,6 +741,8 @@ function UnitCard({
       data-magnetic-drop-target={magneticDropTarget || undefined}
       data-blood-gem-target={bloodGemTarget || undefined}
       data-blood-gem-drop-target={bloodGemDropTarget || undefined}
+      data-tavern-spell-target={tavernSpellTarget || undefined}
+      data-tavern-spell-drop-target={tavernSpellDropTarget || undefined}
       data-newly-generated={newlyGenerated || undefined}
       data-testid={testId}
       data-unit-instance-id={unit.instanceId}
@@ -671,6 +785,20 @@ function UnitCard({
           key={bloodGemCastToken}
         >
           {bloodGemCastLabel}
+        </span>
+      )}
+      {tavernSpellTarget && (
+        <span className="tavern-spell-target-label" aria-hidden="true">
+          施放法术
+        </span>
+      )}
+      {tavernSpellCast && tavernSpellCastLabel && (
+        <span
+          className="tavern-spell-cast-label"
+          aria-hidden="true"
+          key={tavernSpellCastToken}
+        >
+          {tavernSpellCastLabel}
         </span>
       )}
       {newlyGenerated && (
@@ -826,6 +954,75 @@ function BloodGemCard({
   );
 }
 
+function TavernSpellCardFace({
+  card,
+  inShop = false,
+}: {
+  card: TavernSpellInstance;
+  inShop?: boolean;
+}) {
+  return (
+    <>
+      <CardArtwork unit={card} kind="portrait" />
+      <span className="tavern-spell-cost">{card.cost}</span>
+      <span className="tavern-spell-tier">{card.tier}</span>
+      <span className="tavern-spell-name">{card.name}</span>
+      <span className="tavern-spell-copy">{card.description}</span>
+      <span className="tavern-spell-hint">
+        {inShop
+          ? `购买 · ${card.cost}`
+          : tavernSpellNeedsTarget(card)
+            ? "拖到随从上施放"
+            : "拖到战场或点击施放"}
+      </span>
+    </>
+  );
+}
+
+function TavernSpellCard({
+  card,
+  inShop = false,
+  selected = false,
+  unaffordable = false,
+  disabled = false,
+  dragging = false,
+  dragHandlers,
+  testId,
+  onClick,
+}: {
+  card: TavernSpellInstance;
+  inShop?: boolean;
+  selected?: boolean;
+  unaffordable?: boolean;
+  disabled?: boolean;
+  dragging?: boolean;
+  dragHandlers?: DragPointerHandlers;
+  testId?: string;
+  onClick?: () => void;
+}) {
+  return (
+    <button
+      type="button"
+      className={`tavern-spell-card${inShop ? " is-shop-offer" : ""}${
+        selected ? " is-selected" : ""
+      }${unaffordable ? " is-unaffordable" : ""}${
+        dragHandlers ? " is-draggable" : ""
+      }${dragging ? " is-drag-source" : ""}`}
+      aria-label={`${card.name}，${card.tier}级酒馆法术，费用${card.cost}，${card.description}`}
+      aria-pressed={selected}
+      data-card-instance-id={card.instanceId}
+      data-drag-enabled={Boolean(dragHandlers)}
+      data-testid={testId}
+      disabled={disabled}
+      onClick={onClick}
+      style={{ "--card-hue": 266 } as CSSProperties}
+      {...dragHandlers}
+    >
+      <TavernSpellCardFace card={card} inShop={inShop} />
+    </button>
+  );
+}
+
 function CardArtwork({
   unit,
   kind,
@@ -889,11 +1086,15 @@ function BoardRow({
   bloodGemTargetIds,
   bloodGemDropTargetId,
   bloodGemCastFeedback,
+  tavernSpellTargetIds,
+  tavernSpellDropTargetId,
+  tavernSpellCastFeedback,
   getDragHandlers,
   onUnitClick,
   onChoiceTarget,
   onMagneticTarget,
   onBloodGemTarget,
+  onTavernSpellTarget,
   onEmptyClick,
   interactionLocked = false,
 }: {
@@ -916,6 +1117,9 @@ function BoardRow({
   bloodGemTargetIds?: readonly string[];
   bloodGemDropTargetId?: string;
   bloodGemCastFeedback?: BloodGemCastFeedback | null;
+  tavernSpellTargetIds?: readonly string[];
+  tavernSpellDropTargetId?: string;
+  tavernSpellCastFeedback?: TavernSpellCastFeedback | null;
   getDragHandlers?: (
     source: DragSource,
     card: DraggableCard,
@@ -924,6 +1128,7 @@ function BoardRow({
   onChoiceTarget?: (instanceId: string) => void;
   onMagneticTarget?: (instanceId: string) => void;
   onBloodGemTarget?: (instanceId: string) => void;
+  onTavernSpellTarget?: (instanceId: string) => void;
   onEmptyClick?: (index: number) => void;
   interactionLocked?: boolean;
 }) {
@@ -968,6 +1173,10 @@ function BoardRow({
         side === "friendly" && bloodGemTargetIds?.length
           ? " has-blood-gem-targets"
           : ""
+      }${
+        side === "friendly" && tavernSpellTargetIds?.length
+          ? " has-tavern-spell-targets"
+          : ""
       }`}
       data-side={side}
       data-magnetic-ready={
@@ -995,6 +1204,14 @@ function BoardRow({
           bloodGemDropTargetId === unit?.instanceId;
         const isBloodGemCast =
           bloodGemCastFeedback?.targetInstanceId === unit?.instanceId;
+        const isTavernSpellTarget =
+          unit !== undefined &&
+          tavernSpellTargetIds?.includes(unit.instanceId) === true;
+        const isTavernSpellDropTarget =
+          isTavernSpellTarget &&
+          tavernSpellDropTargetId === unit?.instanceId;
+        const isTavernSpellCast =
+          tavernSpellCastFeedback?.targetInstanceId === unit?.instanceId;
         const isValidDragTarget =
           side === "friendly" &&
           dragSession?.active === true &&
@@ -1087,6 +1304,19 @@ function BoardRow({
                       ? bloodGemCastFeedback?.token
                       : undefined
                   }
+                  tavernSpellTarget={isTavernSpellTarget}
+                  tavernSpellDropTarget={isTavernSpellDropTarget}
+                  tavernSpellCast={isTavernSpellCast}
+                  tavernSpellCastLabel={
+                    isTavernSpellCast
+                      ? tavernSpellCastFeedback?.label
+                      : undefined
+                  }
+                  tavernSpellCastToken={
+                    isTavernSpellCast
+                      ? tavernSpellCastFeedback?.token
+                      : undefined
+                  }
                   disabled={interactionLocked && !isChoiceTarget}
                   dragHandlers={
                     side === "friendly" && getDragHandlers
@@ -1099,6 +1329,8 @@ function BoardRow({
                   onClick={
                     isChoiceTarget && onChoiceTarget
                       ? () => onChoiceTarget(unit.instanceId)
+                      : isTavernSpellTarget && onTavernSpellTarget
+                        ? () => onTavernSpellTarget(unit.instanceId)
                       : isBloodGemTarget && onBloodGemTarget
                         ? () => onBloodGemTarget(unit.instanceId)
                       : isMagneticTarget && onMagneticTarget
@@ -1108,6 +1340,7 @@ function BoardRow({
                         : undefined
                   }
                   onKeyDown={
+                    (isTavernSpellTarget && onTavernSpellTarget) ||
                     (isBloodGemTarget && onBloodGemTarget) ||
                     (isMagneticTarget && onMagneticTarget)
                       ? (event) => {
@@ -1118,7 +1351,12 @@ function BoardRow({
                             return;
                           }
                           event.preventDefault();
-                          if (isBloodGemTarget && onBloodGemTarget) {
+                          if (
+                            isTavernSpellTarget &&
+                            onTavernSpellTarget
+                          ) {
+                            onTavernSpellTarget(unit.instanceId);
+                          } else if (isBloodGemTarget && onBloodGemTarget) {
                             onBloodGemTarget(unit.instanceId);
                           } else {
                             onMagneticTarget?.(unit.instanceId);
@@ -1229,6 +1467,8 @@ export default function GameClient() {
   const [magneticAnnouncement, setMagneticAnnouncement] = useState("");
   const [bloodGemCastFeedback, setBloodGemCastFeedback] =
     useState<BloodGemCastFeedback | null>(null);
+  const [tavernSpellCastFeedback, setTavernSpellCastFeedback] =
+    useState<TavernSpellCastFeedback | null>(null);
   const [battleSpeed, setBattleSpeed] = useState<BattleSpeed>(1);
   const [combatRewardNotice, setCombatRewardNotice] =
     useState<CombatRewardSummary | null>(null);
@@ -1249,6 +1489,7 @@ export default function GameClient() {
   const battlePlaybackTimerRef = useRef<number | null>(null);
   const combatIntroTimerRef = useRef<number | null>(null);
   const bloodGemCastTimerRef = useRef<number | null>(null);
+  const tavernSpellCastTimerRef = useRef<number | null>(null);
   const interactionReturnFocusRef = useRef<HTMLElement | null>(null);
   const previousInteractionIdRef = useRef<string | null>(null);
   const magneticFocusTargetRef = useRef<string | null>(null);
@@ -1280,6 +1521,14 @@ export default function GameClient() {
     setBloodGemCastFeedback(null);
   }, []);
 
+  const clearTavernSpellCastFeedback = useCallback(() => {
+    if (tavernSpellCastTimerRef.current !== null) {
+      window.clearTimeout(tavernSpellCastTimerRef.current);
+      tavernSpellCastTimerRef.current = null;
+    }
+    setTavernSpellCastFeedback(null);
+  }, []);
+
   const clearCombatRewardFeedback = useCallback(() => {
     setCombatRewardNotice(null);
     setNewCombatRewardIds([]);
@@ -1289,32 +1538,44 @@ export default function GameClient() {
     const hydrationTimer = window.setTimeout(() => {
       try {
         const raw = window.localStorage.getItem(SAVE_KEY);
+        let restored = false;
         if (raw) {
           const saved: unknown = JSON.parse(raw);
           if (isGameState(saved)) {
             setGame(saved);
             setStarted(true);
+            restored = true;
           } else {
             window.localStorage.removeItem(SAVE_KEY);
           }
-        } else {
-          const legacyRaw = window.localStorage.getItem(LEGACY_SAVE_KEY);
-          if (legacyRaw) {
-            try {
-              const migrated = migrateSchema5GameState(
-                JSON.parse(legacyRaw) as unknown,
-              );
-              if (isGameState(migrated)) {
-                setGame(migrated);
-                setStarted(true);
-                window.localStorage.setItem(
-                  SAVE_KEY,
-                  JSON.stringify(migrated),
+        }
+        if (!restored) {
+          for (const legacyKey of LEGACY_SAVE_KEYS) {
+            const legacyRaw = window.localStorage.getItem(legacyKey);
+            if (!legacyRaw) {
+              continue;
+            }
+            if (legacyRaw) {
+              try {
+                const migrated = migrateLegacyGameState(
+                  JSON.parse(legacyRaw) as unknown,
                 );
+                if (isGameState(migrated)) {
+                  setGame(migrated);
+                  setStarted(true);
+                  window.localStorage.setItem(
+                    SAVE_KEY,
+                    JSON.stringify(migrated),
+                  );
+                  restored = true;
+                }
+                window.localStorage.removeItem(legacyKey);
+                if (restored) {
+                  break;
+                }
+              } catch {
+                window.localStorage.removeItem(legacyKey);
               }
-              window.localStorage.removeItem(LEGACY_SAVE_KEY);
-            } catch {
-              window.localStorage.removeItem(LEGACY_SAVE_KEY);
             }
           }
         }
@@ -1361,6 +1622,29 @@ export default function GameClient() {
       game.players[0],
     [game],
   );
+  const shopDisplayOffers = useMemo<ShopDisplayOffer[]>(() => {
+    const minionOffers = human.shop.map((unit, shopIndex) => ({
+      kind: "minion" as const,
+      unit,
+      shopIndex,
+    }));
+    if (!human.spellShop) {
+      return minionOffers;
+    }
+    const spellPosition =
+      [...human.spellShop.instanceId].reduce(
+        (hash, character) =>
+          (Math.imul(hash, 33) + character.charCodeAt(0)) >>> 0,
+        5381,
+      ) %
+      (minionOffers.length + 1);
+    const offers: ShopDisplayOffer[] = [...minionOffers];
+    offers.splice(spellPosition, 0, {
+      kind: "tavernSpell",
+      spell: human.spellShop,
+    });
+    return offers;
+  }, [human.shop, human.spellShop]);
   const humanInteraction =
     game.pendingInteraction?.playerId === human.id
       ? game.pendingInteraction
@@ -1671,6 +1955,12 @@ export default function GameClient() {
       : undefined;
   const selectedBloodGem =
     selectedHandCard?.kind === "bloodGem" ? selectedHandCard : null;
+  const selectedShopSpell =
+    selection?.zone === "spellShop" ? human.spellShop : null;
+  const selectedHandTavernSpell =
+    selectedHandCard?.kind === "tavernSpell" ? selectedHandCard : null;
+  const selectedTavernSpell =
+    selectedHandTavernSpell ?? selectedShopSpell;
   const selectedMagneticSource =
     !interactionLocked &&
     selectedHandCard?.kind === "minion" &&
@@ -1703,6 +1993,24 @@ export default function GameClient() {
   const bloodGemTargetIds = bloodGemSourceForTargets
     ? human.board.map((target) => target.instanceId)
     : [];
+  const tavernSpellSourceForTargets =
+    (selectedHandTavernSpell &&
+    tavernSpellNeedsTarget(selectedHandTavernSpell)
+      ? selectedHandTavernSpell
+      : null) ??
+    (dragSession?.active === true &&
+    dragSession.zone === "hand" &&
+    dragSession.card.kind === "tavernSpell" &&
+    tavernSpellNeedsTarget(dragSession.card)
+      ? dragSession.card
+      : null);
+  const tavernSpellTargetIds = useMemo(
+    () =>
+      tavernSpellSourceForTargets
+        ? tavernSpellLegalTargetIds(human, tavernSpellSourceForTargets)
+        : [],
+    [human, tavernSpellSourceForTargets],
+  );
   const selectedMagneticTargetIds = useMemo(
     () =>
       selectedMagneticSource
@@ -1720,32 +2028,48 @@ export default function GameClient() {
     !interactionLocked &&
     (card.kind === "bloodGem"
       ? human.board.length > 0
+      : card.kind === "tavernSpell"
+        ? !tavernSpellNeedsTarget(card) ||
+          tavernSpellLegalTargetIds(human, card).length > 0
       : boardHasOpenSlot ||
         human.board.some((target) => canMagnetize(card, target)));
   const infoOpen =
     selectedUnit !== null ||
     selectedBloodGem !== null ||
+    selectedTavernSpell !== null ||
     (infoTab === "battle" && battle !== null);
   const upgradeCost = getUpgradeCost(game, human.id);
+  const refreshCost = getRefreshCost(game, human.id);
   const canBuyFromShop =
     game.phase === "recruit" &&
     !interactionLocked &&
     human.gold >= 3 &&
     human.hand.length < 10;
+  const canBuyTavernSpell =
+    game.phase === "recruit" &&
+    !interactionLocked &&
+    human.spellShop !== null &&
+    human.gold >= human.spellShop.cost &&
+    human.hand.length < 10;
   const selectedCanBuy =
-    selection?.zone === "shop" && canBuyFromShop;
+    (selection?.zone === "shop" && canBuyFromShop) ||
+    (selection?.zone === "spellShop" && canBuyTavernSpell);
   const selectedCanPlay =
     !interactionLocked &&
     selection?.zone === "hand" &&
     selectedUnit?.kind === "minion" &&
     human.board.length < BOARD_LIMIT;
+  const selectedOfferCost =
+    selection?.zone === "spellShop"
+      ? (human.spellShop?.cost ?? 0)
+      : 3;
   const buyUnavailableReason =
     interactionLocked
       ? "请先完成当前选择"
       : human.hand.length >= 10
       ? "手牌已满"
-      : human.gold < 3
-        ? "金币不足，需要 3 枚金币"
+      : human.gold < selectedOfferCost
+        ? `金币不足，需要 ${selectedOfferCost} 枚金币`
         : null;
   const targetSource = boardChoiceInteraction
     ? human.board.find(
@@ -1774,7 +2098,10 @@ export default function GameClient() {
           discoverMagnetizeTarget?.name ?? "目标机械"
         }`
       : discoverInteraction.filter.exactTier
-      ? `三连奖励 · 发现一个 ${discoverInteraction.filter.exactTier} 级随从`
+      ? discoverInteraction.filter.exactTier === 1 &&
+        !discoverSource
+        ? "新生幼苗 · 发现一个等级1的随从"
+        : `三连奖励 · 发现一个 ${discoverInteraction.filter.exactTier} 级随从`
       : discoverInteraction.filter.tribe
         ? `${discoverSource?.name ?? "战吼"} · 发现一张${
             TRIBE_NAMES[discoverInteraction.filter.tribe]
@@ -1812,10 +2139,15 @@ export default function GameClient() {
   }, [selectedMagneticSource, selectedMagneticTargetIds]);
 
   useEffect(() => {
-    if (!selectedBloodGem || human.board.length === 0) {
+    const firstTargetInstanceId = selectedBloodGem
+      ? human.board[0]?.instanceId
+      : selectedHandTavernSpell &&
+          tavernSpellNeedsTarget(selectedHandTavernSpell)
+        ? tavernSpellTargetIds[0]
+        : undefined;
+    if (!firstTargetInstanceId) {
       return;
     }
-    const firstTargetInstanceId = human.board[0].instanceId;
     const focusFrame = window.requestAnimationFrame(() => {
       const firstTarget = Array.from(
         document.querySelectorAll<HTMLElement>(
@@ -1828,7 +2160,12 @@ export default function GameClient() {
       firstTarget?.focus();
     });
     return () => window.cancelAnimationFrame(focusFrame);
-  }, [human.board, selectedBloodGem]);
+  }, [
+    human.board,
+    selectedBloodGem,
+    selectedHandTavernSpell,
+    tavernSpellTargetIds,
+  ]);
 
   useEffect(() => {
     clearCombatIntroTimer();
@@ -1963,6 +2300,7 @@ export default function GameClient() {
     clearBattlePlaybackTimer();
     clearCombatIntroTimer();
     clearBloodGemCastFeedback();
+    clearTavernSpellCastFeedback();
     const next = createGame(newSeed());
     window.localStorage.setItem(SAVE_KEY, JSON.stringify(next));
     setGame(next);
@@ -1984,6 +2322,7 @@ export default function GameClient() {
   }, [
     clearBattlePlaybackTimer,
     clearBloodGemCastFeedback,
+    clearTavernSpellCastFeedback,
     clearCombatIntroTimer,
     clearCombatRewardFeedback,
   ]);
@@ -2077,6 +2416,57 @@ export default function GameClient() {
     ],
   );
 
+  const castTavernSpell = useCallback(
+    (cardInstanceId: string, targetInstanceId?: string) => {
+      const card = human.hand.find(
+        (candidate): candidate is TavernSpellInstance =>
+          candidate.kind === "tavernSpell" &&
+          candidate.instanceId === cardInstanceId,
+      );
+      if (!card) {
+        return;
+      }
+      const target = targetInstanceId
+        ? (human.board.find(
+            (minion) => minion.instanceId === targetInstanceId,
+          ) ??
+          (tavernSpellCanTargetShop(card)
+            ? human.shop.find(
+                (minion) => minion.instanceId === targetInstanceId,
+              )
+            : undefined))
+        : undefined;
+      if (tavernSpellNeedsTarget(card) && !target) {
+        return;
+      }
+      if (tavernSpellCastTimerRef.current !== null) {
+        window.clearTimeout(tavernSpellCastTimerRef.current);
+      }
+      if (target) {
+        setTavernSpellCastFeedback({
+          targetInstanceId: target.instanceId,
+          label: card.name,
+          token: card.instanceId,
+        });
+        tavernSpellCastTimerRef.current = window.setTimeout(() => {
+          tavernSpellCastTimerRef.current = null;
+          setTavernSpellCastFeedback(null);
+        }, 720);
+      }
+      setMagneticAnnouncement(
+        target
+          ? `已对${target.name}施放${card.name}`
+          : `已施放${card.name}：${card.description}`,
+      );
+      send({
+        type: "CAST_TAVERN_SPELL",
+        cardInstanceId,
+        targetInstanceId,
+      });
+    },
+    [human.board, human.hand, human.shop, send],
+  );
+
   const select = useCallback((nextSelection: Exclude<Selection, null>) => {
     setSelection(nextSelection);
     setInfoTab("details");
@@ -2110,6 +2500,12 @@ export default function GameClient() {
           ? { kind: "hand" }
           : null;
       }
+      if (source.zone === "spellShop") {
+        return canBuyTavernSpell &&
+          hit.closest('[data-hand-drop-zone="true"]')
+          ? { kind: "hand" }
+          : null;
+      }
 
       if (
         source.zone === "board" &&
@@ -2123,33 +2519,54 @@ export default function GameClient() {
         const hoveredCard = hit.closest<HTMLElement>(
           "[data-unit-instance-id]",
         );
-        const hoveredTarget = hoveredCard
+        const hoveredInstanceId =
+          hoveredCard?.dataset.unitInstanceId;
+        const hoveredBoardTarget = hoveredInstanceId
           ? human.board.find(
               (minion) =>
-                minion.instanceId ===
-                hoveredCard.dataset.unitInstanceId,
+                minion.instanceId === hoveredInstanceId,
             )
           : undefined;
-        if (sourceCard?.kind === "bloodGem" && hoveredTarget) {
+        const hoveredShopTarget = hoveredInstanceId
+          ? human.shop.find(
+              (minion) => minion.instanceId === hoveredInstanceId,
+            )
+          : undefined;
+        if (sourceCard?.kind === "bloodGem" && hoveredBoardTarget) {
           return {
             kind: "bloodGem",
-            targetInstanceId: hoveredTarget.instanceId,
+            targetInstanceId: hoveredBoardTarget.instanceId,
+          };
+        }
+        const hoveredTavernSpellTarget =
+          sourceCard?.kind === "tavernSpell" &&
+          tavernSpellCanTargetShop(sourceCard)
+            ? (hoveredBoardTarget ?? hoveredShopTarget)
+            : hoveredBoardTarget;
+        if (
+          sourceCard?.kind === "tavernSpell" &&
+          tavernSpellNeedsTarget(sourceCard) &&
+          hoveredTavernSpellTarget
+        ) {
+          return {
+            kind: "tavernSpell",
+            targetInstanceId: hoveredTavernSpellTarget.instanceId,
           };
         }
         if (
           sourceCard?.kind === "minion" &&
           isMagneticMinion(sourceCard) &&
-          hoveredTarget
+          hoveredBoardTarget
         ) {
-          return canMagnetize(sourceCard, hoveredTarget)
+          return canMagnetize(sourceCard, hoveredBoardTarget)
             ? {
                 kind: "magnetic",
-                targetInstanceId: hoveredTarget.instanceId,
+                targetInstanceId: hoveredBoardTarget.instanceId,
               }
             : {
                 kind: "blockedMagnetic",
-                targetInstanceId: hoveredTarget.instanceId,
-                targetName: hoveredTarget.name,
+                targetInstanceId: hoveredBoardTarget.instanceId,
+                targetName: hoveredBoardTarget.name,
               };
         }
       }
@@ -2191,6 +2608,13 @@ export default function GameClient() {
       ) {
         return null;
       }
+      if (
+        source.zone === "hand" &&
+        draggedHandCard?.kind === "tavernSpell" &&
+        !tavernSpellNeedsTarget(draggedHandCard)
+      ) {
+        return { kind: "castTavernSpell" };
+      }
       const slots = Array.from(
         boardDropZone.querySelectorAll<HTMLElement>(
           ":scope > [data-board-slot-index]",
@@ -2230,7 +2654,13 @@ export default function GameClient() {
       }
       return null;
     },
-    [canBuyFromShop, human.board, human.hand],
+    [
+      canBuyFromShop,
+      canBuyTavernSpell,
+      human.board,
+      human.hand,
+      human.shop,
+    ],
   );
 
   const beginDrag = useCallback(
@@ -2247,6 +2677,9 @@ export default function GameClient() {
         source.zone === "hand" &&
         (card.kind === "bloodGem"
           ? human.board.length === 0
+          : card.kind === "tavernSpell"
+            ? tavernSpellNeedsTarget(card) &&
+              tavernSpellLegalTargetIds(human, card).length === 0
           : human.board.length >= BOARD_LIMIT && !hasMagneticTarget);
       if (
         dragSessionRef.current !== null ||
@@ -2255,7 +2688,8 @@ export default function GameClient() {
         !event.isPrimary ||
         event.button !== 0 ||
         handCardCannotAct ||
-        (source.zone === "shop" && !canBuyFromShop)
+        (source.zone === "shop" && !canBuyFromShop) ||
+        (source.zone === "spellShop" && !canBuyTavernSpell)
       ) {
         return;
       }
@@ -2287,8 +2721,9 @@ export default function GameClient() {
     },
     [
       canBuyFromShop,
+      canBuyTavernSpell,
       game.phase,
-      human.board,
+      human,
       interactionLocked,
       writeDragSession,
     ],
@@ -2411,8 +2846,31 @@ export default function GameClient() {
         );
         return true;
       }
+      if (
+        current.zone === "hand" &&
+        current.card.kind === "tavernSpell" &&
+        target.kind === "tavernSpell"
+      ) {
+        castTavernSpell(
+          current.card.instanceId,
+          target.targetInstanceId,
+        );
+        return true;
+      }
+      if (
+        current.zone === "hand" &&
+        current.card.kind === "tavernSpell" &&
+        target.kind === "castTavernSpell"
+      ) {
+        castTavernSpell(current.card.instanceId);
+        return true;
+      }
       if (current.zone === "shop" && target.kind === "hand") {
         send({ type: "BUY_MINION", shopIndex: current.index });
+        return true;
+      }
+      if (current.zone === "spellShop" && target.kind === "hand") {
+        send({ type: "BUY_TAVERN_SPELL" });
         return true;
       }
       if (
@@ -2446,6 +2904,7 @@ export default function GameClient() {
     },
     [
       castBloodGem,
+      castTavernSpell,
       magnetizeCard,
       resolveDragTarget,
       send,
@@ -2539,11 +2998,17 @@ export default function GameClient() {
         cancelStaleDrag();
         return;
       }
-      if (selectedMagneticSource || selectedBloodGem) {
+      if (
+        selectedMagneticSource ||
+        selectedBloodGem ||
+        selectedHandTavernSpell
+      ) {
         setSelection(null);
         setMagneticAnnouncement(
           selectedBloodGem
             ? "已取消鲜血宝石目标选择"
+            : selectedHandTavernSpell
+              ? "已取消酒馆法术目标选择"
             : "已取消磁力目标选择",
         );
       }
@@ -2573,6 +3038,7 @@ export default function GameClient() {
     finishDragSession,
     moveDragSession,
     selectedBloodGem,
+    selectedHandTavernSpell,
     selectedMagneticSource,
   ]);
 
@@ -2609,23 +3075,40 @@ export default function GameClient() {
               : 0
           } 枚金币`
         : dragSession.target?.kind === "hand"
-          ? `松手购买${dragSession.card.name}，支付 3 枚金币`
+          ? `松手购买${dragSession.card.name}，支付 ${
+              dragSession.card.kind === "tavernSpell"
+                ? dragSession.card.cost
+                : 3
+            } 枚金币`
           : dragSession.target?.kind === "magnetic"
             ? `松手将${dragSession.card.name}吸附到${
                 dragMagneticTargetName ?? "目标随从"
               }`
             : dragSession.target?.kind === "bloodGem"
               ? `松手对目标随从使用鲜血宝石，获得 +${human.bloodGemAttack}/+${human.bloodGemHealth}`
+            : dragSession.target?.kind === "tavernSpell"
+              ? `松手对目标随从施放${dragSession.card.name}`
+            : dragSession.target?.kind === "castTavernSpell"
+              ? `松手施放${dragSession.card.name}`
             : dragSession.target?.kind === "blockedMagnetic"
               ? `${dragSession.card.name}不能吸附到${dragSession.target.targetName}，松手将返回手牌`
           : dragSession.target?.kind === "board"
             ? `松手放到战场第 ${dragSession.target.index + 1} 个位置`
             : dragSession.zone === "shop"
               ? "拖到发光的手牌区域购买，花费 3 枚金币"
+              : dragSession.zone === "spellShop" &&
+                  dragSession.card.kind === "tavernSpell"
+                ? `拖到发光的手牌区域购买，花费 ${dragSession.card.cost} 枚金币`
               : dragSession.zone === "board"
                 ? "拖到战场位置来换位，或拖到鲍勃的酒馆出售"
                 : dragSession.card.kind === "bloodGem"
                   ? "拖到任意友方随从上使用鲜血宝石"
+                : dragSession.card.kind === "tavernSpell"
+                  ? tavernSpellNeedsTarget(dragSession.card)
+                    ? tavernSpellCanTargetShop(dragSession.card)
+                      ? "拖到任意发光随从上施放；酒馆随从也是合法目标"
+                      : "拖到任意发光的友方随从上施放酒馆法术"
+                    : "拖到战场区域施放酒馆法术"
                 : isMagneticMinion(dragSession.card)
                   ? boardHasOpenSlot
                     ? "拖到标有“可吸附”的随从进行磁力吸附，或拖到插位线上普通上场"
@@ -2645,14 +3128,63 @@ export default function GameClient() {
       ? `已选择鲜血宝石，可对 ${human.board.length} 个友方随从使用，当前效果 +${human.bloodGemAttack}/+${human.bloodGemHealth}`
       : "已选择鲜血宝石，但场上没有可用目标"
     : "";
+  const tavernSpellSelectionAnnouncement = selectedHandTavernSpell
+    ? tavernSpellNeedsTarget(selectedHandTavernSpell)
+      ? tavernSpellTargetIds.length > 0
+        ? `已选择${selectedHandTavernSpell.name}，可对 ${tavernSpellTargetIds.length} 个发光随从施放${
+            tavernSpellCanTargetShop(selectedHandTavernSpell)
+              ? "，包括酒馆随从"
+              : ""
+          }`
+        : `已选择${selectedHandTavernSpell.name}，但场上没有合法目标`
+      : `已选择${selectedHandTavernSpell.name}，可在详情面板点击施放，或拖到战场区域`
+    : "";
   const interactionAnnouncement =
     dragAnnouncement ||
     magneticAnnouncement ||
+    tavernSpellSelectionAnnouncement ||
     bloodGemSelectionAnnouncement ||
     magneticSelectionAnnouncement ||
-    (selection?.zone === "shop" && buyUnavailableReason
-      ? `无法购买${selectedUnit?.name ?? "该随从"}：${buyUnavailableReason}`
+    ((selection?.zone === "shop" ||
+      selection?.zone === "spellShop") &&
+    buyUnavailableReason
+      ? `无法购买${
+          selectedUnit?.name ?? selectedShopSpell?.name ?? "该牌"
+        }：${buyUnavailableReason}`
       : "");
+  const aimedSpellDrag =
+    dragSession?.active === true &&
+    dragSession.zone === "hand" &&
+    (dragSession.card.kind === "bloodGem" ||
+      (dragSession.card.kind === "tavernSpell" &&
+        tavernSpellNeedsTarget(dragSession.card)))
+      ? dragSession
+      : null;
+  const aimedSpellHasValidTarget =
+    aimedSpellDrag?.card.kind === "bloodGem"
+      ? aimedSpellDrag.target?.kind === "bloodGem"
+      : aimedSpellDrag?.card.kind === "tavernSpell"
+        ? aimedSpellDrag.target?.kind === "tavernSpell"
+        : false;
+  const aimedSpellPath = aimedSpellDrag
+    ? (() => {
+        const startX =
+          aimedSpellDrag.startX -
+          aimedSpellDrag.offsetX +
+          aimedSpellDrag.width / 2;
+        const startY =
+          aimedSpellDrag.startY -
+          aimedSpellDrag.offsetY +
+          aimedSpellDrag.height / 2;
+        const endX = aimedSpellDrag.clientX;
+        const endY = aimedSpellDrag.clientY;
+        const controlX = (startX + endX) / 2;
+        const controlY =
+          Math.min(startY, endY) -
+          Math.min(110, Math.abs(endX - startX) * 0.18 + 28);
+        return `M ${startX} ${startY} Q ${controlX} ${controlY} ${endX} ${endY}`;
+      })()
+    : null;
 
   const battleDamage = battle
     ? battle.resultForHuman === "win"
@@ -2786,7 +3318,7 @@ export default function GameClient() {
               <span>
                 鲍勃的酒馆
                 <small>
-                  每个随从 3 金币 · 本局{" "}
+                  随从 3 金币 · 法术按卡面费用 · 本局{" "}
                   {game.activeTribes
                     .map((tribe) => TRIBE_NAMES[tribe])
                     .join(" / ")}
@@ -2819,11 +3351,14 @@ export default function GameClient() {
                   disabled={
                     game.phase !== "recruit" ||
                     interactionLocked ||
-                    human.gold < 1
+                    human.gold < refreshCost
                   }
                   onClick={() => send({ type: "REFRESH_SHOP" })}
                 >
-                  刷新 · 1
+                  刷新 · {refreshCost}
+                  {human.freeRefreshes > 0
+                    ? `（免费剩余 ${human.freeRefreshes}）`
+                    : ""}
                 </button>
                 <button
                   type="button"
@@ -2841,33 +3376,128 @@ export default function GameClient() {
                 </button>
               </div>
               <div className="card-row" data-testid="shop-row">
-                {human.shop.map((unit, index) => (
-                  <UnitCard
-                    unit={unit}
-                    key={unit.instanceId}
-                    selected={
-                      selection?.zone === "shop" &&
-                      selection.index === index
-                    }
-                    unaffordable={
-                      human.gold < 3 || human.hand.length >= 10
-                    }
-                    disabled={interactionLocked}
-                    testId={`shop-card-${index}`}
-                    dragEnabled={canBuyFromShop}
-                    dragging={
-                      dragSession?.active === true &&
-                      dragSession.card.instanceId === unit.instanceId
-                    }
-                    dragHandlers={
-                      canBuyFromShop
-                        ? getDragHandlers({ zone: "shop", index }, unit)
-                        : undefined
-                    }
-                    onClick={() => selectCard({ zone: "shop", index })}
-                  />
-                ))}
-                {human.shop.length === 0 && (
+                {shopDisplayOffers.map((offer) =>
+                  offer.kind === "minion" ? (
+                    <UnitCard
+                      unit={offer.unit}
+                      key={offer.unit.instanceId}
+                      selected={
+                        selection?.zone === "shop" &&
+                        selection.index === offer.shopIndex
+                      }
+                      unaffordable={
+                        human.gold < 3 || human.hand.length >= 10
+                      }
+                      disabled={interactionLocked}
+                      testId={`shop-card-${offer.shopIndex}`}
+                      tavernSpellTarget={tavernSpellTargetIds.includes(
+                        offer.unit.instanceId,
+                      )}
+                      tavernSpellDropTarget={
+                        dragSession?.target?.kind === "tavernSpell" &&
+                        dragSession.target.targetInstanceId ===
+                          offer.unit.instanceId
+                      }
+                      tavernSpellCast={
+                        tavernSpellCastFeedback?.targetInstanceId ===
+                        offer.unit.instanceId
+                      }
+                      tavernSpellCastLabel={
+                        tavernSpellCastFeedback?.targetInstanceId ===
+                        offer.unit.instanceId
+                          ? tavernSpellCastFeedback.label
+                          : undefined
+                      }
+                      tavernSpellCastToken={
+                        tavernSpellCastFeedback?.targetInstanceId ===
+                        offer.unit.instanceId
+                          ? tavernSpellCastFeedback.token
+                          : undefined
+                      }
+                      dragEnabled={
+                        canBuyFromShop &&
+                        !tavernSpellTargetIds.includes(
+                          offer.unit.instanceId,
+                        )
+                      }
+                      dragging={
+                        dragSession?.active === true &&
+                        dragSession.card.instanceId ===
+                          offer.unit.instanceId
+                      }
+                      dragHandlers={
+                        canBuyFromShop &&
+                        !tavernSpellTargetIds.includes(
+                          offer.unit.instanceId,
+                        )
+                          ? getDragHandlers(
+                              {
+                                zone: "shop",
+                                index: offer.shopIndex,
+                              },
+                              offer.unit,
+                            )
+                          : undefined
+                      }
+                      onClick={() => {
+                        if (
+                          selectedHandTavernSpell &&
+                          tavernSpellTargetIds.includes(
+                            offer.unit.instanceId,
+                          )
+                        ) {
+                          castTavernSpell(
+                            selectedHandTavernSpell.instanceId,
+                            offer.unit.instanceId,
+                          );
+                          return;
+                        }
+                        selectCard({
+                          zone: "shop",
+                          index: offer.shopIndex,
+                        });
+                      }}
+                    />
+                  ) : (
+                    <div
+                      className="shop-spell-slot"
+                      data-testid="tavern-spell-slot"
+                      key={offer.spell.instanceId}
+                    >
+                      <TavernSpellCard
+                        card={offer.spell}
+                        inShop
+                        selected={selection?.zone === "spellShop"}
+                        unaffordable={
+                          human.gold < offer.spell.cost ||
+                          human.hand.length >= 10
+                        }
+                        disabled={interactionLocked}
+                        testId="tavern-spell-offer"
+                        dragging={
+                          dragSession?.active === true &&
+                          dragSession.card.instanceId ===
+                            offer.spell.instanceId
+                        }
+                        dragHandlers={
+                          canBuyTavernSpell
+                            ? getDragHandlers(
+                                { zone: "spellShop", index: 0 },
+                                offer.spell,
+                              )
+                            : undefined
+                        }
+                        onClick={() =>
+                          selectCard({
+                            zone: "spellShop",
+                            index: 0,
+                          })
+                        }
+                      />
+                    </div>
+                  ),
+                )}
+                {shopDisplayOffers.length === 0 && (
                   <div className="empty-state">酒馆暂时没有随从</div>
                 )}
               </div>
@@ -3123,6 +3753,17 @@ export default function GameClient() {
                     : undefined
                 }
                 bloodGemCastFeedback={bloodGemCastFeedback}
+                tavernSpellTargetIds={
+                  game.phase === "recruit" && !interactionLocked
+                    ? tavernSpellTargetIds
+                    : []
+                }
+                tavernSpellDropTargetId={
+                  dragSession?.target?.kind === "tavernSpell"
+                    ? dragSession.target.targetInstanceId
+                    : undefined
+                }
+                tavernSpellCastFeedback={tavernSpellCastFeedback}
                 interactionLocked={interactionLocked}
                 canDeploy={
                   game.phase === "recruit" &&
@@ -3164,6 +3805,13 @@ export default function GameClient() {
                     targetInstanceId,
                   );
                 }}
+                onTavernSpellTarget={(targetInstanceId) => {
+                  if (!selectedHandTavernSpell) return;
+                  castTavernSpell(
+                    selectedHandTavernSpell.instanceId,
+                    targetInstanceId,
+                  );
+                }}
                 onEmptyClick={deploySelected}
               />
               {game.phase === "recruit" &&
@@ -3178,13 +3826,17 @@ export default function GameClient() {
 
           <section
             className={`panel hand-panel${
-              dragSession?.active && dragSession.zone === "shop"
+              dragSession?.active &&
+              (dragSession.zone === "shop" ||
+                dragSession.zone === "spellShop")
                 ? " is-buy-ready"
                 : ""
             }${
               dragSession?.target?.kind === "hand" ? " is-buy-target" : ""
             }${
-              selection?.zone === "shop" && buyUnavailableReason
+              (selection?.zone === "shop" ||
+                selection?.zone === "spellShop") &&
+              buyUnavailableReason
                 ? " is-buy-unavailable"
                 : ""
             }`}
@@ -3192,39 +3844,55 @@ export default function GameClient() {
             aria-hidden={game.phase !== "recruit"}
             inert={interactionLocked || game.phase !== "recruit"}
             aria-describedby="buy-drop-description"
-            data-drop-cost="3"
+            data-drop-cost={selectedOfferCost}
             data-drop-kind="buy"
             data-drop-reason={buyUnavailableReason ?? undefined}
             data-drop-state={
               dragSession?.target?.kind === "hand"
                 ? "target"
-                : dragSession?.active && dragSession.zone === "shop"
+                : dragSession?.active &&
+                    (dragSession.zone === "shop" ||
+                      dragSession.zone === "spellShop")
                   ? "ready"
-                  : selection?.zone === "shop" && buyUnavailableReason
+                  : (selection?.zone === "shop" ||
+                        selection?.zone === "spellShop") &&
+                      buyUnavailableReason
                     ? "unavailable"
                     : "idle"
             }
-            data-drop-valid={canBuyFromShop}
+            data-drop-valid={
+              selection?.zone === "spellShop"
+                ? canBuyTavernSpell
+                : canBuyFromShop
+            }
             data-hand-drop-zone="true"
             data-testid="buy-drop-zone"
           >
             <div className="buy-drop-feedback" aria-hidden="true">
               <strong>
-                {selection?.zone === "shop" && buyUnavailableReason
+                {(selection?.zone === "shop" ||
+                  selection?.zone === "spellShop") &&
+                buyUnavailableReason
                   ? "无法购买"
                   : "购买到手牌"}
               </strong>
               <span>
-                {selection?.zone === "shop" && buyUnavailableReason
+                {(selection?.zone === "shop" ||
+                  selection?.zone === "spellShop") &&
+                buyUnavailableReason
                   ? buyUnavailableReason
-                  : "松手支付 3 枚金币"}
+                  : `松手支付 ${
+                      dragSession?.card.kind === "tavernSpell"
+                        ? dragSession.card.cost
+                        : selectedOfferCost
+                    } 枚金币`}
               </span>
             </div>
             <div className="panel-title">
               <span>
                 手牌
                 <small>
-                  随从拖到战场；鲜血宝石拖到友方随从；三连奖励点击使用
+                  随从拖到战场；酒馆法术和鲜血宝石拖放施放；三连奖励点击使用
                 </small>
               </span>
               <span>{human.hand.length} / 10</span>
@@ -3255,6 +3923,32 @@ export default function GameClient() {
                       selection.index === index
                     }
                     testId={`blood-gem-card-${index}`}
+                    disabled={interactionLocked}
+                    dragging={
+                      dragSession?.active === true &&
+                      dragSession.card.instanceId === card.instanceId
+                    }
+                    dragHandlers={
+                      canDragHandCard(card)
+                        ? getDragHandlers(
+                            { zone: "hand", index },
+                            card,
+                          )
+                        : undefined
+                    }
+                    onClick={() =>
+                      selectCard({ zone: "hand", index })
+                    }
+                  />
+                ) : card.kind === "tavernSpell" ? (
+                  <TavernSpellCard
+                    card={card}
+                    key={card.instanceId}
+                    selected={
+                      selection?.zone === "hand" &&
+                      selection.index === index
+                    }
+                    testId={`tavern-spell-card-${index}`}
                     disabled={interactionLocked}
                     dragging={
                       dragSession?.active === true &&
@@ -3306,7 +4000,7 @@ export default function GameClient() {
                 ),
               )}
               {human.hand.length === 0 && (
-                <div className="empty-state">购买的随从会进入这里</div>
+                <div className="empty-state">购买的牌会进入这里</div>
               )}
             </div>
           </section>
@@ -3399,7 +4093,84 @@ export default function GameClient() {
 
             {infoTab === "details" ? (
               <div className="details-content">
-                {selectedBloodGem ? (
+                {selectedTavernSpell ? (
+                  <>
+                    <CardArtwork
+                      key={selectedTavernSpell.instanceId}
+                      unit={selectedTavernSpell}
+                      kind="detail"
+                    />
+                    <h2>{selectedTavernSpell.name}</h2>
+                    <p className="detail-meta">
+                      {selectedTavernSpell.tier} 级酒馆法术 ·{" "}
+                      {selectedTavernSpell.cost} 枚金币
+                    </p>
+                    <p>{selectedTavernSpell.description}</p>
+                    {selection?.zone === "hand" && (
+                      <p
+                        className="tavern-spell-play-hint"
+                        data-testid="tavern-spell-selection-hint"
+                        role="status"
+                      >
+                        {tavernSpellNeedsTarget(selectedTavernSpell)
+                          ? tavernSpellTargetIds.length > 0
+                            ? `点击任意发光随从，或把法术拖到目标上施放。当前有 ${tavernSpellTargetIds.length} 个合法目标${
+                                tavernSpellCanTargetShop(
+                                  selectedTavernSpell,
+                                )
+                                  ? "（战场或酒馆）"
+                                  : ""
+                              }。`
+                            : "当前没有合法随从目标；法术会留在手牌中。"
+                          : "点击下方按钮施放，或把法术拖到战场区域。"}
+                      </p>
+                    )}
+                    <div className="detail-keywords">
+                      <span>酒馆法术</span>
+                      <span>一次性</span>
+                      {tavernSpellNeedsTarget(selectedTavernSpell) && (
+                        <span>需要目标</span>
+                      )}
+                    </div>
+                    <div className="detail-actions">
+                      {selection?.zone === "spellShop" && (
+                        <button
+                          type="button"
+                          className="action-button primary"
+                          data-testid="buy-selected-tavern-spell"
+                          disabled={!selectedCanBuy}
+                          onClick={() =>
+                            send({ type: "BUY_TAVERN_SPELL" })
+                          }
+                        >
+                          购买 · {selectedTavernSpell.cost}
+                        </button>
+                      )}
+                      {selection?.zone === "hand" && (
+                        <button
+                          type="button"
+                          className="action-button primary"
+                          data-testid="cast-selected-tavern-spell"
+                          disabled={
+                            interactionLocked ||
+                            tavernSpellNeedsTarget(
+                              selectedTavernSpell,
+                            )
+                          }
+                          onClick={() =>
+                            castTavernSpell(
+                              selectedTavernSpell.instanceId,
+                            )
+                          }
+                        >
+                          {tavernSpellNeedsTarget(selectedTavernSpell)
+                            ? "请选择发光随从"
+                            : "施放法术"}
+                        </button>
+                      )}
+                    </div>
+                  </>
+                ) : selectedBloodGem ? (
                   <>
                     <CardArtwork
                       key={selectedBloodGem.instanceId}
@@ -3670,6 +4441,9 @@ export default function GameClient() {
       <span className="sr-only" id="blood-gem-target-instructions">
         这是当前鲜血宝石的合法目标。点击或按回车键即可使用；按 Escape 键取消选择。
       </span>
+      <span className="sr-only" id="tavern-spell-target-instructions">
+        这是当前酒馆法术的合法目标。点击或按回车键即可施放；按 Escape 键取消选择。
+      </span>
       <span className="sr-only" id="buy-drop-description">
         购买随从需要 3 枚金币且手牌未满。点击商店随从后也可使用详情面板中的购买按钮。
       </span>
@@ -3681,6 +4455,37 @@ export default function GameClient() {
       >
         {interactionAnnouncement}
       </span>
+
+      {aimedSpellPath && (
+        <svg
+          className={`spell-aim-arrow${
+            aimedSpellHasValidTarget ? " is-valid" : ""
+          }`}
+          width="100%"
+          height="100%"
+          aria-hidden="true"
+          data-testid="spell-aim-arrow"
+        >
+          <defs>
+            <marker
+              id="spell-aim-arrowhead"
+              viewBox="0 0 12 12"
+              refX="10"
+              refY="6"
+              markerWidth="5"
+              markerHeight="5"
+              orient="auto-start-reverse"
+            >
+              <path d="M 0 0 L 12 6 L 0 12 z" />
+            </marker>
+          </defs>
+          <path
+            className="spell-aim-arrow-path"
+            d={aimedSpellPath}
+            markerEnd="url(#spell-aim-arrowhead)"
+          />
+        </svg>
+      )}
 
       {game.phase === "recruit" && combatRewardNotice && (
         <div
@@ -3717,6 +4522,8 @@ export default function GameClient() {
           className={`${
             dragSession.card.kind === "bloodGem"
               ? "blood-gem-card"
+              : dragSession.card.kind === "tavernSpell"
+                ? "tavern-spell-card"
               : "unit-card is-compact"
           } is-dragging drag-ghost${
             dragSession.pointerType === "touch" ||
@@ -3732,7 +4539,9 @@ export default function GameClient() {
               "--card-hue":
                 dragSession.card.kind === "minion"
                   ? TRIBE_HUE[dragSession.card.tribe]
-                  : TRIBE_HUE.quilboar,
+                  : dragSession.card.kind === "tavernSpell"
+                    ? 266
+                    : TRIBE_HUE.quilboar,
               left: dragSession.clientX - dragSession.offsetX,
               top: dragSession.clientY - dragSession.offsetY,
               width: dragSession.width,
@@ -3746,6 +4555,8 @@ export default function GameClient() {
               attack={human.bloodGemAttack}
               health={human.bloodGemHealth}
             />
+          ) : dragSession.card.kind === "tavernSpell" ? (
+            <TavernSpellCardFace card={dragSession.card} />
           ) : (
             <UnitCardFace unit={dragSession.card} />
           )}

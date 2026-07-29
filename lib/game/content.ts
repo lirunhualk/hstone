@@ -3,7 +3,7 @@ import liveRosterSnapshot from "./generated/battlegrounds-36.0.3-247416.zhCN.jso
 };
 import type { MinionDefinition, Tribe } from "./types.ts";
 
-export const CURRENT_ROSTER_VERSION = "battlegrounds-36.0.3-247416-v10";
+export const CURRENT_ROSTER_VERSION = "battlegrounds-36.0.3-247416-v11";
 /** Compatibility alias for existing save and engine imports. */
 export const CLASSIC_ROSTER_VERSION = CURRENT_ROSTER_VERSION;
 
@@ -1174,6 +1174,7 @@ const FULLY_SUPPORTED_LIVE_CARD_IDS = new Set([
   "BG26_159",
   "BG26_805",
   "BG26_817",
+  "BG27_005",
   "BG28_300",
   "BG29_503",
   "BG29_611",

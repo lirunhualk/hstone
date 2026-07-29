@@ -470,7 +470,7 @@ test("schema 5 saves migrate Blood Gem values without losing the current run", (
 
   const migrated = migrateSchema5GameState(legacy) as GameState | null;
   assert.ok(migrated);
-  assert.equal(migrated.version, 6);
+  assert.equal(migrated.version, 7);
   assert.equal(humanPlayer(migrated).gold, 7);
   assert.equal(humanPlayer(migrated).bloodGemAttack, 1);
   assert.equal(humanPlayer(migrated).bloodGemHealth, 1);

@@ -381,7 +381,7 @@ test("classic rule fixtures remain available but never enter the live pool", () 
     new Set(MINION_DEFINITIONS.map((definition) => definition.id)).size,
     MINION_DEFINITIONS.length,
   );
-  assert.equal(createGame(1).version, 6);
+  assert.equal(createGame(1).version, 7);
 });
 
 test("Wrath Weaver, Brann, and Mama Bear use their signature recruit triggers", () => {
