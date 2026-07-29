@@ -198,6 +198,11 @@ function tripleRewardFixture(
     description: "发现一个比你当前酒馆等级高一级的随从。",
     bloodGemAttack: 0,
     bloodGemHealth: 0,
+    temporaryAttack: 0,
+    temporaryHealth: 0,
+    temporaryTaunt: false,
+    temporaryDivineShield: false,
+    temporaryCrabDeathrattles: 0,
     grantsTripleReward: false,
     poolCopies: 0,
     attachments: [],
@@ -383,7 +388,7 @@ test("classic rule fixtures remain available but never enter the live pool", () 
     new Set(MINION_DEFINITIONS.map((definition) => definition.id)).size,
     MINION_DEFINITIONS.length,
   );
-  assert.equal(createGame(1).version, 8);
+  assert.equal(createGame(1).version, 9);
 });
 
 test("Wrath Weaver, Brann, and Mama Bear use their signature recruit triggers", () => {

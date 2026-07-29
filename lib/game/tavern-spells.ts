@@ -206,6 +206,30 @@ export const TAVERN_SPELL_RULES = [
     target: "none",
   },
   {
+    id: "tavern-spell-clone-horn",
+    cardId: "BG28_601",
+    effect: "cloneHorn",
+    target: "none",
+  },
+  {
+    id: "tavern-spell-beetle-blessing",
+    cardId: "BG28_603",
+    effect: "beetleBlessing",
+    target: "none",
+  },
+  {
+    id: "tavern-spell-slimy-seafood",
+    cardId: "BG28_606",
+    effect: "slimySeafood",
+    target: "none",
+  },
+  {
+    id: "tavern-spell-gem-confiscation",
+    cardId: "BG28_698",
+    effect: "gemConfiscation",
+    target: "anyMinion",
+  },
+  {
     id: "tavern-spell-back-to-back",
     cardId: "BG35_952",
     effect: "backToBack",
@@ -239,6 +263,42 @@ export const TAVERN_SPELL_RULES = [
     id: "tavern-spell-shifting-tide",
     cardId: "BG32_815",
     effect: "shiftingTide",
+    target: "anyMinion",
+  },
+  {
+    id: "tavern-spell-temperature-shift",
+    cardId: "BG31_819",
+    effect: "temperatureShift",
+    target: "none",
+  },
+  {
+    id: "tavern-spell-ride-the-wind",
+    cardId: "BG34_444",
+    effect: "rideTheWind",
+    target: "none",
+  },
+  {
+    id: "tavern-spell-stir-the-graveyard",
+    cardId: "BG34_888",
+    effect: "stirTheGraveyard",
+    target: "none",
+  },
+  {
+    id: "tavern-spell-blazing-inferno",
+    cardId: "BG35_910",
+    effect: "blazingInferno",
+    target: "anyMinion",
+  },
+  {
+    id: "tavern-spell-arcane-absorption",
+    cardId: "BG35_911",
+    effect: "arcaneAbsorption",
+    target: "friendly",
+  },
+  {
+    id: "tavern-spell-eonars-favor",
+    cardId: "BG35_912",
+    effect: "eonarsFavor",
     target: "anyMinion",
   },
   {

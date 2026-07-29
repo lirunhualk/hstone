@@ -2,10 +2,13 @@ import assert from "node:assert/strict";
 import test from "node:test";
 
 import {
+  SPELLCRAFT_DEFINITIONS,
   TAVERN_SPELL_DEFINITIONS,
   createGame,
   gameReducer,
+  getLegalSpellcraftTargetIds,
   getLegalTavernSpellTargetIds,
+  getSpellcraftDefinition,
   getTavernSpellPurchaseQuote,
   getTavernSpellDefinition,
   tavernSpellIsAvailable,
@@ -13,20 +16,25 @@ import {
   type BoardMinionInstance,
   type GameState,
   type PlayerState,
+  type SpellcraftSpellInstance,
   type TavernSpellInstance,
   type TavernTier,
+  type Tribe,
 } from "../lib/game/engine.ts";
 import {
   CURRENT_ROSTER_VERSION,
+  MINION_DEFINITIONS,
   getMinionDefinition,
 } from "../lib/game/content.ts";
 import {
   LEGACY_SCHEMA_5_CONTENT_VERSION,
   LEGACY_SCHEMA_6_CONTENT_VERSION,
   LEGACY_SCHEMA_7_CONTENT_VERSION,
+  LEGACY_SCHEMA_8_CONTENT_VERSION,
   migrateSchema5GameState,
   migrateSchema6GameState,
   migrateSchema7GameState,
+  migrateSchema8GameState,
 } from "../lib/game/save.ts";
 
 const SPELL_POOL_COPIES_BY_TIER = [0, 5, 7, 9, 11, 7, 5] as const;
@@ -103,6 +111,36 @@ function tavernSpell(
     spellFamily: "tavern",
     target: definition.target,
   };
+}
+
+function spellcraft(
+  definitionId: string,
+  instanceId: string,
+): SpellcraftSpellInstance {
+  const definition = getSpellcraftDefinition(definitionId);
+  return {
+    kind: "spellcraft",
+    instanceId,
+    definitionId: definition.id,
+    cardId: definition.cardId,
+    name: definition.name,
+    description: definition.description,
+    spellFamily: "spellcraft",
+    target: definition.target,
+  };
+}
+
+function createGameWithTribes(
+  tribes: readonly Tribe[],
+  startingSeed: number,
+): GameState {
+  for (let seed = startingSeed; seed < startingSeed + 100_000; seed += 1) {
+    const state = createGame(seed);
+    if (tribes.every((tribe) => state.activeTribes.includes(tribe))) {
+      return state;
+    }
+  }
+  throw new Error(`Could not create a lobby containing ${tribes.join(", ")}`);
 }
 
 function replaceSpellOffer(
@@ -224,18 +262,35 @@ function legacyState(
     delete record.tavernMinionHealthBonus;
     delete record.nextCombatAttackBonus;
     delete record.nextCombatHealthBonus;
+    delete record.nextCombatWinGold;
+    delete record.nextCombatTieGold;
+    delete record.nextTurnBoardAttackBonus;
+    delete record.nextTurnBoardHealthBonus;
+    delete record.nextTurnBoardBuffPulses;
+    delete record.tavernBloodGemBarrageAttack;
+    delete record.tavernBloodGemBarrageHealth;
     delete record.backToBackBonus;
+    delete record.tavernSpellAttackBonus;
+    delete record.tavernSpellHealthBonus;
+    delete record.tavernTypeBuffs;
+    delete record.rideTheWindBuffs;
+    delete record.elementalsPlayedThisTurn;
+    delete record.nextCombatBeetles;
+    delete record.ballerAttackBonus;
+    delete record.ballerHealthBonus;
+    delete record.deepBlueBonus;
     if (version === 5) {
       delete record.bloodGemAttack;
       delete record.bloodGemHealth;
     }
   }
+  removePostSchema7MinionFields(legacy);
   return legacy;
 }
 
-function removeSchema8MinionFields(value: unknown): void {
+function removePostSchema7MinionFields(value: unknown): void {
   if (Array.isArray(value)) {
-    value.forEach(removeSchema8MinionFields);
+    value.forEach(removePostSchema7MinionFields);
     return;
   }
   if (value === null || typeof value !== "object") {
@@ -246,13 +301,39 @@ function removeSchema8MinionFields(value: unknown): void {
     delete record.bloodGemAttack;
     delete record.bloodGemHealth;
     delete record.playableFromRound;
+    delete record.temporaryAttack;
+    delete record.temporaryHealth;
+    delete record.temporaryTaunt;
+    delete record.temporaryDivineShield;
+    delete record.temporaryCrabDeathrattles;
+    delete record.destroyAfterPlayThroughRound;
   }
-  Object.values(record).forEach(removeSchema8MinionFields);
+  Object.values(record).forEach(removePostSchema7MinionFields);
 }
 
-function assertSchema8MinionFields(value: unknown): void {
+function removeSchema9MinionFields(value: unknown): void {
   if (Array.isArray(value)) {
-    value.forEach(assertSchema8MinionFields);
+    value.forEach(removeSchema9MinionFields);
+    return;
+  }
+  if (value === null || typeof value !== "object") {
+    return;
+  }
+  const record = value as Record<string, unknown>;
+  if (record.kind === "minion" || record.kind === "tripleReward") {
+    delete record.temporaryAttack;
+    delete record.temporaryHealth;
+    delete record.temporaryTaunt;
+    delete record.temporaryDivineShield;
+    delete record.temporaryCrabDeathrattles;
+    delete record.destroyAfterPlayThroughRound;
+  }
+  Object.values(record).forEach(removeSchema9MinionFields);
+}
+
+function assertSchema9MinionFields(value: unknown): void {
+  if (Array.isArray(value)) {
+    value.forEach(assertSchema9MinionFields);
     return;
   }
   if (value === null || typeof value !== "object") {
@@ -262,14 +343,47 @@ function assertSchema8MinionFields(value: unknown): void {
   if (record.kind === "minion" || record.kind === "tripleReward") {
     assert.equal(typeof record.bloodGemAttack, "number");
     assert.equal(typeof record.bloodGemHealth, "number");
+    assert.equal(typeof record.temporaryAttack, "number");
+    assert.equal(typeof record.temporaryHealth, "number");
+    assert.equal(typeof record.temporaryTaunt, "boolean");
+    assert.equal(typeof record.temporaryDivineShield, "boolean");
+    assert.equal(typeof record.temporaryCrabDeathrattles, "number");
   }
-  Object.values(record).forEach(assertSchema8MinionFields);
+  Object.values(record).forEach(assertSchema9MinionFields);
 }
 
-function assertMigratedSchema8(value: unknown): asserts value is GameState {
+function legacySchema8State(seed: number): Record<string, unknown> {
+  const current = createGame(seed);
+  current.players.forEach((player, index) => {
+    player.tavernTier = ((index % 6) + 1) as TavernTier;
+  });
+  humanPlayer(current).gold = 7;
+  const legacy = jsonClone(current) as unknown as Record<string, unknown>;
+  legacy.version = 8;
+  legacy.contentVersion = LEGACY_SCHEMA_8_CONTENT_VERSION;
+  const players = legacy.players;
+  assert.ok(Array.isArray(players));
+  for (const player of players) {
+    assert.ok(player !== null && typeof player === "object");
+    const record = player as Record<string, unknown>;
+    delete record.tavernSpellAttackBonus;
+    delete record.tavernSpellHealthBonus;
+    delete record.tavernTypeBuffs;
+    delete record.rideTheWindBuffs;
+    delete record.elementalsPlayedThisTurn;
+    delete record.nextCombatBeetles;
+    delete record.ballerAttackBonus;
+    delete record.ballerHealthBonus;
+    delete record.deepBlueBonus;
+  }
+  removeSchema9MinionFields(legacy);
+  return legacy;
+}
+
+function assertMigratedSchema9(value: unknown): asserts value is GameState {
   assert.ok(value !== null && typeof value === "object");
   const migrated = value as GameState;
-  assert.equal(migrated.version, 8);
+  assert.equal(migrated.version, 9);
   assert.equal(migrated.contentVersion, CURRENT_ROSTER_VERSION);
   assert.equal(humanPlayer(migrated).gold, 7);
   assert.equal(
@@ -296,6 +410,15 @@ function assertMigratedSchema8(value: unknown): asserts value is GameState {
     assert.equal(player.tavernBloodGemBarrageAttack, 0);
     assert.equal(player.tavernBloodGemBarrageHealth, 0);
     assert.equal(player.backToBackBonus, 0);
+    assert.equal(player.tavernSpellAttackBonus, 0);
+    assert.equal(player.tavernSpellHealthBonus, 0);
+    assert.deepEqual(player.tavernTypeBuffs, []);
+    assert.deepEqual(player.rideTheWindBuffs, []);
+    assert.equal(player.elementalsPlayedThisTurn, 0);
+    assert.equal(player.nextCombatBeetles, 0);
+    assert.equal(player.ballerAttackBonus, 1);
+    assert.equal(player.ballerHealthBonus, 1);
+    assert.equal(player.deepBlueBonus, 0);
   }
   for (const definition of TAVERN_SPELL_DEFINITIONS) {
     assert.equal(
@@ -306,6 +429,7 @@ function assertMigratedSchema8(value: unknown): asserts value is GameState {
       `${definition.name} must conserve its shared pool during migration`,
     );
   }
+  assertSchema9MinionFields(migrated);
   assert.deepEqual(JSON.parse(JSON.stringify(migrated)), migrated);
 }
 
@@ -367,6 +491,240 @@ test("the playable Tavern Spell pool covers every current Solo Tier 1-3 spell", 
     ),
     { 1: 8, 2: 6, 3: 16 },
   );
+});
+
+test("the playable Tavern Spell pool covers all 16 current Solo Tier 4 spells", () => {
+  const expected = [
+    [
+      "tavern-spell-clone-horn",
+      "BG28_601",
+      4,
+      "克隆螺号",
+      ["murloc"],
+    ],
+    [
+      "tavern-spell-beetle-blessing",
+      "BG28_603",
+      1,
+      "甲虫恩泽",
+      ["beast"],
+    ],
+    [
+      "tavern-spell-slimy-seafood",
+      "BG28_606",
+      2,
+      "恶鳞套餐",
+      ["naga"],
+    ],
+    [
+      "tavern-spell-gem-confiscation",
+      "BG28_698",
+      1,
+      "查抄宝石",
+      ["quilboar"],
+    ],
+    [
+      "tavern-spell-back-to-back",
+      "BG35_952",
+      1,
+      "背靠背",
+      [],
+    ],
+    [
+      "tavern-spell-deepwater-clan",
+      "BG35_149",
+      2,
+      "深水族群",
+      ["murloc"],
+    ],
+    [
+      "tavern-spell-defenders-rites",
+      "BG28_825",
+      2,
+      "防御者的仪式",
+      [],
+    ],
+    [
+      "tavern-spell-misplaced-tea-set",
+      "BG28_888",
+      2,
+      "乱放的茶具",
+      [],
+    ],
+    [
+      "tavern-spell-natural-blessing",
+      "BG28_845",
+      4,
+      "自然祝福",
+      [],
+    ],
+    [
+      "tavern-spell-shifting-tide",
+      "BG32_815",
+      1,
+      "变换之潮",
+      ["naga"],
+    ],
+    [
+      "tavern-spell-temperature-shift",
+      "BG31_819",
+      4,
+      "寒热骤变",
+      ["elemental"],
+    ],
+    [
+      "tavern-spell-ride-the-wind",
+      "BG34_444",
+      1,
+      "乘借东风",
+      ["elemental"],
+    ],
+    [
+      "tavern-spell-stir-the-graveyard",
+      "BG34_888",
+      2,
+      "惊扰墓穴",
+      ["undead"],
+    ],
+    [
+      "tavern-spell-blazing-inferno",
+      "BG35_910",
+      2,
+      "燃焰",
+      ["elemental"],
+    ],
+    [
+      "tavern-spell-arcane-absorption",
+      "BG35_911",
+      1,
+      "奥术吸收",
+      ["elemental"],
+    ],
+    [
+      "tavern-spell-eonars-favor",
+      "BG35_912",
+      2,
+      "艾欧娜尔的眷顾",
+      [],
+    ],
+  ] as const;
+
+  for (const [
+    definitionId,
+    cardId,
+    cost,
+    name,
+    associatedTribes,
+  ] of expected) {
+    const definition = getTavernSpellDefinition(definitionId);
+    assert.equal(definition.cardId, cardId);
+    assert.equal(definition.tier, 4);
+    assert.equal(definition.cost, cost);
+    assert.equal(definition.name, name);
+    assert.deepEqual(definition.associatedTribes ?? [], associatedTribes);
+  }
+
+  assert.equal(
+    TAVERN_SPELL_DEFINITIONS.filter(
+      (definition) => definition.tier === 4,
+    ).length,
+    16,
+  );
+  assert.equal(TAVERN_SPELL_DEFINITIONS.length, 51);
+});
+
+test("the pinned pool exposes all nine ordinary Spellcraft definitions", () => {
+  const expected = [
+    [
+      "spellcraft-crab-rider",
+      "BG27_004t",
+      1,
+      "螃蟹坐骑",
+      "crabRider",
+      "friendly",
+    ],
+    [
+      "spellcraft-sick-riffs",
+      "BG26_501t",
+      2,
+      "精彩即兴",
+      "sickRiffs",
+      "friendly",
+    ],
+    [
+      "spellcraft-anglers-lure",
+      "BG23_004t",
+      3,
+      "钓客的诱饵",
+      "anglersLure",
+      "friendly",
+    ],
+    [
+      "spellcraft-deep-blue-blues",
+      "BG26_502t",
+      3,
+      "深沉蓝调",
+      "deepBlueBlues",
+      "friendly",
+    ],
+    [
+      "spellcraft-escape-eruption",
+      "BG30_117t",
+      4,
+      "躲避喷发",
+      "escapeEruption",
+      "none",
+    ],
+    [
+      "spellcraft-rime-or-reason",
+      "BG33_319t",
+      4,
+      "霜鳞之理",
+      "rimeOrReason",
+      "none",
+    ],
+    [
+      "spellcraft-glowing-crown",
+      "BG23_008t",
+      5,
+      "闪鳞头冠",
+      "glowingCrown",
+      "friendly",
+    ],
+    [
+      "spellcraft-evolving-strategy",
+      "BG31_920t",
+      5,
+      "战略迭代",
+      "evolvingStrategy",
+      "none",
+    ],
+    [
+      "spellcraft-meditation",
+      "BG32_835t",
+      5,
+      "冥想",
+      "meditation",
+      "none",
+    ],
+  ] as const;
+
+  assert.equal(SPELLCRAFT_DEFINITIONS.length, expected.length);
+  for (const [
+    definitionId,
+    cardId,
+    sourceTier,
+    name,
+    effect,
+    target,
+  ] of expected) {
+    const definition = getSpellcraftDefinition(definitionId);
+    assert.equal(definition.cardId, cardId);
+    assert.equal(definition.sourceTier, sourceTier);
+    assert.equal(definition.name, name);
+    assert.equal(definition.effect, effect);
+    assert.equal(definition.target, target);
+  }
 });
 
 test("playable Tavern Spell text removes client-only dynamic branches", () => {
@@ -1820,6 +2178,1011 @@ test("Trainee and Lasso add real pool/shop minions to hand deterministically", (
   );
 });
 
+test("Clone Horn and Temperature Shift preserve real versus generated pool ownership", () => {
+  let state = createGameWithTribes(
+    ["murloc", "elemental"],
+    0x7400,
+  );
+  let player = humanPlayer(state);
+  player.tavernTier = 4;
+  const template = player.shop[0];
+  assert.ok(template);
+  const murloc = MINION_DEFINITIONS.find(
+    (definition) => definition.id === "BG32_330",
+  );
+  assert.ok(murloc);
+  for (const definitionId of Object.keys(state.pool)) {
+    state.pool[definitionId] = 0;
+  }
+  state.pool[murloc.id] = 1;
+  state.pool.BG31_816 = 1;
+  state.pool.BG31_818 = 1;
+  player.hand = [
+    tavernSpell("tavern-spell-clone-horn", "clone-horn"),
+    tavernSpell(
+      "tavern-spell-temperature-shift",
+      "temperature-shift",
+    ),
+  ];
+
+  state = gameReducer(state, {
+    type: "CAST_TAVERN_SPELL",
+    cardInstanceId: "clone-horn",
+  });
+  state = gameReducer(state, {
+    type: "CAST_TAVERN_SPELL",
+    cardInstanceId: "temperature-shift",
+  });
+  player = humanPlayer(state);
+
+  const clonedMurlocs = player.hand.filter(
+    (card): card is BoardMinionInstance =>
+      card.kind === "minion" &&
+      card.definitionId === murloc.id,
+  );
+  assert.equal(clonedMurlocs.length, 2);
+  assert.deepEqual(
+    clonedMurlocs
+      .map((minion) => minion.poolCopies)
+      .sort((left, right) => left - right),
+    [0, 1],
+  );
+  assert.equal(state.pool[murloc.id], 0);
+
+  const fireBaller = player.hand.find(
+    (card): card is BoardMinionInstance =>
+      card.kind === "minion" && card.definitionId === "BG31_816",
+  );
+  const snowBaller = player.hand.find(
+    (card): card is BoardMinionInstance =>
+      card.kind === "minion" && card.definitionId === "BG31_818",
+  );
+  assert.ok(fireBaller);
+  assert.ok(snowBaller);
+  assert.equal(fireBaller.poolCopies, 1);
+  assert.equal(snowBaller.poolCopies, 1);
+  assert.equal(state.pool.BG31_816, 0);
+  assert.equal(state.pool.BG31_818, 0);
+
+  const witness = definitionMinion(
+    template,
+    "BG35_801",
+    "baller-witness",
+    { attack: 7, health: 9 },
+  );
+  player.board = [witness];
+  state = gameReducer(state, {
+    type: "PLAY_HAND_CARD",
+    cardInstanceId: fireBaller.instanceId,
+  });
+  state = gameReducer(state, {
+    type: "PLAY_HAND_CARD",
+    cardInstanceId: snowBaller.instanceId,
+  });
+  player = humanPlayer(state);
+  const fireIndex = player.board.findIndex(
+    (minion) => minion.definitionId === "BG31_816",
+  );
+  assert.ok(fireIndex >= 0);
+  state = gameReducer(state, {
+    type: "SELL_MINION",
+    boardIndex: fireIndex,
+  });
+  player = humanPlayer(state);
+  const snowIndex = player.board.findIndex(
+    (minion) => minion.definitionId === "BG31_818",
+  );
+  assert.ok(snowIndex >= 0);
+  state = gameReducer(state, {
+    type: "SELL_MINION",
+    boardIndex: snowIndex,
+  });
+  player = humanPlayer(state);
+  assert.deepEqual(
+    [player.board[0].attack, player.board[0].health],
+    [8, 10],
+  );
+  assert.equal(player.ballerAttackBonus, 2);
+  assert.equal(player.ballerHealthBonus, 2);
+});
+
+test("Slimy Seafood draws tier-gated Spellcraft with replacement and respects hand space", () => {
+  let state = createGameWithTribes(["naga"], 0x7410);
+  let player = humanPlayer(state);
+  player.tavernTier = 4;
+  state.rngState = 1;
+  player.hand = [
+    tavernSpell("tavern-spell-slimy-seafood", "slimy-seafood"),
+  ];
+
+  state = gameReducer(state, {
+    type: "CAST_TAVERN_SPELL",
+    cardInstanceId: "slimy-seafood",
+  });
+  player = humanPlayer(state);
+  const generated = player.hand.filter(
+    (card): card is SpellcraftSpellInstance =>
+      card.kind === "spellcraft",
+  );
+  assert.equal(generated.length, 3);
+  assert.equal(
+    generated[0].definitionId,
+    generated[1].definitionId,
+    "independent draws must allow duplicate Spellcraft spells",
+  );
+  assert.ok(
+    generated.every(
+      (card) =>
+        getSpellcraftDefinition(card.definitionId).sourceTier <= 4,
+    ),
+  );
+
+  state = createGameWithTribes(["naga"], 0x7411);
+  player = humanPlayer(state);
+  player.tavernTier = 4;
+  player.hand = [
+    tavernSpell("tavern-spell-slimy-seafood", "full-slimy"),
+    ...Array.from({ length: 9 }, (_, index) =>
+      tavernSpell(
+        "tavern-spell-tavern-coin",
+        `slimy-filler-${index}`,
+      ),
+    ),
+  ];
+  state = gameReducer(state, {
+    type: "CAST_TAVERN_SPELL",
+    cardInstanceId: "full-slimy",
+  });
+  player = humanPlayer(state);
+  assert.equal(player.hand.length, 10);
+  assert.equal(
+    player.hand.filter((card) => card.kind === "spellcraft").length,
+    1,
+  );
+});
+
+test("Gem Confiscation casts two current Blood Gems and steals only neighboring Gem stats", () => {
+  let state = createGameWithTribes(["quilboar"], 0x7420);
+  let player = humanPlayer(state);
+  const template = player.shop[0];
+  assert.ok(template);
+  player.bloodGemAttack = 2;
+  player.bloodGemHealth = 3;
+  player.shop = [];
+  player.board = [
+    definitionMinion(
+      template,
+      template.definitionId,
+      "left-gem-neighbor",
+      {
+        attack: 8,
+        health: 8,
+        bloodGemAttack: 3,
+        bloodGemHealth: 2,
+      },
+    ),
+    definitionMinion(
+      template,
+      template.definitionId,
+      "gem-target",
+      {
+        attack: 7,
+        health: 8,
+        bloodGemAttack: 0,
+        bloodGemHealth: 0,
+      },
+    ),
+    definitionMinion(
+      template,
+      template.definitionId,
+      "right-gem-neighbor",
+      {
+        attack: 3,
+        health: 14,
+        bloodGemAttack: 1,
+        bloodGemHealth: 4,
+      },
+    ),
+  ];
+  player.hand = [
+    tavernSpell(
+      "tavern-spell-gem-confiscation",
+      "gem-confiscation",
+    ),
+  ];
+  assert.deepEqual(
+    getLegalTavernSpellTargetIds(
+      state,
+      player.id,
+      player.hand[0] as TavernSpellInstance,
+    ),
+    player.board.map((minion) => minion.instanceId),
+  );
+
+  state = gameReducer(state, {
+    type: "CAST_TAVERN_SPELL",
+    cardInstanceId: "gem-confiscation",
+    targetInstanceId: "gem-target",
+  });
+  player = humanPlayer(state);
+  const [left, target, right] = player.board;
+  assert.deepEqual(
+    [
+      left.attack,
+      left.health,
+      left.bloodGemAttack,
+      left.bloodGemHealth,
+    ],
+    [5, 6, 0, 0],
+  );
+  assert.deepEqual(
+    [
+      right.attack,
+      right.health,
+      right.bloodGemAttack,
+      right.bloodGemHealth,
+    ],
+    [2, 10, 0, 0],
+  );
+  assert.deepEqual(
+    [
+      target.attack,
+      target.health,
+      target.bloodGemAttack,
+      target.bloodGemHealth,
+    ],
+    [15, 20, 8, 12],
+  );
+});
+
+test("Ride the Wind and Eonar's Favor stack on current and future Tavern minions", () => {
+  let state = createGameWithTribes(["elemental"], 0x7430);
+  let player = humanPlayer(state);
+  player.tavernTier = 4;
+  const template = player.shop[0];
+  assert.ok(template);
+  const typeTarget = definitionMinion(
+    template,
+    "BG31_815",
+    "eonar-type-target",
+  );
+  player.board = [typeTarget];
+  player.shop = [];
+  player.hand = [
+    tavernSpell("tavern-spell-ride-the-wind", "ride-the-wind"),
+    tavernSpell("tavern-spell-eonars-favor", "eonars-favor"),
+  ];
+
+  state = gameReducer(state, {
+    type: "CAST_TAVERN_SPELL",
+    cardInstanceId: "ride-the-wind",
+  });
+  state = gameReducer(state, {
+    type: "CAST_TAVERN_SPELL",
+    cardInstanceId: "eonars-favor",
+    targetInstanceId: typeTarget.instanceId,
+  });
+  player = humanPlayer(state);
+  assert.deepEqual(player.rideTheWindBuffs, [
+    { attack: 6, health: 6 },
+  ]);
+  assert.deepEqual(player.tavernTypeBuffs, [
+    {
+      tribes: ["elemental"],
+      attack: 3,
+      health: 3,
+    },
+  ]);
+
+  for (const definitionId of Object.keys(state.pool)) {
+    state.pool[definitionId] = 0;
+  }
+  for (const definitionId of Object.keys(state.spellPool)) {
+    state.spellPool[definitionId] = 0;
+  }
+  state.pool.BG31_816 = 1;
+  player.gold = 1;
+  state = gameReducer(state, { type: "REFRESH_SHOP" });
+  player = humanPlayer(state);
+  assert.equal(player.shop.length, 1);
+  assert.equal(player.shop[0].definitionId, "BG31_816");
+  assert.deepEqual(
+    [player.shop[0].attack, player.shop[0].health],
+    [13, 12],
+  );
+});
+
+test("Blazing Inferno counts Elementals played this turn and Arcane Absorption uses half Tavern stats", () => {
+  let state = createGameWithTribes(["elemental"], 0x7440);
+  let player = humanPlayer(state);
+  player.tavernTier = 4;
+  const template = player.shop[0];
+  assert.ok(template);
+  const target = definitionMinion(
+    template,
+    "BG31_815",
+    "inferno-target",
+  );
+  const nonElemental = definitionMinion(
+    template,
+    template.definitionId,
+    "non-elemental-target",
+  );
+  nonElemental.tribe = "neutral";
+  nonElemental.tribes = [];
+  player.board = [target, nonElemental];
+  player.shop = [
+    definitionMinion(
+      template,
+      template.definitionId,
+      "arcane-source",
+      { attack: 9, health: 11 },
+    ),
+  ];
+  player.hand = [
+    definitionMinion(
+      template,
+      "BG31_816",
+      "played-fire-baller",
+    ),
+    definitionMinion(
+      template,
+      "BG31_818",
+      "played-snow-baller",
+    ),
+    tavernSpell("tavern-spell-blazing-inferno", "blazing-inferno"),
+    tavernSpell(
+      "tavern-spell-arcane-absorption",
+      "arcane-absorption",
+    ),
+  ];
+
+  state = gameReducer(state, {
+    type: "PLAY_HAND_CARD",
+    cardInstanceId: "played-fire-baller",
+  });
+  state = gameReducer(state, {
+    type: "PLAY_HAND_CARD",
+    cardInstanceId: "played-snow-baller",
+  });
+  player = humanPlayer(state);
+  assert.equal(player.elementalsPlayedThisTurn, 2);
+  assert.ok(
+    !getLegalTavernSpellTargetIds(
+      state,
+      player.id,
+      player.hand.find(
+        (card): card is TavernSpellInstance =>
+          card.kind === "tavernSpell" &&
+          card.instanceId === "arcane-absorption",
+      )!,
+    ).includes(nonElemental.instanceId),
+  );
+
+  state = gameReducer(state, {
+    type: "CAST_TAVERN_SPELL",
+    cardInstanceId: "blazing-inferno",
+    targetInstanceId: target.instanceId,
+  });
+  state = gameReducer(state, {
+    type: "CAST_TAVERN_SPELL",
+    cardInstanceId: "arcane-absorption",
+    targetInstanceId: target.instanceId,
+  });
+  player = humanPlayer(state);
+  const buffed = player.board.find(
+    (minion) => minion.instanceId === target.instanceId,
+  );
+  assert.ok(buffed);
+  assert.deepEqual([buffed.attack, buffed.health], [13, 13]);
+  assert.equal(player.tavernSpellsCastThisTurn, 2);
+});
+
+test("Stir the Graveyard kills a same-turn play, fires its Deathrattle, and clears on a triple", () => {
+  let state = createGameWithTribes(["undead"], 0x7450);
+  let player = humanPlayer(state);
+  player.tavernTier = 4;
+  for (const definitionId of Object.keys(state.pool)) {
+    state.pool[definitionId] = 0;
+  }
+  state.pool.BG28_300 = 1;
+  player.shop = [];
+  player.hand = [
+    tavernSpell(
+      "tavern-spell-stir-the-graveyard",
+      "stir-the-graveyard",
+    ),
+  ];
+
+  state = gameReducer(state, {
+    type: "CAST_TAVERN_SPELL",
+    cardInstanceId: "stir-the-graveyard",
+  });
+  const graveyardDiscover = state.pendingInteraction;
+  assert.ok(graveyardDiscover?.kind === "discover");
+  assert.equal(graveyardDiscover.options.length, 1);
+  const option = graveyardDiscover.options[0];
+  assert.ok(option);
+  state = gameReducer(state, {
+    type: "RESOLVE_INTERACTION",
+    interactionId: graveyardDiscover.interactionId,
+    optionInstanceId: option.instanceId,
+  });
+  player = humanPlayer(state);
+  const discovered = player.hand.find(
+    (card): card is BoardMinionInstance =>
+      card.kind === "minion" && card.definitionId === "BG28_300",
+  );
+  assert.ok(discovered);
+  assert.equal(discovered.destroyAfterPlayThroughRound, state.round);
+
+  state = gameReducer(state, {
+    type: "PLAY_HAND_CARD",
+    cardInstanceId: discovered.instanceId,
+  });
+  player = humanPlayer(state);
+  assert.ok(
+    player.board.every(
+      (minion) => minion.definitionId === "live-skeleton-token",
+    ),
+  );
+  assert.equal(player.board.length, 2);
+  assert.equal(state.pool.BG28_300, 1);
+
+  state = createGameWithTribes(["undead"], 0x7451);
+  player = humanPlayer(state);
+  player.tavernTier = 4;
+  const template = player.shop[0];
+  assert.ok(template);
+  for (const definitionId of Object.keys(state.pool)) {
+    state.pool[definitionId] = 0;
+  }
+  state.pool.BG28_300 = 1;
+  player.shop = [];
+  player.board = [
+    definitionMinion(template, "BG28_300", "graveyard-copy-a", {
+      poolCopies: 1,
+    }),
+  ];
+  player.hand = [
+    definitionMinion(template, "BG28_300", "graveyard-copy-b", {
+      poolCopies: 1,
+    }),
+    tavernSpell(
+      "tavern-spell-stir-the-graveyard",
+      "triple-graveyard",
+    ),
+  ];
+  state = gameReducer(state, {
+    type: "CAST_TAVERN_SPELL",
+    cardInstanceId: "triple-graveyard",
+  });
+  const tripleDiscover = state.pendingInteraction;
+  assert.ok(tripleDiscover?.kind === "discover");
+  const tripleOption = tripleDiscover.options[0];
+  assert.ok(tripleOption);
+  state = gameReducer(state, {
+    type: "RESOLVE_INTERACTION",
+    interactionId: tripleDiscover.interactionId,
+    optionInstanceId: tripleOption.instanceId,
+  });
+  player = humanPlayer(state);
+  const golden = player.hand.find(
+    (card): card is BoardMinionInstance =>
+      card.kind === "minion" &&
+      card.definitionId === "BG28_300" &&
+      card.golden,
+  );
+  assert.ok(golden);
+  assert.equal(golden.destroyAfterPlayThroughRound, undefined);
+  state = gameReducer(state, {
+    type: "PLAY_HAND_CARD",
+    cardInstanceId: golden.instanceId,
+  });
+  assert.ok(
+    humanPlayer(state).board.some(
+      (minion) =>
+        minion.definitionId === "BG28_300" && minion.golden,
+    ),
+  );
+});
+
+test("Stir the Graveyard leaves a one-Health Reborn copy in the played position", () => {
+  let state = createGameWithTribes(["undead"], 0x7452);
+  let player = humanPlayer(state);
+  player.tavernTier = 4;
+  const template = player.shop[0];
+  assert.ok(template);
+  for (const definitionId of Object.keys(state.pool)) {
+    state.pool[definitionId] = 0;
+  }
+  state.pool.BG25_001 = 1;
+  player.shop = [];
+  player.board = [
+    definitionMinion(template, "BG35_801", "reborn-left-anchor"),
+    definitionMinion(template, "BG35_801", "reborn-right-anchor"),
+  ];
+  player.hand = [
+    tavernSpell(
+      "tavern-spell-stir-the-graveyard",
+      "reborn-graveyard",
+    ),
+  ];
+
+  state = gameReducer(state, {
+    type: "CAST_TAVERN_SPELL",
+    cardInstanceId: "reborn-graveyard",
+  });
+  const discover = state.pendingInteraction;
+  assert.ok(discover?.kind === "discover");
+  assert.equal(discover.options.length, 1);
+  const option = discover.options[0];
+  assert.equal(option.definitionId, "BG25_001");
+  assert.equal(option.reborn, true);
+  state = gameReducer(state, {
+    type: "RESOLVE_INTERACTION",
+    interactionId: discover.interactionId,
+    optionInstanceId: option.instanceId,
+  });
+  player = humanPlayer(state);
+  const discovered = player.hand.find(
+    (card): card is BoardMinionInstance =>
+      card.kind === "minion" && card.definitionId === "BG25_001",
+  );
+  assert.ok(discovered);
+
+  state = gameReducer(state, {
+    type: "PLAY_HAND_CARD",
+    cardInstanceId: discovered.instanceId,
+    boardIndex: 1,
+  });
+  player = humanPlayer(state);
+  assert.deepEqual(
+    player.board.map((minion) => minion.instanceId),
+    [
+      "reborn-left-anchor",
+      player.board[1].instanceId,
+      "reborn-right-anchor",
+    ],
+  );
+  const reborn = player.board[1];
+  assert.equal(reborn.definitionId, "BG25_001");
+  assert.notEqual(reborn.instanceId, discovered.instanceId);
+  assert.equal(reborn.health, 1);
+  assert.equal(reborn.reborn, false);
+  assert.equal(reborn.poolCopies, 0);
+  assert.equal(reborn.destroyAfterPlayThroughRound, undefined);
+  assert.equal(state.pool.BG25_001, 1);
+});
+
+test("Beetle Blessing summons two 2/2 Taunt Beetles in the next combat", () => {
+  let state = createGameWithTribes(["beast"], 0x7460);
+  const player = humanPlayer(state);
+  const template = player.shop[0];
+  assert.ok(template);
+  const opponent = keepOnlyOneOpponent(state, [
+    definitionMinion(
+      template,
+      template.definitionId,
+      "beetle-opponent",
+      { attack: 0, health: 100 },
+    ),
+  ]);
+  player.hand = [
+    tavernSpell(
+      "tavern-spell-beetle-blessing",
+      "beetle-blessing",
+    ),
+  ];
+  state = gameReducer(state, {
+    type: "CAST_TAVERN_SPELL",
+    cardInstanceId: "beetle-blessing",
+  });
+  assert.equal(humanPlayer(state).nextCombatBeetles, 2);
+
+  state = gameReducer(state, { type: "END_TURN" });
+  const battle = state.lastRoundBattles.find(
+    (candidate) =>
+      candidate.playerAId === player.id ||
+      candidate.playerBId === player.id,
+  );
+  assert.ok(battle);
+  assert.ok(
+    [battle.playerAId, battle.playerBId].includes(opponent.id),
+  );
+  const beetleSummons = battle.events.filter(
+    (event) =>
+      event.type === "summon" &&
+      event.minion?.definitionId === "live-beetle-token",
+  );
+  assert.equal(beetleSummons.length, 2);
+  assert.ok(
+    beetleSummons.every(
+      (event) =>
+        event.minion?.attack === 2 &&
+        event.minion.health === 2 &&
+        event.minion.taunt,
+    ),
+  );
+  assert.equal(humanPlayer(state).nextCombatBeetles, 0);
+});
+
+test("targeted Spellcraft stacks temporary stats and keywords, grows Deep Blue, then expires", () => {
+  let state = createGame(0x7470);
+  let player = humanPlayer(state);
+  player.tavernTier = 4;
+  const template = player.shop[0];
+  assert.ok(template);
+  const target = definitionMinion(
+    template,
+    "BG31_815",
+    "spellcraft-target",
+    {
+      attack: 5,
+      health: 7,
+      taunt: false,
+      divineShield: false,
+    },
+  );
+  player.board = [target];
+  const shopTarget = definitionMinion(
+    template,
+    template.definitionId,
+    "illegal-spellcraft-shop-target",
+  );
+  player.shop = [shopTarget];
+  player.hand = [
+    spellcraft("spellcraft-crab-rider", "crab-rider"),
+    spellcraft("spellcraft-anglers-lure", "anglers-lure"),
+    spellcraft("spellcraft-glowing-crown", "glowing-crown"),
+    spellcraft("spellcraft-sick-riffs", "sick-riffs"),
+    spellcraft("spellcraft-deep-blue-blues", "deep-blue-one"),
+    spellcraft("spellcraft-deep-blue-blues", "deep-blue-two"),
+    spellcraft("spellcraft-rime-or-reason", "unused-spellcraft"),
+  ];
+
+  assert.deepEqual(
+    getLegalSpellcraftTargetIds(
+      state,
+      player.id,
+      player.hand[0] as SpellcraftSpellInstance,
+    ),
+    [target.instanceId],
+  );
+  state = gameReducer(state, {
+    type: "CAST_SPELLCRAFT",
+    cardInstanceId: "crab-rider",
+    targetInstanceId: shopTarget.instanceId,
+  });
+  assert.ok(
+    humanPlayer(state).hand.some(
+      (card) => card.instanceId === "crab-rider",
+    ),
+  );
+
+  for (const [cardInstanceId, targetInstanceId] of [
+    ["crab-rider", target.instanceId],
+    ["anglers-lure", target.instanceId],
+    ["glowing-crown", target.instanceId],
+    ["sick-riffs", target.instanceId],
+    ["deep-blue-one", target.instanceId],
+    ["deep-blue-two", target.instanceId],
+  ] as const) {
+    state = gameReducer(state, {
+      type: "CAST_SPELLCRAFT",
+      cardInstanceId,
+      targetInstanceId,
+    });
+  }
+  player = humanPlayer(state);
+  const temporarilyBuffed = player.board[0];
+  assert.deepEqual(
+    [temporarilyBuffed.attack, temporarilyBuffed.health],
+    [16, 22],
+  );
+  assert.deepEqual(
+    [
+      temporarilyBuffed.temporaryAttack,
+      temporarilyBuffed.temporaryHealth,
+      temporarilyBuffed.temporaryTaunt,
+      temporarilyBuffed.temporaryDivineShield,
+      temporarilyBuffed.temporaryCrabDeathrattles,
+    ],
+    [11, 15, true, true, 1],
+  );
+  assert.equal(temporarilyBuffed.taunt, true);
+  assert.equal(temporarilyBuffed.divineShield, true);
+  assert.equal(player.deepBlueBonus, 2);
+
+  state = gameReducer(state, { type: "END_TURN" });
+  assert.ok(
+    humanPlayer(state).hand.every(
+      (card) => card.kind !== "spellcraft",
+    ),
+    "unused Spellcraft must disappear at the end of Recruit",
+  );
+  state = gameReducer(state, { type: "CONTINUE" });
+  player = humanPlayer(state);
+  const cleared = player.board[0];
+  assert.deepEqual([cleared.attack, cleared.health], [5, 7]);
+  assert.deepEqual(
+    [
+      cleared.temporaryAttack,
+      cleared.temporaryHealth,
+      cleared.temporaryTaunt,
+      cleared.temporaryDivineShield,
+      cleared.temporaryCrabDeathrattles,
+    ],
+    [0, 0, false, false, 0],
+  );
+  assert.equal(cleared.taunt, false);
+  assert.equal(cleared.divineShield, false);
+  assert.equal(player.deepBlueBonus, 2);
+  assert.equal(player.elementalsPlayedThisTurn, 0);
+});
+
+test("eliminated players clear every temporary Spellcraft effect before becoming ghosts", () => {
+  let state = createGame(0x7471);
+  const template = humanPlayer(state).shop[0];
+  assert.ok(template);
+  const ghost = state.players.find((candidate) => !candidate.isHuman);
+  assert.ok(ghost);
+  ghost.alive = false;
+  ghost.health = 0;
+  ghost.eliminatedRound = state.round;
+  ghost.hand = [];
+  ghost.shop = [];
+  ghost.spellShop = null;
+  ghost.board = [
+    definitionMinion(
+      template,
+      "BG31_815",
+      "temporary-ghost-minion",
+      {
+        attack: 10,
+        health: 11,
+        taunt: true,
+        divineShield: true,
+        temporaryAttack: 7,
+        temporaryHealth: 9,
+        temporaryTaunt: true,
+        temporaryDivineShield: true,
+        temporaryCrabDeathrattles: 2,
+      },
+    ),
+  ];
+  state.phase = "combat";
+
+  state = gameReducer(state, { type: "CONTINUE" });
+  const cleanedGhost = state.players.find(
+    (candidate) => candidate.id === ghost.id,
+  );
+  assert.ok(cleanedGhost);
+  assert.deepEqual(
+    [
+      cleanedGhost.board[0].attack,
+      cleanedGhost.board[0].health,
+      cleanedGhost.board[0].taunt,
+      cleanedGhost.board[0].divineShield,
+      cleanedGhost.board[0].temporaryAttack,
+      cleanedGhost.board[0].temporaryHealth,
+      cleanedGhost.board[0].temporaryTaunt,
+      cleanedGhost.board[0].temporaryDivineShield,
+      cleanedGhost.board[0].temporaryCrabDeathrattles,
+    ],
+    [3, 2, false, false, 0, 0, false, false, 0],
+  );
+
+  for (const player of state.players) {
+    if (!player.alive) {
+      continue;
+    }
+    player.gold = 0;
+    player.hand = [];
+    player.shop = [];
+    player.spellShop = null;
+  }
+  state = gameReducer(state, { type: "END_TURN" });
+  const ghostBattle = state.lastRoundBattles.find(
+    (battle) =>
+      battle.isGhost && battle.playerBId === cleanedGhost.id,
+  );
+  assert.ok(ghostBattle);
+  const ghostMinion = ghostBattle.initialBoards[cleanedGhost.id][0];
+  assert.deepEqual(
+    [
+      ghostMinion.attack,
+      ghostMinion.health,
+      ghostMinion.taunt,
+      ghostMinion.divineShield,
+      ghostMinion.temporaryCrabDeathrattles,
+    ],
+    [3, 2, false, false, 0],
+  );
+});
+
+test("targetless Spellcraft resolves choices, draws from the pool, and empowers Tavern Spells", () => {
+  let state = createGameWithTribes(["naga"], 0x7480);
+  let player = humanPlayer(state);
+  const template = player.shop[0];
+  assert.ok(template);
+  const target = definitionMinion(
+    template,
+    template.definitionId,
+    "meditation-target",
+    { attack: 5, health: 7 },
+  );
+  const other = definitionMinion(
+    template,
+    template.definitionId,
+    "eruption-other",
+    { attack: 2, health: 3 },
+  );
+  player.board = [target, other];
+  player.shop = [];
+  for (const definitionId of Object.keys(state.pool)) {
+    state.pool[definitionId] = 0;
+  }
+  state.pool.BG27_004 = 1;
+  player.hand = [
+    spellcraft(
+      "spellcraft-escape-eruption",
+      "escape-eruption",
+    ),
+    spellcraft(
+      "spellcraft-evolving-strategy",
+      "evolving-strategy",
+    ),
+    spellcraft("spellcraft-meditation", "meditation"),
+    spellcraft("spellcraft-rime-or-reason", "rime-or-reason"),
+    tavernSpell("tavern-spell-tavern-dish-banana", "meditated-banana"),
+  ];
+
+  state = gameReducer(state, {
+    type: "CAST_SPELLCRAFT",
+    cardInstanceId: "escape-eruption",
+  });
+  assert.equal(state.pendingInteraction?.kind, "spellcraftChoice");
+  const choiceInteraction = state.pendingInteraction;
+  assert.ok(choiceInteraction?.kind === "spellcraftChoice");
+  const unresolved = gameReducer(state, {
+    type: "RESOLVE_INTERACTION",
+    interactionId: choiceInteraction.interactionId,
+    optionInstanceId: "not-a-choice",
+  });
+  assert.equal(unresolved, state);
+  state = gameReducer(state, {
+    type: "RESOLVE_INTERACTION",
+    interactionId: choiceInteraction.interactionId,
+    optionInstanceId: "escapeEruptionAttack",
+  });
+  assert.deepEqual(
+    humanPlayer(state).board.map((minion) => minion.attack),
+    [9, 6],
+  );
+
+  state = gameReducer(state, {
+    type: "CAST_SPELLCRAFT",
+    cardInstanceId: "evolving-strategy",
+  });
+  player = humanPlayer(state);
+  const drawnNaga = player.hand.find(
+    (card): card is BoardMinionInstance =>
+      card.kind === "minion" && card.definitionId === "BG27_004",
+  );
+  assert.ok(drawnNaga);
+  assert.equal(drawnNaga.poolCopies, 1);
+  assert.equal(state.pool.BG27_004, 0);
+
+  state = gameReducer(state, {
+    type: "CAST_SPELLCRAFT",
+    cardInstanceId: "meditation",
+  });
+  state = gameReducer(state, {
+    type: "CAST_TAVERN_SPELL",
+    cardInstanceId: "meditated-banana",
+    targetInstanceId: target.instanceId,
+  });
+  player = humanPlayer(state);
+  const meditated = player.board.find(
+    (minion) => minion.instanceId === target.instanceId,
+  );
+  assert.ok(meditated);
+  assert.deepEqual([meditated.attack, meditated.health], [12, 10]);
+  assert.equal(player.tavernSpellAttackBonus, 1);
+  assert.equal(player.tavernSpellHealthBonus, 1);
+  assert.equal(player.tavernSpellsCastThisTurn, 1);
+
+  state = gameReducer(state, {
+    type: "CAST_SPELLCRAFT",
+    cardInstanceId: "rime-or-reason",
+  });
+  player = humanPlayer(state);
+  const generatedSpell = player.hand.find(
+    (card): card is TavernSpellInstance =>
+      card.kind === "tavernSpell",
+  );
+  assert.ok(generatedSpell);
+  assert.ok(
+    [
+      "fortify",
+      "pointyArrow",
+      "tavernDishBanana",
+      "themApples",
+      "mightOfStormwind",
+      "healthyBounty",
+      "hostileBounty",
+      "selfishBounty",
+      "shinyRing",
+      "staffOfEnrichment",
+      "trickyTrousers",
+      "stackedAvalanche",
+      "backToBack",
+      "deepwaterClan",
+      "defendersRites",
+      "misplacedTeaSet",
+      "naturalBlessing",
+      "shiftingTide",
+      "blazingInferno",
+      "arcaneAbsorption",
+      "queensCommand",
+      "sanctify",
+      "waveOfGold",
+      "azeriteEmpowerment",
+      "perfectVision",
+    ].includes(
+      getTavernSpellDefinition(generatedSpell.definitionId).effect,
+    ),
+  );
+});
+
+test("Crab Rider's temporary Deathrattle summons a 3/2 Crab in combat", () => {
+  let state = createGame(0x7490);
+  const player = humanPlayer(state);
+  const template = player.shop[0];
+  assert.ok(template);
+  const source = definitionMinion(
+    template,
+    "BG31_815",
+    "crab-rider-source",
+    { attack: 1, health: 1 },
+  );
+  player.board = [source];
+  player.hand = [
+    spellcraft("spellcraft-crab-rider", "combat-crab-rider"),
+  ];
+  keepOnlyOneOpponent(state, [
+    definitionMinion(
+      template,
+      template.definitionId,
+      "crab-rider-opponent",
+      { attack: 10, health: 10 },
+    ),
+  ]);
+  state = gameReducer(state, {
+    type: "CAST_SPELLCRAFT",
+    cardInstanceId: "combat-crab-rider",
+    targetInstanceId: source.instanceId,
+  });
+  state = gameReducer(state, { type: "END_TURN" });
+  const battle = state.lastRoundBattles.find(
+    (candidate) =>
+      candidate.playerAId === player.id ||
+      candidate.playerBId === player.id,
+  );
+  assert.ok(battle);
+  const crabSummon = battle.events.find(
+    (event) =>
+      event.type === "summon" &&
+      event.minion?.definitionId === "live-crab-token",
+  );
+  assert.ok(crabSummon);
+  assert.deepEqual(
+    [crabSummon.minion?.attack, crabSummon.minion?.health],
+    [3, 2],
+  );
+});
+
 test("AI buys and casts useful Tavern Spells through the normal recruit path", () => {
   const state = createGame(0x71d0);
   const template = humanPlayer(state).shop[0];
@@ -1859,7 +3222,7 @@ test("AI buys and casts useful Tavern Spells through the normal recruit path", (
   assert.equal(recruitedAi.tavernSpellsCastThisTurn, 1);
 });
 
-test("schema 7 saves migrate every minion zone and pending discover to schema 8", () => {
+test("schema 7 saves migrate every minion zone and pending discover to schema 9", () => {
   let current = createGame(0x71df);
   const player = humanPlayer(current);
   player.gold = 7;
@@ -1890,17 +3253,30 @@ test("schema 7 saves migrate every minion zone and pending discover to schema 8"
     delete record.tavernBloodGemBarrageAttack;
     delete record.tavernBloodGemBarrageHealth;
   }
-  removeSchema8MinionFields(legacy);
+  removePostSchema7MinionFields(legacy);
 
   const migrated = migrateSchema7GameState(legacy);
-  assertMigratedSchema8(migrated);
+  assertMigratedSchema9(migrated);
   assert.equal(migrated.pendingInteraction?.kind, "discover");
-  assertSchema8MinionFields(migrated);
 });
 
-test("schema 6 saves migrate to schema 8 and survive a JSON round-trip", () => {
+test("schema 8 saves initialize Tier 4 and Spellcraft state in schema 9", () => {
+  const migrated = migrateSchema8GameState(
+    legacySchema8State(0x71e3),
+  );
+  assertMigratedSchema9(migrated);
+  assert.equal(
+    migrateSchema8GameState({
+      version: 8,
+      contentVersion: "wrong-content-version",
+    }),
+    null,
+  );
+});
+
+test("schema 6 saves migrate to schema 9 and survive a JSON round-trip", () => {
   const migrated = migrateSchema6GameState(legacyState(6, 0x71e0));
-  assertMigratedSchema8(migrated);
+  assertMigratedSchema9(migrated);
   assert.equal(humanPlayer(migrated).bloodGemAttack, 1);
   assert.equal(humanPlayer(migrated).bloodGemHealth, 1);
 });
@@ -1929,9 +3305,9 @@ test("schema 6 migration does not reserve Tavern Spells for eliminated players",
   }
 });
 
-test("schema 5 saves migrate through schema 6 to schema 8", () => {
+test("schema 5 saves migrate through schema 6 to schema 9", () => {
   const migrated = migrateSchema5GameState(legacyState(5, 0x71e1));
-  assertMigratedSchema8(migrated);
+  assertMigratedSchema9(migrated);
   assert.equal(humanPlayer(migrated).bloodGemAttack, 1);
   assert.equal(humanPlayer(migrated).bloodGemHealth, 1);
   assert.equal(migrateSchema5GameState({ version: 5 }), null);

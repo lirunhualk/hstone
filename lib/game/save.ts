@@ -20,6 +20,8 @@ export const LEGACY_SCHEMA_6_CONTENT_VERSION =
   "battlegrounds-36.0.3-247416-v10";
 export const LEGACY_SCHEMA_7_CONTENT_VERSION =
   "battlegrounds-36.0.3-247416-v11";
+export const LEGACY_SCHEMA_8_CONTENT_VERSION =
+  "battlegrounds-36.0.3-247416-v12";
 
 const SPELL_POOL_COPIES_BY_TIER = [0, 5, 7, 9, 11, 7, 5] as const;
 
@@ -82,11 +84,37 @@ function refreshSchema8Minions(value: unknown): void {
       typeof value.bloodGemHealth === "number"
         ? value.bloodGemHealth
         : 0;
+    value.temporaryAttack =
+      typeof value.temporaryAttack === "number"
+        ? value.temporaryAttack
+        : 0;
+    value.temporaryHealth =
+      typeof value.temporaryHealth === "number"
+        ? value.temporaryHealth
+        : 0;
+    value.temporaryTaunt =
+      typeof value.temporaryTaunt === "boolean"
+        ? value.temporaryTaunt
+        : false;
+    value.temporaryDivineShield =
+      typeof value.temporaryDivineShield === "boolean"
+        ? value.temporaryDivineShield
+        : false;
+    value.temporaryCrabDeathrattles =
+      typeof value.temporaryCrabDeathrattles === "number"
+        ? value.temporaryCrabDeathrattles
+        : 0;
     if (
       value.playableFromRound !== undefined &&
       typeof value.playableFromRound !== "number"
     ) {
       delete value.playableFromRound;
+    }
+    if (
+      value.destroyAfterPlayThroughRound !== undefined &&
+      typeof value.destroyAfterPlayThroughRound !== "number"
+    ) {
+      delete value.destroyAfterPlayThroughRound;
     }
     if (
       value.kind === "minion" &&
@@ -247,7 +275,7 @@ function refreshMigratedSpell(
   value.spellFamily = "tavern";
 }
 
-export function migrateSchema7GameState(value: unknown): unknown {
+function migrateSchema7To8(value: unknown): unknown {
   if (
     !isRecord(value) ||
     value.version !== 7 ||
@@ -354,13 +382,96 @@ export function migrateSchema7GameState(value: unknown): unknown {
     }
 
     migrated.version = 8;
-    migrated.contentVersion = CURRENT_ROSTER_VERSION;
+    migrated.contentVersion = LEGACY_SCHEMA_8_CONTENT_VERSION;
     migrated.nextInstanceId = nextInstanceId;
     migrated.spellPool = spellPool;
     return migrated;
   } catch {
     return null;
   }
+}
+
+export function migrateSchema8GameState(value: unknown): unknown {
+  if (
+    !isRecord(value) ||
+    value.version !== 8 ||
+    value.contentVersion !== LEGACY_SCHEMA_8_CONTENT_VERSION ||
+    !Array.isArray(value.players) ||
+    !Array.isArray(value.activeTribes) ||
+    !value.activeTribes.every((tribe) => typeof tribe === "string")
+  ) {
+    return null;
+  }
+  try {
+    const migrated: unknown = JSON.parse(JSON.stringify(value));
+    if (
+      !isRecord(migrated) ||
+      !Array.isArray(migrated.players) ||
+      !Array.isArray(migrated.activeTribes)
+    ) {
+      return null;
+    }
+    refreshSchema8Minions(migrated);
+    const activeTribes = migrated.activeTribes as Tribe[];
+    const spellPool: Record<string, number> = {};
+    for (const definition of TAVERN_SPELL_DEFINITIONS) {
+      spellPool[definition.id] = tavernSpellIsAvailable(
+        definition,
+        activeTribes,
+      )
+        ? SPELL_POOL_COPIES_BY_TIER[definition.tier]
+        : 0;
+    }
+
+    for (const player of migrated.players) {
+      if (!isRecord(player)) {
+        return null;
+      }
+      player.tavernSpellAttackBonus = 0;
+      player.tavernSpellHealthBonus = 0;
+      player.tavernTypeBuffs = [];
+      player.rideTheWindBuffs = [];
+      player.elementalsPlayedThisTurn = 0;
+      player.nextCombatBeetles = 0;
+      player.ballerAttackBonus = 1;
+      player.ballerHealthBonus = 1;
+      player.deepBlueBonus = 0;
+
+      if (!isRecord(player.spellShop)) {
+        player.spellShop = null;
+        continue;
+      }
+      try {
+        const definition = getTavernSpellDefinition(
+          String(player.spellShop.definitionId),
+        );
+        if (
+          player.alive === true &&
+          tavernSpellIsAvailable(definition, activeTribes) &&
+          spellPool[definition.id] > 0
+        ) {
+          refreshMigratedSpell(player.spellShop, definition);
+          spellPool[definition.id] -= 1;
+        } else {
+          player.spellShop = null;
+        }
+      } catch {
+        player.spellShop = null;
+      }
+    }
+
+    migrated.version = 9;
+    migrated.contentVersion = CURRENT_ROSTER_VERSION;
+    migrated.spellPool = spellPool;
+    return migrated;
+  } catch {
+    return null;
+  }
+}
+
+export function migrateSchema7GameState(value: unknown): unknown {
+  const schema8 = migrateSchema7To8(value);
+  return schema8 ? migrateSchema8GameState(schema8) : null;
 }
 
 export function migrateSchema6GameState(value: unknown): unknown {
@@ -370,7 +481,7 @@ export function migrateSchema6GameState(value: unknown): unknown {
 
 /**
  * Kept as a public compatibility entry point for existing tests and older
- * installs. It now performs the complete v5 -> v6 -> v7 -> v8 chain.
+ * installs. It now performs the complete v5 -> v6 -> v7 -> v8 -> v9 chain.
  */
 export function migrateSchema5GameState(value: unknown): unknown {
   const schema6 = migrateSchema5To6(value);
@@ -389,6 +500,9 @@ export function migrateLegacyGameState(value: unknown): unknown {
   }
   if (value.version === 7) {
     return migrateSchema7GameState(value);
+  }
+  if (value.version === 8) {
+    return migrateSchema8GameState(value);
   }
   return null;
 }

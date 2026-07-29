@@ -60,6 +60,13 @@ function definitionMinion(
     ...overrides,
     bloodGemAttack: overrides.bloodGemAttack ?? 0,
     bloodGemHealth: overrides.bloodGemHealth ?? 0,
+    temporaryAttack: overrides.temporaryAttack ?? 0,
+    temporaryHealth: overrides.temporaryHealth ?? 0,
+    temporaryTaunt: overrides.temporaryTaunt ?? false,
+    temporaryDivineShield:
+      overrides.temporaryDivineShield ?? false,
+    temporaryCrabDeathrattles:
+      overrides.temporaryCrabDeathrattles ?? 0,
   };
 }
 

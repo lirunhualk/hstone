@@ -147,6 +147,12 @@ export interface ImproveBloodGemsEffect {
   health: number;
 }
 
+export interface ImproveBallersEffect {
+  kind: "improveBallers";
+  attack: number;
+  health: number;
+}
+
 export type MinionEffect =
   | BuffEffect
   | SummonEffect
@@ -160,7 +166,8 @@ export type MinionEffect =
   | GetRandomMinionEffect
   | DamageAllMinionsEffect
   | GainBloodGemsEffect
-  | ImproveBloodGemsEffect;
+  | ImproveBloodGemsEffect
+  | ImproveBallersEffect;
 
 export interface TargetedBuffBattlecry {
   kind: "targetedBuff";
@@ -315,8 +322,17 @@ export interface MinionInstance {
   /** Total permanent stats on this minion that came specifically from Blood Gems. */
   bloodGemAttack: number;
   bloodGemHealth: number;
+  /** Spellcraft enchantments remain for combat, then expire next Recruit phase. */
+  temporaryAttack: number;
+  temporaryHealth: number;
+  temporaryTaunt: boolean;
+  temporaryDivineShield: boolean;
+  /** Temporary "Deathrattle: summon a 3/2 Crab" effects from Crab Rider. */
+  temporaryCrabDeathrattles: number;
   /** A hand minion cannot be played before this Recruit round. */
   playableFromRound?: number;
+  /** Stir the Graveyard destroys this minion if it is played through this round. */
+  destroyAfterPlayThroughRound?: number;
   /**
    * True only for a Golden minion produced by combining three owned copies.
    * Combat/token Golden minions never grant a Triple Reward.
@@ -390,6 +406,41 @@ export interface ConsolationCoinSpellInstance {
   spellFamily: "coin";
 }
 
+export type SpellcraftEffect =
+  | "crabRider"
+  | "anglersLure"
+  | "glowingCrown"
+  | "sickRiffs"
+  | "deepBlueBlues"
+  | "escapeEruption"
+  | "evolvingStrategy"
+  | "meditation"
+  | "rimeOrReason";
+
+export type SpellcraftTarget = "none" | "friendly";
+
+export interface SpellcraftDefinition {
+  id: string;
+  cardId: string;
+  name: string;
+  description: string;
+  /** Tavern Tier of the active Naga that normally generates this spell. */
+  sourceTier: TavernTier;
+  effect: SpellcraftEffect;
+  target: SpellcraftTarget;
+}
+
+export interface SpellcraftSpellInstance {
+  kind: "spellcraft";
+  instanceId: string;
+  definitionId: string;
+  cardId: string;
+  name: string;
+  description: string;
+  spellFamily: "spellcraft";
+  target: SpellcraftTarget;
+}
+
 export type TavernSpellEffect =
   | "discoverTierOne"
   | "stealRandomShopMinion"
@@ -421,12 +472,22 @@ export type TavernSpellEffect =
   | "timeManagement"
   | "stackedAvalanche"
   | "bloodGemBarrage"
+  | "cloneHorn"
+  | "beetleBlessing"
+  | "slimySeafood"
+  | "gemConfiscation"
   | "backToBack"
   | "deepwaterClan"
   | "defendersRites"
   | "misplacedTeaSet"
   | "naturalBlessing"
   | "shiftingTide"
+  | "temperatureShift"
+  | "rideTheWind"
+  | "stirTheGraveyard"
+  | "blazingInferno"
+  | "arcaneAbsorption"
+  | "eonarsFavor"
   | "queensCommand"
   | "sanctify"
   | "waveOfGold"
@@ -468,7 +529,17 @@ export type HandCardInstance =
   | TripleRewardSpellInstance
   | BloodGemSpellInstance
   | ConsolationCoinSpellInstance
+  | SpellcraftSpellInstance
   | TavernSpellInstance;
+
+export interface TavernRefreshBuff {
+  attack: number;
+  health: number;
+}
+
+export interface TavernTypeBuff extends TavernRefreshBuff {
+  tribes: Tribe[];
+}
 
 export interface PlayerState {
   id: PlayerId;
@@ -502,6 +573,15 @@ export interface PlayerState {
   tavernBloodGemBarrageAttack: number;
   tavernBloodGemBarrageHealth: number;
   backToBackBonus: number;
+  tavernSpellAttackBonus: number;
+  tavernSpellHealthBonus: number;
+  tavernTypeBuffs: TavernTypeBuff[];
+  rideTheWindBuffs: TavernRefreshBuff[];
+  elementalsPlayedThisTurn: number;
+  nextCombatBeetles: number;
+  ballerAttackBonus: number;
+  ballerHealthBonus: number;
+  deepBlueBonus: number;
   /** Permanent per-player Blood Gem values; new Gems read these on cast. */
   bloodGemAttack: number;
   bloodGemHealth: number;
@@ -543,7 +623,7 @@ export interface BattleEvent {
   healthDelta?: number;
   boardIndex?: number;
   minion?: MinionInstance;
-  summonReason?: "reborn" | "rallyFromHand";
+  summonReason?: "reborn" | "rallyFromHand" | "beetle" | "spellcraft";
   removedKeywords?: RallyRemovedKeyword[];
   cardGainResult?: CardGainResult;
 }
@@ -577,7 +657,11 @@ export interface DiscoverFilter {
 }
 
 export type DiscoverDestination =
-  | { kind: "hand"; playableFromRound?: number }
+  | {
+      kind: "hand";
+      playableFromRound?: number;
+      destroyAfterPlayThroughRound?: number;
+    }
   | { kind: "magnetize"; targetInstanceId: string };
 
 export interface PendingDiscoverInteraction extends PendingInteractionBase {
@@ -599,11 +683,23 @@ export interface PendingTavernSpellChoiceInteraction
   optionIds: TavernSpellChoiceId[];
 }
 
+export type SpellcraftChoiceId =
+  | "escapeEruptionAttack"
+  | "escapeEruptionHealth";
+
+export interface PendingSpellcraftChoiceInteraction
+  extends PendingInteractionBase {
+  kind: "spellcraftChoice";
+  definitionId: string;
+  optionIds: SpellcraftChoiceId[];
+}
+
 export type PendingInteraction =
   | PendingTargetInteraction
   | PendingMagnetizeTargetInteraction
   | PendingDiscoverInteraction
-  | PendingTavernSpellChoiceInteraction;
+  | PendingTavernSpellChoiceInteraction
+  | PendingSpellcraftChoiceInteraction;
 
 export type BattleResult = "win" | "loss" | "tie";
 
@@ -628,7 +724,7 @@ export interface BattleSummary {
 }
 
 export interface GameState {
-  version: 8;
+  version: 9;
   /** Invalidates local saves when the roster or its mechanics change. */
   contentVersion: string;
   seed: number;
@@ -675,6 +771,11 @@ export type GameAction =
     }
   | {
       type: "CAST_TAVERN_SPELL";
+      cardInstanceId: string;
+      targetInstanceId?: string;
+    }
+  | {
+      type: "CAST_SPELLCRAFT";
       cardInstanceId: string;
       targetInstanceId?: string;
     }

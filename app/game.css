@@ -2264,6 +2264,31 @@
     transform 150ms ease;
 }
 
+.spellcraft-card {
+  --spell-accent: #61d9ff;
+  --spell-accent-soft: #c0f4ff;
+  border-color: rgb(92 214 255 / 88%);
+  background:
+    radial-gradient(circle at 50% 25%, rgb(80 225 255 / 30%), transparent 40%),
+    linear-gradient(180deg, rgb(24 78 132 / 55%), rgb(7 20 48 / 98%)),
+    var(--surface-1);
+  box-shadow:
+    0 9px 21px rgb(0 0 0 / 32%),
+    0 0 0 1px rgb(83 205 255 / 30%),
+    0 0 22px rgb(55 173 255 / 18%),
+    inset 0 1px 0 rgb(255 255 255 / 16%);
+}
+
+.spellcraft-card .tavern-spell-name {
+  border-color: rgb(111 224 255 / 45%);
+  background: rgb(10 45 84 / 90%);
+}
+
+.spellcraft-card .tavern-spell-hint {
+  color: #06243b;
+  background: linear-gradient(135deg, #d7fbff, #76dcff 58%, #a7a4ff);
+}
+
 .tavern-spell-card::before {
   position: absolute;
   z-index: 2;

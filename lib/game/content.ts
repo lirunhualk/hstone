@@ -3,7 +3,7 @@ import liveRosterSnapshot from "./generated/battlegrounds-36.0.3-247416.zhCN.jso
 };
 import type { MinionDefinition, Tribe } from "./types.ts";
 
-export const CURRENT_ROSTER_VERSION = "battlegrounds-36.0.3-247416-v12";
+export const CURRENT_ROSTER_VERSION = "battlegrounds-36.0.3-247416-v13";
 /** Compatibility alias for existing save and engine imports. */
 export const CLASSIC_ROSTER_VERSION = CURRENT_ROSTER_VERSION;
 
@@ -802,7 +802,21 @@ export const LIVE_TOKEN_DEFINITIONS: readonly MinionDefinition[] =
       effectSupport: "complete",
       attack: 2,
       health: 2,
-      description: "由嗡鸣害虫召唤。",
+      description: "由甲虫恩泽或野兽效果召唤。",
+      collectible: false,
+    },
+    {
+      id: "live-crab-token",
+      cardId: "BG27_004t2",
+      name: "螃蟹",
+      tier: 1,
+      tribe: "beast",
+      tribes: ["beast"],
+      associatedTribes: [],
+      effectSupport: "complete",
+      attack: 3,
+      health: 2,
+      description: "由螃蟹坐骑的临时亡语召唤。",
       collectible: false,
     },
     {
@@ -1046,6 +1060,24 @@ const LIVE_RULE_OVERRIDES: Readonly<
       },
     ],
   },
+  BG31_816: {
+    afterSold: [
+      {
+        kind: "improveBallers",
+        attack: 1,
+        health: 0,
+      },
+    ],
+  },
+  BG31_818: {
+    afterSold: [
+      {
+        kind: "improveBallers",
+        attack: 0,
+        health: 1,
+      },
+    ],
+  },
   BG34_731: {
     deathrattle: [
       {
@@ -1181,6 +1213,8 @@ const FULLY_SUPPORTED_LIVE_CARD_IDS = new Set([
   "BG30_125",
   "BG31_175",
   "BG31_803",
+  "BG31_816",
+  "BG31_818",
   "BG31_859",
   "BG32_235",
   "BG32_172",

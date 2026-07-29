@@ -59,6 +59,13 @@ function definitionMinion(
     ...overrides,
     bloodGemAttack: overrides.bloodGemAttack ?? 0,
     bloodGemHealth: overrides.bloodGemHealth ?? 0,
+    temporaryAttack: overrides.temporaryAttack ?? 0,
+    temporaryHealth: overrides.temporaryHealth ?? 0,
+    temporaryTaunt: overrides.temporaryTaunt ?? false,
+    temporaryDivineShield:
+      overrides.temporaryDivineShield ?? false,
+    temporaryCrabDeathrattles:
+      overrides.temporaryCrabDeathrattles ?? 0,
   };
 }
 
@@ -218,6 +225,41 @@ test("transfers current stats and keywords without changing the host identity", 
   assert.equal(host.attachments[0].healthGranted, 7);
   assert.equal(host.attachments[0].description, annoyOModule.description);
   assert.equal(host.attachments[0].effectSupport, "complete");
+});
+
+test("Magnetic attachment stats record only the source's permanent contribution", () => {
+  const state = createGame(4013);
+  const human = humanPlayer(state);
+  const target = definitionMinion("BG29_611", "temporary-stat-host", {
+    attack: 7,
+    health: 8,
+  });
+  const source = definitionMinion("BG26_146", "temporary-stat-source", {
+    attack: 11,
+    health: 13,
+    temporaryAttack: 4,
+    temporaryHealth: 5,
+  });
+  human.board = [target];
+  human.hand = [source];
+
+  const next = gameReducer(state, magneticAction(source, target));
+  const host = humanPlayer(next).board[0];
+  assert.deepEqual(
+    [host.attack, host.health],
+    [target.attack + source.attack, target.health + source.health],
+  );
+  assert.deepEqual(
+    [host.temporaryAttack, host.temporaryHealth],
+    [4, 5],
+  );
+  assert.deepEqual(
+    [
+      host.attachments[0].attackGranted,
+      host.attachments[0].healthGranted,
+    ],
+    [source.attack - source.temporaryAttack, source.health - source.temporaryHealth],
+  );
 });
 
 test("keeps nested attachment contributions additive and visible", () => {
@@ -2187,7 +2229,7 @@ test("Magnetic attachment trees survive a JSON save round-trip", () => {
   const next = gameReducer(state, magneticAction(source, target));
   const restored = JSON.parse(JSON.stringify(next)) as GameState;
   assert.deepEqual(restored, next);
-  assert.equal(restored.version, 8);
+  assert.equal(restored.version, 9);
   assert.equal(
     humanPlayer(restored).board[0].attachments[0].definitionId,
     source.definitionId,

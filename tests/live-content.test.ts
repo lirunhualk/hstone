@@ -65,7 +65,7 @@ function expectedPlainText(html: string): string {
 test("exports the pinned current roster version through the legacy alias", () => {
   assert.equal(
     CURRENT_ROSTER_VERSION,
-    "battlegrounds-36.0.3-247416-v12",
+    "battlegrounds-36.0.3-247416-v13",
   );
   assert.equal(CLASSIC_ROSTER_VERSION, CURRENT_ROSTER_VERSION);
 });
@@ -97,7 +97,7 @@ test("maps all 237 live Solo Tavern minions as the only collectible cards", () =
 test("keeps legacy rules and tokens addressable but out of the shared pool", () => {
   assert.equal(LEGACY_RULE_DEFINITIONS.length, 36);
   assert.equal(TOKEN_DEFINITIONS.length, 9);
-  assert.equal(LIVE_TOKEN_DEFINITIONS.length, 5);
+  assert.equal(LIVE_TOKEN_DEFINITIONS.length, 6);
   assert.ok(
     [
       ...LEGACY_RULE_DEFINITIONS,
@@ -444,6 +444,8 @@ test("marks every live card honestly as complete or partial", () => {
       "BG30_125",
       "BG31_175",
       "BG31_803",
+      "BG31_816",
+      "BG31_818",
       "BG31_859",
       "BG32_172",
       "BG32_235",
@@ -474,13 +476,13 @@ test("marks every live card honestly as complete or partial", () => {
     LIVE_MINION_DEFINITIONS.filter(
       (definition) => definition.effectSupport === "partial",
     ).length,
-    191,
+    189,
   );
   assert.equal(
     LIVE_MINION_DEFINITIONS.filter(
       (definition) => definition.effectSupport === "complete",
     ).length,
-    46,
+    48,
   );
   assert.deepEqual(getMinionDefinition("BG35_702").interactiveBattlecry, {
     kind: "targetedBuff",
