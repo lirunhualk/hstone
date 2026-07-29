@@ -26,6 +26,8 @@ export const LEGACY_SCHEMA_9_CONTENT_VERSION =
   "battlegrounds-36.0.3-247416-v13";
 export const LEGACY_SCHEMA_10_CONTENT_VERSION =
   "battlegrounds-36.0.3-247416-v14";
+export const LEGACY_SCHEMA_11_CONTENT_VERSION =
+  "battlegrounds-36.0.3-247416-v15";
 
 const SPELL_POOL_COPIES_BY_TIER = [0, 5, 7, 9, 11, 7, 5] as const;
 
@@ -669,6 +671,27 @@ export function migrateSchema10GameState(value: unknown): unknown {
   }
 }
 
+export function migrateSchema11GameState(value: unknown): unknown {
+  if (
+    !isRecord(value) ||
+    value.version !== 11 ||
+    value.contentVersion !== LEGACY_SCHEMA_11_CONTENT_VERSION ||
+    !Array.isArray(value.players)
+  ) {
+    return null;
+  }
+  try {
+    const migrated: unknown = JSON.parse(JSON.stringify(value));
+    if (!isRecord(migrated) || !refreshOwnedMinions(migrated)) {
+      return null;
+    }
+    migrated.contentVersion = CURRENT_ROSTER_VERSION;
+    return migrated;
+  } catch {
+    return null;
+  }
+}
+
 export function migrateSchema9GameState(value: unknown): unknown {
   const schema10 = migrateSchema9To10(value);
   return schema10 ? migrateSchema10GameState(schema10) : null;
@@ -720,5 +743,19 @@ export function migrateLegacyGameState(value: unknown): unknown {
   if (value.version === 10) {
     return migrateSchema10GameState(value);
   }
+  if (value.version === 11) {
+    return migrateSchema11GameState(value);
+  }
   return null;
+}
+
+export function normalizePersistedGameState(value: unknown): unknown {
+  if (
+    isRecord(value) &&
+    value.version === 11 &&
+    value.contentVersion === CURRENT_ROSTER_VERSION
+  ) {
+    return value;
+  }
+  return migrateLegacyGameState(value);
 }

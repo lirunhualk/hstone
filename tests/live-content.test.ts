@@ -65,7 +65,7 @@ function expectedPlainText(html: string): string {
 test("exports the pinned current roster version through the legacy alias", () => {
   assert.equal(
     CURRENT_ROSTER_VERSION,
-    "battlegrounds-36.0.3-247416-v15",
+    "battlegrounds-36.0.3-247416-v16",
   );
   assert.equal(CLASSIC_ROSTER_VERSION, CURRENT_ROSTER_VERSION);
 });
@@ -97,7 +97,7 @@ test("maps all 237 live Solo Tavern minions as the only collectible cards", () =
 test("keeps legacy rules and tokens addressable but out of the shared pool", () => {
   assert.equal(LEGACY_RULE_DEFINITIONS.length, 36);
   assert.equal(TOKEN_DEFINITIONS.length, 9);
-  assert.equal(LIVE_TOKEN_DEFINITIONS.length, 6);
+  assert.equal(LIVE_TOKEN_DEFINITIONS.length, 7);
   assert.ok(
     [
       ...LEGACY_RULE_DEFINITIONS,
@@ -425,12 +425,17 @@ test("marks every live card honestly as complete or partial", () => {
       "BG20_100",
       "BG20_203",
       "BG20_301",
+      "BG22_202",
+      "BG23_002",
       "BG25_001",
       "BG25_010",
+      "BG25_011",
+      "BG25_013",
       "BG25_016",
       "BG25_022",
       "BG25_354",
       "BG26_146",
+      "BG26_135",
       "BG26_147",
       "BG26_148",
       "BG26_159",
@@ -444,12 +449,14 @@ test("marks every live card honestly as complete or partial", () => {
       "BG30_125",
       "BG31_175",
       "BG31_803",
+      "BG31_815",
       "BG31_816",
       "BG31_818",
       "BG31_859",
       "BG32_172",
       "BG32_235",
       "BG33_156",
+      "BG33_140",
       "BG33_241",
       "BG33_888",
       "BG34_140",
@@ -466,6 +473,7 @@ test("marks every live card honestly as complete or partial", () => {
       "BG_DEEP_015",
       "BGS_004",
       "BGS_049",
+      "BGS_115",
       "BGS_012",
       "BGS_018",
       "BGS_071",
@@ -478,13 +486,13 @@ test("marks every live card honestly as complete or partial", () => {
     LIVE_MINION_DEFINITIONS.filter(
       (definition) => definition.effectSupport === "partial",
     ).length,
-    187,
+    179,
   );
   assert.equal(
     LIVE_MINION_DEFINITIONS.filter(
       (definition) => definition.effectSupport === "complete",
     ).length,
-    50,
+    58,
   );
   assert.deepEqual(getMinionDefinition("BG35_702").interactiveBattlecry, {
     kind: "targetedBuff",

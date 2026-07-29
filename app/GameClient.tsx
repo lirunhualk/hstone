@@ -62,11 +62,12 @@ import {
 } from "../lib/game/combat-presentation";
 import {
   createBoardDragPreview,
+  createLiftedCardDragPreview,
   nearestBoardSlotIndex,
 } from "../lib/game/drag-preview";
 import { interactionRequiresModalBackdrop } from "../lib/game/interaction-presentation";
 import { projectCombatBoard } from "../lib/game/playback";
-import { migrateLegacyGameState } from "../lib/game/save";
+import { normalizePersistedGameState } from "../lib/game/save";
 
 const SAVE_KEY = "hearthstone-battlegrounds-local.save.v11";
 const LEGACY_SAVE_KEYS = [
@@ -1890,6 +1891,23 @@ export default function GameClient() {
     setDragSession(next);
   }, []);
 
+  const liftedDragPreview = useMemo(() => {
+    if (!dragSession?.active) {
+      return null;
+    }
+    return createLiftedCardDragPreview({
+      clientX: dragSession.clientX,
+      clientY: dragSession.clientY,
+      offsetX: dragSession.offsetX,
+      offsetY: dragSession.offsetY,
+      sourceWidth: dragSession.width,
+      sourceHeight: dragSession.height,
+      viewportWidth: window.innerWidth,
+      viewportHeight: window.innerHeight,
+      pointerType: dragSession.pointerType,
+    });
+  }, [dragSession]);
+
   const clearBattlePlaybackTimer = useCallback(() => {
     if (battlePlaybackTimerRef.current === null) return;
     window.clearTimeout(battlePlaybackTimerRef.current);
@@ -1929,10 +1947,11 @@ export default function GameClient() {
         const raw = safeReadLocalStorage(SAVE_KEY);
         let restored = false;
         if (raw) {
-          const saved: unknown = JSON.parse(raw);
+          const saved = normalizePersistedGameState(JSON.parse(raw));
           if (isGameState(saved)) {
             setGame(saved);
             setStarted(true);
+            safeWriteLocalStorage(SAVE_KEY, JSON.stringify(saved));
             restored = true;
           } else {
             safeRemoveLocalStorage(SAVE_KEY);
@@ -1946,7 +1965,7 @@ export default function GameClient() {
             }
             if (legacyRaw) {
               try {
-                const migrated = migrateLegacyGameState(
+                const migrated = normalizePersistedGameState(
                   JSON.parse(legacyRaw) as unknown,
                 );
                 if (isGameState(migrated)) {
@@ -5466,7 +5485,7 @@ export default function GameClient() {
         </div>
       )}
 
-      {dragSession?.active && (
+      {dragSession?.active && liftedDragPreview && (
         <div
           className={`${
             dragSession.card.kind === "bloodGem"
@@ -5477,8 +5496,7 @@ export default function GameClient() {
                   ? "tavern-spell-card spellcraft-card"
               : "unit-card is-compact"
           } is-dragging drag-ghost${
-            dragSession.pointerType === "touch" ||
-            dragSession.pointerType === "pen"
+            liftedDragPreview.directTouch
               ? " is-direct-touch-drag"
               : ""
           }`}
@@ -5495,10 +5513,11 @@ export default function GameClient() {
                     : dragSession.card.kind === "spellcraft"
                       ? 222
                     : TRIBE_HUE.quilboar,
-              left: dragSession.clientX - dragSession.offsetX,
-              top: dragSession.clientY - dragSession.offsetY,
-              width: dragSession.width,
-              height: dragSession.height,
+              left: liftedDragPreview.left,
+              top: liftedDragPreview.top,
+              width: liftedDragPreview.width,
+              height: liftedDragPreview.height,
+              maxWidth: "none",
             } as CSSProperties
           }
         >

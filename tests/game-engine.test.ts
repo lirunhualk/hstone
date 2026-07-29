@@ -705,24 +705,24 @@ test("Venomous is consumed after the first minion it damages", () => {
           windfury: true,
           venomous: true,
         }),
-        fixtureMinion(template, "venomous-friendly-filler-1", {
+        definitionMinion(template, "BG35_801", "venomous-friendly-filler-1", {
           attack: 0,
           health: 1,
         }),
-        fixtureMinion(template, "venomous-friendly-filler-2", {
+        definitionMinion(template, "BG35_801", "venomous-friendly-filler-2", {
           attack: 0,
           health: 1,
         }),
       ];
     } else {
       player.board = [
-        fixtureMinion(template, `venomous-taunt-${player.id}`, {
+        definitionMinion(template, "BG35_801", `venomous-taunt-${player.id}`, {
           name: "烈毒首个目标",
           attack: 0,
           health: 50,
           taunt: true,
         }),
-        fixtureMinion(template, `venomous-survivor-${player.id}`, {
+        definitionMinion(template, "BG35_801", `venomous-survivor-${player.id}`, {
           name: "烈毒后续目标",
           attack: 100,
           health: 50,

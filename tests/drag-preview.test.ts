@@ -3,8 +3,102 @@ import test from "node:test";
 
 import {
   createBoardDragPreview,
+  createLiftedCardDragPreview,
   nearestBoardSlotIndex,
 } from "../lib/game/drag-preview.ts";
+
+test("compact hand cards lift to a readable size without changing aspect ratio", () => {
+  const preview = createLiftedCardDragPreview({
+    clientX: 500,
+    clientY: 400,
+    offsetX: 47,
+    offsetY: 66,
+    sourceWidth: 94,
+    sourceHeight: 132,
+    viewportWidth: 1280,
+    viewportHeight: 720,
+    pointerType: "mouse",
+  });
+
+  assert.equal(preview.width, 150);
+  assert.ok(preview.height > 200);
+  assert.ok(
+    Math.abs(preview.width / preview.height - 94 / 132) <
+      Number.EPSILON * 16,
+  );
+});
+
+test("mouse lifting preserves the relative grab point", () => {
+  const preview = createLiftedCardDragPreview({
+    clientX: 420,
+    clientY: 360,
+    offsetX: 23.5,
+    offsetY: 99,
+    sourceWidth: 94,
+    sourceHeight: 132,
+    viewportWidth: 1280,
+    viewportHeight: 720,
+    pointerType: "mouse",
+  });
+
+  assert.ok(
+    Math.abs((420 - preview.left) / preview.width - 0.25) <
+      Number.EPSILON * 16,
+  );
+  assert.ok(
+    Math.abs((360 - preview.top) / preview.height - 0.75) <
+      Number.EPSILON * 16,
+  );
+});
+
+test("touch and pen previews stay centered above the pointer", () => {
+  for (const pointerType of ["touch", "pen"]) {
+    const preview = createLiftedCardDragPreview({
+      clientX: 500,
+      clientY: 600,
+      offsetX: 10,
+      offsetY: 10,
+      sourceWidth: 94,
+      sourceHeight: 132,
+      viewportWidth: 1280,
+      viewportHeight: 720,
+      pointerType,
+    });
+
+    assert.equal(preview.directTouch, true);
+    assert.ok(
+      Math.abs(preview.left + preview.width / 2 - 500) <
+        Number.EPSILON * 16,
+    );
+    assert.ok(preview.top + preview.height <= 600 - 56);
+  }
+});
+
+test("lifted cards remain inside every viewport edge", () => {
+  for (const [clientX, clientY] of [
+    [0, 0],
+    [360, 0],
+    [0, 260],
+    [360, 260],
+  ] as const) {
+    const preview = createLiftedCardDragPreview({
+      clientX,
+      clientY,
+      offsetX: 47,
+      offsetY: 66,
+      sourceWidth: 94,
+      sourceHeight: 132,
+      viewportWidth: 360,
+      viewportHeight: 260,
+      pointerType: "touch",
+    });
+
+    assert.ok(preview.left >= 8);
+    assert.ok(preview.top >= 8);
+    assert.ok(preview.left + preview.width <= 352);
+    assert.ok(preview.top + preview.height <= 252);
+  }
+});
 
 test("hand drag reserves one slot and shifts every unit at or after the gap", () => {
   const preview = createBoardDragPreview({

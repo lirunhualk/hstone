@@ -15,6 +15,101 @@ export interface BoardDragPreview {
   slots: BoardPreviewSlot[];
 }
 
+export interface LiftedCardDragPreview {
+  left: number;
+  top: number;
+  width: number;
+  height: number;
+  directTouch: boolean;
+}
+
+function clamp(value: number, minimum: number, maximum: number): number {
+  return Math.min(Math.max(value, minimum), Math.max(minimum, maximum));
+}
+
+/**
+ * Converts the compact hand-card rectangle into a readable, Hearthstone-style
+ * lifted card. Mouse dragging preserves the relative grab point; direct touch
+ * keeps the whole card above the finger. The final rectangle is always
+ * clamped to the visible viewport.
+ */
+export function createLiftedCardDragPreview({
+  clientX,
+  clientY,
+  offsetX,
+  offsetY,
+  sourceWidth,
+  sourceHeight,
+  viewportWidth,
+  viewportHeight,
+  pointerType,
+}: {
+  clientX: number;
+  clientY: number;
+  offsetX: number;
+  offsetY: number;
+  sourceWidth: number;
+  sourceHeight: number;
+  viewportWidth: number;
+  viewportHeight: number;
+  pointerType: string;
+}): LiftedCardDragPreview {
+  const margin = 8;
+  const safeSourceWidth =
+    Number.isFinite(sourceWidth) && sourceWidth > 0 ? sourceWidth : 94;
+  const safeSourceHeight =
+    Number.isFinite(sourceHeight) && sourceHeight > 0
+      ? sourceHeight
+      : safeSourceWidth * 1.4;
+  const safeViewportWidth = Math.max(
+    margin * 2 + 1,
+    Number.isFinite(viewportWidth) ? viewportWidth : 1280,
+  );
+  const safeViewportHeight = Math.max(
+    margin * 2 + 1,
+    Number.isFinite(viewportHeight) ? viewportHeight : 720,
+  );
+  const aspectRatio = safeSourceWidth / safeSourceHeight;
+  const preferredWidth = clamp(safeSourceWidth, 150, 168);
+  const width = Math.max(
+    1,
+    Math.min(
+      preferredWidth,
+      safeViewportWidth - margin * 2,
+      (safeViewportHeight - margin * 2) * aspectRatio,
+    ),
+  );
+  const height = width / aspectRatio;
+  const directTouch = pointerType === "touch" || pointerType === "pen";
+
+  const horizontalAnchor = directTouch
+    ? 0.5
+    : clamp(offsetX / safeSourceWidth, 0, 1);
+  const verticalAnchor = directTouch
+    ? 1
+    : clamp(offsetY / safeSourceHeight, 0, 1);
+  const rawLeft = clientX - width * horizontalAnchor;
+  const rawTop = directTouch
+    ? clientY - height - 56
+    : clientY - height * verticalAnchor;
+
+  return {
+    left: clamp(
+      rawLeft,
+      margin,
+      safeViewportWidth - margin - width,
+    ),
+    top: clamp(
+      rawTop,
+      margin,
+      safeViewportHeight - margin - height,
+    ),
+    width,
+    height,
+    directTouch,
+  };
+}
+
 export function createBoardDragPreview({
   unitCount,
   boardLimit,

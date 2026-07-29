@@ -1334,6 +1334,57 @@ function applyRecruitEffects(
       }
     } else if (effect.kind === "gainGold") {
       player.gold += effect.amount * scale;
+    } else if (effect.kind === "gainNextTurnGold") {
+      player.pendingNextTurnGold += effect.amount * scale;
+    } else if (effect.kind === "gainTavernSpell") {
+      const gainCount =
+        effect.count *
+        (effect.goldenMode === "doubleCount" ? scale : 1);
+      const definition = getTavernSpellDefinition(
+        effect.definitionId,
+      );
+      for (
+        let count = 0;
+        count < gainCount && player.hand.length < MAX_HAND_SIZE;
+        count += 1
+      ) {
+        player.hand.push(createTavernSpell(state, definition));
+      }
+    } else if (effect.kind === "gainMinion") {
+      const gainCount =
+        effect.count *
+        (effect.goldenMode === "doubleCount" ? scale : 1);
+      for (let count = 0; count < gainCount; count += 1) {
+        addGeneratedMinionCopyToHand(
+          state,
+          player,
+          effect.definitionId,
+        );
+      }
+    } else if (effect.kind === "getRandomMinion") {
+      const gainCount =
+        effect.count *
+        (effect.goldenMode === "doubleCount" ? scale : 1);
+      for (let count = 0; count < gainCount; count += 1) {
+        addDrawnMinionToHand(
+          state,
+          player,
+          drawMatchingFromPool(
+            state,
+            player.tavernTier,
+            (definition) =>
+              (effect.filter.tribe === undefined ||
+                definitionHasTribe(
+                  definition,
+                  effect.filter.tribe,
+                )) &&
+              (effect.filter.magnetic !== true ||
+                definition.magnetic !== undefined) &&
+              (effect.filter.exactTier === undefined ||
+                definition.tier === effect.filter.exactTier),
+          ),
+        );
+      }
     } else if (effect.kind === "damageHero") {
       damagePlayer(player, effect.amount);
     } else if (effect.kind === "gainMissingHealth") {
@@ -1366,6 +1417,47 @@ function applyRecruitEffects(
         );
         player.ballerHealthBonus += effect.health * scale;
       }
+    } else if (effect.kind === "buffTavernType") {
+      const attack = effect.attack * scale;
+      const health = effect.health * scale;
+      const existing = player.tavernTypeBuffs.find(
+        (buff) =>
+          buff.tribes.length === 1 &&
+          buff.tribes[0] === effect.tribe,
+      );
+      if (existing) {
+        existing.attack += attack;
+        existing.health += health;
+      } else {
+        player.tavernTypeBuffs.push({
+          tribes: [effect.tribe],
+          attack,
+          health,
+        });
+      }
+      buffMinions(
+        player.shop.filter((minion) =>
+          minionHasTribe(minion, effect.tribe),
+        ),
+        attack,
+        health,
+      );
+    } else if (effect.kind === "improveUndeadArmy") {
+      const attack = effect.attack * scale;
+      const health = effect.health * scale;
+      player.undeadArmyAttackBonus += attack;
+      player.undeadArmyHealthBonus += health;
+      buffMinions(
+        [
+          ...player.board,
+          ...player.hand.filter(
+            (card): card is BoardMinionInstance =>
+              card.kind === "minion",
+          ),
+        ].filter((minion) => minionHasTribe(minion, "undead")),
+        attack,
+        health,
+      );
     } else if (effect.kind === "summon") {
       const baseCount =
         effect.count === "sourceAttack" ? source.attack : effect.count;
@@ -5417,7 +5509,9 @@ function resolveCombatGetRandomMinion(
         (effect.filter.tribe === undefined ||
           definitionHasTribe(definition, effect.filter.tribe)) &&
         (effect.filter.magnetic !== true ||
-          definition.magnetic !== undefined),
+          definition.magnetic !== undefined) &&
+        (effect.filter.exactTier === undefined ||
+          definition.tier === effect.filter.exactTier),
     );
     if (!gained) {
       pushBattleEvent(context.events, {
@@ -5758,36 +5852,58 @@ function triggerAfterFriendlyDied(
   const enemyId = opponentId(context, ownerId);
   for (const watcher of context.boards[ownerId]) {
     for (const component of minionEffectSources(watcher)) {
-      const trigger = getMinionDefinition(
-        component.definitionId,
-      ).afterFriendlyDied;
-      if (!trigger || !minionHasTribe(death.minion, trigger.tribe)) {
-        continue;
-      }
+      const definition = getMinionDefinition(component.definitionId);
+      const trigger = definition.afterFriendlyDied;
       const scale = component.golden ? 2 : 1;
-      watcher.attack += (trigger.attack ?? 0) * scale;
-      watcher.health += (trigger.health ?? 0) * scale;
-      if (trigger.damageEnemy) {
-        for (let hit = 0; hit < scale; hit += 1) {
-          const target = targetForEnemyDamage(
-            context,
-            enemyId,
-            trigger.damageTarget ?? "random",
-          );
-          if (!target) {
-            break;
+      if (trigger && minionHasTribe(death.minion, trigger.tribe)) {
+        watcher.attack += (trigger.attack ?? 0) * scale;
+        watcher.health += (trigger.health ?? 0) * scale;
+        if (trigger.damageEnemy) {
+          for (let hit = 0; hit < scale; hit += 1) {
+            const target = targetForEnemyDamage(
+              context,
+              enemyId,
+              trigger.damageTarget ?? "random",
+            );
+            if (!target) {
+              break;
+            }
+            dealCombatDamage(
+              context,
+              ownerId,
+              watcher,
+              enemyId,
+              target,
+              trigger.damageEnemy,
+              false,
+            );
           }
-          dealCombatDamage(
-            context,
-            ownerId,
-            watcher,
-            enemyId,
-            target,
-            trigger.damageEnemy,
-            false,
-          );
         }
       }
+
+      const combatDeathTrigger =
+        definition.afterFriendlyCombatDied;
+      if (!combatDeathTrigger) {
+        continue;
+      }
+      const attackDelta = combatDeathTrigger.attack * scale;
+      const healthDelta = combatDeathTrigger.health * scale;
+      watcher.attack += attackDelta;
+      watcher.health += healthDelta;
+      pushBattleEvent(context.events, {
+        type: "buff",
+        actorPlayerId: ownerId,
+        actorInstanceId: watcher.instanceId,
+        targetPlayerId: ownerId,
+        targetInstanceId: watcher.instanceId,
+        attackDelta,
+        healthDelta,
+        message: `${watcher.name}因友方随从死亡获得+${
+          attackDelta
+        }攻击力${
+          healthDelta > 0 ? `和+${healthDelta}生命值` : ""
+        }。`,
+      });
     }
   }
 }

@@ -3,7 +3,7 @@ import liveRosterSnapshot from "./generated/battlegrounds-36.0.3-247416.zhCN.jso
 };
 import type { MinionDefinition, Tribe } from "./types.ts";
 
-export const CURRENT_ROSTER_VERSION = "battlegrounds-36.0.3-247416-v15";
+export const CURRENT_ROSTER_VERSION = "battlegrounds-36.0.3-247416-v16";
 /** Compatibility alias for existing save and engine imports. */
 export const CLASSIC_ROSTER_VERSION = CURRENT_ROSTER_VERSION;
 
@@ -849,6 +849,20 @@ export const LIVE_TOKEN_DEFINITIONS: readonly MinionDefinition[] =
       description: "复生",
       collectible: false,
     },
+    {
+      id: "live-water-droplet-token",
+      cardId: "BGS_115t",
+      name: "水滴元素",
+      tier: 1,
+      tribe: "elemental",
+      tribes: ["elemental"],
+      associatedTribes: [],
+      effectSupport: "complete",
+      attack: 3,
+      health: 3,
+      description: "由商贩元素获取。",
+      collectible: false,
+    },
   ] satisfies readonly MinionDefinition[]);
 
 const LEGACY_RULE_BY_CARD_ID = new Map(
@@ -896,6 +910,78 @@ const LIVE_RULE_OVERRIDES: Readonly<
       kind: "gainBloodGems",
       count: 1,
       bonusKeyword: "rebornForQuilboar",
+    },
+  },
+  BG26_135: {
+    battlecry: [{ kind: "gainNextTurnGold", amount: 1 }],
+  },
+  BG33_140: {
+    afterSold: [
+      {
+        kind: "getRandomMinion",
+        count: 1,
+        filter: { exactTier: 1 },
+        maximumTier: "ownerTavern",
+        source: "sharedPool",
+        goldenMode: "doubleCount",
+      },
+    ],
+  },
+  BG31_815: {
+    battlecry: [
+      {
+        kind: "buffTavernType",
+        tribe: "elemental",
+        attack: 1,
+        health: 1,
+      },
+    ],
+  },
+  BG23_002: {
+    battlecry: [
+      {
+        kind: "gainTavernSpell",
+        definitionId: "tavern-spell-tavern-coin",
+        count: 1,
+        goldenMode: "doubleCount",
+      },
+    ],
+  },
+  BGS_115: {
+    afterSold: [
+      {
+        kind: "gainMinion",
+        definitionId: "live-water-droplet-token",
+        count: 1,
+        goldenMode: "doubleCount",
+      },
+    ],
+  },
+  BG22_202: {
+    afterSold: [
+      {
+        kind: "getRandomMinion",
+        count: 1,
+        filter: { tribe: "murloc" },
+        maximumTier: "ownerTavern",
+        source: "sharedPool",
+        goldenMode: "doubleCount",
+      },
+    ],
+  },
+  BG25_011: {
+    battlecry: [
+      {
+        kind: "improveUndeadArmy",
+        attack: 1,
+        health: 0,
+      },
+    ],
+  },
+  BG25_013: {
+    afterFriendlyCombatDied: {
+      attack: 1,
+      health: 0,
     },
   },
   BG25_016: {
@@ -1211,13 +1297,18 @@ const FULLY_SUPPORTED_LIVE_CARD_IDS = new Set([
   "BG20_100",
   "BG20_203",
   "BG20_301",
+  "BG22_202",
   "BG21_014",
+  "BG23_002",
   "BG25_001",
   "BG25_010",
+  "BG25_011",
+  "BG25_013",
   "BG25_016",
   "BG25_022",
   "BG25_354",
   "BG26_146",
+  "BG26_135",
   "BG26_147",
   "BG26_148",
   "BG26_159",
@@ -1230,12 +1321,14 @@ const FULLY_SUPPORTED_LIVE_CARD_IDS = new Set([
   "BG30_125",
   "BG31_175",
   "BG31_803",
+  "BG31_815",
   "BG31_816",
   "BG31_818",
   "BG31_859",
   "BG32_235",
   "BG32_172",
   "BG33_156",
+  "BG33_140",
   "BG33_241",
   "BG33_888",
   "BG34_140",
@@ -1254,6 +1347,7 @@ const FULLY_SUPPORTED_LIVE_CARD_IDS = new Set([
   "BGS_012",
   "BGS_018",
   "BGS_049",
+  "BGS_115",
   "BGS_071",
   "BGS_119",
   "BGS_131",

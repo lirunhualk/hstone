@@ -1251,11 +1251,18 @@
   margin: 0;
   pointer-events: none;
   transition: none;
-  will-change: left, top, transform;
+  outline: 3px solid rgb(84 255 176 / 86%);
+  outline-offset: 2px;
+  will-change: left, top, width, height, transform;
 }
 
+.unit-card.is-dragging.drag-ghost,
+.tavern-spell-card.is-dragging.drag-ghost,
+.blood-gem-card.is-dragging.drag-ghost,
 .drag-ghost.is-direct-touch-drag {
-  transform: translateY(-42px) rotate(1.5deg) scale(1.04);
+  max-width: none;
+  opacity: 0.98;
+  transform: rotate(1.5deg);
 }
 
 .spell-aim-arrow {
@@ -2490,11 +2497,20 @@
 }
 
 .tavern-spell-card.is-dragging.drag-ghost:not(.is-direct-touch-drag) {
-  transform: translateY(-12px) rotate(1.5deg) scale(1.04);
+  transform: rotate(1.5deg);
 }
 
 .tavern-spell-card.is-dragging.drag-ghost.is-direct-touch-drag {
-  transform: translateY(-42px) rotate(1.5deg) scale(1.04);
+  transform: rotate(1.5deg);
+}
+
+.tavern-spell-card.is-dragging.drag-ghost,
+.blood-gem-card.is-dragging.drag-ghost,
+.unit-card.is-dragging.drag-ghost {
+  box-shadow:
+    0 26px 54px rgb(0 0 0 / 52%),
+    0 0 0 4px rgb(84 255 176 / 82%),
+    0 0 42px rgb(50 215 196 / 54%);
 }
 
 .tavern-spell-card > .card-art {

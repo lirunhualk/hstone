@@ -62,6 +62,25 @@ export interface GainGoldEffect {
   amount: number;
 }
 
+export interface GainNextTurnGoldEffect {
+  kind: "gainNextTurnGold";
+  amount: number;
+}
+
+export interface GainTavernSpellEffect {
+  kind: "gainTavernSpell";
+  definitionId: string;
+  count: number;
+  goldenMode?: "doubleCount";
+}
+
+export interface GainMinionEffect {
+  kind: "gainMinion";
+  definitionId: string;
+  count: number;
+  goldenMode?: "doubleCount";
+}
+
 export interface DamageHeroEffect {
   kind: "damageHero";
   amount: number;
@@ -94,6 +113,7 @@ export interface GetRandomMinionEffect {
   filter: {
     tribe?: Tribe;
     magnetic?: true;
+    exactTier?: TavernTier;
   };
   maximumTier: "ownerTavern";
   source: "sharedPool";
@@ -154,11 +174,27 @@ export interface ImproveBallersEffect {
   health: number;
 }
 
+export interface BuffTavernTypeEffect {
+  kind: "buffTavernType";
+  tribe: Tribe;
+  attack: number;
+  health: number;
+}
+
+export interface ImproveUndeadArmyEffect {
+  kind: "improveUndeadArmy";
+  attack: number;
+  health: number;
+}
+
 export type MinionEffect =
   | BuffEffect
   | SummonEffect
   | GrantShieldEffect
   | GainGoldEffect
+  | GainNextTurnGoldEffect
+  | GainTavernSpellEffect
+  | GainMinionEffect
   | DamageHeroEffect
   | DamageEnemyEffect
   | GainMissingHealthEffect
@@ -168,7 +204,9 @@ export type MinionEffect =
   | DamageAllMinionsEffect
   | GainBloodGemsEffect
   | ImproveBloodGemsEffect
-  | ImproveBallersEffect;
+  | ImproveBallersEffect
+  | BuffTavernTypeEffect
+  | ImproveUndeadArmyEffect;
 
 export interface TargetedBuffBattlecry {
   kind: "targetedBuff";
@@ -207,6 +245,11 @@ export interface FriendlyTribeTrigger {
   damageEnemy?: number;
   damageTarget?: "random" | "highestHealth";
   grantShield?: boolean;
+}
+
+export interface FriendlyCombatDeathTrigger {
+  attack: number;
+  health: number;
 }
 
 export interface MenagerieEndOfTurnEffect {
@@ -274,6 +317,7 @@ export interface MinionDefinition {
   afterFriendlyPlayed?: FriendlyTribeTrigger;
   afterFriendlySummoned?: FriendlyTribeTrigger;
   afterFriendlyDied?: FriendlyTribeTrigger;
+  afterFriendlyCombatDied?: FriendlyCombatDeathTrigger;
   afterSelfDamaged?: readonly MinionEffect[];
   startOfTurn?: readonly MinionEffect[];
   startOfCombat?: readonly MinionEffect[];
