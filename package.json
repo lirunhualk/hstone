@@ -13,7 +13,7 @@
     "assets:check": "node scripts/check-no-card-binaries.mjs",
     "data:bg:generate": "node scripts/generate-battlegrounds-pool.mjs",
     "data:bg:check": "node --test tests/battlegrounds-pool.test.mjs",
-    "test": "node --experimental-strip-types --test tests/game-engine.test.ts tests/live-content.test.ts tests/blood-gems.test.ts tests/tavern-spells.test.ts tests/magnetic.test.ts tests/rally.test.ts tests/drag-preview.test.ts tests/combat-presentation.test.ts tests/battlegrounds-pool.test.mjs",
+    "test": "node --experimental-strip-types --test tests/game-engine.test.ts tests/live-content.test.ts tests/blood-gems.test.ts tests/tavern-spells.test.ts tests/magnetic.test.ts tests/rally.test.ts tests/drag-preview.test.ts tests/combat-presentation.test.ts tests/interaction-presentation.test.ts tests/battlegrounds-pool.test.mjs",
     "typecheck": "tsc --noEmit",
     "check": "npm run assets:check && npm run lint && npm run typecheck && npm run test && npm run build",
     "lint": "eslint . --ignore-pattern dist --ignore-pattern .next"

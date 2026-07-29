@@ -1,5 +1,5 @@
 {
-  "schemaVersion": 2,
+  "schemaVersion": 3,
   "source": {
     "patch": "36.0.3",
     "build": 247416,
@@ -57,6 +57,7 @@
       "referencedTags": [
         "BACON_BLOOD_GEM_TOOLTIP"
       ],
+      "elite": false,
       "text": "<b>战吼：</b>获取2张\n<b>鲜血宝石</b>。"
     },
     {
@@ -75,6 +76,7 @@
       "referencedTags": [
         "BACON_BLOOD_GEM_TOOLTIP"
       ],
+      "elite": false,
       "text": "当你出售本随从时，获取2张<b>鲜血宝石</b>。"
     },
     {
@@ -93,6 +95,7 @@
         "BATTLECRY"
       ],
       "referencedTags": [],
+      "elite": false,
       "text": "<b>战吼：</b>随机吞食酒馆中的一个随从，获得其属性值。"
     },
     {
@@ -112,6 +115,7 @@
         "TAUNT"
       ],
       "referencedTags": [],
+      "elite": false,
       "text": "<b>嘲讽</b>，<b>复生</b>"
     },
     {
@@ -130,6 +134,7 @@
         "AURA"
       ],
       "referencedTags": [],
+      "elite": false,
       "text": "在本场战斗中，每有一个友方随从死亡，便拥有+1攻击力。"
     },
     {
@@ -148,6 +153,7 @@
         "BATTLECRY"
       ],
       "referencedTags": [],
+      "elite": false,
       "text": "<b>战吼：</b>下回合获得1枚铸币。"
     },
     {
@@ -167,6 +173,7 @@
         "MAGNETIC"
       ],
       "referencedTags": [],
+      "elite": false,
       "text": "<b>磁力</b>\n在你的回合结束时，获得+1生命值。"
     },
     {
@@ -186,6 +193,7 @@
         "TRIGGER_VISUAL"
       ],
       "referencedTags": [],
+      "elite": false,
       "text": "每3个回合，在回合结束时，随机获取一张龙牌。<i>（还剩3回合！）</i>3每3个回合，在回合结束时，随机获取一张龙牌。<i>（就是这回合！）</i>"
     },
     {
@@ -208,6 +216,7 @@
       "referencedTags": [
         "DEATHRATTLE"
       ],
+      "elite": false,
       "text": "<b>塑造法术：</b>直到下个回合，使一个随从获得“<b>亡语：</b>召唤一只3/2的螃蟹”。"
     },
     {
@@ -226,6 +235,7 @@
         "DEATHRATTLE"
       ],
       "referencedTags": [],
+      "elite": false,
       "text": "<b>亡语：</b>召唤两个1/1的骷髅。"
     },
     {
@@ -245,6 +255,7 @@
         "DIVINE_SHIELD"
       ],
       "referencedTags": [],
+      "elite": false,
       "text": "<b>圣盾</b>。<b>亡语：</b>召唤一个1/1的微型机器人。"
     },
     {
@@ -264,6 +275,7 @@
         "BATTLECRY"
       ],
       "referencedTags": [],
+      "elite": false,
       "text": "<b>战吼：</b>你购买的下一张酒馆法术牌消耗的铸币减少（1）枚。"
     },
     {
@@ -283,6 +295,7 @@
         "TAUNT"
       ],
       "referencedTags": [],
+      "elite": false,
       "text": "<b>嘲讽</b>。<b>亡语：</b>召唤一只2/2的甲虫。"
     },
     {
@@ -301,6 +314,7 @@
         "BATTLECRY"
       ],
       "referencedTags": [],
+      "elite": false,
       "text": "<b>战吼：</b>使酒馆中的元素在本局对战中获得+1/+1。"
     },
     {
@@ -320,6 +334,7 @@
         "DIVINE_SHIELD"
       ],
       "referencedTags": [],
+      "elite": false,
       "text": "<b>圣盾</b>。<b>战吼：</b>使本随从变为金色。"
     },
     {
@@ -339,6 +354,7 @@
         "TRIGGER_VISUAL"
       ],
       "referencedTags": [],
+      "elite": false,
       "text": "<b>战斗开始时：</b>如果本随从在你的手牌中，召唤一个它的复制。"
     },
     {
@@ -355,6 +371,7 @@
       "associatedRaces": [],
       "mechanics": [],
       "referencedTags": [],
+      "elite": false,
       "text": "当你出售本随从时，随机获取一张等级1的随从牌。"
     },
     {
@@ -373,6 +390,7 @@
         "DEATHRATTLE"
       ],
       "referencedTags": [],
+      "elite": false,
       "text": "<b>亡语：</b>召唤一条3/3并立即发起攻击的\n雏龙。"
     },
     {
@@ -389,6 +407,7 @@
         "TRIGGER_VISUAL"
       ],
       "referencedTags": [],
+      "elite": false,
       "text": "一旦你购买了4张牌，获得+4/+4。<i>（还剩4张！）</i>4一旦你购买了4张牌，获得+4/+4。<i>（已完成！）</i>"
     },
     {
@@ -409,6 +428,7 @@
       "referencedTags": [
         "DIVINE_SHIELD"
       ],
+      "elite": false,
       "text": "一旦本随从的攻击力达到6点，获得<b>圣盾</b>。6一旦本随从的攻击力达到6点，获得<b>圣盾</b>。<i>（已完成！）</i>"
     },
     {
@@ -427,6 +447,7 @@
         "TRIGGER_VISUAL"
       ],
       "referencedTags": [],
+      "elite": false,
       "text": "在你使用一张恶魔牌后，对你的英雄造成1点伤害并获得+2/+2。"
     },
     {
@@ -446,6 +467,7 @@
         "WINDFURY"
       ],
       "referencedTags": [],
+      "elite": false,
       "text": "<b>圣盾，风怒</b>"
     },
     {
@@ -464,6 +486,7 @@
         "AURA"
       ],
       "referencedTags": [],
+      "elite": false,
       "text": "在本局对战中，你每召唤过一个其他星元自动机，便拥有+3/+2<i>（无论本随从在哪）</i>。"
     },
     {
@@ -485,6 +508,7 @@
       "referencedTags": [
         "BACON_BLOOD_GEM_TOOLTIP"
       ],
+      "elite": false,
       "text": "<b>嘲讽</b>。在你使用一张野猪人后，获取一张<b>鲜血宝石</b>。"
     },
     {
@@ -503,6 +527,7 @@
         "TRIGGER_VISUAL"
       ],
       "referencedTags": [],
+      "elite": true,
       "text": "本随从可永久保留战斗阶段获得的<b><b>额外关键词</b></b>和属性值。"
     },
     {
@@ -521,6 +546,7 @@
         "TRIGGER_VISUAL"
       ],
       "referencedTags": [],
+      "elite": false,
       "text": "每当本随从通过其他来源获得攻击力时，获得+1生命值。0每当本随从通过其他来源获得攻击力时，获得+0/+1。"
     },
     {
@@ -537,6 +563,7 @@
       "associatedRaces": [],
       "mechanics": [],
       "referencedTags": [],
+      "elite": true,
       "text": "当你出售本随从时，随机获取一张鱼人牌。"
     },
     {
@@ -555,6 +582,7 @@
         "BATTLECRY"
       ],
       "referencedTags": [],
+      "elite": false,
       "text": "<b>战吼：</b>获取\n一张酒馆币。"
     },
     {
@@ -575,6 +603,7 @@
       "referencedTags": [
         "BACON_SPELLCRAFT_ID"
       ],
+      "elite": false,
       "text": "每回合从手牌对本随从使用的第一张<b>塑造法术</b>的法术牌永久有效。<i>（还剩1张！）</i>"
     },
     {
@@ -593,6 +622,7 @@
       "referencedTags": [
         "DISCOVER"
       ],
+      "elite": false,
       "text": "当你出售本随从时，<b>发现</b>一个等级1的随从。<i>（每回合都会提升！）</i>"
     },
     {
@@ -612,6 +642,7 @@
         "InvisibleDeathrattle"
       ],
       "referencedTags": [],
+      "elite": false,
       "text": "在本局对战中，每有一个友方永恒骑士死亡，便拥有+4/+2<i>（无论本随从在哪）</i>。"
     },
     {
@@ -630,6 +661,7 @@
         "BATTLECRY"
       ],
       "referencedTags": [],
+      "elite": false,
       "text": "<b>战吼：</b>在本局对战中，你的亡灵拥有+1攻击力<i>（无论它们在哪）</i>。"
     },
     {
@@ -649,6 +681,7 @@
         "REBORN"
       ],
       "referencedTags": [],
+      "elite": false,
       "text": "<b>复生</b>。<b>亡语：</b>使一个友方亡灵获得+1/+2。"
     },
     {
@@ -669,6 +702,7 @@
       "referencedTags": [
         "BACON_BLOOD_GEM_TOOLTIP"
       ],
+      "elite": false,
       "text": "<b>战吼：</b>在本局对战中，你的<b>鲜血宝石</b>会额外获得+1生命值。"
     },
     {
@@ -687,6 +721,7 @@
         "TRIGGER_VISUAL"
       ],
       "referencedTags": [],
+      "elite": false,
       "text": "在你的英雄\n受到伤害后，回溯该伤害并使本随从获得\n+1生命值。"
     },
     {
@@ -706,6 +741,7 @@
         "TRIGGER_VISUAL"
       ],
       "referencedTags": [],
+      "elite": false,
       "text": "<b>塑造法术：</b>直到下个回合，使一个随从获得等同于你当前等级的属性值。"
     },
     {
@@ -725,6 +761,7 @@
         "TRIGGER_VISUAL"
       ],
       "referencedTags": [],
+      "elite": false,
       "text": "<b>战斗开始时：</b>在本场战斗的剩余时间内，你的野兽拥有+1攻击力。"
     },
     {
@@ -743,6 +780,7 @@
       "referencedTags": [
         "TAUNT"
       ],
+      "elite": false,
       "text": "<b>战吼：</b>获取两张可以使随从获得+1/+1和<b>嘲讽</b>的黏黏盾。"
     },
     {
@@ -762,6 +800,7 @@
         "TRIGGER_VISUAL"
       ],
       "referencedTags": [],
+      "elite": false,
       "text": "<b>嘲讽</b>。每当本随从受到伤害，使你手牌中的一张随从牌获得+2/+1。"
     },
     {
@@ -781,6 +820,7 @@
         "DEATHRATTLE"
       ],
       "referencedTags": [],
+      "elite": false,
       "text": "<b>战吼：</b>在本局对战中，你的甲虫拥有+2/+1。\n<b>亡语：</b>召唤一只2/2的甲虫。"
     },
     {
@@ -797,6 +837,7 @@
       "associatedRaces": [],
       "mechanics": [],
       "referencedTags": [],
+      "elite": false,
       "text": "当你出售本随从时，使你的随从获得+1攻击力。提升你此后投球手的效果。1当你出售本随从时，使你的随从获得+1/+0。提升你此后投球手的效果。"
     },
     {
@@ -813,6 +854,7 @@
       "associatedRaces": [],
       "mechanics": [],
       "referencedTags": [],
+      "elite": false,
       "text": "当你出售本随从时，使你的随从获得+1生命值。提升你此后投球手的效果。0当你出售本随从时，使你的随从获得+0/+1。提升你此后投球手的效果。"
     },
     {
@@ -831,6 +873,7 @@
         "DEATHRATTLE"
       ],
       "referencedTags": [],
+      "elite": false,
       "text": "<b>亡语：</b>获取一张尖利箭矢。"
     },
     {
@@ -849,6 +892,7 @@
         "END_OF_TURN_TRIGGER"
       ],
       "referencedTags": [],
+      "elite": false,
       "text": "在你的回合结束时，使相邻的随从获得+1攻击力。每有一个友方金色随从，重复一次。1在你的回合结束时，使相邻的随从获得+1/+0。每有一个友方金色随从，重复一次。"
     },
     {
@@ -865,6 +909,7 @@
         "CHOOSE_ONE"
       ],
       "referencedTags": [],
+      "elite": false,
       "text": "<b>抉择：</b>在本局对战中，你的酒馆法术使随从额外获得+1攻击力；或者+1生命值。"
     },
     {
@@ -886,6 +931,7 @@
         "BACON_BLOOD_GEM_TOOLTIP",
         "TAUNT"
       ],
+      "elite": false,
       "text": "<b>亡语：</b>召唤两个1/1并具有<b>嘲讽</b>的野猪人。本随从对其使用一张<b>鲜血宝石</b>。"
     },
     {
@@ -904,6 +950,7 @@
         "BACON_RALLY"
       ],
       "referencedTags": [],
+      "elite": false,
       "text": "<b>进击：</b>使本随从右边的随从获得+2/+2。"
     },
     {
@@ -922,6 +969,7 @@
         "BACON_RALLY"
       ],
       "referencedTags": [],
+      "elite": false,
       "text": "<b>进击：</b>召唤你手牌中攻击力最高的随从，其登场仅限本场战斗。"
     },
     {
@@ -938,6 +986,7 @@
       "associatedRaces": [],
       "mechanics": [],
       "referencedTags": [],
+      "elite": false,
       "text": "当本随从在你手牌中时，在15个友方随从死亡后，将本随从变为金色。<i>（还剩15个！）</i>"
     },
     {
@@ -957,6 +1006,7 @@
         "TAUNT"
       ],
       "referencedTags": [],
+      "elite": false,
       "text": "<b>嘲讽</b>。<b>亡语：</b>对一个相邻的随从施放变换之潮。"
     },
     {
@@ -977,6 +1027,7 @@
       "referencedTags": [
         "BACON_REFRESH_TOOLTIP"
       ],
+      "elite": false,
       "text": "<b>战吼：</b>在你的下3次<b>刷新</b>中各添加一个恶魔<b>饲料</b>。"
     },
     {
@@ -996,6 +1047,7 @@
         "TAUNT"
       ],
       "referencedTags": [],
+      "elite": false,
       "text": "<b>嘲讽</b>。<b>亡语：</b>你购买的下一张酒馆法术牌消耗的铸币减少\n（1）枚。"
     },
     {
@@ -1012,6 +1064,7 @@
       "associatedRaces": [],
       "mechanics": [],
       "referencedTags": [],
+      "elite": false,
       "text": "出售本随从可以获得3枚铸币。"
     },
     {
@@ -1028,6 +1081,7 @@
       "associatedRaces": [],
       "mechanics": [],
       "referencedTags": [],
+      "elite": false,
       "text": "当你出售\n本随从时，获取一张3/3的元素牌。"
     },
     {
@@ -1048,6 +1102,7 @@
         "TAUNT"
       ],
       "referencedTags": [],
+      "elite": false,
       "text": "<b>磁力</b>\n<b>圣盾</b>\n<b>嘲讽</b>"
     },
     {
@@ -1069,6 +1124,7 @@
       "referencedTags": [
         "TAUNT"
       ],
+      "elite": false,
       "text": "<b>塑造法术：</b>直到下个回合，使一个随从获得+2/+6和<b>嘲讽</b>。"
     },
     {
@@ -1091,6 +1147,7 @@
       "referencedTags": [
         "DIVINE_SHIELD"
       ],
+      "elite": false,
       "text": "<b>嘲讽</b>。<b>战斗开始时：</b>使另一条友方的龙获得+2/+2和<b>圣盾</b>。"
     },
     {
@@ -1112,6 +1169,7 @@
         "BACON_BLOOD_GEM_TOOLTIP",
         "TAUNT"
       ],
+      "elite": false,
       "text": "在一个友方<b>嘲讽</b>随从死亡后，获取一张<b>鲜血宝石</b>。"
     },
     {
@@ -1130,6 +1188,7 @@
         "DEATHRATTLE"
       ],
       "referencedTags": [],
+      "elite": false,
       "text": "<b>亡语：</b>召唤一只2/1并具有<b>复生</b>的手。"
     },
     {
@@ -1148,6 +1207,7 @@
         "TRIGGER_VISUAL"
       ],
       "referencedTags": [],
+      "elite": true,
       "text": "每当一张卡牌被置入你的手牌，使另一个友方海盗获得+2/+1。"
     },
     {
@@ -1169,6 +1229,7 @@
       "referencedTags": [
         "VENOMOUS"
       ],
+      "elite": false,
       "text": "每当法术被施放在本随从身上，直到下个回合，获得<b>烈毒</b>。"
     },
     {
@@ -1188,6 +1249,7 @@
         "BATTLECRY"
       ],
       "referencedTags": [],
+      "elite": false,
       "text": "<b>战吼：</b>使酒馆中的随从在本局对战中获得+2/+1。"
     },
     {
@@ -1206,6 +1268,7 @@
         "DEATHRATTLE"
       ],
       "referencedTags": [],
+      "elite": false,
       "text": "<b>亡语：</b>随机召唤一只野兽，其属性值变为6/6。"
     },
     {
@@ -1225,6 +1288,7 @@
         "TRIGGER_VISUAL"
       ],
       "referencedTags": [],
+      "elite": false,
       "text": "<b>磁力</b>。在你的回合开始时，获得1枚铸币。"
     },
     {
@@ -1245,6 +1309,7 @@
       "referencedTags": [
         "BACON_BLOOD_GEM_TOOLTIP"
       ],
+      "elite": false,
       "text": "<b>亡语：</b>在本局对战中，你的<b>鲜血宝石</b>会额外获得+1攻击力。"
     },
     {
@@ -1263,6 +1328,7 @@
         "DEATHRATTLE"
       ],
       "referencedTags": [],
+      "elite": false,
       "text": "<b>亡语：</b>随机使你手牌中的一张随从牌获得+7/+7。"
     },
     {
@@ -1282,6 +1348,7 @@
         "TRIGGER_VISUAL"
       ],
       "referencedTags": [],
+      "elite": false,
       "text": "<b>塑造法术：</b>直到下个回合，使一个随从获得+2/+2。提升你此后的深沉蓝调效果。"
     },
     {
@@ -1302,6 +1369,7 @@
       "referencedTags": [
         "BACON_REFRESH_TOOLTIP"
       ],
+      "elite": true,
       "text": "每回合中，有两次<b>刷新</b>会消耗生命值，而非铸币。<i>（还剩2次！）</i>"
     },
     {
@@ -1320,6 +1388,7 @@
         "TRIGGER_VISUAL"
       ],
       "referencedTags": [],
+      "elite": false,
       "text": "每当你花掉\n6枚铸币，使你的海盗获得+2攻击力。<i>（还剩6枚！）</i>6每当你花掉6枚铸币，使你的海盗获得+2/+0。<i>（还剩6枚！）</i>"
     },
     {
@@ -1339,6 +1408,7 @@
         "TRIGGER_VISUAL"
       ],
       "referencedTags": [],
+      "elite": true,
       "text": "每当你施放一个酒馆法术，使你的随从获得+1攻击力。1每当你施放一个酒馆法术，使你的随从获得+1/+0。"
     },
     {
@@ -1359,6 +1429,7 @@
       "referencedTags": [
         "WINDFURY"
       ],
+      "elite": false,
       "text": "<b>抉择：</b>使一只野兽获得+1/+1和<b>复生</b>；或者+4攻击力和<b>风怒</b>。"
     },
     {
@@ -1377,6 +1448,7 @@
         "BATTLECRY"
       ],
       "referencedTags": [],
+      "elite": false,
       "text": "<b>战吼：</b>消灭一个友方亡灵以获取一张它的原始版复制。"
     },
     {
@@ -1395,6 +1467,7 @@
         "DEATHRATTLE"
       ],
       "referencedTags": [],
+      "elite": false,
       "text": "<b>亡语：</b>使一个不同的友方亡灵获得<b>复生</b>。"
     },
     {
@@ -1413,6 +1486,7 @@
         "TRIGGER_VISUAL"
       ],
       "referencedTags": [],
+      "elite": false,
       "text": "每当另一条友方的龙攻击时，使其获得+3/+1。"
     },
     {
@@ -1433,6 +1507,7 @@
       "referencedTags": [
         "BACON_BLOOD_GEM_TOOLTIP"
       ],
+      "elite": false,
       "text": "<b>抉择：</b>在本局对战中，你的<b>鲜血宝石</b>使随从额外获得+1/+1；或者获取4张<b>鲜血宝石</b>。"
     },
     {
@@ -1451,6 +1526,7 @@
         "DEATHRATTLE"
       ],
       "referencedTags": [],
+      "elite": false,
       "text": "<b>亡语：</b>召唤三个1/1的骷髅。"
     },
     {
@@ -1470,6 +1546,7 @@
         "MAGNETIC"
       ],
       "referencedTags": [],
+      "elite": false,
       "text": "<b>磁力</b>。可以<b>磁力吸附</b>在机械和元素上。"
     },
     {
@@ -1488,6 +1565,7 @@
         "BATTLECRY"
       ],
       "referencedTags": [],
+      "elite": false,
       "text": "<b>战吼：</b>在本局对战中，你的元素使随从额外获得+1攻击力。"
     },
     {
@@ -1506,6 +1584,7 @@
         "BACON_RALLY"
       ],
       "referencedTags": [],
+      "elite": false,
       "text": "<b>进击：</b>\n在本局对战中，你的亡灵拥有+2攻击力<i>（无论它们在哪）。</i>"
     },
     {
@@ -1525,6 +1604,7 @@
         "TAUNT"
       ],
       "referencedTags": [],
+      "elite": false,
       "text": "<b>嘲讽</b>。在你的回合结束时，随机获取一张<b>悬赏令</b>。"
     },
     {
@@ -1544,6 +1624,7 @@
         "DEATHRATTLE"
       ],
       "referencedTags": [],
+      "elite": false,
       "text": "<b>战吼，亡语：</b>随机获取一张等级1的酒馆法术牌。"
     },
     {
@@ -1563,6 +1644,7 @@
         "TRIGGER_VISUAL"
       ],
       "referencedTags": [],
+      "elite": false,
       "text": "<b>嘲讽</b>。每当本随从受到伤害，使你的其他随从获得+1/+1。"
     },
     {
@@ -1581,6 +1663,7 @@
         "BATTLECRY"
       ],
       "referencedTags": [],
+      "elite": false,
       "text": "<b>战吼：</b>随机获取一张消耗2枚铸币的酒馆法术牌。"
     },
     {
@@ -1599,6 +1682,7 @@
         "BATTLECRY"
       ],
       "referencedTags": [],
+      "elite": false,
       "text": "<b>战吼：</b>\n在本局对战中，你的酒馆法术使随从额外获得+1生命值。"
     },
     {
@@ -1617,6 +1701,7 @@
         "BATTLECRY"
       ],
       "referencedTags": [],
+      "elite": false,
       "text": "<b>战吼：</b>使你的其他龙获得+1/+3。"
     },
     {
@@ -1635,6 +1720,7 @@
         "BATTLECRY"
       ],
       "referencedTags": [],
+      "elite": false,
       "text": "<b>战吼：</b>使你的其他龙获得+3/+1。"
     },
     {
@@ -1653,6 +1739,7 @@
         "BATTLECRY"
       ],
       "referencedTags": [],
+      "elite": false,
       "text": "<b>战吼：</b>\n在本局对战中，你的酒馆法术使随从额外获得+1攻击力。"
     },
     {
@@ -1673,6 +1760,7 @@
       "referencedTags": [
         "BACON_BLOOD_GEM_TOOLTIP"
       ],
+      "elite": false,
       "text": "<b>战吼：</b>获取一张鲜血宝石弹幕。"
     },
     {
@@ -1692,6 +1780,7 @@
         "BATTLECRY"
       ],
       "referencedTags": [],
+      "elite": false,
       "text": "<b>战吼：</b>使你的其他恶魔和野兽获得+1/+2并对其造成1点伤害，触发两次。"
     },
     {
@@ -1712,6 +1801,7 @@
       "referencedTags": [
         "BACON_REFRESH_TOOLTIP"
       ],
+      "elite": false,
       "text": "<b>亡语：</b>在本局对战中，在酒馆<b>刷新</b>后，使酒馆中一个随机随从获得+3/+3。"
     },
     {
@@ -1730,6 +1820,7 @@
         "BATTLECRY"
       ],
       "referencedTags": [],
+      "elite": false,
       "text": "<b>战吼：</b>使你的其他鱼人获得+2攻击力。<i>（在本局对战中你每使用过一张莫格顿家的鱼人牌都会提升！）</i>"
     },
     {
@@ -1748,6 +1839,7 @@
         "BATTLECRY"
       ],
       "referencedTags": [],
+      "elite": false,
       "text": "<b>战吼：</b>使你的其他鱼人获得+2生命值。<i>（在本局对战中你每使用过一张莫格顿家的鱼人牌都会提升！）</i>"
     },
     {
@@ -1767,6 +1859,7 @@
         "TRIGGER_VISUAL"
       ],
       "referencedTags": [],
+      "elite": false,
       "text": "<b>圣盾</b>\n在战斗阶段中，每当你召唤一个机械，便获得+2攻击力和<b>圣盾</b>。"
     },
     {
@@ -1785,6 +1878,7 @@
         "TRIGGER_VISUAL"
       ],
       "referencedTags": [],
+      "elite": false,
       "text": "在本随从攻击并消灭一个随从后，对一个相邻的随从造成超过目标生命值的伤害。"
     },
     {
@@ -1801,6 +1895,7 @@
         "VENOMOUS"
       ],
       "referencedTags": [],
+      "elite": false,
       "text": "<b>烈毒</b>"
     },
     {
@@ -1818,6 +1913,7 @@
         "TAUNT"
       ],
       "referencedTags": [],
+      "elite": false,
       "text": "<b>嘲讽，亡语：</b>对所有随从造成3点伤害。"
     },
     {
@@ -1838,6 +1934,7 @@
         "REBORN"
       ],
       "referencedTags": [],
+      "elite": false,
       "text": "<b>磁力</b>。<b>复生</b>\n可以<b>磁力吸附</b>在机械或亡灵上。"
     },
     {
@@ -1857,6 +1954,7 @@
         "TRIGGER_VISUAL"
       ],
       "referencedTags": [],
+      "elite": false,
       "text": "<b>战斗开始时：</b>使你的龙获得+4/+4。"
     },
     {
@@ -1871,6 +1969,7 @@
       "associatedRaces": [],
       "mechanics": [],
       "referencedTags": [],
+      "elite": false,
       "text": "如果你输掉了上一场战斗，出售本随从可以获得5枚铸币。"
     },
     {
@@ -1891,6 +1990,7 @@
       "referencedTags": [
         "TAUNT"
       ],
+      "elite": false,
       "text": "<b>风怒</b>，<b>圣盾</b>。<b>进击：</b>移除目标的<b>复生</b>和<b>嘲讽</b>。"
     },
     {
@@ -1907,6 +2007,7 @@
       "associatedRaces": [],
       "mechanics": [],
       "referencedTags": [],
+      "elite": false,
       "text": "当本牌在你手牌中时，在你使用一张鱼人牌后，获得+6/+6。"
     },
     {
@@ -1927,6 +2028,7 @@
       "referencedTags": [
         "BACON_SPELLCRAFT_ID"
       ],
+      "elite": false,
       "text": "每回合一次：当<b>塑造法术</b>的法术被用于本随从时，获取它的一张新复制。"
     },
     {
@@ -1947,6 +2049,7 @@
       "referencedTags": [
         "DISCOVER"
       ],
+      "elite": false,
       "text": "<b><b>战吼：\n</b>发现</b>一张恶魔牌，对你的英雄造成等同于其等级的伤害。"
     },
     {
@@ -1968,6 +2071,7 @@
       "referencedTags": [
         "BATTLECRY"
       ],
+      "elite": false,
       "text": "<b>嘲讽</b>。<b>亡语：</b>触发一个相邻随从的<b>战吼</b>。"
     },
     {
@@ -1986,6 +2090,7 @@
         "TRIGGER_VISUAL"
       ],
       "referencedTags": [],
+      "elite": false,
       "text": "在战斗中，在你召唤一只野兽后，使其攻击力翻倍。"
     },
     {
@@ -2004,6 +2109,7 @@
         "BATTLECRY"
       ],
       "referencedTags": [],
+      "elite": false,
       "text": "<b>战吼：</b>使一个海盗获得+1生命值。<i>（在本回合中你每花费一枚铸币都会提升！）</i>"
     },
     {
@@ -2020,6 +2126,7 @@
       "associatedRaces": [],
       "mechanics": [],
       "referencedTags": [],
+      "elite": false,
       "text": "同时对其攻击目标相邻的随从造成伤害。"
     },
     {
@@ -2038,6 +2145,7 @@
         "TRIGGER_VISUAL"
       ],
       "referencedTags": [],
+      "elite": false,
       "text": "<b>战斗开始时：</b>当你有空位时，召唤你手牌中攻击力最高的鱼人，其登场仅限本场战斗。"
     },
     {
@@ -2059,6 +2167,7 @@
       "referencedTags": [
         "BACON_BLOOD_GEM_TOOLTIP"
       ],
+      "elite": true,
       "text": "<b>圣盾</b>。每当一张<b>鲜血宝石</b>被用于本随从时，本随从对一个不同的友方随从使用一张<b>鲜血宝石</b>。"
     },
     {
@@ -2080,6 +2189,7 @@
         "DISCOVER",
         "MAGNETIC"
       ],
+      "elite": false,
       "text": "<b>战吼：</b>选择一个友方机械，<b>发现</b>一个机械以对其<b>磁力吸附</b>。"
     },
     {
@@ -2098,6 +2208,7 @@
         "TRIGGER_VISUAL"
       ],
       "referencedTags": [],
+      "elite": true,
       "text": "每当另一只友方野兽受到伤害时，永久获得+2生命值。"
     },
     {
@@ -2117,6 +2228,7 @@
         "TRIGGER_VISUAL"
       ],
       "referencedTags": [],
+      "elite": false,
       "text": "<b>圣盾</b>。相邻的龙可永久保留战斗阶段获得的<b><b>额外关键词</b></b>和属性值。"
     },
     {
@@ -2136,6 +2248,7 @@
         "TRIGGER_VISUAL"
       ],
       "referencedTags": [],
+      "elite": false,
       "text": "<b><b>塑造法术：</b>\n抉择：</b>使你的随从获得+4攻击力；或者+4生命值。"
     },
     {
@@ -2156,6 +2269,7 @@
       "referencedTags": [
         "BACON_BLOOD_GEM_TOOLTIP"
       ],
+      "elite": false,
       "text": "从你手牌中使用\n的<b>鲜血宝石</b>会额外施放一次。"
     },
     {
@@ -2174,6 +2288,7 @@
         "END_OF_TURN_TRIGGER"
       ],
       "referencedTags": [],
+      "elite": false,
       "text": "在你的回合结束时，随机获取一张酒馆法术牌。"
     },
     {
@@ -2192,6 +2307,7 @@
         "TRIGGER_VISUAL"
       ],
       "referencedTags": [],
+      "elite": false,
       "text": "每当你花掉5枚铸币，使两个友方海盗\n获得+3/+4。\n<i>（还剩5枚！）</i>"
     },
     {
@@ -2211,6 +2327,7 @@
         "MAGNETIC"
       ],
       "referencedTags": [],
+      "elite": false,
       "text": "<b>磁力</b>。<b>亡语：</b>召唤一个星元自动机。"
     },
     {
@@ -2228,6 +2345,7 @@
         "DIVINE_SHIELD"
       ],
       "referencedTags": [],
+      "elite": true,
       "text": "<b>圣盾</b>。你的酒馆法术使随从额外获得+1/+2。"
     },
     {
@@ -2246,6 +2364,7 @@
         "DEATHRATTLE"
       ],
       "referencedTags": [],
+      "elite": false,
       "text": "<b>亡语：</b>在本局对战中，你的元素使随从额外获得+2生命值。"
     },
     {
@@ -2264,6 +2383,7 @@
         "DEATHRATTLE"
       ],
       "referencedTags": [],
+      "elite": false,
       "text": "<b>亡语：</b>在本局对战中，你酒馆法术使随从额外获得+1攻击力。"
     },
     {
@@ -2282,6 +2402,7 @@
         "TRIGGER_VISUAL"
       ],
       "referencedTags": [],
+      "elite": false,
       "text": "在另一个友方恶魔造成伤害后，永久获得+1/+2。"
     },
     {
@@ -2301,6 +2422,7 @@
         "TAUNT"
       ],
       "referencedTags": [],
+      "elite": false,
       "text": "<b>嘲讽</b>。<b>亡语：</b>对所有随从造成2点伤害<i>（友方恶魔除外）</i>。"
     },
     {
@@ -2320,6 +2442,7 @@
         "TRIGGER_VISUAL"
       ],
       "referencedTags": [],
+      "elite": false,
       "text": "<b>塑造法术：</b>随机获取一张能使随从获得属性值的酒馆法术牌。"
     },
     {
@@ -2338,6 +2461,7 @@
         "BACON_RALLY"
       ],
       "referencedTags": [],
+      "elite": false,
       "text": "<b>进击：</b>随机获取一张<b>悬赏令</b>。"
     },
     {
@@ -2357,6 +2481,7 @@
         "END_OF_TURN_TRIGGER"
       ],
       "referencedTags": [],
+      "elite": false,
       "text": "在你的回合结束时，吞食酒馆中生命值最高的随从以获得其\n属性值。"
     },
     {
@@ -2377,6 +2502,7 @@
       "referencedTags": [
         "DISCOVER"
       ],
+      "elite": false,
       "text": "<b>战吼：</b>\n<b>发现</b>一张野兽牌。"
     },
     {
@@ -2394,6 +2520,7 @@
         "STEALTH"
       ],
       "referencedTags": [],
+      "elite": false,
       "text": "<b>潜行</b>。<b>进击：</b>获得目标的攻击力。"
     },
     {
@@ -2412,6 +2539,7 @@
         "AVENGE"
       ],
       "referencedTags": [],
+      "elite": false,
       "text": "<b>复仇（3）：</b>随机获取一张<b>多彩幼龙</b>。"
     },
     {
@@ -2432,6 +2560,7 @@
       "referencedTags": [
         "BACON_BLOOD_GEM_TOOLTIP"
       ],
+      "elite": false,
       "text": "<b>亡语：</b>获取一张鲜血宝石弹幕。"
     },
     {
@@ -2450,6 +2579,7 @@
         "END_OF_TURN_TRIGGER"
       ],
       "referencedTags": [],
+      "elite": false,
       "text": "在你的回合结束时，获取一张查抄宝石。"
     },
     {
@@ -2468,6 +2598,7 @@
         "DEATHRATTLE"
       ],
       "referencedTags": [],
+      "elite": false,
       "text": "<b>亡语：</b>在本局对战中，你的亡灵拥有+2攻击力，无论它们在哪。<i>（如果本随从在战斗之外死亡，改为+4！）</i>"
     },
     {
@@ -2488,6 +2619,7 @@
       "referencedTags": [
         "BACON_REFRESH_TOOLTIP"
       ],
+      "elite": false,
       "text": "<b>战吼：</b>在本局对战中，在酒馆<b>刷新</b>后，使酒馆中一个随机随从获得+7/+7。"
     },
     {
@@ -2506,6 +2638,7 @@
         "BACON_RALLY"
       ],
       "referencedTags": [],
+      "elite": false,
       "text": "<b>进击：</b>对本随从右边的随从施放主厨\n甄选。"
     },
     {
@@ -2525,6 +2658,7 @@
         "DEATHRATTLE"
       ],
       "referencedTags": [],
+      "elite": false,
       "text": "<b>战吼，亡语：</b>获取一张深水族群。"
     },
     {
@@ -2545,6 +2679,7 @@
       "referencedTags": [
         "BACON_REFRESH_TOOLTIP"
       ],
+      "elite": false,
       "text": "在你的回合结束时，在你的下3次<b>刷新</b>中各添加一个恶魔<b>饲料</b>。"
     },
     {
@@ -2564,6 +2699,7 @@
         "MAGNETIC"
       ],
       "referencedTags": [],
+      "elite": false,
       "text": "<b>磁力</b>。你的酒馆法术使随从额外获得+1/+1。"
     },
     {
@@ -2584,6 +2720,7 @@
       "referencedTags": [
         "BACON_BLOOD_GEM_TOOLTIP"
       ],
+      "elite": false,
       "text": "在你的回合结束时，获取一张<b>鲜血宝石</b>。该宝石还能使野猪人获得<b>复生</b>。"
     },
     {
@@ -2604,6 +2741,7 @@
       "referencedTags": [
         "BACON_REFRESH_TOOLTIP"
       ],
+      "elite": false,
       "text": "每当本随从受到伤害，获得一次免费的<b>刷新</b>。<i>（每回合限3次。）</i>3每当本随从受到伤害，获得一次免费的<b>刷新</b>。<i>（还剩3次！）</i>"
     },
     {
@@ -2622,6 +2760,7 @@
         "BATTLECRY"
       ],
       "referencedTags": [],
+      "elite": false,
       "text": "<b>战吼：</b>使一个友方随从获得+2/+2。<i>（在本回合中，你每施放过一个酒馆法术都会提升！）</i>"
     },
     {
@@ -2641,6 +2780,7 @@
         "DEATHRATTLE"
       ],
       "referencedTags": [],
+      "elite": false,
       "text": "<b>战吼，亡语：</b>获取一张奥术吸收。"
     },
     {
@@ -2660,6 +2800,7 @@
         "DIVINE_SHIELD"
       ],
       "referencedTags": [],
+      "elite": false,
       "text": "<b>圣盾</b>。在本局对战中，你每施放一个酒馆法术，便拥有+1/+1。"
     },
     {
@@ -2678,6 +2819,7 @@
         "BATTLECRY"
       ],
       "referencedTags": [],
+      "elite": true,
       "text": "<b>战吼：</b>使你手牌中和场上的所有其他鱼人获得+4/+4。"
     },
     {
@@ -2698,6 +2840,7 @@
       "referencedTags": [
         "DEATHRATTLE"
       ],
+      "elite": false,
       "text": "<b>进击：</b>触发你最左边的<b>亡语</b><i>（本随从的除外）</i>。"
     },
     {
@@ -2718,6 +2861,7 @@
       "referencedTags": [
         "BACON_REFRESH_TOOLTIP"
       ],
+      "elite": false,
       "text": "<b>战吼：</b>获得2次免费的<b>刷新</b>。"
     },
     {
@@ -2736,6 +2880,7 @@
         "BATTLECRY"
       ],
       "referencedTags": [],
+      "elite": false,
       "text": "<b>战吼：</b>随机获取一张元素牌。"
     },
     {
@@ -2754,6 +2899,7 @@
       "referencedTags": [
         "BATTLECRY"
       ],
+      "elite": true,
       "text": "你的<b>战吼</b>会触发\n两次。"
     },
     {
@@ -2772,6 +2918,7 @@
         "END_OF_TURN_TRIGGER"
       ],
       "referencedTags": [],
+      "elite": false,
       "text": "在你的回合结束时，你的恶魔各吞食酒馆中的一个随从，获得其属性值。"
     },
     {
@@ -2794,6 +2941,7 @@
       "referencedTags": [
         "DIVINE_SHIELD"
       ],
+      "elite": false,
       "text": "<b>嘲讽</b>，<b>塑造法术：</b>直到下个回合，使一个随从获得<b>圣盾</b>。"
     },
     {
@@ -2814,6 +2962,7 @@
       "referencedTags": [
         "BACON_BLOOD_GEM_TOOLTIP"
       ],
+      "elite": false,
       "text": "每当你花掉8枚铸币，本随从对你的所有野猪人各使用两张<b>鲜血宝石</b>。<i>（还剩8枚！）</i>"
     },
     {
@@ -2830,6 +2979,7 @@
         "DEATHRATTLE"
       ],
       "referencedTags": [],
+      "elite": true,
       "text": "<b>亡语：</b>消灭击杀本随从的随从。"
     },
     {
@@ -2848,6 +2998,7 @@
       "referencedTags": [
         "DEATHRATTLE"
       ],
+      "elite": true,
       "text": "你的<b>亡语</b>额外触发一次。"
     },
     {
@@ -2868,6 +3019,7 @@
       "referencedTags": [
         "MAGNETIC"
       ],
+      "elite": false,
       "text": "<b>亡语：</b>随机获取一张<b>磁力</b>机械牌。"
     },
     {
@@ -2887,6 +3039,7 @@
         "DEATHRATTLE"
       ],
       "referencedTags": [],
+      "elite": false,
       "text": "<b>战吼，亡语：</b>使酒馆中的元素在本局对战中获得+8/+8。"
     },
     {
@@ -2904,6 +3057,7 @@
         "TRIGGER_VISUAL"
       ],
       "referencedTags": [],
+      "elite": false,
       "text": "每2个回合，在回合结束时，获取一张本随从左边随从的原始版复制。<i>（还剩2回合！）</i>2每2个回合，在回合结束时，获取一张本随从左边随从的原始版复制。<i>（就是这回合！）</i>"
     },
     {
@@ -2924,6 +3078,7 @@
       "referencedTags": [
         "BACON_BLOOD_GEM_TOOLTIP"
       ],
+      "elite": false,
       "text": "<b>亡语：</b>本随从对你的所有野猪人各使用3张<b>鲜血宝石</b>。"
     },
     {
@@ -2940,6 +3095,7 @@
         "AURA"
       ],
       "referencedTags": [],
+      "elite": false,
       "text": "你的回合结束效果会触发两次。"
     },
     {
@@ -2958,6 +3114,7 @@
         "END_OF_TURN_TRIGGER"
       ],
       "referencedTags": [],
+      "elite": true,
       "text": "在你的回合结束时，消灭本随从左侧的亡灵并再次召唤完全相同的复制。"
     },
     {
@@ -2976,6 +3133,7 @@
       "referencedTags": [
         "DISCOVER"
       ],
+      "elite": false,
       "text": "<b>战吼：</b><b>发现</b>一张酒馆法术牌。"
     },
     {
@@ -2992,6 +3150,7 @@
         "TRIGGER_VISUAL"
       ],
       "referencedTags": [],
+      "elite": true,
       "text": "每当你施放一个酒馆法术，使每个类型的各一个友方随从获得+4/+3。"
     },
     {
@@ -3011,6 +3170,7 @@
         "TRIGGER_VISUAL"
       ],
       "referencedTags": [],
+      "elite": false,
       "text": "在你施放3个法术后，吞食酒馆中的一个随从，获得其属性值。<i>（还剩3个！）</i>"
     },
     {
@@ -3030,6 +3190,7 @@
         "TRIGGER_VISUAL"
       ],
       "referencedTags": [],
+      "elite": false,
       "text": "<b>圣盾</b>。每当你施放一个酒馆法术时，使你具有<b>圣盾</b>的随从获得+4攻击力。"
     },
     {
@@ -3048,6 +3209,7 @@
         "TRIGGER_VISUAL"
       ],
       "referencedTags": [],
+      "elite": false,
       "text": "每当一只友方野兽受到伤害时，使该受伤野兽之外的一只友方野兽永久获得+3/+2。"
     },
     {
@@ -3068,6 +3230,7 @@
         "TAUNT"
       ],
       "referencedTags": [],
+      "elite": false,
       "text": "<b><b>嘲讽</b>。<b>复生</b></b>\n<b>亡语：</b>使你的随从获得+1生命值并对其造成1点伤害。"
     },
     {
@@ -3084,6 +3247,7 @@
         "TRIGGER_VISUAL"
       ],
       "referencedTags": [],
+      "elite": false,
       "text": "在你使用奇数等级的牌后，使你的奇数等级的随从获得+1/+1。"
     },
     {
@@ -3102,6 +3266,7 @@
       "referencedTags": [
         "BATTLECRY"
       ],
+      "elite": false,
       "text": "<b>亡语：</b>随机获取一张<b>战吼</b>随从牌。"
     },
     {
@@ -3120,6 +3285,7 @@
         "TRIGGER_VISUAL"
       ],
       "referencedTags": [],
+      "elite": false,
       "text": "在你使用一张鱼人牌后，使一个友方随从和你手牌中的一张随从牌获得+5/+5。"
     },
     {
@@ -3138,6 +3304,7 @@
         "TRIGGER_VISUAL"
       ],
       "referencedTags": [],
+      "elite": false,
       "text": "每当你即将召唤随从且你的战队放不下时，使你的随从永久获得+2/+2。"
     },
     {
@@ -3159,6 +3326,7 @@
       "referencedTags": [
         "MAGNETIC"
       ],
+      "elite": false,
       "text": "<b>圣盾</b>。<b>进击：</b>随机获取一张<b>磁力</b>机械牌。"
     },
     {
@@ -3177,6 +3345,7 @@
         "DEATHRATTLE"
       ],
       "referencedTags": [],
+      "elite": false,
       "text": "<b>亡语：</b>在本局\n对战中，你的甲虫拥有+5/+5。召唤一只2/2的甲虫。"
     },
     {
@@ -3197,6 +3366,7 @@
         "TRIGGER_VISUAL"
       ],
       "referencedTags": [],
+      "elite": false,
       "text": "<b>塑造法术：</b>随机获取一张等级1的纳迦牌。<i>（每回合都会提升！）</i>"
     },
     {
@@ -3216,6 +3386,7 @@
         "DEATHRATTLE"
       ],
       "referencedTags": [],
+      "elite": false,
       "text": "<b>战吼，亡语：</b>获取一张乱放的茶具。"
     },
     {
@@ -3234,6 +3405,7 @@
         "AVENGE"
       ],
       "referencedTags": [],
+      "elite": false,
       "text": "<b>复仇（3）：</b>获取一张宰割。"
     },
     {
@@ -3253,6 +3425,7 @@
         "END_OF_TURN_TRIGGER"
       ],
       "referencedTags": [],
+      "elite": false,
       "text": "在你的回合结束时，你的酒馆法术在本局对战中使随从额外获得+1/+1。"
     },
     {
@@ -3272,6 +3445,7 @@
         "TRIGGER_VISUAL"
       ],
       "referencedTags": [],
+      "elite": false,
       "text": "<b>塑造法术：</b>在本局对战中，你的酒馆法术使随从额外获得+1/+1。"
     },
     {
@@ -3290,6 +3464,7 @@
         "TRIGGER_VISUAL"
       ],
       "referencedTags": [],
+      "elite": false,
       "text": "在你的英雄受到伤害后，回溯该伤害并使酒馆中的随从在本回合中获得+1/+1。"
     },
     {
@@ -3309,6 +3484,7 @@
         "TAUNT"
       ],
       "referencedTags": [],
+      "elite": false,
       "text": "<b>嘲讽</b>。<b>亡语：</b>获取一张富足之杖。"
     },
     {
@@ -3328,6 +3504,7 @@
         "VENOMOUS"
       ],
       "referencedTags": [],
+      "elite": false,
       "text": "<b>烈毒</b>。<b>进击：</b>使另一个友方鱼人获得<b>烈毒</b>。"
     },
     {
@@ -3348,6 +3525,7 @@
         "TAUNT"
       ],
       "referencedTags": [],
+      "elite": false,
       "text": "<b>嘲讽</b>。<b>圣盾</b>。<b>亡语：</b>获取一张圣洁庇护。"
     },
     {
@@ -3367,6 +3545,7 @@
         "DEATHRATTLE"
       ],
       "referencedTags": [],
+      "elite": false,
       "text": "<b>战吼，亡语：</b>随机获取一张<b>悬赏令</b>。"
     },
     {
@@ -3385,6 +3564,7 @@
         "AURA"
       ],
       "referencedTags": [],
+      "elite": false,
       "text": "你的<b>悬赏令</b>会施放\n两次。"
     },
     {
@@ -3406,6 +3586,7 @@
         "BACON_BLOOD_GEM_TOOLTIP",
         "DIVINE_SHIELD"
       ],
+      "elite": false,
       "text": "<b>战吼：</b>获取一张<b>鲜血宝石</b>。该宝石还能使野猪人获得<b>圣盾</b>。"
     },
     {
@@ -3426,6 +3607,7 @@
         "TRIGGER_VISUAL"
       ],
       "referencedTags": [],
+      "elite": false,
       "text": "<b>圣盾</b>。<b>战斗开始时：</b>获得你手牌中攻击力\n最高的随从牌的攻击力。"
     },
     {
@@ -3444,6 +3626,7 @@
         "AVENGE"
       ],
       "referencedTags": [],
+      "elite": false,
       "text": "<b>复仇（5）：</b>召唤一个永恒骑士并使其立即发起攻击。"
     },
     {
@@ -3463,6 +3646,7 @@
         "DEATHRATTLE"
       ],
       "referencedTags": [],
+      "elite": false,
       "text": "<b>战吼，亡语：</b>随机获取一张<b>多彩幼龙</b>。"
     },
     {
@@ -3481,6 +3665,7 @@
         "DEATHRATTLE"
       ],
       "referencedTags": [],
+      "elite": false,
       "text": "<b>亡语：</b>获取一张惊扰墓穴。"
     },
     {
@@ -3501,6 +3686,7 @@
       "referencedTags": [
         "TAUNT"
       ],
+      "elite": false,
       "text": "<b>亡语：</b>召唤2条暮光龙崽并使其获得<b>嘲讽</b>。"
     },
     {
@@ -3519,6 +3705,7 @@
         "TRIGGER_VISUAL"
       ],
       "referencedTags": [],
+      "elite": false,
       "text": "在你花掉7枚铸币后，施放乘借东风。<i>（还剩7枚！）</i>"
     },
     {
@@ -3537,6 +3724,7 @@
         "AURA"
       ],
       "referencedTags": [],
+      "elite": false,
       "text": "在战斗中，你的\n酒馆法术会额外施放一次。"
     },
     {
@@ -3553,6 +3741,7 @@
         "END_OF_TURN_TRIGGER"
       ],
       "referencedTags": [],
+      "elite": false,
       "text": "在你的回合结束时，获取你施放的上一个酒馆法术的一张复制。"
     },
     {
@@ -3571,6 +3760,7 @@
         "END_OF_TURN_TRIGGER"
       ],
       "referencedTags": [],
+      "elite": false,
       "text": "在你的回合结束时，获取一张莫格顿大妈或莫格顿老爹。"
     },
     {
@@ -3589,6 +3779,7 @@
         "BATTLECRY"
       ],
       "referencedTags": [],
+      "elite": false,
       "text": "<b>战吼：</b>在本局对战中，使酒馆中等级3或以下的随从获得+3/+3。"
     },
     {
@@ -3608,6 +3799,7 @@
         "END_OF_TURN_TRIGGER"
       ],
       "referencedTags": [],
+      "elite": false,
       "text": "在你的回合结束时，使你的随从获得+1/+1。<b>复仇（1）：</b>永久提升此效果。"
     },
     {
@@ -3629,6 +3821,7 @@
         "BACON_BLOOD_GEM_TOOLTIP",
         "DEATHRATTLE"
       ],
+      "elite": false,
       "text": "在一个友方<b>亡语</b>随从死亡后，你的<b>鲜血宝石</b>会在本局对战中使随从额外获得+2攻击力。"
     },
     {
@@ -3647,6 +3840,7 @@
         "TRIGGER_VISUAL"
       ],
       "referencedTags": [],
+      "elite": false,
       "text": "每当你召唤野兽时，使其获得+2攻击力并永久提升此效果。"
     },
     {
@@ -3667,6 +3861,7 @@
       "referencedTags": [
         "TAUNT"
       ],
+      "elite": false,
       "text": "<b>亡语：</b>召唤两只下水道老鼠。下水道老鼠能召唤2/3并具有<b>嘲讽</b>的乌龟。"
     },
     {
@@ -3685,6 +3880,7 @@
         "END_OF_TURN_TRIGGER"
       ],
       "referencedTags": [],
+      "elite": false,
       "text": "在你的回合结束时，使你最左边的海盗获得+2/+3。在本回合中你每使用过一张牌，重复一次。<i>（重复0次）</i>"
     },
     {
@@ -3703,6 +3899,7 @@
         "BATTLECRY"
       ],
       "referencedTags": [],
+      "elite": false,
       "text": "<b>战吼：</b>获取一张\n燃焰。"
     },
     {
@@ -3722,6 +3919,7 @@
         "TRIGGER_VISUAL"
       ],
       "referencedTags": [],
+      "elite": false,
       "text": "你的酒馆法术使随从额外获得+1/+1。在你使用2张鱼人牌后，在本回合中提升此效果。<i>（还剩2张！）</i>"
     },
     {
@@ -3740,6 +3938,7 @@
         "DEATHRATTLE"
       ],
       "referencedTags": [],
+      "elite": false,
       "text": "<b>亡语：</b>召唤你本场战斗中最先死亡的2个机械的原始版复制。"
     },
     {
@@ -3759,6 +3958,7 @@
         "DISCOVER"
       ],
       "referencedTags": [],
+      "elite": false,
       "text": "<b>战吼：</b>如果你控制着其他鱼人，<b>发现</b>一张鱼人牌。"
     },
     {
@@ -3779,6 +3979,7 @@
       "referencedTags": [
         "BATTLECRY"
       ],
+      "elite": true,
       "text": "在你触发一个<b>战吼</b>后，使你的龙获得+2/+2。"
     },
     {
@@ -3797,6 +3998,7 @@
         "TRIGGER_VISUAL"
       ],
       "referencedTags": [],
+      "elite": true,
       "text": "在你使用一张元素牌后，使酒馆中的元素在本局对战中获得+4/+4。"
     },
     {
@@ -3816,6 +4018,7 @@
         "REBORN"
       ],
       "referencedTags": [],
+      "elite": false,
       "text": "<b>复生</b>。<b>亡语：</b>召唤1个永恒骑士。"
     },
     {
@@ -3836,6 +4039,7 @@
       "referencedTags": [
         "BACON_BLOOD_GEM_TOOLTIP"
       ],
+      "elite": true,
       "text": "<b>复仇（2）：</b>本随从对你的所有野猪人各使用2张<b>鲜血宝石</b>。"
     },
     {
@@ -3854,6 +4058,7 @@
         "DIVINE_SHIELD"
       ],
       "referencedTags": [],
+      "elite": false,
       "text": "<b>圣盾</b>。可以与任意元素三连。"
     },
     {
@@ -3873,6 +4078,7 @@
         "TRIGGER_VISUAL"
       ],
       "referencedTags": [],
+      "elite": false,
       "text": "<b>战斗开始时：</b>获得你手牌中所有随从牌的属性值。"
     },
     {
@@ -3891,6 +4097,7 @@
         "END_OF_TURN_TRIGGER"
       ],
       "referencedTags": [],
+      "elite": false,
       "text": "在你的回合结束时，随机获取2张\n酒馆法术牌。"
     },
     {
@@ -3907,6 +4114,7 @@
         "TRIGGER_VISUAL"
       ],
       "referencedTags": [],
+      "elite": false,
       "text": "在你使用偶数等级的牌后，使你的偶数等级的随从获得+2/+2。"
     },
     {
@@ -3925,6 +4133,7 @@
         "TRIGGER_VISUAL"
       ],
       "referencedTags": [],
+      "elite": false,
       "text": "在你使用一张纳迦牌后，获得+1/+1。<i>（在本局对战中，你每施放4个法术都会提升！）</i>4在你使用一张纳迦牌后，获得+1/+1。<i>（施放0/4个法术即可提升！）</i>"
     },
     {
@@ -3945,6 +4154,7 @@
       "referencedTags": [
         "MAGNETIC"
       ],
+      "elite": false,
       "text": "在你的回合结束时，获取两张6/6的<b>磁力</b>卫星并提升此效果。"
     },
     {
@@ -3963,6 +4173,7 @@
         "TRIGGER_VISUAL"
       ],
       "referencedTags": [],
+      "elite": false,
       "text": "每当另一个友方海盗获得攻击力时，获得+2生命值。"
     },
     {
@@ -3982,6 +4193,7 @@
         "DEATHRATTLE"
       ],
       "referencedTags": [],
+      "elite": false,
       "text": "<b>复仇（4）：</b>随机获取一张亡灵牌。<b>亡语：</b>从你的手牌中召唤它，其登场仅限本场战斗。"
     },
     {
@@ -4000,6 +4212,7 @@
         "DEATHRATTLE"
       ],
       "referencedTags": [],
+      "elite": false,
       "text": "每当本随从受到伤害，在本局对战中，你的甲虫拥有+2/+2。<b>亡语：</b>召唤一只2/2的甲虫。"
     },
     {
@@ -4018,6 +4231,7 @@
         "TRIGGER_VISUAL"
       ],
       "referencedTags": [],
+      "elite": false,
       "text": "每当你获取一张海盗牌，使你的随从获得+2/+2，金色随从改为+6/+6。"
     },
     {
@@ -4037,6 +4251,7 @@
         "TRIGGER_VISUAL"
       ],
       "referencedTags": [],
+      "elite": false,
       "text": "<b>战斗开始时：</b>使你的龙获得+2/+1。在你施放一个酒馆法术后永久提升此效果。"
     },
     {
@@ -4055,6 +4270,7 @@
         "TRIGGER_VISUAL"
       ],
       "referencedTags": [],
+      "elite": false,
       "text": "在你使用一张元素牌后，使你的元素获得+4/+4。"
     },
     {
@@ -4073,6 +4289,7 @@
         "TRIGGER_VISUAL"
       ],
       "referencedTags": [],
+      "elite": false,
       "text": "在一个友方恶魔造成伤害后，使其之外的友方随从获得+2/+1。"
     },
     {
@@ -4091,6 +4308,7 @@
         "BACON_RALLY"
       ],
       "referencedTags": [],
+      "elite": true,
       "text": "<b>进击：</b>使2条友方的龙获得本随从的生命值上限<i>（魅惑之翼除外）</i>。"
     },
     {
@@ -4109,6 +4327,7 @@
         "TRIGGER_VISUAL"
       ],
       "referencedTags": [],
+      "elite": true,
       "text": "在你花掉9枚铸币后，随机获取一张<b>悬赏令</b>。<i>（还剩9枚！）</i>"
     },
     {
@@ -4129,6 +4348,7 @@
       "referencedTags": [
         "BACON_BLOOD_GEM_TOOLTIP"
       ],
+      "elite": false,
       "text": "<b>进击：</b>在本局对战中，你的<b>鲜血宝石</b>使随从额外获得+1/+2。"
     },
     {
@@ -4147,6 +4367,7 @@
         "TRIGGER_VISUAL"
       ],
       "referencedTags": [],
+      "elite": false,
       "text": "每回合一次。在你购买一个酒馆法术后，获取一张1/1的鱼人并教会它该法术。<i>（还剩1次！）</i>"
     },
     {
@@ -4165,6 +4386,7 @@
         "TRIGGER_VISUAL"
       ],
       "referencedTags": [],
+      "elite": false,
       "text": "在你使用一张等级3或以下的牌后，使你的鱼人获得+2/+2。"
     },
     {
@@ -4183,6 +4405,7 @@
         "TRIGGER_VISUAL"
       ],
       "referencedTags": [],
+      "elite": false,
       "text": "在另一个友方纳迦获得生命值后，使其获得等量的攻击力。"
     },
     {
@@ -4201,6 +4424,7 @@
         "TRIGGER_VISUAL"
       ],
       "referencedTags": [],
+      "elite": false,
       "text": "每当你施放一个法术，使你的随从获得+3生命值。"
     },
     {
@@ -4221,6 +4445,7 @@
       "referencedTags": [
         "MAGNETIC"
       ],
+      "elite": false,
       "text": "在你<b>磁力吸附</b>一个随从后，使你的随从获得+5/+5。"
     },
     {
@@ -4239,6 +4464,7 @@
         "TRIGGER_VISUAL"
       ],
       "referencedTags": [],
+      "elite": false,
       "text": "在你使用一张野兽牌后，使你的野兽获得+3/+3并对它们造成1点伤害。"
     },
     {
@@ -4257,6 +4483,7 @@
         "TRIGGER_VISUAL"
       ],
       "referencedTags": [],
+      "elite": false,
       "text": "在你施放一个酒馆法术后，你的亡灵在本局对战中拥有+2攻击力<i>（无论它们\n在哪）</i>。"
     },
     {
@@ -4276,6 +4503,7 @@
         "BACON_RALLY"
       ],
       "referencedTags": [],
+      "elite": false,
       "text": "<b>进击：</b>使4个其他友方随从获得本随从的攻击力。"
     },
     {
@@ -4295,6 +4523,7 @@
         "TRIGGER_VISUAL"
       ],
       "referencedTags": [],
+      "elite": false,
       "text": "每当一个友方随从\n攻击时，施放闪亮的戒指。"
     },
     {
@@ -4315,6 +4544,7 @@
         "DEATHRATTLE"
       ],
       "referencedTags": [],
+      "elite": false,
       "text": "<b>战吼，亡语，进击：</b>施放女王的命令。"
     },
     {
@@ -4333,6 +4563,7 @@
         "TRIGGER_VISUAL"
       ],
       "referencedTags": [],
+      "elite": false,
       "text": "每当一个随从被吞食，在本回合中使酒馆中的随从获得+1/+1。"
     },
     {
@@ -4353,6 +4584,7 @@
       "referencedTags": [
         "BACON_REFRESH_TOOLTIP"
       ],
+      "elite": false,
       "text": "在你出售一个随从后，在你的下一次<b>刷新</b>中添加一个恶魔<b>饲料</b>。"
     },
     {
@@ -4374,6 +4606,7 @@
       "referencedTags": [
         "DEATHRATTLE"
       ],
+      "elite": false,
       "text": "<b>圣盾</b>。在本局对战中，你每触发过一次<b>亡语</b>，便拥有+4/+2<i>（无论本随从在哪）。</i>"
     },
     {
@@ -4395,6 +4628,7 @@
       "referencedTags": [
         "BACON_BLOOD_GEM_TOOLTIP"
       ],
+      "elite": false,
       "text": "<b>风怒</b>。在你的回合结束时，本随从对你的所有随从各使用一张<b>鲜血宝石</b>。本随从每拥有一个<b>额外关键词</b>，重复一次。"
     },
     {
@@ -4411,6 +4645,7 @@
         "AURA"
       ],
       "referencedTags": [],
+      "elite": true,
       "text": "你的以友方随从为目标的法术会施放\n两次。"
     },
     {
@@ -4431,6 +4666,7 @@
       "referencedTags": [
         "MAGNETIC"
       ],
+      "elite": false,
       "text": "<b>亡语：</b>在本场战斗中，你的机械拥有+2攻击力。<i>（在本局对战中你每<b>磁力吸附</b>一次都会提升！）</i>"
     },
     {
@@ -4449,6 +4685,7 @@
         "DEATHRATTLE"
       ],
       "referencedTags": [],
+      "elite": true,
       "text": "<b>亡语：</b>在本场战斗的剩余时间内，你的野兽拥有+8/+8。"
     }
   ],

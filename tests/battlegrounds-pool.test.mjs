@@ -25,7 +25,7 @@ function byTier(cards) {
 }
 
 test("pins the verified 36.0.3 / build 247416 source", () => {
-  assert.equal(snapshot.schemaVersion, 2);
+  assert.equal(snapshot.schemaVersion, 3);
   assert.deepEqual(source, {
     patch: "36.0.3",
     build: 247416,
@@ -164,6 +164,7 @@ test("preserves the fields needed by the future live-roster engine", () => {
     assert.ok(Array.isArray(card.associatedRaces));
     assert.ok(Array.isArray(card.mechanics));
     assert.ok(Array.isArray(card.referencedTags));
+    assert.equal(typeof card.elite, "boolean");
     assert.equal(typeof card.text, "string");
   }
 
@@ -171,6 +172,15 @@ test("preserves the fields needed by the future live-roster engine", () => {
   assert.equal(
     minions.filter((card) => card.associatedRaces.length > 0).length,
     5,
+  );
+  assert.equal(minions.filter((card) => card.elite).length, 21);
+  assert.equal(
+    minions.find((card) => card.id === "BG_LOE_077")?.elite,
+    true,
+  );
+  assert.equal(
+    minions.find((card) => card.id === "BG20_100")?.elite,
+    false,
   );
 });
 

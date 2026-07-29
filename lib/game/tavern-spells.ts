@@ -397,6 +397,24 @@ export const TAVERN_SPELL_RULES = [
     effect: "perfectVision",
     target: "anyMinion",
   },
+  {
+    id: "tavern-spell-knockoff-wisdomball",
+    cardId: "BG30_802",
+    effect: "knockoffWisdomball",
+    target: "none",
+  },
+  {
+    id: "tavern-spell-eyes-of-earth-mother",
+    cardId: "EBG_Spell_017",
+    effect: "eyesOfTheEarthMother",
+    target: "friendly",
+  },
+  {
+    id: "tavern-spell-lost-staff-of-hamuul",
+    cardId: "EBG_Spell_038",
+    effect: "lostStaffOfHamuul",
+    target: "anyMinion",
+  },
 ] as const satisfies readonly TavernSpellRule[];
 
 const SOURCE_TRIBES: Readonly<Record<string, Tribe>> = {

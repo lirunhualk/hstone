@@ -3,7 +3,7 @@ import liveRosterSnapshot from "./generated/battlegrounds-36.0.3-247416.zhCN.jso
 };
 import type { MinionDefinition, Tribe } from "./types.ts";
 
-export const CURRENT_ROSTER_VERSION = "battlegrounds-36.0.3-247416-v14";
+export const CURRENT_ROSTER_VERSION = "battlegrounds-36.0.3-247416-v15";
 /** Compatibility alias for existing save and engine imports. */
 export const CLASSIC_ROSTER_VERSION = CURRENT_ROSTER_VERSION;
 
@@ -642,6 +642,7 @@ interface LiveRosterCard {
   associatedRaces: readonly string[];
   mechanics: readonly string[];
   referencedTags: readonly string[];
+  elite: boolean;
   text: string;
 }
 
@@ -880,6 +881,22 @@ const LIVE_RULE_OVERRIDES: Readonly<
         health: 1,
       },
     ],
+  },
+  BG33_888: {
+    battlecry: [
+      {
+        kind: "gainBloodGems",
+        count: 1,
+        bonusKeyword: "divineShieldForQuilboar",
+      },
+    ],
+  },
+  BG35_433: {
+    endOfTurn: {
+      kind: "gainBloodGems",
+      count: 1,
+      bonusKeyword: "rebornForQuilboar",
+    },
   },
   BG25_016: {
     rally: [
@@ -1220,6 +1237,7 @@ const FULLY_SUPPORTED_LIVE_CARD_IDS = new Set([
   "BG32_172",
   "BG33_156",
   "BG33_241",
+  "BG33_888",
   "BG34_140",
   "BG34_175",
   "BG34_523",
@@ -1228,6 +1246,7 @@ const FULLY_SUPPORTED_LIVE_CARD_IDS = new Set([
   "BG34_637t",
   "BG34_731",
   "BG35_702",
+  "BG35_433",
   "BG_DAL_775",
   "BG_BOT_911",
   "BG_DEEP_015",
@@ -1279,6 +1298,7 @@ function createLiveDefinition(card: LiveRosterCard): MinionDefinition {
     associatedTribes,
     effectSupport,
     printedMechanics: [...card.mechanics],
+    legendary: card.elite,
     attack: card.attack,
     health: card.health,
     description,

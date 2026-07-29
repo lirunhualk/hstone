@@ -34,11 +34,13 @@ import {
   LEGACY_SCHEMA_7_CONTENT_VERSION,
   LEGACY_SCHEMA_8_CONTENT_VERSION,
   LEGACY_SCHEMA_9_CONTENT_VERSION,
+  LEGACY_SCHEMA_10_CONTENT_VERSION,
   migrateSchema5GameState,
   migrateSchema6GameState,
   migrateSchema7GameState,
   migrateSchema8GameState,
   migrateSchema9GameState,
+  migrateSchema10GameState,
 } from "../lib/game/save.ts";
 
 const SPELL_POOL_COPIES_BY_TIER = [0, 5, 7, 9, 11, 7, 5] as const;
@@ -145,6 +147,30 @@ function createGameWithTribes(
     }
   }
   throw new Error(`Could not create a lobby containing ${tribes.join(", ")}`);
+}
+
+function gameWithHelpfulRefresh(
+  kind: NonNullable<PlayerState["lastHelpfulRefreshKind"]>,
+  setup: (state: GameState, player: PlayerState) => void,
+): GameState {
+  for (let seed = 0x7600; seed < 0x7800; seed += 1) {
+    const state = createGame(seed);
+    const player = humanPlayer(state);
+    player.tavernTier = 6;
+    setup(state, player);
+    player.shop = [];
+    player.spellShop = null;
+    player.additionalSpellShop = [];
+    player.spellOnlyRefreshActive = false;
+    player.helpfulRefreshes = 1;
+    player.freeRefreshes = 1;
+    player.gold = 0;
+    const refreshed = gameReducer(state, { type: "REFRESH_SHOP" });
+    if (humanPlayer(refreshed).lastHelpfulRefreshKind === kind) {
+      return refreshed;
+    }
+  }
+  throw new Error(`Could not produce helpful Refresh kind ${kind}`);
 }
 
 function replaceSpellOffer(
@@ -399,10 +425,10 @@ function legacySchema8State(seed: number): Record<string, unknown> {
   return legacy;
 }
 
-function assertMigratedSchema10(value: unknown): asserts value is GameState {
+function assertMigratedSchema11(value: unknown): asserts value is GameState {
   assert.ok(value !== null && typeof value === "object");
   const migrated = value as GameState;
-  assert.equal(migrated.version, 10);
+  assert.equal(migrated.version, 11);
   assert.equal(migrated.contentVersion, CURRENT_ROSTER_VERSION);
   assert.equal(humanPlayer(migrated).gold, 7);
   assert.equal(
@@ -421,6 +447,8 @@ function assertMigratedSchema10(value: unknown): asserts value is GameState {
     assert.equal(player.maxGold, 10);
     assert.equal(player.pendingNextTurnGold, 0);
     assert.equal(player.freeRefreshes, 0);
+    assert.equal(player.helpfulRefreshes, 0);
+    assert.equal(player.lastHelpfulRefreshKind, null);
     assert.equal(player.tavernMinionAttackBonus, 0);
     assert.equal(player.tavernMinionHealthBonus, 0);
     assert.equal(player.nextCombatAttackBonus, 0);
@@ -657,7 +685,7 @@ test("the playable Tavern Spell pool covers all 16 current Solo Tier 4 spells", 
     ).length,
     16,
   );
-  assert.equal(TAVERN_SPELL_DEFINITIONS.length, 62);
+  assert.equal(TAVERN_SPELL_DEFINITIONS.length, 65);
 });
 
 test("the playable Tavern Spell pool covers all 14 current Solo Tier 5 spells", () => {
@@ -756,8 +784,41 @@ test("the playable Tavern Spell pool covers all 14 current Solo Tier 5 spells", 
         ).length,
       ]),
     ),
-    { 1: 8, 2: 6, 3: 16, 4: 16, 5: 14, 6: 2 },
+    { 1: 8, 2: 6, 3: 16, 4: 16, 5: 14, 6: 5 },
   );
+});
+
+test("the playable Tavern Spell pool covers all five current Solo Tier 6 spells", () => {
+  const expected = [
+    ["tavern-spell-azerite-empowerment", "BG28_169", 4, "艾泽里特强化"],
+    ["tavern-spell-perfect-vision", "BG28_838", 2, "完美形象"],
+    [
+      "tavern-spell-knockoff-wisdomball",
+      "BG30_802",
+      4,
+      "冒牌的智慧之球",
+    ],
+    [
+      "tavern-spell-eyes-of-earth-mother",
+      "EBG_Spell_017",
+      4,
+      "大地母亲之眼",
+    ],
+    [
+      "tavern-spell-lost-staff-of-hamuul",
+      "EBG_Spell_038",
+      2,
+      "哈缪尔遗失的法杖",
+    ],
+  ] as const;
+
+  for (const [definitionId, cardId, cost, name] of expected) {
+    const definition = getTavernSpellDefinition(definitionId);
+    assert.equal(definition.cardId, cardId);
+    assert.equal(definition.tier, 6);
+    assert.equal(definition.cost, cost);
+    assert.equal(definition.name, name);
+  }
 });
 
 test("the pinned pool exposes all nine ordinary Spellcraft definitions", () => {
@@ -3992,7 +4053,11 @@ test("Saloon's Finest creates seven independently purchasable spell offers and c
     ...(player.spellShop ? [player.spellShop.instanceId] : []),
     ...player.additionalSpellShop.map((offer) => offer.instanceId),
   ];
-  assert.equal(player.spellOnlyRefreshActive, true);
+  assert.equal(
+    player.spellOnlyRefreshActive,
+    false,
+    "the frozen special page becomes an ordinary mixed Tavern next turn",
+  );
   assert.equal(player.frozen, false);
   assert.deepEqual(nextTurnOfferIds, remainingOfferIds);
   assert.equal(
@@ -4007,6 +4072,355 @@ test("Saloon's Finest creates seven independently purchasable spell offers and c
       `${definition.name} must remain conserved across a frozen round`,
     );
   }
+});
+
+test("Knockoff Wisdomball grants exactly two paid helpful Refreshes and never creates an empty Tavern", () => {
+  let state = createGame(0x7520);
+  let player = humanPlayer(state);
+  player.tavernTier = 6;
+  player.hand = [
+    tavernSpell(
+      "tavern-spell-knockoff-wisdomball",
+      "knockoff-wisdomball",
+    ),
+  ];
+
+  state = gameReducer(state, {
+    type: "CAST_TAVERN_SPELL",
+    cardInstanceId: "knockoff-wisdomball",
+  });
+  player = humanPlayer(state);
+  assert.equal(player.helpfulRefreshes, 2);
+  assert.equal(player.lastHelpfulRefreshKind, null);
+
+  player.gold = 0;
+  state = gameReducer(state, { type: "REFRESH_SHOP" });
+  player = humanPlayer(state);
+  assert.equal(player.helpfulRefreshes, 2);
+
+  player.freeRefreshes = 1;
+  state = gameReducer(state, { type: "REFRESH_SHOP" });
+  player = humanPlayer(state);
+  assert.equal(player.freeRefreshes, 0);
+  assert.equal(player.helpfulRefreshes, 1);
+  assert.ok(player.lastHelpfulRefreshKind);
+  assert.equal(
+    player.shop.length +
+      (player.spellShop ? 1 : 0) +
+      player.additionalSpellShop.length,
+    7,
+  );
+
+  state = gameReducer(state, { type: "END_TURN" });
+  state = gameReducer(state, { type: "CONTINUE" });
+  player = humanPlayer(state);
+  assert.equal(
+    player.helpfulRefreshes,
+    1,
+    "the automatic start-of-turn Tavern does not consume Wisdomball",
+  );
+
+  player.gold = 1;
+  state = gameReducer(state, { type: "REFRESH_SHOP" });
+  player = humanPlayer(state);
+  assert.equal(player.gold, 0);
+  assert.equal(player.helpfulRefreshes, 0);
+  assert.ok(player.lastHelpfulRefreshKind);
+  assert.ok(
+    player.shop.length +
+      (player.spellShop ? 1 : 0) +
+      player.additionalSpellShop.length >
+      0,
+  );
+
+  let exhausted = createGame(0x7523);
+  let exhaustedPlayer = humanPlayer(exhausted);
+  exhaustedPlayer.shop = [];
+  exhaustedPlayer.spellShop = null;
+  exhaustedPlayer.additionalSpellShop = [];
+  for (const definitionId of Object.keys(exhausted.pool)) {
+    exhausted.pool[definitionId] = 0;
+  }
+  for (const definitionId of Object.keys(exhausted.spellPool)) {
+    exhausted.spellPool[definitionId] = 0;
+  }
+  exhaustedPlayer.helpfulRefreshes = 1;
+  exhaustedPlayer.gold = 1;
+  exhausted = gameReducer(exhausted, { type: "REFRESH_SHOP" });
+  exhaustedPlayer = humanPlayer(exhausted);
+  assert.ok(exhaustedPlayer.shop.length > 0);
+  assert.ok(
+    exhaustedPlayer.shop.every(
+      (minion) =>
+        minion.poolCopies === 0 &&
+        minion.poolCopiesOnPurchase === 1,
+    ),
+    "Wisdomball overflow must not expand the finite shared pool",
+  );
+  let claimed = jsonClone(exhausted);
+  let claimedPlayer = humanPlayer(claimed);
+  const claimedOffer = claimedPlayer.shop[0];
+  assert.ok(claimedOffer);
+  claimedPlayer.gold = 3;
+  claimed = gameReducer(claimed, {
+    type: "BUY_MINION",
+    shopIndex: 0,
+  });
+  claimedPlayer = humanPlayer(claimed);
+  const claimedMinion = claimedPlayer.hand.find(
+    (card): card is BoardMinionInstance =>
+      card.kind === "minion" &&
+      card.instanceId === claimedOffer.instanceId,
+  );
+  assert.ok(claimedMinion);
+  assert.equal(claimedMinion.poolCopies, 1);
+  assert.equal(claimedMinion.poolCopiesOnPurchase, undefined);
+  claimedPlayer.hand = [];
+  claimedPlayer.board = [claimedMinion];
+  claimed = gameReducer(claimed, {
+    type: "SELL_MINION",
+    boardIndex: 0,
+  });
+  assert.equal(claimed.pool[claimedMinion.definitionId], 1);
+
+  exhaustedPlayer.gold = 1;
+  exhausted = gameReducer(exhausted, { type: "REFRESH_SHOP" });
+  assert.ok(
+    Object.values(exhausted.pool).every((copies) => copies === 0),
+    "releasing unbought overflow keeps an exhausted pool exhausted",
+  );
+});
+
+test("Wisdomball uses plain warband copies, a full Legendary page, and enough copies for a triple", () => {
+  let firstCopyPoolBefore = 0;
+  let secondCopyPoolBefore = 0;
+  const copied = gameWithHelpfulRefresh(
+    "warbandCopies",
+    (state, player) => {
+      const template = player.shop[0];
+      assert.ok(template);
+      firstCopyPoolBefore = state.pool.BG35_801;
+      secondCopyPoolBefore = state.pool.BG_LOE_077;
+      player.board = [
+        definitionMinion(template, "BG35_801", "copy-source-one", {
+          attack: 40,
+          health: 40,
+          golden: true,
+        }),
+        definitionMinion(template, "BG_LOE_077", "copy-source-two", {
+          attack: 30,
+          health: 30,
+        }),
+      ];
+    },
+  );
+  const copiedShop = humanPlayer(copied).shop;
+  assert.deepEqual(
+    copiedShop.map((minion) => minion.definitionId),
+    ["BG35_801", "BG_LOE_077"],
+  );
+  assert.ok(copiedShop.every((minion) => !minion.golden));
+  assert.ok(copiedShop.every((minion) => minion.poolCopies === 1));
+  assert.equal(copied.pool.BG35_801, firstCopyPoolBefore - 1);
+  assert.equal(copied.pool.BG_LOE_077, secondCopyPoolBefore - 1);
+  assert.deepEqual(
+    copiedShop.map((minion) => [minion.attack, minion.health]),
+    [
+      [
+        getMinionDefinition("BG35_801").attack,
+        getMinionDefinition("BG35_801").health,
+      ],
+      [
+        getMinionDefinition("BG_LOE_077").attack,
+        getMinionDefinition("BG_LOE_077").health,
+      ],
+    ],
+  );
+
+  const legendary = gameWithHelpfulRefresh(
+    "legendary",
+    (_state, player) => {
+      player.board = [];
+      player.hand = [];
+    },
+  );
+  const legendaryShop = humanPlayer(legendary).shop;
+  assert.equal(legendaryShop.length, 7);
+  assert.ok(
+    legendaryShop.every(
+      (minion) =>
+        getMinionDefinition(minion.definitionId).legendary === true,
+    ),
+  );
+
+  let triplePoolBefore = 0;
+  const triple = gameWithHelpfulRefresh(
+    "triple",
+    (state, player) => {
+      const template = player.shop[0];
+      assert.ok(template);
+      triplePoolBefore = state.pool.BG35_801;
+      player.board = [
+        definitionMinion(template, "BG35_801", "triple-source", {
+          attack: 50,
+          health: 50,
+        }),
+      ];
+      player.hand = [];
+    },
+  );
+  const tripleShop = humanPlayer(triple).shop;
+  assert.equal(tripleShop.length, 7);
+  assert.deepEqual(
+    tripleShop.slice(0, 2).map((minion) => minion.definitionId),
+    ["BG35_801", "BG35_801"],
+  );
+  assert.ok(
+    tripleShop.slice(0, 2).every(
+      (minion) =>
+        minion.attack === getMinionDefinition("BG35_801").attack &&
+        minion.health === getMinionDefinition("BG35_801").health &&
+        minion.poolCopies === 1,
+    ),
+  );
+  assert.equal(triple.pool.BG35_801, triplePoolBefore - 2);
+});
+
+test("Eyes of the Earth Mother targets only a friendly non-Golden Tier 4-or-lower minion and preserves enchantments", () => {
+  let state = createGameWithTribes(["quilboar"], 0x7521);
+  let player = humanPlayer(state);
+  const template = player.shop[0];
+  assert.ok(template);
+  const definition = getMinionDefinition("BG28_583");
+  const target = definitionMinion(
+    template,
+    definition.id,
+    "eyes-target",
+    {
+      attack: definition.attack + 5,
+      health: definition.health + 7,
+      bloodGemAttack: 2,
+      bloodGemHealth: 3,
+      poolCopies: 1,
+    },
+  );
+  const tooHigh = definitionMinion(
+    template,
+    "BG23_018",
+    "eyes-too-high",
+  );
+  const alreadyGolden = definitionMinion(
+    template,
+    definition.id,
+    "eyes-golden",
+    { golden: true },
+  );
+  player.board = [target, tooHigh, alreadyGolden];
+  const spell = tavernSpell(
+    "tavern-spell-eyes-of-earth-mother",
+    "eyes-of-earth-mother",
+  );
+  player.hand = [spell];
+
+  assert.deepEqual(
+    getLegalTavernSpellTargetIds(state, player.id, spell),
+    [target.instanceId],
+  );
+  state = gameReducer(state, {
+    type: "CAST_TAVERN_SPELL",
+    cardInstanceId: spell.instanceId,
+    targetInstanceId: target.instanceId,
+  });
+  player = humanPlayer(state);
+  const golden = player.board[0];
+  assert.equal(golden.golden, true);
+  assert.equal(golden.attack, definition.attack * 2 + 5);
+  assert.equal(golden.health, definition.health * 2 + 7);
+  assert.equal(golden.bloodGemAttack, 2);
+  assert.equal(golden.bloodGemHealth, 3);
+  assert.equal(golden.poolCopies, 1);
+  assert.equal(golden.grantsTripleReward, false);
+  assert.equal(player.hand.length, 0);
+});
+
+test("Hamuul's Lost Staff replaces the full Tavern with the chosen minion type", () => {
+  let state = createGameWithTribes(["quilboar"], 0x7522);
+  let player = humanPlayer(state);
+  player.tavernTier = 6;
+  const template = player.shop[0];
+  assert.ok(template);
+  const target = definitionMinion(
+    template,
+    "BG20_100",
+    "hamuul-quilboar",
+  );
+  player.board = [target];
+  player.hand = [
+    tavernSpell(
+      "tavern-spell-lost-staff-of-hamuul",
+      "lost-staff-of-hamuul",
+    ),
+  ];
+
+  state = gameReducer(state, {
+    type: "CAST_TAVERN_SPELL",
+    cardInstanceId: "lost-staff-of-hamuul",
+    targetInstanceId: target.instanceId,
+  });
+  player = humanPlayer(state);
+  assert.equal(player.shop.length, 7);
+  assert.equal(player.spellShop, null);
+  assert.deepEqual(player.additionalSpellShop, []);
+  assert.ok(
+    player.shop.every(
+      (minion) =>
+        minion.tribes.includes("quilboar") ||
+        minion.tribes.includes("all"),
+    ),
+  );
+  assert.equal(player.frozen, false);
+
+  let exhausted = createGameWithTribes(["quilboar"], 0x7524);
+  let exhaustedPlayer = humanPlayer(exhausted);
+  const exhaustedTemplate = exhaustedPlayer.shop[0];
+  assert.ok(exhaustedTemplate);
+  const exhaustedTarget = definitionMinion(
+    exhaustedTemplate,
+    "BG20_100",
+    "hamuul-exhausted-target",
+  );
+  exhaustedPlayer.board = [exhaustedTarget];
+  exhaustedPlayer.hand = [
+    tavernSpell(
+      "tavern-spell-lost-staff-of-hamuul",
+      "lost-staff-exhausted",
+    ),
+  ];
+  exhaustedPlayer.shop = [];
+  exhaustedPlayer.spellShop = null;
+  exhaustedPlayer.additionalSpellShop = [];
+  for (const definition of MINION_DEFINITIONS) {
+    if (
+      definition.tribes?.some(
+        (tribe) => tribe === "quilboar" || tribe === "all",
+      )
+    ) {
+      exhausted.pool[definition.id] = 0;
+    }
+  }
+  exhausted = gameReducer(exhausted, {
+    type: "CAST_TAVERN_SPELL",
+    cardInstanceId: "lost-staff-exhausted",
+    targetInstanceId: exhaustedTarget.instanceId,
+  });
+  exhaustedPlayer = humanPlayer(exhausted);
+  assert.equal(
+    exhaustedPlayer.shop.length,
+    0,
+    "Hamuul respects an exhausted matching shared pool",
+  );
+  assert.equal(exhaustedPlayer.spellShop, null);
+  assert.deepEqual(exhaustedPlayer.additionalSpellShop, []);
 });
 
 test("Unmasked Identity exposes only the four implemented powers and resolves exactly once", () => {
@@ -4170,7 +4584,76 @@ test("AI buys and casts useful Tavern Spells through the normal recruit path", (
   assert.equal(recruitedAi.tavernSpellsCastThisTurn, 1);
 });
 
-test("schema 9 saves migrate Tier 5 state to schema 10 and conserve every spell offer", () => {
+test("schema 10 saves migrate the complete Tier 6 spell pool to schema 11", () => {
+  const current = createGame(0x71dd);
+  const currentPlayer = humanPlayer(current);
+  currentPlayer.gold = 7;
+  const template = currentPlayer.shop[0];
+  assert.ok(template);
+  currentPlayer.board = [
+    definitionMinion(template, "BG33_888", "legacy-hog-shepherd", {
+      effectSupport: "partial",
+    }),
+  ];
+  currentPlayer.hand = [
+    definitionMinion(template, "BG35_433", "legacy-redtooth", {
+      effectSupport: "partial",
+    }),
+  ];
+  const legacy = jsonClone(current) as unknown as Record<string, unknown>;
+  legacy.version = 10;
+  legacy.contentVersion = LEGACY_SCHEMA_10_CONTENT_VERSION;
+  const spellPool = legacy.spellPool;
+  assert.ok(spellPool !== null && typeof spellPool === "object");
+  for (const definitionId of [
+    "tavern-spell-knockoff-wisdomball",
+    "tavern-spell-eyes-of-earth-mother",
+    "tavern-spell-lost-staff-of-hamuul",
+  ]) {
+    delete (spellPool as Record<string, unknown>)[definitionId];
+  }
+  const players = legacy.players;
+  assert.ok(Array.isArray(players));
+  for (const legacyPlayer of players) {
+    assert.ok(
+      legacyPlayer !== null && typeof legacyPlayer === "object",
+    );
+    delete (legacyPlayer as Record<string, unknown>).helpfulRefreshes;
+    delete (legacyPlayer as Record<string, unknown>)
+      .lastHelpfulRefreshKind;
+  }
+
+  const migrated = migrateSchema10GameState(legacy);
+  assertMigratedSchema11(migrated);
+  const migratedPlayer = humanPlayer(migrated);
+  assert.equal(migratedPlayer.board[0].effectSupport, "complete");
+  const migratedHandCard = migratedPlayer.hand[0];
+  assert.equal(
+    migratedHandCard?.kind === "minion"
+      ? migratedHandCard.effectSupport
+      : null,
+    "complete",
+  );
+  for (const definitionId of [
+    "tavern-spell-knockoff-wisdomball",
+    "tavern-spell-eyes-of-earth-mother",
+    "tavern-spell-lost-staff-of-hamuul",
+  ]) {
+    assert.equal(
+      totalSpellCopies(migrated, definitionId),
+      SPELL_POOL_COPIES_BY_TIER[6],
+    );
+  }
+  assert.equal(
+    migrateSchema10GameState({
+      version: 10,
+      contentVersion: "wrong-content-version",
+    }),
+    null,
+  );
+});
+
+test("schema 9 saves migrate Tier 5 state to schema 11 and conserve every spell offer", () => {
   const current = createGame(0x71de);
   humanPlayer(current).gold = 7;
   const legacy = jsonClone(current) as unknown as Record<string, unknown>;
@@ -4202,7 +4685,7 @@ test("schema 9 saves migrate Tier 5 state to schema 10 and conserve every spell 
   }
 
   const migrated = migrateSchema9GameState(legacy);
-  assertMigratedSchema10(migrated);
+  assertMigratedSchema11(migrated);
   assert.equal(
     migrateSchema9GameState({
       version: 9,
@@ -4212,7 +4695,7 @@ test("schema 9 saves migrate Tier 5 state to schema 10 and conserve every spell 
   );
 });
 
-test("schema 7 saves migrate every minion zone and pending discover to schema 10", () => {
+test("schema 7 saves migrate every minion zone and pending discover to schema 11", () => {
   let current = createGame(0x71df);
   const player = humanPlayer(current);
   player.gold = 7;
@@ -4246,15 +4729,15 @@ test("schema 7 saves migrate every minion zone and pending discover to schema 10
   removePostSchema7MinionFields(legacy);
 
   const migrated = migrateSchema7GameState(legacy);
-  assertMigratedSchema10(migrated);
+  assertMigratedSchema11(migrated);
   assert.equal(migrated.pendingInteraction?.kind, "discover");
 });
 
-test("schema 8 saves initialize Tier 4 and Spellcraft state in schema 10", () => {
+test("schema 8 saves initialize Tier 4 and Spellcraft state in schema 11", () => {
   const migrated = migrateSchema8GameState(
     legacySchema8State(0x71e3),
   );
-  assertMigratedSchema10(migrated);
+  assertMigratedSchema11(migrated);
   assert.equal(
     migrateSchema8GameState({
       version: 8,
@@ -4264,9 +4747,9 @@ test("schema 8 saves initialize Tier 4 and Spellcraft state in schema 10", () =>
   );
 });
 
-test("schema 6 saves migrate to schema 10 and survive a JSON round-trip", () => {
+test("schema 6 saves migrate to schema 11 and survive a JSON round-trip", () => {
   const migrated = migrateSchema6GameState(legacyState(6, 0x71e0));
-  assertMigratedSchema10(migrated);
+  assertMigratedSchema11(migrated);
   assert.equal(humanPlayer(migrated).bloodGemAttack, 1);
   assert.equal(humanPlayer(migrated).bloodGemHealth, 1);
 });
@@ -4295,9 +4778,9 @@ test("schema 6 migration does not reserve Tavern Spells for eliminated players",
   }
 });
 
-test("schema 5 saves migrate through schema 6 to schema 10", () => {
+test("schema 5 saves migrate through schema 6 to schema 11", () => {
   const migrated = migrateSchema5GameState(legacyState(5, 0x71e1));
-  assertMigratedSchema10(migrated);
+  assertMigratedSchema11(migrated);
   assert.equal(humanPlayer(migrated).bloodGemAttack, 1);
   assert.equal(humanPlayer(migrated).bloodGemHealth, 1);
   assert.equal(migrateSchema5GameState({ version: 5 }), null);

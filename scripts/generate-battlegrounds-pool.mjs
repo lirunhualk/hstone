@@ -184,6 +184,7 @@ function normalizeMinion(card) {
     associatedRaces: card.battlegroundsAssociatedRaces ?? [],
     mechanics: card.mechanics ?? [],
     referencedTags: card.referencedTags ?? [],
+    elite: card.elite === true,
     text: card.text,
   };
 }
@@ -334,7 +335,7 @@ function buildSnapshot(cards) {
   validateUnique(normalizedTavernSpells, "dbfId");
 
   return {
-    schemaVersion: 2,
+    schemaVersion: 3,
     source: {
       patch: PATCH,
       build: BUILD,

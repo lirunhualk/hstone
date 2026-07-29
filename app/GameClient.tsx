@@ -15,6 +15,7 @@ import {
   canMagnetize,
   createGame,
   gameReducer,
+  HELPFUL_REFRESH_LABELS,
   getLegalSpellcraftTargetIds,
   getLegalTavernSpellTargetIds,
   getRefreshCost,
@@ -23,6 +24,7 @@ import {
   getTavernSpellDefinition,
   getSpellcraftDefinition,
   getUpgradeCost,
+  minionHasTribe,
   isHeroPowerDefinitionId,
   tavernSpellCanTargetShop,
   tavernSpellNeedsTarget,
@@ -62,11 +64,13 @@ import {
   createBoardDragPreview,
   nearestBoardSlotIndex,
 } from "../lib/game/drag-preview";
+import { interactionRequiresModalBackdrop } from "../lib/game/interaction-presentation";
 import { projectCombatBoard } from "../lib/game/playback";
 import { migrateLegacyGameState } from "../lib/game/save";
 
-const SAVE_KEY = "hearthstone-battlegrounds-local.save.v10";
+const SAVE_KEY = "hearthstone-battlegrounds-local.save.v11";
 const LEGACY_SAVE_KEYS = [
+  "hearthstone-battlegrounds-local.save.v10",
   "hearthstone-battlegrounds-local.save.v9",
   "hearthstone-battlegrounds-local.save.v8",
   "hearthstone-battlegrounds-local.save.v7",
@@ -195,6 +199,7 @@ type BloodGemCastFeedback = {
   targetInstanceId: string;
   attack: number;
   health: number;
+  bonusKeyword: string;
   token: string;
 };
 
@@ -237,6 +242,13 @@ function hasSchema9MinionState(value: unknown): boolean {
     typeof value.temporaryTaunt === "boolean" &&
     typeof value.temporaryDivineShield === "boolean" &&
     typeof value.temporaryCrabDeathrattles === "number" &&
+    typeof value.poolCopies === "number" &&
+    Number.isInteger(value.poolCopies) &&
+    value.poolCopies >= 0 &&
+    (value.poolCopiesOnPurchase === undefined ||
+      (typeof value.poolCopiesOnPurchase === "number" &&
+        Number.isInteger(value.poolCopiesOnPurchase) &&
+        value.poolCopiesOnPurchase >= 0)) &&
     (value.playableFromRound === undefined ||
       typeof value.playableFromRound === "number") &&
     (value.destroyAfterPlayThroughRound === undefined ||
@@ -423,7 +435,10 @@ function isBloodGemSpell(value: unknown): value is BloodGemSpellInstance {
     value.cardId === "BG20_GEM" &&
     value.name === "鲜血宝石" &&
     typeof value.description === "string" &&
-    value.spellFamily === "bloodGem"
+    value.spellFamily === "bloodGem" &&
+    (value.bonusKeyword === undefined ||
+      value.bonusKeyword === "rebornForQuilboar" ||
+      value.bonusKeyword === "divineShieldForQuilboar")
   );
 }
 
@@ -510,7 +525,7 @@ function isGameState(value: unknown): value is GameState {
   if (!value || typeof value !== "object") return false;
   const candidate = value as Partial<GameState>;
   return (
-    candidate.version === 10 &&
+    candidate.version === 11 &&
     candidate.contentVersion === CURRENT_ROSTER_VERSION &&
     typeof candidate.seed === "number" &&
     typeof candidate.nextInteractionId === "number" &&
@@ -531,6 +546,14 @@ function isGameState(value: unknown): value is GameState {
         player.maxGold >= 10 &&
         typeof player.pendingNextTurnGold === "number" &&
         typeof player.freeRefreshes === "number" &&
+        typeof player.helpfulRefreshes === "number" &&
+        player.helpfulRefreshes >= 0 &&
+        (player.lastHelpfulRefreshKind === null ||
+          (typeof player.lastHelpfulRefreshKind === "string" &&
+            Object.hasOwn(
+              HELPFUL_REFRESH_LABELS,
+              player.lastHelpfulRefreshKind,
+            ))) &&
         typeof player.tavernMinionAttackBonus === "number" &&
         typeof player.tavernMinionHealthBonus === "number" &&
         typeof player.nextCombatAttackBonus === "number" &&
@@ -1144,6 +1167,19 @@ function ConsolationCoinCard({
   );
 }
 
+function bloodGemKeywordText(card: BloodGemSpellInstance): string {
+  return card.bonusKeyword === "rebornForQuilboar"
+    ? "复生"
+    : card.bonusKeyword === "divineShieldForQuilboar"
+      ? "圣盾"
+      : "";
+}
+
+function bloodGemBonusText(card: BloodGemSpellInstance): string {
+  const keyword = bloodGemKeywordText(card);
+  return keyword ? `野猪人还会获得${keyword}` : "";
+}
+
 function BloodGemCardFace({
   card,
   attack,
@@ -1163,6 +1199,9 @@ function BloodGemCardFace({
         <strong>
           +{attack}/+{health}
         </strong>
+        {bloodGemBonusText(card) && (
+          <small>{bloodGemBonusText(card)}</small>
+        )}
       </span>
       <span className="blood-gem-hint">拖到随从上使用</span>
     </>
@@ -1193,10 +1232,14 @@ function BloodGemCard({
   return (
     <button
       type="button"
-      className={`blood-gem-card${selected ? " is-selected" : ""}${
+      className={`blood-gem-card${
+        bloodGemBonusText(card) ? " has-bonus" : ""
+      }${selected ? " is-selected" : ""}${
         dragHandlers ? " is-draggable" : ""
       }${dragging ? " is-drag-source" : ""}`}
-      aria-label={`鲜血宝石，使一个友方随从获得+${attack}/+${health}。拖到友方随从上使用`}
+      aria-label={`鲜血宝石，使一个友方随从获得+${attack}/+${health}。${bloodGemBonusText(
+        card,
+      )}。拖到友方随从上使用`}
       aria-pressed={selected}
       data-card-instance-id={card.instanceId}
       data-drag-enabled={Boolean(dragHandlers)}
@@ -1628,7 +1671,11 @@ function BoardRow({
                   bloodGemCast={isBloodGemCast}
                   bloodGemCastLabel={
                     isBloodGemCast && bloodGemCastFeedback
-                      ? `+${bloodGemCastFeedback.attack}/+${bloodGemCastFeedback.health}`
+                      ? `+${bloodGemCastFeedback.attack}/+${bloodGemCastFeedback.health}${
+                          bloodGemCastFeedback.bonusKeyword
+                            ? ` · ${bloodGemCastFeedback.bonusKeyword}`
+                            : ""
+                        }`
                       : undefined
                   }
                   bloodGemCastToken={
@@ -2024,6 +2071,9 @@ export default function GameClient() {
       ? humanInteraction
       : null;
   const interactionLocked = game.pendingInteraction !== null;
+  const modalInteractionLocked = interactionRequiresModalBackdrop(
+    game.pendingInteraction,
+  );
 
   useEffect(() => {
     if (humanInteraction) {
@@ -2883,7 +2933,7 @@ export default function GameClient() {
   const castBloodGem = useCallback(
     (cardInstanceId: string, targetInstanceId: string) => {
       const card = human.hand.find(
-        (candidate) =>
+        (candidate): candidate is BloodGemSpellInstance =>
           candidate.kind === "bloodGem" &&
           candidate.instanceId === cardInstanceId,
       );
@@ -2896,10 +2946,14 @@ export default function GameClient() {
       if (bloodGemCastTimerRef.current !== null) {
         window.clearTimeout(bloodGemCastTimerRef.current);
       }
+      const bonusKeyword = minionHasTribe(target, "quilboar")
+        ? bloodGemKeywordText(card)
+        : "";
       setBloodGemCastFeedback({
         targetInstanceId,
         attack: human.bloodGemAttack,
         health: human.bloodGemHealth,
+        bonusKeyword,
         token: card.instanceId,
       });
       bloodGemCastTimerRef.current = window.setTimeout(() => {
@@ -2907,7 +2961,11 @@ export default function GameClient() {
         setBloodGemCastFeedback(null);
       }, 620);
       setMagneticAnnouncement(
-        `已对${target.name}使用鲜血宝石，获得 +${human.bloodGemAttack}/+${human.bloodGemHealth}`,
+        `已对${target.name}使用鲜血宝石，获得 +${human.bloodGemAttack}/+${human.bloodGemHealth}${
+          bonusKeyword
+            ? `，并获得${bonusKeyword}`
+            : ""
+        }`,
       );
       send({
         type: "CAST_BLOOD_GEM",
@@ -4007,7 +4065,7 @@ export default function GameClient() {
 
       <div
         className="main-grid"
-        inert={interactionLocked || combatIntroActive}
+        inert={modalInteractionLocked || combatIntroActive}
       >
         <section className="play-column" aria-label="游戏区域">
           <section
@@ -4027,6 +4085,7 @@ export default function GameClient() {
             inert={interactionLocked || game.phase !== "recruit"}
             data-sell-drop-zone="true"
             data-frozen={human.frozen}
+            data-helpful-refreshes={human.helpfulRefreshes}
             data-testid="sell-drop-zone"
           >
             <div className="sell-drop-feedback" aria-hidden="true">
@@ -4054,6 +4113,16 @@ export default function GameClient() {
                   ? "已冻结"
                   : human.spellOnlyRefreshActive
                     ? `法术专场 · ${tavernSpellShopOffers.length} 张`
+                    : human.helpfulRefreshes > 0
+                      ? `有用刷新剩余 ${human.helpfulRefreshes} 次${
+                          human.lastHelpfulRefreshKind
+                            ? ` · ${
+                                HELPFUL_REFRESH_LABELS[
+                                  human.lastHelpfulRefreshKind
+                                ]
+                              }`
+                            : ""
+                        }`
                     : "招募中"}
               </span>
             </div>
@@ -4089,6 +4158,9 @@ export default function GameClient() {
                   刷新 · {refreshCost}
                   {human.freeRefreshes > 0
                     ? `（免费剩余 ${human.freeRefreshes}）`
+                    : ""}
+                  {human.helpfulRefreshes > 0
+                    ? `（有用剩余 ${human.helpfulRefreshes}）`
                     : ""}
                 </button>
                 <button
@@ -5047,6 +5119,7 @@ export default function GameClient() {
                     <p>
                       使一个友方随从永久获得+
                       {human.bloodGemAttack}/+{human.bloodGemHealth}。
+                      {bloodGemBonusText(selectedBloodGem)}
                     </p>
                     <p
                       className="blood-gem-play-hint"

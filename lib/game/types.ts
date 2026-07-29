@@ -139,6 +139,7 @@ export interface DamageAllMinionsEffect {
 export interface GainBloodGemsEffect {
   kind: "gainBloodGems";
   count: number;
+  bonusKeyword?: BloodGemBonusKeyword;
 }
 
 export interface ImproveBloodGemsEffect {
@@ -224,7 +225,8 @@ export interface BuffEndOfTurnEffect {
 
 export type EndOfTurnEffect =
   | MenagerieEndOfTurnEffect
-  | BuffEndOfTurnEffect;
+  | BuffEndOfTurnEffect
+  | GainBloodGemsEffect;
 
 export interface StatAura {
   tribe: Tribe;
@@ -253,6 +255,8 @@ export interface MinionDefinition {
   effectSupport?: EffectSupport;
   /** Printed client mechanics retained for pool-wide Discover filters. */
   printedMechanics?: readonly string[];
+  /** Whether the live card uses Hearthstone's legendary border. */
+  legendary?: boolean;
   attack: number;
   health: number;
   description: string;
@@ -346,6 +350,11 @@ export interface MinionInstance {
    */
   poolCopies: number;
   /**
+   * Wisdomball overflow is not in the pool while offered, but becomes one
+   * returnable shared-pool copy if the player acquires it.
+   */
+  poolCopiesOnPurchase?: number;
+  /**
    * Minions fused into this host through Magnetic. The tree retains each
    * component's own Golden state while the host keeps its identity, Tavern
    * Tier, sell value, and visible card art. Under current Battlegrounds rules,
@@ -388,6 +397,10 @@ export type SpellFamily =
   | "spellcraft"
   | "coin";
 
+export type BloodGemBonusKeyword =
+  | "rebornForQuilboar"
+  | "divineShieldForQuilboar";
+
 export interface BloodGemSpellInstance {
   kind: "bloodGem";
   instanceId: string;
@@ -396,6 +409,7 @@ export interface BloodGemSpellInstance {
   name: "鲜血宝石";
   description: string;
   spellFamily: "bloodGem";
+  bonusKeyword?: BloodGemBonusKeyword;
 }
 
 export interface ConsolationCoinSpellInstance {
@@ -505,7 +519,10 @@ export type TavernSpellEffect =
   | "sanctify"
   | "waveOfGold"
   | "azeriteEmpowerment"
-  | "perfectVision";
+  | "perfectVision"
+  | "knockoffWisdomball"
+  | "eyesOfTheEarthMother"
+  | "lostStaffOfHamuul";
 
 export type TavernSpellTarget = "none" | "friendly" | "anyMinion";
 
@@ -568,6 +585,19 @@ export interface TavernTypeBuff extends TavernRefreshBuff {
   tribes: Tribe[];
 }
 
+export type HelpfulRefreshKind =
+  | "warbandCopies"
+  | "legendary"
+  | "golden"
+  | "triple"
+  | "divineShield"
+  | "tavernBuff"
+  | "majorityTribe"
+  | "highTier"
+  | "allSame"
+  | "utility"
+  | "allSpells";
+
 export interface PlayerState {
   id: PlayerId;
   name: string;
@@ -596,6 +626,10 @@ export interface PlayerState {
   maxGold: number;
   pendingNextTurnGold: number;
   freeRefreshes: number;
+  /** Remaining successful manual Refreshes replaced by Wisdomball pages. */
+  helpfulRefreshes: number;
+  /** Most recent page, retained for deterministic feedback and save restore. */
+  lastHelpfulRefreshKind: HelpfulRefreshKind | null;
   tavernMinionAttackBonus: number;
   tavernMinionHealthBonus: number;
   nextCombatAttackBonus: number;
@@ -779,7 +813,7 @@ export interface BattleSummary {
 }
 
 export interface GameState {
-  version: 10;
+  version: 11;
   /** Invalidates local saves when the roster or its mechanics change. */
   contentVersion: string;
   seed: number;

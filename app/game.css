@@ -2270,6 +2270,29 @@
   font-weight: 950;
 }
 
+.blood-gem-copy small {
+  display: block;
+  color: #ffe28e;
+  font-size: 7px;
+  font-weight: 850;
+}
+
+.blood-gem-card.has-bonus .blood-gem-copy {
+  font-size: 8px;
+  line-height: 1;
+}
+
+.blood-gem-card.has-bonus .blood-gem-copy strong {
+  font-size: 11px;
+  line-height: 1;
+}
+
+.blood-gem-card.has-bonus .blood-gem-copy small {
+  margin-top: 1px;
+  font-size: 6px;
+  line-height: 1.05;
+}
+
 .blood-gem-hint {
   bottom: 5px;
   min-height: 15px;

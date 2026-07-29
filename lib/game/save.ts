@@ -24,6 +24,8 @@ export const LEGACY_SCHEMA_8_CONTENT_VERSION =
   "battlegrounds-36.0.3-247416-v12";
 export const LEGACY_SCHEMA_9_CONTENT_VERSION =
   "battlegrounds-36.0.3-247416-v13";
+export const LEGACY_SCHEMA_10_CONTENT_VERSION =
+  "battlegrounds-36.0.3-247416-v14";
 
 const SPELL_POOL_COPIES_BY_TIER = [0, 5, 7, 9, 11, 7, 5] as const;
 
@@ -493,7 +495,7 @@ function refreshLegacyBattleArmor(value: unknown): void {
       : 0;
 }
 
-export function migrateSchema9GameState(value: unknown): unknown {
+function migrateSchema9To10(value: unknown): unknown {
   if (
     !isRecord(value) ||
     value.version !== 9 ||
@@ -567,12 +569,109 @@ export function migrateSchema9GameState(value: unknown): unknown {
       migrated.lastRoundBattles.forEach(refreshLegacyBattleArmor);
     }
     migrated.version = 10;
+    migrated.contentVersion = LEGACY_SCHEMA_10_CONTENT_VERSION;
+    migrated.spellPool = spellPool;
+    return migrated;
+  } catch {
+    return null;
+  }
+}
+
+export function migrateSchema10GameState(value: unknown): unknown {
+  if (
+    !isRecord(value) ||
+    value.version !== 10 ||
+    value.contentVersion !== LEGACY_SCHEMA_10_CONTENT_VERSION ||
+    !Array.isArray(value.players) ||
+    !Array.isArray(value.activeTribes) ||
+    !value.activeTribes.every((tribe) => typeof tribe === "string")
+  ) {
+    return null;
+  }
+  try {
+    const migrated: unknown = JSON.parse(JSON.stringify(value));
+    if (
+      !isRecord(migrated) ||
+      !Array.isArray(migrated.players) ||
+      !Array.isArray(migrated.activeTribes) ||
+      !refreshOwnedMinions(migrated)
+    ) {
+      return null;
+    }
+    const activeTribes = migrated.activeTribes as Tribe[];
+    const spellPool: Record<string, number> = {};
+    for (const definition of TAVERN_SPELL_DEFINITIONS) {
+      spellPool[definition.id] = tavernSpellIsAvailable(
+        definition,
+        activeTribes,
+      )
+        ? SPELL_POOL_COPIES_BY_TIER[definition.tier]
+        : 0;
+    }
+
+    for (const player of migrated.players) {
+      if (
+        !isRecord(player) ||
+        typeof player.alive !== "boolean" ||
+        typeof player.tavernTier !== "number" ||
+        player.tavernTier < 1 ||
+        player.tavernTier > 6
+      ) {
+        return null;
+      }
+      player.helpfulRefreshes = 0;
+      player.lastHelpfulRefreshKind = null;
+
+      const reserveOffer = (offer: unknown): Record<string, unknown> | null => {
+        if (!isRecord(offer) || !player.alive) {
+          return null;
+        }
+        try {
+          const definition = getTavernSpellDefinition(
+            String(offer.definitionId),
+          );
+          if (
+            definition.tier > (player.tavernTier as TavernTier) ||
+            !tavernSpellIsAvailable(definition, activeTribes) ||
+            spellPool[definition.id] <= 0
+          ) {
+            return null;
+          }
+          refreshMigratedSpell(offer, definition);
+          spellPool[definition.id] -= 1;
+          return offer;
+        } catch {
+          return null;
+        }
+      };
+
+      player.spellShop = reserveOffer(player.spellShop);
+      const additionalOffers = Array.isArray(player.additionalSpellShop)
+        ? player.additionalSpellShop
+        : [];
+      player.additionalSpellShop = additionalOffers
+        .map(reserveOffer)
+        .filter((offer): offer is Record<string, unknown> => offer !== null);
+      if (
+        player.spellShop === null &&
+        (player.additionalSpellShop as unknown[]).length === 0
+      ) {
+        player.spellOnlyRefreshActive = false;
+      }
+    }
+
+    migrated.version = 11;
     migrated.contentVersion = CURRENT_ROSTER_VERSION;
     migrated.spellPool = spellPool;
     return migrated;
   } catch {
     return null;
   }
+}
+
+export function migrateSchema9GameState(value: unknown): unknown {
+  const schema10 = migrateSchema9To10(value);
+  return schema10 ? migrateSchema10GameState(schema10) : null;
 }
 
 export function migrateSchema8GameState(value: unknown): unknown {
@@ -617,6 +716,9 @@ export function migrateLegacyGameState(value: unknown): unknown {
   }
   if (value.version === 9) {
     return migrateSchema9GameState(value);
+  }
+  if (value.version === 10) {
+    return migrateSchema10GameState(value);
   }
   return null;
 }

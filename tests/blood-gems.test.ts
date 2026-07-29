@@ -131,6 +131,111 @@ test("Razorfen Geomancer generates the live normal, Golden, and Brann quantities
   }
 });
 
+test("the default playable run can refresh, buy and play a real Blood Gem generator", () => {
+  let state = createGame(0x53544152);
+  let player = humanPlayer(state);
+  assert.ok(state.activeTribes.includes("quilboar"));
+
+  state = gameReducer(state, { type: "REFRESH_SHOP" });
+  player = humanPlayer(state);
+  const geomancer = player.shop.find(
+    (minion) => minion.definitionId === "BG20_100",
+  );
+  assert.ok(geomancer);
+  state = gameReducer(state, { type: "TOGGLE_FREEZE" });
+  state = gameReducer(state, { type: "END_TURN" });
+  state = gameReducer(state, { type: "CONTINUE" });
+  player = humanPlayer(state);
+  const shopIndex = player.shop.findIndex(
+    (minion) => minion.instanceId === geomancer.instanceId,
+  );
+  assert.ok(shopIndex >= 0);
+  state = gameReducer(state, { type: "BUY_MINION", shopIndex });
+  player = humanPlayer(state);
+  const bought = player.hand.find(
+    (card) =>
+      card.kind === "minion" &&
+      card.instanceId === geomancer.instanceId,
+  );
+  assert.ok(bought);
+  state = gameReducer(state, {
+    type: "PLAY_HAND_CARD",
+    cardInstanceId: bought.instanceId,
+  });
+  player = humanPlayer(state);
+  assert.equal(bloodGems(player).length, 2);
+  const gem = bloodGems(player)[0];
+  const target = player.board.find(
+    (minion) => minion.instanceId === bought.instanceId,
+  );
+  assert.ok(gem);
+  assert.ok(target);
+  state = gameReducer(state, {
+    type: "CAST_BLOOD_GEM",
+    cardInstanceId: gem.instanceId,
+    targetInstanceId: target.instanceId,
+  });
+  player = humanPlayer(state);
+  assert.deepEqual(
+    [player.board[0].attack, player.board[0].health],
+    [3, 2],
+  );
+  assert.equal(bloodGems(player).length, 1);
+});
+
+test("keyword Blood Gems from Hog Shepherd and Redtooth Cultivator retain their live bonuses", () => {
+  let state = createGame(0xb108);
+  let player = humanPlayer(state);
+  const template = player.shop[0];
+  assert.ok(template);
+  player.board = [
+    definitionMinion(template, "BG32_111", "keyword-gem-all"),
+  ];
+  player.hand = [
+    definitionMinion(template, "BG33_888", "hog-shepherd"),
+  ];
+
+  state = gameReducer(state, {
+    type: "PLAY_HAND_CARD",
+    cardInstanceId: "hog-shepherd",
+  });
+  player = humanPlayer(state);
+  const shieldGem = bloodGems(player)[0];
+  assert.equal(shieldGem?.bonusKeyword, "divineShieldForQuilboar");
+  state = gameReducer(state, {
+    type: "CAST_BLOOD_GEM",
+    cardInstanceId: shieldGem.instanceId,
+    targetInstanceId: "keyword-gem-all",
+  });
+  player = humanPlayer(state);
+  assert.equal(
+    player.board.find(
+      (minion) => minion.instanceId === "keyword-gem-all",
+    )?.divineShield,
+    true,
+  );
+
+  const cultivator = definitionMinion(
+    template,
+    "BG35_433",
+    "redtooth-cultivator",
+  );
+  player.board = [cultivator];
+  player.hand = [];
+  state = gameReducer(state, { type: "END_TURN" });
+  player = humanPlayer(state);
+  const rebornGem = bloodGems(player)[0];
+  assert.equal(rebornGem?.bonusKeyword, "rebornForQuilboar");
+  state = gameReducer(state, { type: "CONTINUE" });
+  state = gameReducer(state, {
+    type: "CAST_BLOOD_GEM",
+    cardInstanceId: rebornGem.instanceId,
+    targetInstanceId: "redtooth-cultivator",
+  });
+  player = humanPlayer(state);
+  assert.equal(player.board[0].reborn, true);
+});
+
 test("Blood Gem generation stops at the ten-card hand limit", () => {
   let state = createGame(0xb110);
   const player = humanPlayer(state);
@@ -470,7 +575,7 @@ test("schema 5 saves migrate Blood Gem values without losing the current run", (
 
   const migrated = migrateSchema5GameState(legacy) as GameState | null;
   assert.ok(migrated);
-  assert.equal(migrated.version, 10);
+  assert.equal(migrated.version, 11);
   assert.equal(humanPlayer(migrated).gold, 7);
   assert.equal(humanPlayer(migrated).bloodGemAttack, 1);
   assert.equal(humanPlayer(migrated).bloodGemHealth, 1);
