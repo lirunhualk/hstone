@@ -6,6 +6,7 @@ import {
   combatIntroOpponent,
   initialCombatPlayback,
   isCombatPlaybackEvent,
+  projectCombatArmor,
   projectCombatHealth,
 } from "../lib/game/combat-presentation.ts";
 import type {
@@ -35,6 +36,10 @@ function battle(overrides: Partial<BattleSummary> = {}): BattleSummary {
     playerBHealthBefore: 27,
     playerAHealthAfter: 31,
     playerBHealthAfter: 27,
+    playerAArmorBefore: 0,
+    playerBArmorBefore: 0,
+    playerAArmorAfter: 0,
+    playerBArmorAfter: 0,
     initialBoards: {},
     finalBoards: {},
     events: [],
@@ -244,5 +249,94 @@ test("a matching hero damage event reveals the authoritative summary health", ()
       playbackComplete: false,
     }),
     11,
+  );
+});
+
+test("combat armor stays at the pre-combat value until hero damage is revealed", () => {
+  const summary = battle({
+    playerAArmorBefore: 6,
+    playerBArmorBefore: 12,
+    playerAArmorAfter: 6,
+    playerBArmorAfter: 5,
+  });
+  const attack = event("attack", 1);
+  const heroDamage: BattleEvent = {
+    ...event("heroDamage", 2),
+    targetPlayerId: "human",
+    amount: 7,
+  };
+
+  assert.equal(
+    projectCombatArmor({
+      battle: summary,
+      playerId: "human",
+      revealedEvents: [],
+      playbackComplete: false,
+    }),
+    12,
+  );
+  assert.equal(
+    projectCombatArmor({
+      battle: summary,
+      playerId: "human",
+      revealedEvents: [attack],
+      playbackComplete: false,
+    }),
+    12,
+  );
+  assert.equal(
+    projectCombatArmor({
+      battle: summary,
+      playerId: "human",
+      revealedEvents: [attack, heroDamage],
+      playbackComplete: false,
+    }),
+    5,
+  );
+  assert.equal(
+    projectCombatArmor({
+      battle: summary,
+      playerId: "ai-1",
+      revealedEvents: [attack, heroDamage],
+      playbackComplete: false,
+    }),
+    6,
+  );
+});
+
+test("combat armor uses each summary result when playback completes", () => {
+  const summary = battle({
+    playerAArmorBefore: 6,
+    playerBArmorBefore: 12,
+    playerAArmorAfter: -2,
+    playerBArmorAfter: 5,
+  });
+
+  assert.equal(
+    projectCombatArmor({
+      battle: summary,
+      playerId: "ai-1",
+      revealedEvents: [],
+      playbackComplete: true,
+    }),
+    0,
+  );
+  assert.equal(
+    projectCombatArmor({
+      battle: summary,
+      playerId: "human",
+      revealedEvents: [],
+      playbackComplete: true,
+    }),
+    5,
+  );
+  assert.equal(
+    projectCombatArmor({
+      battle: summary,
+      playerId: "not-in-this-battle",
+      revealedEvents: [],
+      playbackComplete: false,
+    }),
+    null,
   );
 });

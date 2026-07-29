@@ -252,8 +252,56 @@
   color: #ffb6bb;
 }
 
+.hud-stat[data-stat="armor"] > strong,
+.hud-stat.armor > strong {
+  color: #bfeaff;
+  text-shadow: 0 0 14px rgb(91 184 255 / 42%);
+}
+
 .hud-stat.is-taking-hero-damage > strong {
   animation: hero-health-damage 650ms cubic-bezier(0.22, 1, 0.36, 1);
+}
+
+.hud-hero-power {
+  display: grid;
+  min-width: 150px;
+  max-width: 230px;
+  min-height: 48px;
+  align-content: center;
+  gap: 1px;
+  padding: 5px 10px;
+  border: 1px solid rgb(155 140 255 / 34%);
+  border-radius: 11px;
+  background:
+    radial-gradient(circle at 12% 24%, rgb(155 140 255 / 15%), transparent 44%),
+    rgb(37 28 67 / 46%);
+  box-shadow: inset 0 1px 0 rgb(255 255 255 / 6%);
+}
+
+.hud-hero-power > small {
+  color: #cfc8ff;
+  font-size: 9px;
+  font-weight: 850;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.hud-hero-power > strong {
+  overflow: hidden;
+  color: #fff1c2;
+  font-size: 12px;
+  line-height: 1.15;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.hud-hero-power > span {
+  overflow: hidden;
+  color: var(--muted);
+  font-size: 9px;
+  line-height: 1.2;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .hud-actions {
@@ -396,6 +444,18 @@
   background:
     linear-gradient(128deg, rgb(231 250 255 / 20%), transparent 34%),
     linear-gradient(310deg, rgb(117 214 255 / 14%), transparent 42%);
+}
+
+.shop-panel.is-spell-only {
+  border-color: rgb(183 128 255 / 62%);
+  background:
+    radial-gradient(circle at 52% 48%, rgb(166 97 255 / 14%), transparent 38%),
+    linear-gradient(145deg, rgb(222 198 255 / 6%), transparent 48%),
+    rgb(18 16 43 / 97%);
+  box-shadow:
+    0 12px 30px rgb(0 0 0 / 18%),
+    inset 0 0 34px rgb(150 88 255 / 8%),
+    0 0 26px rgb(133 75 222 / 14%);
 }
 
 .shop-layout {
@@ -2687,7 +2747,16 @@
   white-space: nowrap;
 }
 
-.player-health {
+.player-survivability {
+  display: flex;
+  min-width: 0;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 3px;
+}
+
+.player-health,
+.player-armor {
   display: inline-flex;
   min-width: 37px;
   min-height: 28px;
@@ -2704,7 +2773,14 @@
   font-weight: 850;
 }
 
-.player-row.is-taking-hero-damage .player-health {
+.player-armor {
+  border-color: rgb(91 184 255 / 28%);
+  color: #bfeaff;
+  background: rgb(91 184 255 / 10%);
+}
+
+.player-row.is-taking-hero-damage .player-health,
+.player-row.is-taking-hero-damage .player-armor {
   animation: hero-health-damage 650ms cubic-bezier(0.22, 1, 0.36, 1);
 }
 
@@ -3363,6 +3439,97 @@
   line-height: 1.4;
 }
 
+.hero-power-choice-modal {
+  display: flex;
+  width: min(900px, 100%);
+  max-height: min(760px, calc(100dvh - 42px));
+  overflow: auto;
+  flex-direction: column;
+  align-items: center;
+  padding: 26px clamp(16px, 3vw, 32px) 30px;
+}
+
+.hero-power-choice-options {
+  display: grid;
+  width: 100%;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: clamp(10px, 2vw, 20px);
+}
+
+.hero-power-choice {
+  position: relative;
+  display: grid;
+  min-width: 0;
+  min-height: 286px;
+  overflow: hidden;
+  padding: 138px 16px 18px;
+  border: 2px solid rgb(174 123 255 / 54%);
+  border-radius: 18px;
+  color: var(--text);
+  background:
+    radial-gradient(circle at 50% 4%, rgb(177 113 255 / 24%), transparent 48%),
+    linear-gradient(145deg, rgb(41 22 65 / 98%), rgb(19 15 35 / 98%));
+  box-shadow:
+    inset 0 1px 0 rgb(255 255 255 / 12%),
+    0 12px 26px rgb(0 0 0 / 30%),
+    0 0 22px rgb(151 86 245 / 12%);
+  cursor: pointer;
+  align-content: start;
+  gap: 7px;
+  text-align: center;
+  transition:
+    border-color 150ms ease,
+    box-shadow 150ms ease,
+    transform 150ms ease;
+}
+
+.hero-power-choice > .card-art {
+  position: absolute;
+  inset: 0 0 auto;
+  width: 100%;
+  height: 132px;
+  border-bottom: 1px solid rgb(238 218 255 / 24%);
+}
+
+.hero-power-choice > .card-art::after {
+  background:
+    linear-gradient(180deg, transparent 25%, rgb(28 14 52 / 88%));
+  transform: none;
+}
+
+.hero-power-choice:hover,
+.hero-power-choice:focus-visible {
+  border-color: #fff0a9;
+  outline: none;
+  box-shadow:
+    inset 0 1px 0 rgb(255 255 255 / 16%),
+    0 16px 34px rgb(0 0 0 / 38%),
+    0 0 0 3px rgb(246 190 85 / 24%),
+    0 0 32px rgb(155 140 255 / 30%);
+  transform: translateY(-5px);
+}
+
+.hero-power-choice-type {
+  color: #bdb4ff;
+  font-size: 10px;
+  font-weight: 900;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.hero-power-choice > strong {
+  color: #fff2bf;
+  font-size: 20px;
+  line-height: 1.2;
+}
+
+.hero-power-choice-copy {
+  color: #f1eaff;
+  font-size: 13px;
+  font-weight: 700;
+  line-height: 1.55;
+}
+
 @media (max-width: 620px) {
   .tavern-spell-choice-options {
     grid-template-columns: 1fr;
@@ -3370,6 +3537,14 @@
 
   .tavern-spell-choice {
     min-height: 132px;
+  }
+
+  .hero-power-choice-options {
+    grid-template-columns: 1fr;
+  }
+
+  .hero-power-choice {
+    min-height: 210px;
   }
 }
 
@@ -4450,6 +4625,16 @@
     font-size: 9px;
   }
 
+  .hud-hero-power {
+    min-width: 94px;
+    max-width: 118px;
+    padding-inline: 7px;
+  }
+
+  .hud-hero-power > span {
+    display: none;
+  }
+
   .hud-actions .primary {
     min-width: 126px;
     padding-inline: 10px;
@@ -4525,7 +4710,8 @@
     font-size: 11px;
   }
 
-  .player-health {
+  .player-health,
+  .player-armor {
     min-width: 32px;
     padding-inline: 4px;
     font-size: 11px;
@@ -4567,7 +4753,7 @@
 
   .side-rail .panel-title,
   .player-meta,
-  .player-health {
+  .player-survivability {
     display: none;
   }
 
@@ -4638,6 +4824,19 @@
 
   .discover-modal {
     width: min(680px, calc(100% - 12px));
+  }
+
+  .hero-power-choice-modal {
+    width: min(680px, calc(100% - 12px));
+  }
+
+  .hero-power-choice {
+    min-height: 246px;
+    padding-top: 118px;
+  }
+
+  .hero-power-choice > .card-art {
+    height: 112px;
   }
 
   .discover-options {

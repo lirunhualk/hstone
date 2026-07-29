@@ -18,10 +18,12 @@ import {
   getLegalSpellcraftTargetIds,
   getLegalTavernSpellTargetIds,
   getRefreshCost,
+  getHeroPowerDefinition,
   getTavernSpellPurchaseQuote,
   getTavernSpellDefinition,
   getSpellcraftDefinition,
   getUpgradeCost,
+  isHeroPowerDefinitionId,
   tavernSpellCanTargetShop,
   tavernSpellNeedsTarget,
   tavernSpellPurchaseCurrency,
@@ -53,6 +55,7 @@ import {
   combatIntroOpponent,
   initialCombatPlayback,
   isCombatPlaybackEvent,
+  projectCombatArmor,
   projectCombatHealth,
 } from "../lib/game/combat-presentation";
 import {
@@ -62,8 +65,9 @@ import {
 import { projectCombatBoard } from "../lib/game/playback";
 import { migrateLegacyGameState } from "../lib/game/save";
 
-const SAVE_KEY = "hearthstone-battlegrounds-local.save.v9";
+const SAVE_KEY = "hearthstone-battlegrounds-local.save.v10";
 const LEGACY_SAVE_KEYS = [
+  "hearthstone-battlegrounds-local.save.v9",
   "hearthstone-battlegrounds-local.save.v8",
   "hearthstone-battlegrounds-local.save.v7",
   "hearthstone-battlegrounds-local.save.v6",
@@ -142,6 +146,7 @@ type ShopDisplayOffer =
   | {
       kind: "tavernSpell";
       spell: TavernSpellInstance;
+      spellIndex: number;
     };
 
 type DragSession = DragSource & {
@@ -216,6 +221,10 @@ const TRIBE_HUE: Record<Tribe, number> = {
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return value !== null && typeof value === "object";
+}
+
+function formatSignedStat(value: number): string {
+  return value > 0 ? `+${value}` : `${value}`;
 }
 
 function hasSchema9MinionState(value: unknown): boolean {
@@ -295,6 +304,18 @@ function isPendingInteraction(
       )
     );
   }
+  if (value.kind === "heroPowerChoice") {
+    return (
+      typeof value.definitionId === "string" &&
+      Array.isArray(value.optionIds) &&
+      value.optionIds.length > 0 &&
+      value.optionIds.every(
+        (optionId) =>
+          typeof optionId === "string" &&
+          isHeroPowerDefinitionId(optionId),
+      )
+    );
+  }
   if (value.kind !== "discover") {
     return false;
   }
@@ -354,6 +375,14 @@ function pendingInteractionMatchesPlayer(
       interaction.definitionId ===
         "spellcraft-escape-eruption" &&
       interaction.optionIds.length === 2
+    );
+  }
+  if (interaction.kind === "heroPowerChoice") {
+    return (
+      interaction.definitionId ===
+        "tavern-spell-unmasked-identity" &&
+      interaction.optionIds.length > 0 &&
+      interaction.optionIds.every(isHeroPowerDefinitionId)
     );
   }
   return (
@@ -481,7 +510,7 @@ function isGameState(value: unknown): value is GameState {
   if (!value || typeof value !== "object") return false;
   const candidate = value as Partial<GameState>;
   return (
-    candidate.version === 9 &&
+    candidate.version === 10 &&
     candidate.contentVersion === CURRENT_ROSTER_VERSION &&
     typeof candidate.seed === "number" &&
     typeof candidate.nextInteractionId === "number" &&
@@ -492,6 +521,11 @@ function isGameState(value: unknown): value is GameState {
     candidate.players.length === 8 &&
     candidate.players.every(
       (player) =>
+        typeof player.armor === "number" &&
+        player.armor >= 0 &&
+        (player.heroPowerId === null ||
+          (typeof player.heroPowerId === "string" &&
+            isHeroPowerDefinitionId(player.heroPowerId))) &&
         typeof player.tavernSpellsCastThisTurn === "number" &&
         typeof player.maxGold === "number" &&
         player.maxGold >= 10 &&
@@ -501,6 +535,13 @@ function isGameState(value: unknown): value is GameState {
         typeof player.tavernMinionHealthBonus === "number" &&
         typeof player.nextCombatAttackBonus === "number" &&
         typeof player.nextCombatHealthBonus === "number" &&
+        typeof player.nextCombatSetEnemyHealthToOne === "number" &&
+        Array.isArray(player.nextCombatDoubleLeftmostAttack) &&
+        player.nextCombatDoubleLeftmostAttack.every(
+          (buff) =>
+            typeof buff.attack === "number" &&
+            typeof buff.health === "number",
+        ) &&
         typeof player.nextCombatWinGold === "number" &&
         typeof player.nextCombatTieGold === "number" &&
         typeof player.nextTurnBoardAttackBonus === "number" &&
@@ -530,6 +571,8 @@ function isGameState(value: unknown): value is GameState {
         typeof player.ballerAttackBonus === "number" &&
         typeof player.ballerHealthBonus === "number" &&
         typeof player.deepBlueBonus === "number" &&
+        typeof player.undeadArmyAttackBonus === "number" &&
+        typeof player.undeadArmyHealthBonus === "number" &&
         typeof player.bloodGemAttack === "number" &&
         player.bloodGemAttack >= 1 &&
         typeof player.bloodGemHealth === "number" &&
@@ -563,7 +606,10 @@ function isGameState(value: unknown): value is GameState {
             hasSchema9MinionState(minion),
         ) &&
         (player.spellShop === null ||
-          isTavernSpell(player.spellShop)),
+          isTavernSpell(player.spellShop)) &&
+        Array.isArray(player.additionalSpellShop) &&
+        player.additionalSpellShop.every(isTavernSpell) &&
+        typeof player.spellOnlyRefreshActive === "boolean",
     ) &&
     (candidate.pendingInteraction === null ||
       (isPendingInteraction(candidate.pendingInteraction) &&
@@ -1695,6 +1741,7 @@ function PlayerRow({
   opponentId,
   rank,
   displayHealth,
+  displayArmor,
   displayAlive,
   takingHeroDamage = false,
 }: {
@@ -1703,6 +1750,7 @@ function PlayerRow({
   opponentId?: string;
   rank: number;
   displayHealth?: number;
+  displayArmor?: number;
   displayAlive?: boolean;
   takingHeroDamage?: boolean;
 }) {
@@ -1710,6 +1758,7 @@ function PlayerRow({
     0,
     displayHealth ?? player.health,
   );
+  const renderedArmor = Math.max(0, displayArmor ?? player.armor);
   const renderedAlive = displayAlive ?? player.alive;
 
   return (
@@ -1726,6 +1775,7 @@ function PlayerRow({
       data-eliminated={!renderedAlive}
       data-opponent={player.id === opponentId}
       data-displayed-health={renderedHealth}
+      data-displayed-armor={renderedArmor}
       data-testid={`standing-${player.id}`}
     >
       <span className="player-meta">
@@ -1738,8 +1788,11 @@ function PlayerRow({
               : `第 ${player.placement ?? rank} 名`}
         </small>
       </span>
-      <span className="player-health">
-        生命 {renderedHealth}
+      <span className="player-survivability">
+        {renderedArmor > 0 && (
+          <span className="player-armor">护甲 {renderedArmor}</span>
+        )}
+        <span className="player-health">生命 {renderedHealth}</span>
       </span>
     </div>
   );
@@ -1911,29 +1964,39 @@ export default function GameClient() {
       game.players[0],
     [game],
   );
+  const humanHeroPower = human.heroPowerId
+    ? getHeroPowerDefinition(human.heroPowerId)
+    : null;
+  const tavernSpellShopOffers = useMemo(
+    () => [
+      ...(human.spellShop ? [human.spellShop] : []),
+      ...human.additionalSpellShop,
+    ],
+    [human.additionalSpellShop, human.spellShop],
+  );
   const shopDisplayOffers = useMemo<ShopDisplayOffer[]>(() => {
     const minionOffers = human.shop.map((unit, shopIndex) => ({
       kind: "minion" as const,
       unit,
       shopIndex,
     }));
-    if (!human.spellShop) {
-      return minionOffers;
-    }
-    const spellPosition =
-      [...human.spellShop.instanceId].reduce(
-        (hash, character) =>
-          (Math.imul(hash, 33) + character.charCodeAt(0)) >>> 0,
-        5381,
-      ) %
-      (minionOffers.length + 1);
     const offers: ShopDisplayOffer[] = [...minionOffers];
-    offers.splice(spellPosition, 0, {
-      kind: "tavernSpell",
-      spell: human.spellShop,
+    tavernSpellShopOffers.forEach((spell, spellIndex) => {
+      const spellPosition =
+        [...spell.instanceId].reduce(
+          (hash, character) =>
+            (Math.imul(hash, 33) + character.charCodeAt(0)) >>> 0,
+          5381,
+        ) %
+        (offers.length + 1);
+      offers.splice(spellPosition, 0, {
+        kind: "tavernSpell",
+        spell,
+        spellIndex,
+      });
     });
     return offers;
-  }, [human.shop, human.spellShop]);
+  }, [human.shop, tavernSpellShopOffers]);
   const humanInteraction =
     game.pendingInteraction?.playerId === human.id
       ? game.pendingInteraction
@@ -1954,6 +2017,10 @@ export default function GameClient() {
       : null;
   const spellcraftChoiceInteraction =
     humanInteraction?.kind === "spellcraftChoice"
+      ? humanInteraction
+      : null;
+  const heroPowerChoiceInteraction =
+    humanInteraction?.kind === "heroPowerChoice"
       ? humanInteraction
       : null;
   const interactionLocked = game.pendingInteraction !== null;
@@ -1983,6 +2050,10 @@ export default function GameClient() {
             : humanInteraction.kind === "spellcraftChoice"
               ? document.querySelector<HTMLElement>(
                   '[data-testid="escape-eruption-attack"]',
+                )
+            : humanInteraction.kind === "heroPowerChoice"
+              ? document.querySelector<HTMLElement>(
+                  '[data-testid="hero-power-choice-0"]',
                 )
             : Array.from(
                 document.querySelectorAll<HTMLElement>(
@@ -2146,9 +2217,27 @@ export default function GameClient() {
           playbackComplete: battlePlaybackComplete,
         }) ?? Math.max(0, human.health))
       : Math.max(0, human.health);
+  const displayedHumanArmor =
+    game.phase === "combat" && battle
+      ? (projectCombatArmor({
+          battle,
+          playerId: human.id,
+          revealedEvents: revealedPlaybackEvents,
+          playbackComplete: battlePlaybackComplete,
+        }) ?? Math.max(0, human.armor))
+      : Math.max(0, human.armor);
   const displayedOpponentHealth =
     game.phase === "combat" && battle && opponentId
       ? projectCombatHealth({
+          battle,
+          playerId: opponentId,
+          revealedEvents: revealedPlaybackEvents,
+          playbackComplete: battlePlaybackComplete,
+        })
+      : null;
+  const displayedOpponentArmor =
+    game.phase === "combat" && battle && opponentId
+      ? projectCombatArmor({
           battle,
           playerId: opponentId,
           revealedEvents: revealedPlaybackEvents,
@@ -2168,6 +2257,14 @@ export default function GameClient() {
           ? (displayedOpponentHealth ?? player.health)
           : player.health
       : player.health;
+  const projectedStandingArmor = (player: PlayerState) =>
+    game.phase === "combat" && battle
+      ? player.id === human.id
+        ? displayedHumanArmor
+        : player.id === opponentId
+          ? (displayedOpponentArmor ?? player.armor)
+          : player.armor
+      : player.armor;
   const projectedStandingAlive = (player: PlayerState) =>
     game.phase === "combat" &&
     battle &&
@@ -2229,7 +2326,9 @@ export default function GameClient() {
     currentBattleEvent?.type === "buff" &&
     currentBattleEvent.attackDelta !== undefined &&
     currentBattleEvent.healthDelta !== undefined
-      ? `+${currentBattleEvent.attackDelta}/+${currentBattleEvent.healthDelta}`
+      ? `${formatSignedStat(
+          currentBattleEvent.attackDelta,
+        )}/${formatSignedStat(currentBattleEvent.healthDelta)}`
       : undefined;
   const currentDebuffLabel =
     currentBattleEvent?.type === "keywordRemoved" &&
@@ -2265,7 +2364,9 @@ export default function GameClient() {
       ? selectedHandCard
       : null;
   const selectedShopSpell =
-    selection?.zone === "spellShop" ? human.spellShop : null;
+    selection?.zone === "spellShop"
+      ? (tavernSpellShopOffers[selection.index] ?? null)
+      : null;
   const selectedHandTavernSpell =
     selectedHandCard?.kind === "tavernSpell" ? selectedHandCard : null;
   const selectedTavernSpell =
@@ -2407,6 +2508,18 @@ export default function GameClient() {
   const tavernSpellPurchaseQuote = getTavernSpellPurchaseQuote(
     game,
     human.id,
+    selectedShopSpell?.instanceId,
+  );
+  const canBuyTavernSpellOffer = useCallback(
+    (spell: TavernSpellInstance) =>
+      game.phase === "recruit" &&
+      !interactionLocked &&
+      getTavernSpellPurchaseQuote(
+        game,
+        human.id,
+        spell.instanceId,
+      )?.affordable === true,
+    [game, human.id, interactionLocked],
   );
   const canBuyFromShop =
     game.phase === "recruit" &&
@@ -2428,7 +2541,7 @@ export default function GameClient() {
     (selectedUnit.playableFromRound ?? 0) <= game.round;
   const selectedOfferCost =
     selection?.zone === "spellShop"
-      ? (human.spellShop?.cost ?? 0)
+      ? (selectedShopSpell?.cost ?? 0)
       : 3;
   const selectedOfferCurrency =
     selection?.zone === "spellShop"
@@ -2477,6 +2590,10 @@ export default function GameClient() {
         ? "惊扰墓穴 · 发现一张亡灵牌"
       : discoverInteraction.destination.playableFromRound !== undefined
         ? `搜寻时光 · 发现一个 ${discoverInteraction.filter.exactTier} 级随从`
+      : discoverInteraction.filter.ability === "deathrattle"
+        ? "预订遗体 · 发现一张亡语随从牌"
+      : discoverInteraction.filter.ability === "battlecry"
+        ? "猎头招聘 · 发现一张战吼随从牌"
       : discoverInteraction.filter.exactTier
       ? discoverInteraction.filter.exactTier === 1 &&
         !discoverSource
@@ -2958,7 +3075,9 @@ export default function GameClient() {
           : null;
       }
       if (source.zone === "spellShop") {
-        return canBuyTavernSpell &&
+        const spell = tavernSpellShopOffers[source.index];
+        return spell &&
+          canBuyTavernSpellOffer(spell) &&
           hit.closest('[data-hand-drop-zone="true"]')
           ? { kind: "hand" }
           : null;
@@ -3142,12 +3261,13 @@ export default function GameClient() {
     },
     [
       canBuyFromShop,
-      canBuyTavernSpell,
+      canBuyTavernSpellOffer,
       game,
       human.board,
       human.hand,
       human.id,
       human.shop,
+      tavernSpellShopOffers,
     ],
   );
 
@@ -3191,7 +3311,9 @@ export default function GameClient() {
         event.button !== 0 ||
         handCardCannotAct ||
         (source.zone === "shop" && !canBuyFromShop) ||
-        (source.zone === "spellShop" && !canBuyTavernSpell)
+        (source.zone === "spellShop" &&
+          (card.kind !== "tavernSpell" ||
+            !canBuyTavernSpellOffer(card)))
       ) {
         return;
       }
@@ -3223,7 +3345,7 @@ export default function GameClient() {
     },
     [
       canBuyFromShop,
-      canBuyTavernSpell,
+      canBuyTavernSpellOffer,
       game,
       human,
       interactionLocked,
@@ -3403,7 +3525,10 @@ export default function GameClient() {
         return true;
       }
       if (current.zone === "spellShop" && target.kind === "hand") {
-        send({ type: "BUY_TAVERN_SPELL" });
+        send({
+          type: "BUY_TAVERN_SPELL",
+          spellInstanceId: current.card.instanceId,
+        });
         return true;
       }
       if (
@@ -3807,6 +3932,23 @@ export default function GameClient() {
           <small>生命</small>
           <strong>{displayedHumanHealth}</strong>
         </div>
+        <div
+          className={`hud-stat armor${
+            currentHeroDamageTargetId === human.id
+              ? " is-taking-hero-damage"
+              : ""
+          }`}
+          aria-atomic="true"
+          aria-label={`护甲 ${displayedHumanArmor}`}
+          aria-live="polite"
+          data-displayed-armor={displayedHumanArmor}
+          data-stat="armor"
+          data-testid="human-armor"
+          role="status"
+        >
+          <small>护甲</small>
+          <strong>{displayedHumanArmor}</strong>
+        </div>
         <div className="hud-stat" aria-label={`金币 ${human.gold}`}>
           <small>金币</small>
           <strong>{human.gold}</strong>
@@ -3814,6 +3956,22 @@ export default function GameClient() {
         <div className="hud-stat" aria-label={`酒馆等级 ${human.tavernTier}`}>
           <small>酒馆</small>
           <strong>{human.tavernTier} / 6</strong>
+        </div>
+        <div
+          className="hud-hero-power"
+          aria-label={
+            humanHeroPower
+              ? `英雄技能 ${humanHeroPower.name}：${humanHeroPower.description}`
+              : "英雄技能：无"
+          }
+          data-testid="human-hero-power"
+          title={humanHeroPower?.description ?? "尚未获得英雄技能"}
+        >
+          <small>英雄技能</small>
+          <strong>{humanHeroPower?.name ?? "无"}</strong>
+          <span>
+            {humanHeroPower?.description ?? "可通过身份揭晓获得"}
+          </span>
         </div>
         <div className="hud-actions">
           <button
@@ -3856,6 +4014,8 @@ export default function GameClient() {
             className={`panel shop-panel${
               human.frozen ? " is-frozen" : ""
             }${
+              human.spellOnlyRefreshActive ? " is-spell-only" : ""
+            }${
               dragSession?.active && dragSession.zone === "board"
                 ? " is-sell-ready"
                 : ""
@@ -3889,7 +4049,13 @@ export default function GameClient() {
                     .join(" / ")}
                 </small>
               </span>
-              <span>{human.frozen ? "已冻结" : "招募中"}</span>
+              <span>
+                {human.frozen
+                  ? "已冻结"
+                  : human.spellOnlyRefreshActive
+                    ? `法术专场 · ${tavernSpellShopOffers.length} 张`
+                    : "招募中"}
+              </span>
             </div>
             <div className="shop-layout">
               <div className="shop-actions">
@@ -4027,27 +4193,33 @@ export default function GameClient() {
                   ) : (
                     <div
                       className="shop-spell-slot"
-                      data-testid="tavern-spell-slot"
+                      data-testid={`tavern-spell-slot-${offer.spellIndex}`}
                       key={offer.spell.instanceId}
                     >
                       <TavernSpellCard
                         card={offer.spell}
                         inShop
-                        selected={selection?.zone === "spellShop"}
+                        selected={
+                          selection?.zone === "spellShop" &&
+                          selection.index === offer.spellIndex
+                        }
                         unaffordable={
-                          tavernSpellPurchaseQuote?.affordable !== true
+                          !canBuyTavernSpellOffer(offer.spell)
                         }
                         disabled={interactionLocked}
-                        testId="tavern-spell-offer"
+                        testId={`tavern-spell-offer-${offer.spellIndex}`}
                         dragging={
                           dragSession?.active === true &&
                           dragSession.card.instanceId ===
                             offer.spell.instanceId
                         }
                         dragHandlers={
-                          canBuyTavernSpell
+                          canBuyTavernSpellOffer(offer.spell)
                             ? getDragHandlers(
-                                { zone: "spellShop", index: 0 },
+                                {
+                                  zone: "spellShop",
+                                  index: offer.spellIndex,
+                                },
                                 offer.spell,
                               )
                             : undefined
@@ -4055,7 +4227,7 @@ export default function GameClient() {
                         onClick={() =>
                           selectCard({
                             zone: "spellShop",
-                            index: 0,
+                            index: offer.spellIndex,
                           })
                         }
                       />
@@ -4063,7 +4235,7 @@ export default function GameClient() {
                   ),
                 )}
                 {shopDisplayOffers.length === 0 && (
-                  <div className="empty-state">酒馆暂时没有随从</div>
+                  <div className="empty-state">酒馆暂时没有可购买的牌</div>
                 )}
               </div>
             </div>
@@ -4654,6 +4826,11 @@ export default function GameClient() {
                           : undefined
                       : undefined
                   }
+                  displayArmor={
+                    game.phase === "combat" && battle
+                      ? projectedStandingArmor(player)
+                      : player.armor
+                  }
                   displayAlive={
                     game.phase === "combat" &&
                     battle &&
@@ -4816,7 +4993,11 @@ export default function GameClient() {
                           data-testid="buy-selected-tavern-spell"
                           disabled={!selectedCanBuy}
                           onClick={() =>
-                            send({ type: "BUY_TAVERN_SPELL" })
+                            send({
+                              type: "BUY_TAVERN_SPELL",
+                              spellInstanceId:
+                                selectedTavernSpell.instanceId,
+                            })
                           }
                         >
                           购买 · {selectedTavernSpell.cost}
@@ -5389,6 +5570,66 @@ export default function GameClient() {
                 </span>
                 <small>合计 +4/+4，但本场战斗不生效</small>
               </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {heroPowerChoiceInteraction && (
+        <div
+          className="overlay interaction-overlay"
+          role="dialog"
+          aria-modal="true"
+          aria-labelledby="hero-power-choice-title"
+          aria-describedby="hero-power-choice-description"
+          data-testid="hero-power-choice-dialog"
+          onKeyDown={trapDiscoverFocus}
+        >
+          <div className="modal hero-power-choice-modal">
+            <span className="discover-kicker">发现 · 英雄技能</span>
+            <h2
+              className="discover-title"
+              id="hero-power-choice-title"
+            >
+              身份揭晓 · 选择一个新的英雄技能
+            </h2>
+            <p
+              className="discover-copy"
+              id="hero-power-choice-description"
+            >
+              没有倒计时。选择后会替换你当前的英雄技能，并在本局余下时间持续生效。
+            </p>
+            <div className="hero-power-choice-options">
+              {heroPowerChoiceInteraction.optionIds.map(
+                (optionId, index) => {
+                  const option = getHeroPowerDefinition(optionId);
+                  return (
+                    <button
+                      type="button"
+                      className="hero-power-choice"
+                      data-testid={`hero-power-choice-${index}`}
+                      key={option.id}
+                      onClick={() =>
+                        send({
+                          type: "RESOLVE_INTERACTION",
+                          interactionId:
+                            heroPowerChoiceInteraction.interactionId,
+                          optionInstanceId: option.id,
+                        })
+                      }
+                    >
+                      <CardArtwork unit={option} kind="portrait" />
+                      <span className="hero-power-choice-type">
+                        被动英雄技能
+                      </span>
+                      <strong>{option.name}</strong>
+                      <span className="hero-power-choice-copy">
+                        {option.description}
+                      </span>
+                    </button>
+                  );
+                },
+              )}
             </div>
           </div>
         </div>

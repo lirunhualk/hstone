@@ -302,6 +302,72 @@ export const TAVERN_SPELL_RULES = [
     target: "anyMinion",
   },
   {
+    id: "tavern-spell-armor-stash",
+    cardId: "BG28_500",
+    effect: "armorStash",
+    target: "none",
+  },
+  {
+    id: "tavern-spell-overpowered",
+    cardId: "BG28_573",
+    effect: "overpowered",
+    target: "none",
+  },
+  {
+    id: "tavern-spell-slaughter",
+    cardId: "BG28_604",
+    effect: "slaughter",
+    target: "friendly",
+  },
+  {
+    id: "tavern-spell-corrupted-cupcakes",
+    cardId: "BG28_607",
+    effect: "corruptedCupcakes",
+    target: "friendly",
+  },
+  {
+    id: "tavern-spell-golden-touch",
+    cardId: "BG28_830",
+    effect: "goldenTouch",
+    target: "none",
+  },
+  {
+    id: "tavern-spell-saloons-finest",
+    cardId: "BG28_849",
+    effect: "saloonsFinest",
+    target: "none",
+  },
+  {
+    id: "tavern-spell-reserved-corpse",
+    cardId: "BG28_882",
+    effect: "reservedCorpse",
+    target: "none",
+  },
+  {
+    id: "tavern-spell-headhunter",
+    cardId: "BG28_GIL_836",
+    effect: "headhunter",
+    target: "none",
+  },
+  {
+    id: "tavern-spell-nozdormus-progeny",
+    cardId: "BG34_889",
+    effect: "nozdormusProgeny",
+    target: "none",
+  },
+  {
+    id: "tavern-spell-invoke-the-devourer",
+    cardId: "EBG_Spell_032",
+    effect: "invokeTheDevourer",
+    target: "friendly",
+  },
+  {
+    id: "tavern-spell-unmasked-identity",
+    cardId: "EBG_Spell_037",
+    effect: "unmaskedIdentity",
+    target: "none",
+  },
+  {
     id: "tavern-spell-queens-command",
     cardId: "BG35_922",
     effect: "queensCommand",
@@ -353,6 +419,9 @@ const READABLE_TEXT_OVERRIDES: Readonly<Record<string, string>> = {
   BG33_811: "使四个友方随从获得+4生命值。",
   BG33_812: "使四个友方随从获得+4攻击力。",
   BG33_817: "使你具有圣盾的随从获得+6攻击力。",
+  BG28_604:
+    "消灭一个友方亡灵。在本局对战中，你的亡灵拥有+5攻击力（无论它们在哪）。",
+  BG28_849: "刷新酒馆，使其中变为酒馆法术牌。",
 };
 
 function plainText(html: string): string {

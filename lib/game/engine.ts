@@ -18,6 +18,10 @@ import {
   getSpellcraftDefinition,
   spellcraftNeedsTarget,
 } from "./spellcraft.ts";
+import {
+  HERO_POWER_DEFINITIONS,
+  getHeroPowerDefinition,
+} from "./hero-powers.ts";
 import type {
   BattleEvent,
   BattleResult,
@@ -31,6 +35,7 @@ import type {
   GameAction,
   GameState,
   GetRandomMinionEffect,
+  HeroPowerDefinition,
   MagneticAttachment,
   MinionEffect,
   MinionInstance,
@@ -61,6 +66,7 @@ export type {
   GamePhase,
   GameState,
   HandCardInstance,
+  HeroPowerDefinition,
   MagneticAttachment,
   MinionDefinition,
   MinionEffect,
@@ -81,6 +87,12 @@ export type {
   Tribe,
   TripleRewardSpellInstance,
 } from "./types.ts";
+
+export {
+  HERO_POWER_DEFINITIONS,
+  getHeroPowerDefinition,
+  isHeroPowerDefinitionId,
+} from "./hero-powers.ts";
 
 export {
   SPELLCRAFT_DEFINITIONS,
@@ -318,6 +330,33 @@ function humanPlayer(state: GameState): PlayerState {
   return player;
 }
 
+interface HeroDamageResult {
+  armorAbsorbed: number;
+  healthDamage: number;
+}
+
+function damagePlayer(
+  player: PlayerState,
+  amount: number,
+): HeroDamageResult {
+  const safeAmount = Math.max(0, amount);
+  const armorAbsorbed = Math.min(player.armor, safeAmount);
+  const healthDamage = safeAmount - armorAbsorbed;
+  player.armor -= armorAbsorbed;
+  player.health -= healthDamage;
+  return { armorAbsorbed, healthDamage };
+}
+
+function playerHasHeroPower(
+  player: PlayerState,
+  effect: HeroPowerDefinition["effect"],
+): boolean {
+  return (
+    player.heroPowerId !== null &&
+    getHeroPowerDefinition(player.heroPowerId).effect === effect
+  );
+}
+
 function createMinionInstance(
   state: GameState,
   definitionId: string,
@@ -385,6 +424,26 @@ function makeGoldenToken(
   minion.sellValue =
     definition.goldenSellValue ?? minion.sellValue;
   minion.description = describeGoldenMinion(minion.description);
+  return minion;
+}
+
+function makeShopMinionGolden(
+  minion: BoardMinionInstance,
+): BoardMinionInstance {
+  if (minion.golden) {
+    return minion;
+  }
+  const definition = getMinionDefinition(minion.definitionId);
+  minion.golden = true;
+  minion.name = `金色·${definition.name}`;
+  // Golden Touch adds the second copy of the printed base stats. Existing
+  // Tavern buffs and enchantments are retained once rather than doubled.
+  minion.attack += definition.attack;
+  minion.health += definition.health;
+  minion.sellValue =
+    definition.goldenSellValue ?? minion.sellValue;
+  minion.description = describeGoldenMinion(definition.description);
+  minion.grantsTripleReward = false;
   return minion;
 }
 
@@ -519,10 +578,12 @@ function createTavernSpell(
 function drawTavernSpell(
   state: GameState,
   tavernTier: TavernTier,
+  excludedDefinitionIds: ReadonlySet<string> = new Set(),
 ): TavernSpellInstance | null {
   const eligible = TAVERN_SPELL_DEFINITIONS.filter(
     (definition) =>
       definition.tier <= tavernTier &&
+      !excludedDefinitionIds.has(definition.id) &&
       tavernSpellIsAvailable(definition, state.activeTribes) &&
       (state.spellPool[definition.id] ?? 0) > 0,
   );
@@ -790,6 +851,18 @@ function reserveDiscoverOptions(
     ) {
       return false;
     }
+    if (
+      filter.ability === "battlecry" &&
+      !definition.printedMechanics?.includes("BATTLECRY")
+    ) {
+      return false;
+    }
+    if (
+      filter.ability === "deathrattle" &&
+      !definition.printedMechanics?.includes("DEATHRATTLE")
+    ) {
+      return false;
+    }
     return (
       filter.tribe === undefined ||
       definitionHasTribe(definition, filter.tribe)
@@ -821,16 +894,27 @@ function reserveDiscoverOptions(
   return options;
 }
 
+function tavernSpellShopOffers(
+  player: PlayerState,
+): TavernSpellInstance[] {
+  return [
+    ...(player.spellShop ? [player.spellShop] : []),
+    ...player.additionalSpellShop,
+  ];
+}
+
 function releaseShop(state: GameState, player: PlayerState): void {
   for (const minion of player.shop) {
     returnMinionToPool(state, minion);
   }
   player.shop = [];
-  if (player.spellShop) {
-    state.spellPool[player.spellShop.definitionId] =
-      (state.spellPool[player.spellShop.definitionId] ?? 0) + 1;
+  for (const spell of tavernSpellShopOffers(player)) {
+    state.spellPool[spell.definitionId] =
+      (state.spellPool[spell.definitionId] ?? 0) + 1;
   }
   player.spellShop = null;
+  player.additionalSpellShop = [];
+  player.spellOnlyRefreshActive = false;
 }
 
 function applyPersistentTavernBonuses(
@@ -851,10 +935,30 @@ function applyPersistentTavernBonuses(
     matchingBuffs.reduce((total, buff) => total + buff.health, 0);
 }
 
+function applyOwnedUndeadArmyBonus(
+  player: PlayerState,
+  minion: BoardMinionInstance,
+): void {
+  if (!minionHasTribe(minion, "undead")) {
+    return;
+  }
+  minion.attack += player.undeadArmyAttackBonus;
+  minion.health += player.undeadArmyHealthBonus;
+}
+
 function fillShop(state: GameState, player: PlayerState): void {
   const targetSize = SHOP_SIZE_BY_TIER[player.tavernTier];
+  const minionTargetSize = player.spellOnlyRefreshActive
+    ? Math.max(
+        0,
+        // Saloon's Finest itself can produce seven spells, but a later
+        // start-of-turn refill uses the live total-card cap for the current
+        // Tavern Tier (normal minion offers plus the dedicated spell slot).
+        targetSize + 1 - tavernSpellShopOffers(player).length,
+      )
+    : targetSize;
   let tavernRefreshed = false;
-  while (player.shop.length < targetSize) {
+  while (player.shop.length < minionTargetSize) {
     const minion = drawFromPool(state, player.tavernTier);
     if (!minion) {
       break;
@@ -863,7 +967,7 @@ function fillShop(state: GameState, player: PlayerState): void {
     player.shop.push(minion);
     tavernRefreshed = true;
   }
-  if (player.spellShop === null) {
+  if (!player.spellOnlyRefreshActive && player.spellShop === null) {
     const spell = drawTavernSpell(state, player.tavernTier);
     if (spell) {
       player.spellShop = spell;
@@ -902,7 +1006,16 @@ export function getUpgradeCost(
     return 0;
   }
   const baseCost = UPGRADE_BASE_COST[player.tavernTier];
-  return Math.max(0, baseCost - player.upgradeDiscount);
+  const heroPowerDiscount = playerHasHeroPower(
+    player,
+    "upgradeDiscount",
+  )
+    ? 1
+    : 0;
+  return Math.max(
+    0,
+    baseCost - player.upgradeDiscount - heroPowerDiscount,
+  );
 }
 
 export function getRefreshCost(
@@ -922,9 +1035,16 @@ export interface TavernSpellPurchaseQuote {
 export function getTavernSpellPurchaseQuote(
   state: GameState,
   playerId: PlayerId,
+  spellInstanceId?: string,
 ): TavernSpellPurchaseQuote | null {
   const player = findPlayer(state, playerId);
-  const spell = player?.spellShop;
+  const spell = player
+    ? spellInstanceId
+      ? tavernSpellShopOffers(player).find(
+          (candidate) => candidate.instanceId === spellInstanceId,
+        )
+      : player.spellShop
+    : undefined;
   if (!player || !spell) {
     return null;
   }
@@ -969,6 +1089,21 @@ function tavernSpellLegalTargets(
     }
     return candidates.filter((candidate) =>
       minionHasTribe(candidate, "elemental"),
+    );
+  }
+  if (definition.effect === "slaughter") {
+    return candidates.filter((candidate) =>
+      minionHasTribe(candidate, "undead"),
+    );
+  }
+  if (definition.effect === "corruptedCupcakes") {
+    return candidates.filter((candidate) =>
+      minionHasTribe(candidate, "demon"),
+    );
+  }
+  if (definition.effect === "invokeTheDevourer") {
+    return candidates.filter((candidate) =>
+      player.board.includes(candidate),
     );
   }
   return candidates;
@@ -1113,7 +1248,7 @@ function applyRecruitEffects(
     } else if (effect.kind === "gainGold") {
       player.gold += effect.amount * scale;
     } else if (effect.kind === "damageHero") {
-      player.health -= effect.amount;
+      damagePlayer(player, effect.amount);
     } else if (effect.kind === "gainMissingHealth") {
       source.health +=
         Math.max(0, 40 - player.health) * effect.multiplier * scale;
@@ -1157,6 +1292,7 @@ function applyRecruitEffects(
         if (effect.taunt) {
           summoned.taunt = true;
         }
+        applyOwnedUndeadArmyBonus(player, summoned);
         player.board.push(summoned);
         applyRecruitSummonTriggers(player, summoned);
       }
@@ -1210,7 +1346,7 @@ function applyAfterFriendlyPlayed(
       const scale = component.golden ? 2 : 1;
       watcher.attack += (trigger.attack ?? 0) * scale;
       watcher.health += (trigger.health ?? 0) * scale;
-      player.health -= (trigger.heroDamage ?? 0) * scale;
+      damagePlayer(player, (trigger.heroDamage ?? 0) * scale);
       addBloodGems(
         state,
         player,
@@ -1362,12 +1498,24 @@ function resolveTriples(state: GameState, player: PlayerState): void {
       );
 
       const definition = getMinionDefinition(definitionId);
+      const undeadArmyAttack =
+        definitionHasTribe(definition, "undead")
+          ? player.undeadArmyAttackBonus
+          : 0;
+      const undeadArmyHealth =
+        definitionHasTribe(definition, "undead")
+          ? player.undeadArmyHealthBonus
+          : 0;
       const extraAttack = consumed.reduce(
-        (total, minion) => total + (minion.attack - definition.attack),
+        (total, minion) =>
+          total +
+          (minion.attack - definition.attack - undeadArmyAttack),
         0,
       );
       const extraHealth = consumed.reduce(
-        (total, minion) => total + (minion.health - definition.health),
+        (total, minion) =>
+          total +
+          (minion.health - definition.health - undeadArmyHealth),
         0,
       );
       const golden = createMinionInstance(
@@ -1378,8 +1526,10 @@ function resolveTriples(state: GameState, player: PlayerState): void {
       golden.golden = true;
       golden.grantsTripleReward = true;
       golden.name = `金色·${definition.name}`;
-      golden.attack = definition.attack * 2 + extraAttack;
-      golden.health = definition.health * 2 + extraHealth;
+      golden.attack =
+        definition.attack * 2 + undeadArmyAttack + extraAttack;
+      golden.health =
+        definition.health * 2 + undeadArmyHealth + extraHealth;
       golden.bloodGemAttack = consumed.reduce(
         (total, minion) => total + minion.bloodGemAttack,
         0,
@@ -1486,6 +1636,7 @@ function buyMinion(
   }
   const [minion] = player.shop.splice(shopIndex, 1);
   player.gold -= BUY_COST;
+  applyOwnedUndeadArmyBonus(player, minion);
   player.hand.push(minion);
   resolveTriples(state, player);
   return true;
@@ -1494,8 +1645,12 @@ function buyMinion(
 function buyTavernSpell(
   state: GameState,
   player: PlayerState,
+  spellInstanceId?: string,
 ): boolean {
-  const spell = player.spellShop;
+  const offers = tavernSpellShopOffers(player);
+  const spell = spellInstanceId
+    ? offers.find((candidate) => candidate.instanceId === spellInstanceId)
+    : player.spellShop;
   if (!spell || player.hand.length >= MAX_HAND_SIZE) {
     return false;
   }
@@ -1514,7 +1669,13 @@ function buyTavernSpell(
   state.spellPool[spell.definitionId] =
     (state.spellPool[spell.definitionId] ?? 0) + 1;
   player.hand.push(spell);
-  player.spellShop = null;
+  if (player.spellShop?.instanceId === spell.instanceId) {
+    player.spellShop = player.additionalSpellShop.shift() ?? null;
+  } else {
+    player.additionalSpellShop = player.additionalSpellShop.filter(
+      (candidate) => candidate.instanceId !== spell.instanceId,
+    );
+  }
   return true;
 }
 
@@ -1588,21 +1749,17 @@ function playMinion(
   return true;
 }
 
-function resolveStirTheGraveyardDeath(
+function destroyRecruitMinion(
   state: GameState,
   player: PlayerState,
   instanceId: string,
-): void {
+): BoardMinionInstance | null {
   const boardIndex = player.board.findIndex(
     (minion) => minion.instanceId === instanceId,
   );
   const source = player.board[boardIndex];
-  if (
-    !source ||
-    source.destroyAfterPlayThroughRound === undefined ||
-    source.destroyAfterPlayThroughRound < state.round
-  ) {
-    return;
+  if (!source) {
+    return null;
   }
 
   player.board.splice(boardIndex, 1);
@@ -1660,6 +1817,7 @@ function resolveStirTheGraveyardDeath(
     }
     reborn.health = 1;
     reborn.reborn = false;
+    applyOwnedUndeadArmyBonus(player, reborn);
     player.board.splice(
       Math.min(boardIndex, player.board.length),
       0,
@@ -1667,6 +1825,25 @@ function resolveStirTheGraveyardDeath(
     );
     applyRecruitSummonTriggers(player, reborn);
   }
+  return source;
+}
+
+function resolveStirTheGraveyardDeath(
+  state: GameState,
+  player: PlayerState,
+  instanceId: string,
+): void {
+  const source = player.board.find(
+    (minion) => minion.instanceId === instanceId,
+  );
+  if (
+    !source ||
+    source.destroyAfterPlayThroughRound === undefined ||
+    source.destroyAfterPlayThroughRound < state.round
+  ) {
+    return;
+  }
+  destroyRecruitMinion(state, player, instanceId);
 }
 
 function resolvePendingStirDeaths(
@@ -2052,6 +2229,7 @@ function addDrawnMinionToHand(
     returnMinionToPool(state, minion);
     return;
   }
+  applyOwnedUndeadArmyBonus(player, minion);
   player.hand.push(minion);
   resolveTriples(state, player);
 }
@@ -2064,7 +2242,9 @@ function addGeneratedMinionCopyToHand(
   if (player.hand.length >= MAX_HAND_SIZE) {
     return;
   }
-  player.hand.push(createMinionInstance(state, definitionId, 0));
+  const minion = createMinionInstance(state, definitionId, 0);
+  applyOwnedUndeadArmyBonus(player, minion);
+  player.hand.push(minion);
   resolveTriples(state, player);
 }
 
@@ -2089,6 +2269,10 @@ const STAT_GRANTING_TAVERN_SPELL_EFFECTS = new Set<string>([
   "shiftingTide",
   "blazingInferno",
   "arcaneAbsorption",
+  "slaughter",
+  "corruptedCupcakes",
+  "nozdormusProgeny",
+  "invokeTheDevourer",
   "queensCommand",
   "sanctify",
   "waveOfGold",
@@ -2223,31 +2407,29 @@ function adjacentRecruitMinions(
   if (shopIndex < 0) {
     return [];
   }
-  const spellPosition = player.spellShop
-    ? [...player.spellShop.instanceId].reduce(
+  const displayOffers: Array<
+    | { kind: "minion"; minion: BoardMinionInstance }
+    | { kind: "spell"; spell: TavernSpellInstance }
+  > = player.shop.map((minion) => ({ kind: "minion", minion }));
+  for (const spell of tavernSpellShopOffers(player)) {
+    const spellPosition =
+      [...spell.instanceId].reduce(
         (hash, character) =>
           (Math.imul(hash, 33) + character.charCodeAt(0)) >>> 0,
         5381,
       ) %
-      (player.shop.length + 1)
-    : -1;
-  const targetDisplayIndex =
-    shopIndex + (spellPosition >= 0 && spellPosition <= shopIndex ? 1 : 0);
+      (displayOffers.length + 1);
+    displayOffers.splice(spellPosition, 0, { kind: "spell", spell });
+  }
+  const targetDisplayIndex = displayOffers.findIndex(
+    (offer) =>
+      offer.kind === "minion" &&
+      offer.minion.instanceId === target.instanceId,
+  );
   return [targetDisplayIndex - 1, targetDisplayIndex + 1].flatMap(
     (displayIndex) => {
-      if (
-        displayIndex < 0 ||
-        displayIndex > player.shop.length ||
-        displayIndex === spellPosition
-      ) {
-        return [];
-      }
-      const minionIndex =
-        spellPosition >= 0 && displayIndex > spellPosition
-          ? displayIndex - 1
-          : displayIndex;
-      const minion = player.shop[minionIndex];
-      return minion ? [minion] : [];
+      const offer = displayOffers[displayIndex];
+      return offer?.kind === "minion" ? [offer.minion] : [];
     },
   );
 }
@@ -2289,6 +2471,87 @@ function selectDistinctMinionsByTribe(
   }
   const selectedIds = new Set(assignedTribeByInstance.keys());
   return board.filter((minion) => selectedIds.has(minion.instanceId));
+}
+
+function heroPowerAiScore(
+  player: PlayerState,
+  definition: HeroPowerDefinition,
+): number {
+  switch (definition.effect) {
+    case "upgradeDiscount":
+      return player.tavernTier < 6 ? 9 : 1;
+    case "gainGoldAfterUpgrade":
+      return player.tavernTier < 6 ? 8 : 1;
+    case "freeRefreshAtTurnStart":
+      return 7;
+    case "buffCombatSummons":
+      return 4 + player.board.filter((minion) => {
+        const minionDefinition = getMinionDefinition(minion.definitionId);
+        return minionDefinition.deathrattle?.some(
+          (effect) => effect.kind === "summon",
+        );
+      }).length;
+  }
+}
+
+function beginHeroPowerChoice(
+  state: GameState,
+  player: PlayerState,
+  spell: TavernSpellInstance,
+  definition: TavernSpellDefinition,
+): boolean {
+  const candidates = HERO_POWER_DEFINITIONS.filter(
+    (candidate) => candidate.id !== player.heroPowerId,
+  ).map((candidate) => ({ ...candidate }));
+  shuffleInPlace(state, candidates);
+  const options = candidates.slice(0, 3);
+  if (options.length === 0) {
+    return false;
+  }
+  if (!player.isHuman) {
+    player.heroPowerId = [...options].sort((left, right) => {
+      const scoreDifference =
+        heroPowerAiScore(player, right) -
+        heroPowerAiScore(player, left);
+      return scoreDifference !== 0
+        ? scoreDifference
+        : left.id.localeCompare(right.id);
+    })[0].id;
+    return false;
+  }
+  state.pendingInteraction = {
+    kind: "heroPowerChoice",
+    interactionId: nextInteractionId(state),
+    playerId: player.id,
+    sourceInstanceId: spell.instanceId,
+    definitionId: definition.id,
+    optionIds: options.map((option) => option.id),
+  };
+  return true;
+}
+
+function refreshWithTavernSpells(
+  state: GameState,
+  player: PlayerState,
+): void {
+  releaseShop(state, player);
+  player.frozen = false;
+  player.spellOnlyRefreshActive = true;
+  const excluded = new Set(["tavern-spell-saloons-finest"]);
+  const offers: TavernSpellInstance[] = [];
+  while (offers.length < 7) {
+    const offer = drawTavernSpell(
+      state,
+      player.tavernTier,
+      excluded,
+    );
+    if (!offer) {
+      break;
+    }
+    offers.push(offer);
+  }
+  player.spellShop = offers.shift() ?? null;
+  player.additionalSpellShop = offers;
 }
 
 function applyTavernSpellEffect(
@@ -2746,6 +3009,145 @@ function applyTavernSpellEffect(
         );
       }
       break;
+    case "armorStash":
+      player.armor = 5;
+      break;
+    case "overpowered":
+      player.nextCombatSetEnemyHealthToOne += 1;
+      break;
+    case "slaughter":
+      if (target) {
+        const destroyed = destroyRecruitMinion(
+          state,
+          player,
+          target.instanceId,
+        );
+        if (destroyed) {
+          const attack =
+            5 + player.tavernSpellAttackBonus;
+          const health = player.tavernSpellHealthBonus;
+          player.undeadArmyAttackBonus += attack;
+          player.undeadArmyHealthBonus += health;
+          for (const minion of [
+            ...player.board,
+            ...player.hand.filter(
+              (card): card is BoardMinionInstance =>
+                card.kind === "minion",
+            ),
+          ]) {
+            if (minionHasTribe(minion, "undead")) {
+              minion.attack += attack;
+              minion.health += health;
+            }
+          }
+        }
+      }
+      break;
+    case "corruptedCupcakes":
+      if (target && player.shop.length > 0) {
+        let attack = 0;
+        let health = 0;
+        for (
+          let count = 0;
+          count < 3 && player.shop.length > 0;
+          count += 1
+        ) {
+          const [consumed] = player.shop.splice(
+            randomIndex(state, player.shop.length),
+            1,
+          );
+          attack += consumed.attack;
+          health += consumed.health;
+          returnMinionToPool(state, consumed);
+        }
+        buffMinionsFromTavernSpell(
+          player,
+          [target],
+          attack,
+          health,
+        );
+      }
+      break;
+    case "goldenTouch": {
+      const candidates = player.shop.filter(
+        (minion) => !minion.golden,
+      );
+      if (candidates.length > 0) {
+        makeShopMinionGolden(
+          candidates[randomIndex(state, candidates.length)],
+        );
+      }
+      break;
+    }
+    case "saloonsFinest":
+      refreshWithTavernSpells(state, player);
+      break;
+    case "reservedCorpse":
+      beginDiscoverInteraction(
+        state,
+        player,
+        spell.instanceId,
+        {
+          maximumTier: player.tavernTier,
+          ability: "deathrattle",
+        },
+        1,
+        { kind: "hand" },
+      );
+      break;
+    case "headhunter":
+      beginDiscoverInteraction(
+        state,
+        player,
+        spell.instanceId,
+        {
+          maximumTier: player.tavernTier,
+          ability: "battlecry",
+        },
+        1,
+        { kind: "hand" },
+      );
+      break;
+    case "nozdormusProgeny":
+      player.nextCombatDoubleLeftmostAttack.push({
+        attack: player.tavernSpellAttackBonus,
+        health: player.tavernSpellHealthBonus,
+      });
+      break;
+    case "invokeTheDevourer":
+      if (target) {
+        const boardIndex = player.board.findIndex(
+          (minion) => minion.instanceId === target.instanceId,
+        );
+        const sold = sellMinionTransaction(
+          state,
+          player,
+          boardIndex,
+        );
+        if (sold && player.board.length > 0) {
+          const recipient =
+            player.board[randomIndex(state, player.board.length)];
+          buffMinionsFromTavernSpell(
+            player,
+            [recipient],
+            sold.attack,
+            sold.health,
+          );
+        }
+      }
+      break;
+    case "unmaskedIdentity":
+      if (
+        beginHeroPowerChoice(
+          state,
+          player,
+          spell,
+          definition,
+        )
+      ) {
+        return false;
+      }
+      break;
     case "queensCommand":
       buffMinionsFromTavernSpell(player, player.board, 2, 2);
       buffMinionsFromTavernSpell(
@@ -2884,6 +3286,9 @@ function upgradeTavern(state: GameState, player: PlayerState): boolean {
   player.gold -= cost;
   player.tavernTier = (player.tavernTier + 1) as MutableTier;
   player.upgradeDiscount = 0;
+  if (playerHasHeroPower(player, "gainGoldAfterUpgrade")) {
+    player.gold += 2;
+  }
   return true;
 }
 
@@ -3002,6 +3407,7 @@ function beginDiscoverInteraction(
         selected.destroyAfterPlayThroughRound =
           destination.destroyAfterPlayThroughRound;
       }
+      applyOwnedUndeadArmyBonus(player, selected);
       player.hand.push(selected);
       resolveTriples(state, player);
     } else {
@@ -3251,6 +3657,30 @@ function resolvePendingInteraction(
     return next;
   }
 
+  if (pending.kind === "heroPowerChoice") {
+    if (!pending.optionIds.includes(action.optionInstanceId)) {
+      return state;
+    }
+    const next = cloneState(state);
+    const nextPlayer = findPlayer(next, pending.playerId);
+    const nextPending = next.pendingInteraction;
+    if (
+      !nextPlayer ||
+      nextPending?.kind !== "heroPowerChoice"
+    ) {
+      return state;
+    }
+    try {
+      getHeroPowerDefinition(action.optionInstanceId);
+    } catch {
+      return state;
+    }
+    nextPlayer.heroPowerId = action.optionInstanceId;
+    next.pendingInteraction = null;
+    finishTavernSpellCast(nextPlayer);
+    return next;
+  }
+
   if (pending.kind === "spellcraftChoice") {
     if (
       action.optionInstanceId !== "escapeEruptionAttack" &&
@@ -3308,6 +3738,7 @@ function resolvePendingInteraction(
       nextSelected.destroyAfterPlayThroughRound =
         destination.destroyAfterPlayThroughRound;
     }
+    applyOwnedUndeadArmyBonus(nextPlayer, nextSelected);
     nextPlayer.hand.push(nextSelected);
     resolveTriples(next, nextPlayer);
   } else {
@@ -3400,7 +3831,9 @@ function playBestAiTavernSpell(
       }
       const target =
         definition.effect === "stackedAvalanche" ||
-        definition.effect === "carefulMutation"
+        definition.effect === "carefulMutation" ||
+        definition.effect === "slaughter" ||
+        definition.effect === "invokeTheDevourer"
           ? [...targets].sort((left, right) => {
               const scoreDifference =
                 minionScore(player, left) -
@@ -3602,6 +4035,33 @@ function tavernSpellAiScore(
       return targetCount > 0 ? 10 : 0;
     case "eonarsFavor":
       return targetCount > 0 ? 10 : 0;
+    case "armorStash":
+      return player.armor < 5 ? (5 - player.armor) * 2 : 0;
+    case "overpowered":
+      return 8;
+    case "slaughter":
+      return targetCount > 0 ? 11 : 0;
+    case "corruptedCupcakes":
+      return targetCount > 0 && player.shop.length > 0
+        ? player.shop
+            .map((minion) => minion.attack + minion.health)
+            .sort((left, right) => right - left)
+            .slice(0, 3)
+            .reduce((total, value) => total + value, 0) / 2
+        : 0;
+    case "goldenTouch":
+      return player.shop.some((minion) => !minion.golden) ? 12 : 0;
+    case "saloonsFinest":
+      return player.spellOnlyRefreshActive ? 0 : 9;
+    case "reservedCorpse":
+    case "headhunter":
+      return player.hand.length < MAX_HAND_SIZE ? 8 : 0;
+    case "nozdormusProgeny":
+      return boardSize > 0 ? 10 : 3;
+    case "invokeTheDevourer":
+      return targetCount > 1 ? 10 : targetCount === 1 ? 2 : 0;
+    case "unmaskedIdentity":
+      return 8;
     case "selfishBounty":
       return boardSize > 0 ? 12 : 0;
     case "fleetingVigor":
@@ -3715,7 +4175,21 @@ function runAiRecruit(state: GameState, player: PlayerState): void {
   let refreshes = 0;
   while (actions < 50) {
     playAiHand(state, player);
-    const spellOffer = player.spellShop;
+    const spellOffer = tavernSpellShopOffers(player)
+      .filter((offer) => {
+        const currency = tavernSpellPurchaseCurrency(offer);
+        return currency === "health"
+          ? player.health > offer.cost && player.health > 8
+          : player.gold >= offer.cost;
+      })
+      .sort((left, right) => {
+        const scoreDifference =
+          tavernSpellAiScore(player, right) -
+          tavernSpellAiScore(player, left);
+        return scoreDifference !== 0
+          ? scoreDifference
+          : left.instanceId.localeCompare(right.instanceId);
+      })[0] ?? null;
     const spellCurrency = spellOffer
       ? tavernSpellPurchaseCurrency(spellOffer)
       : "gold";
@@ -3732,7 +4206,7 @@ function runAiRecruit(state: GameState, player: PlayerState): void {
         (spellCurrency === "health"
           ? 3
           : Math.max(1.5, spellOffer.cost * 1.7)) &&
-      buyTavernSpell(state, player)
+      buyTavernSpell(state, player, spellOffer.instanceId)
     ) {
       actions += 1;
       continue;
@@ -4052,6 +4526,20 @@ function applyPersistentTribeBuff(
   }
 }
 
+function applyCombatSummonHeroPower(
+  context: CombatContext,
+  ownerId: PlayerId,
+  minion: MinionInstance,
+): void {
+  const owner = findPlayer(context.state, ownerId);
+  if (!owner || !playerHasHeroPower(owner, "buffCombatSummons")) {
+    return;
+  }
+  minion.attack += 1;
+  minion.health += 2;
+  minion.taunt = true;
+}
+
 function triggerAfterFriendlySummoned(
   context: CombatContext,
   ownerId: PlayerId,
@@ -4123,7 +4611,10 @@ function insertCombatMinion(
   if (board.length >= MAX_BOARD_SIZE) {
     return null;
   }
-  applyPersistentTribeBuff(context, ownerId, summoned);
+  if (summonReason !== "rallyFromHand") {
+    applyPersistentTribeBuff(context, ownerId, summoned);
+  }
+  applyCombatSummonHeroPower(context, ownerId, summoned);
   applyExistingAurasToSummoned(board, summoned);
   const boardIndex = Math.min(Math.max(0, insertAt), board.length);
   board.splice(boardIndex, 0, summoned);
@@ -4354,6 +4845,7 @@ function resolveCombatGetRandomMinion(
       });
       continue;
     }
+    applyOwnedUndeadArmyBonus(owner, gained);
     const gainedSnapshot = cloneMinion(gained);
     owner.hand.push(gained);
     resolveTriples(context.state, owner);
@@ -4960,6 +5452,7 @@ function resolveCombatDeaths(context: CombatContext): void {
       reborn.health = 1;
       reborn.reborn = false;
       applyPersistentTribeBuff(context, death.ownerId, reborn);
+      applyCombatSummonHeroPower(context, death.ownerId, reborn);
       const board = context.boards[death.ownerId];
       const boardIndex = Math.min(death.index, board.length);
       board.splice(boardIndex, 0, reborn);
@@ -5052,6 +5545,62 @@ function settleNextCombatGold(
   });
 }
 
+function applyQueuedStartOfCombatSpells(
+  context: CombatContext,
+  owner: PlayerState,
+  enemy: PlayerState,
+  isGhostOwner: boolean,
+): void {
+  if (isGhostOwner) {
+    return;
+  }
+  const ownBoard = context.boards[owner.id];
+  for (const buff of owner.nextCombatDoubleLeftmostAttack) {
+    const target = ownBoard[0];
+    if (!target) {
+      continue;
+    }
+    const attackDelta = target.attack + buff.attack;
+    const healthDelta = buff.health;
+    target.attack += attackDelta;
+    target.health += healthDelta;
+    pushBattleEvent(context.events, {
+      type: "buff",
+      actorPlayerId: owner.id,
+      targetPlayerId: owner.id,
+      targetInstanceId: target.instanceId,
+      attackDelta,
+      healthDelta,
+      minion: cloneMinion(target),
+      message: `诺兹多姆的子嗣使${target.name}的攻击力翻倍。`,
+    });
+  }
+  owner.nextCombatDoubleLeftmostAttack = [];
+
+  const enemyBoard = context.boards[enemy.id];
+  for (
+    let count = 0;
+    count < owner.nextCombatSetEnemyHealthToOne &&
+    enemyBoard.length > 0;
+    count += 1
+  ) {
+    const target = enemyBoard[randomIndex(context.state, enemyBoard.length)];
+    const healthDelta = 1 - target.health;
+    target.health = 1;
+    pushBattleEvent(context.events, {
+      type: "buff",
+      actorPlayerId: owner.id,
+      targetPlayerId: enemy.id,
+      targetInstanceId: target.instanceId,
+      attackDelta: 0,
+      healthDelta,
+      minion: cloneMinion(target),
+      message: `优势压制将${target.name}的生命值变为1。`,
+    });
+  }
+  owner.nextCombatSetEnemyHealthToOne = 0;
+}
+
 function simulateBattle(
   state: GameState,
   pairing: Pairing,
@@ -5095,8 +5644,18 @@ function simulateBattle(
       [playerB.id]: [],
     },
     tribeBuffs: {
-      [playerA.id]: {},
-      [playerB.id]: {},
+      [playerA.id]: {
+        undead: {
+          attack: playerA.undeadArmyAttackBonus,
+          health: playerA.undeadArmyHealthBonus,
+        },
+      },
+      [playerB.id]: {
+        undead: {
+          attack: playerB.undeadArmyAttackBonus,
+          health: playerB.undeadArmyHealthBonus,
+        },
+      },
     },
     pendingBeetles: {
       [playerA.id]: playerA.nextCombatBeetles,
@@ -5105,12 +5664,26 @@ function simulateBattle(
   };
   const healthABefore = playerA.health;
   const healthBBefore = playerB.health;
+  const armorABefore = playerA.armor;
+  const armorBBefore = playerB.armor;
   pushBattleEvent(events, {
     type: "battleStart",
     actorPlayerId: playerA.id,
     targetPlayerId: playerB.id,
     message: `${playerA.name}对阵${isGhost ? "幽灵·" : ""}${playerB.name}。`,
   });
+  applyQueuedStartOfCombatSpells(
+    context,
+    playerA,
+    playerB,
+    false,
+  );
+  applyQueuedStartOfCombatSpells(
+    context,
+    playerB,
+    playerA,
+    isGhost,
+  );
   summonPendingBeetles(context, playerA.id);
   summonPendingBeetles(context, playerB.id);
 
@@ -5210,13 +5783,18 @@ function simulateBattle(
       playerA.tavernTier +
       boardA.reduce((total, minion) => total + minion.tier, 0);
     if (!isGhost) {
-      playerB.health -= damageToPlayerB;
+      const damage = damagePlayer(playerB, damageToPlayerB);
       pushBattleEvent(events, {
         type: "heroDamage",
         actorPlayerId: playerA.id,
         targetPlayerId: playerB.id,
         amount: damageToPlayerB,
-        message: `${playerB.name}受到 ${damageToPlayerB} 点伤害。`,
+        armorAbsorbed: damage.armorAbsorbed,
+        healthDamage: damage.healthDamage,
+        message:
+          damage.armorAbsorbed > 0
+            ? `${playerB.name}受到 ${damageToPlayerB} 点伤害，护甲抵挡 ${damage.armorAbsorbed} 点。`
+            : `${playerB.name}受到 ${damageToPlayerB} 点伤害。`,
       });
     } else {
       damageToPlayerB = 0;
@@ -5225,13 +5803,18 @@ function simulateBattle(
     damageToPlayerA =
       playerB.tavernTier +
       boardB.reduce((total, minion) => total + minion.tier, 0);
-    playerA.health -= damageToPlayerA;
+    const damage = damagePlayer(playerA, damageToPlayerA);
     pushBattleEvent(events, {
       type: "heroDamage",
       actorPlayerId: playerB.id,
       targetPlayerId: playerA.id,
       amount: damageToPlayerA,
-      message: `${playerA.name}受到 ${damageToPlayerA} 点伤害。`,
+      armorAbsorbed: damage.armorAbsorbed,
+      healthDamage: damage.healthDamage,
+      message:
+        damage.armorAbsorbed > 0
+          ? `${playerA.name}受到 ${damageToPlayerA} 点伤害，护甲抵挡 ${damage.armorAbsorbed} 点。`
+          : `${playerA.name}受到 ${damageToPlayerA} 点伤害。`,
     });
   }
 
@@ -5279,6 +5862,10 @@ function simulateBattle(
     playerBHealthBefore: healthBBefore,
     playerAHealthAfter: playerA.health,
     playerBHealthAfter: playerB.health,
+    playerAArmorBefore: armorABefore,
+    playerBArmorBefore: armorBBefore,
+    playerAArmorAfter: playerA.armor,
+    playerBArmorAfter: playerB.armor,
     initialBoards,
     finalBoards: {
       [playerA.id]: cloneBoard(boardA),
@@ -5298,9 +5885,9 @@ function releaseEliminatedPlayer(
   for (const minion of [...player.board, ...ownedMinions, ...player.shop]) {
     returnMinionToPool(state, minion);
   }
-  if (player.spellShop) {
-    state.spellPool[player.spellShop.definitionId] =
-      (state.spellPool[player.spellShop.definitionId] ?? 0) + 1;
+  for (const spell of tavernSpellShopOffers(player)) {
+    state.spellPool[spell.definitionId] =
+      (state.spellPool[spell.definitionId] ?? 0) + 1;
   }
   for (const minion of player.board) {
     clearTemporarySpellcraftBuffs(minion);
@@ -5313,6 +5900,8 @@ function releaseEliminatedPlayer(
   player.hand = [];
   player.shop = [];
   player.spellShop = null;
+  player.additionalSpellShop = [];
+  player.spellOnlyRefreshActive = false;
   player.frozen = false;
 }
 
@@ -5415,6 +6004,9 @@ function beginNextRecruit(state: GameState): void {
     player.pendingNextTurnGold = 0;
     player.tavernSpellsCastThisTurn = 0;
     player.elementalsPlayedThisTurn = 0;
+    if (playerHasHeroPower(player, "freeRefreshAtTurnStart")) {
+      player.freeRefreshes += 1;
+    }
     if (
       player.nextTurnBoardAttackBonus > 0 ||
       player.nextTurnBoardHealthBonus > 0
@@ -5456,13 +6048,17 @@ export function createGame(seed?: number): GameState {
     name,
     isHuman: index === 0,
     health: 40,
+    armor: 0,
     alive: true,
+    heroPowerId: null,
     tavernTier: 1,
     gold: 3,
     board: [],
     hand: [],
     shop: [],
     spellShop: null,
+    additionalSpellShop: [],
+    spellOnlyRefreshActive: false,
     frozen: false,
     upgradeDiscount: 0,
     tavernSpellsCastThisTurn: 0,
@@ -5473,6 +6069,8 @@ export function createGame(seed?: number): GameState {
     tavernMinionHealthBonus: 0,
     nextCombatAttackBonus: 0,
     nextCombatHealthBonus: 0,
+    nextCombatSetEnemyHealthToOne: 0,
+    nextCombatDoubleLeftmostAttack: [],
     nextCombatWinGold: 0,
     nextCombatTieGold: 0,
     nextTurnBoardAttackBonus: 0,
@@ -5490,13 +6088,15 @@ export function createGame(seed?: number): GameState {
     ballerAttackBonus: 1,
     ballerHealthBonus: 1,
     deepBlueBonus: 0,
+    undeadArmyAttackBonus: 0,
+    undeadArmyHealthBonus: 0,
     bloodGemAttack: 1,
     bloodGemHealth: 1,
   }));
   const pool: Record<string, number> = {};
   const spellPool: Record<string, number> = {};
   const state: GameState = {
-    version: 9,
+    version: 10,
     contentVersion: CURRENT_ROSTER_VERSION,
     seed: normalizedSeed,
     rngState: normalizedSeed,
@@ -5576,7 +6176,7 @@ export function gameReducer(state: GameState, action: GameAction): GameState {
       buyMinion(next, player, action.shopIndex);
       break;
     case "BUY_TAVERN_SPELL":
-      buyTavernSpell(next, player);
+      buyTavernSpell(next, player, action.spellInstanceId);
       break;
     case "SELL_MINION":
       sellMinion(next, player, action.boardIndex);

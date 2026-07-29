@@ -65,7 +65,7 @@ function expectedPlainText(html: string): string {
 test("exports the pinned current roster version through the legacy alias", () => {
   assert.equal(
     CURRENT_ROSTER_VERSION,
-    "battlegrounds-36.0.3-247416-v13",
+    "battlegrounds-36.0.3-247416-v14",
   );
   assert.equal(CLASSIC_ROSTER_VERSION, CURRENT_ROSTER_VERSION);
 });

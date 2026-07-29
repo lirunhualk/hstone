@@ -251,6 +251,8 @@ export interface MinionDefinition {
   associatedTribes?: readonly Tribe[];
   /** Whether all card-text behavior is represented by the current rules DSL. */
   effectSupport?: EffectSupport;
+  /** Printed client mechanics retained for pool-wide Discover filters. */
+  printedMechanics?: readonly string[];
   attack: number;
   health: number;
   description: string;
@@ -488,6 +490,17 @@ export type TavernSpellEffect =
   | "blazingInferno"
   | "arcaneAbsorption"
   | "eonarsFavor"
+  | "armorStash"
+  | "overpowered"
+  | "slaughter"
+  | "corruptedCupcakes"
+  | "goldenTouch"
+  | "saloonsFinest"
+  | "reservedCorpse"
+  | "headhunter"
+  | "nozdormusProgeny"
+  | "invokeTheDevourer"
+  | "unmaskedIdentity"
   | "queensCommand"
   | "sanctify"
   | "waveOfGold"
@@ -524,6 +537,20 @@ export interface TavernSpellInstance {
   target: TavernSpellTarget;
 }
 
+export type HeroPowerEffect =
+  | "upgradeDiscount"
+  | "freeRefreshAtTurnStart"
+  | "gainGoldAfterUpgrade"
+  | "buffCombatSummons";
+
+export interface HeroPowerDefinition {
+  id: string;
+  cardId: string;
+  name: string;
+  description: string;
+  effect: HeroPowerEffect;
+}
+
 export type HandCardInstance =
   | BoardMinionInstance
   | TripleRewardSpellInstance
@@ -546,7 +573,11 @@ export interface PlayerState {
   name: string;
   isHuman: boolean;
   health: number;
+  /** Damage removes Armor before Health. Paying Health never spends Armor. */
+  armor: number;
   alive: boolean;
+  /** Null is the local game's neutral starting power. */
+  heroPowerId: string | null;
   tavernTier: TavernTier;
   gold: number;
   board: BoardMinionInstance[];
@@ -554,6 +585,10 @@ export interface PlayerState {
   shop: BoardMinionInstance[];
   /** One extra Tavern Spell offer, matching the live Battlegrounds shop. */
   spellShop: TavernSpellInstance | null;
+  /** Saloon's Finest can reserve several additional spell offers at once. */
+  additionalSpellShop: TavernSpellInstance[];
+  /** Those spell offers temporarily occupy the Tavern's normal minion slots. */
+  spellOnlyRefreshActive: boolean;
   frozen: boolean;
   upgradeDiscount: number;
   tavernSpellsCastThisTurn: number;
@@ -565,6 +600,8 @@ export interface PlayerState {
   tavernMinionHealthBonus: number;
   nextCombatAttackBonus: number;
   nextCombatHealthBonus: number;
+  nextCombatSetEnemyHealthToOne: number;
+  nextCombatDoubleLeftmostAttack: TavernRefreshBuff[];
   nextCombatWinGold: number;
   nextCombatTieGold: number;
   nextTurnBoardAttackBonus: number;
@@ -582,6 +619,9 @@ export interface PlayerState {
   ballerAttackBonus: number;
   ballerHealthBonus: number;
   deepBlueBonus: number;
+  /** Permanent "wherever they are" stats granted by Slaughter. */
+  undeadArmyAttackBonus: number;
+  undeadArmyHealthBonus: number;
   /** Permanent per-player Blood Gem values; new Gems read these on cast. */
   bloodGemAttack: number;
   bloodGemHealth: number;
@@ -619,6 +659,8 @@ export interface BattleEvent {
   targetPlayerId?: PlayerId;
   targetInstanceId?: string;
   amount?: number;
+  armorAbsorbed?: number;
+  healthDamage?: number;
   attackDelta?: number;
   healthDelta?: number;
   boardIndex?: number;
@@ -654,6 +696,7 @@ export interface DiscoverFilter {
   exactTier?: TavernTier;
   maximumTier?: TavernTier;
   tribe?: Tribe;
+  ability?: "battlecry" | "deathrattle";
 }
 
 export type DiscoverDestination =
@@ -694,12 +737,20 @@ export interface PendingSpellcraftChoiceInteraction
   optionIds: SpellcraftChoiceId[];
 }
 
+export interface PendingHeroPowerChoiceInteraction
+  extends PendingInteractionBase {
+  kind: "heroPowerChoice";
+  definitionId: string;
+  optionIds: string[];
+}
+
 export type PendingInteraction =
   | PendingTargetInteraction
   | PendingMagnetizeTargetInteraction
   | PendingDiscoverInteraction
   | PendingTavernSpellChoiceInteraction
-  | PendingSpellcraftChoiceInteraction;
+  | PendingSpellcraftChoiceInteraction
+  | PendingHeroPowerChoiceInteraction;
 
 export type BattleResult = "win" | "loss" | "tie";
 
@@ -718,13 +769,17 @@ export interface BattleSummary {
   playerBHealthBefore: number;
   playerAHealthAfter: number;
   playerBHealthAfter: number;
+  playerAArmorBefore: number;
+  playerBArmorBefore: number;
+  playerAArmorAfter: number;
+  playerBArmorAfter: number;
   initialBoards: Record<PlayerId, MinionInstance[]>;
   finalBoards: Record<PlayerId, MinionInstance[]>;
   events: BattleEvent[];
 }
 
 export interface GameState {
-  version: 9;
+  version: 10;
   /** Invalidates local saves when the roster or its mechanics change. */
   contentVersion: string;
   seed: number;
@@ -751,7 +806,7 @@ export interface GameState {
 
 export type GameAction =
   | { type: "BUY_MINION"; shopIndex: number }
-  | { type: "BUY_TAVERN_SPELL" }
+  | { type: "BUY_TAVERN_SPELL"; spellInstanceId?: string }
   | { type: "SELL_MINION"; boardIndex: number }
   | { type: "PLAY_MINION"; handIndex: number; boardIndex?: number }
   | {

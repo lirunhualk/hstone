@@ -3,7 +3,7 @@ import liveRosterSnapshot from "./generated/battlegrounds-36.0.3-247416.zhCN.jso
 };
 import type { MinionDefinition, Tribe } from "./types.ts";
 
-export const CURRENT_ROSTER_VERSION = "battlegrounds-36.0.3-247416-v13";
+export const CURRENT_ROSTER_VERSION = "battlegrounds-36.0.3-247416-v14";
 /** Compatibility alias for existing save and engine imports. */
 export const CLASSIC_ROSTER_VERSION = CURRENT_ROSTER_VERSION;
 
@@ -1278,6 +1278,7 @@ function createLiveDefinition(card: LiveRosterCard): MinionDefinition {
     tribes,
     associatedTribes,
     effectSupport,
+    printedMechanics: [...card.mechanics],
     attack: card.attack,
     health: card.health,
     description,

@@ -4,6 +4,7 @@ import { fileURLToPath } from "node:url";
 
 import { MINION_DEFINITIONS } from "../lib/game/content.ts";
 import { createGame } from "../lib/game/engine.ts";
+import { HERO_POWER_DEFINITIONS } from "../lib/game/hero-powers.ts";
 import { SPELLCRAFT_DEFINITIONS } from "../lib/game/spellcraft.ts";
 import { TAVERN_SPELL_DEFINITIONS } from "../lib/game/tavern-spells.ts";
 
@@ -30,6 +31,7 @@ const CORE_SPELL_CARD_IDS = [
 const allCardIds = [
   ...new Set([
     ...MINION_DEFINITIONS.map((definition) => definition.cardId),
+    ...HERO_POWER_DEFINITIONS.map((definition) => definition.cardId),
     ...SPELLCRAFT_DEFINITIONS.map((definition) => definition.cardId),
     ...TAVERN_SPELL_DEFINITIONS.map((definition) => definition.cardId),
     ...CORE_SPELL_CARD_IDS,

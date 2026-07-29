@@ -68,3 +68,37 @@ export function projectCombatHealth({
     ? Math.max(0, projectedHealth)
     : 0;
 }
+
+export function projectCombatArmor({
+  battle,
+  playerId,
+  revealedEvents,
+  playbackComplete,
+}: {
+  battle: BattleSummary;
+  playerId: PlayerId;
+  revealedEvents: readonly BattleEvent[];
+  playbackComplete: boolean;
+}): number | null {
+  const isPlayerA = battle.playerAId === playerId;
+  const isPlayerB = battle.playerBId === playerId;
+  if (!isPlayerA && !isPlayerB) return null;
+
+  const armorBefore = isPlayerA
+    ? battle.playerAArmorBefore
+    : battle.playerBArmorBefore;
+  const armorAfter = isPlayerA
+    ? battle.playerAArmorAfter
+    : battle.playerBArmorAfter;
+  const damageRevealed = revealedEvents.some(
+    (event) =>
+      event.type === "heroDamage" &&
+      event.targetPlayerId === playerId,
+  );
+  const projectedArmor =
+    playbackComplete || damageRevealed ? armorAfter : armorBefore;
+
+  return Number.isFinite(projectedArmor)
+    ? Math.max(0, projectedArmor)
+    : 0;
+}

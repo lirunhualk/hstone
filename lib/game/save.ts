@@ -22,6 +22,8 @@ export const LEGACY_SCHEMA_7_CONTENT_VERSION =
   "battlegrounds-36.0.3-247416-v11";
 export const LEGACY_SCHEMA_8_CONTENT_VERSION =
   "battlegrounds-36.0.3-247416-v12";
+export const LEGACY_SCHEMA_9_CONTENT_VERSION =
+  "battlegrounds-36.0.3-247416-v13";
 
 const SPELL_POOL_COPIES_BY_TIER = [0, 5, 7, 9, 11, 7, 5] as const;
 
@@ -391,7 +393,7 @@ function migrateSchema7To8(value: unknown): unknown {
   }
 }
 
-export function migrateSchema8GameState(value: unknown): unknown {
+function migrateSchema8To9(value: unknown): unknown {
   if (
     !isRecord(value) ||
     value.version !== 8 ||
@@ -461,12 +463,121 @@ export function migrateSchema8GameState(value: unknown): unknown {
     }
 
     migrated.version = 9;
+    migrated.contentVersion = LEGACY_SCHEMA_9_CONTENT_VERSION;
+    migrated.spellPool = spellPool;
+    return migrated;
+  } catch {
+    return null;
+  }
+}
+
+function refreshLegacyBattleArmor(value: unknown): void {
+  if (!isRecord(value)) {
+    return;
+  }
+  value.playerAArmorBefore =
+    typeof value.playerAArmorBefore === "number"
+      ? value.playerAArmorBefore
+      : 0;
+  value.playerBArmorBefore =
+    typeof value.playerBArmorBefore === "number"
+      ? value.playerBArmorBefore
+      : 0;
+  value.playerAArmorAfter =
+    typeof value.playerAArmorAfter === "number"
+      ? value.playerAArmorAfter
+      : 0;
+  value.playerBArmorAfter =
+    typeof value.playerBArmorAfter === "number"
+      ? value.playerBArmorAfter
+      : 0;
+}
+
+export function migrateSchema9GameState(value: unknown): unknown {
+  if (
+    !isRecord(value) ||
+    value.version !== 9 ||
+    value.contentVersion !== LEGACY_SCHEMA_9_CONTENT_VERSION ||
+    !Array.isArray(value.players) ||
+    !Array.isArray(value.activeTribes) ||
+    !value.activeTribes.every((tribe) => typeof tribe === "string")
+  ) {
+    return null;
+  }
+  try {
+    const migrated: unknown = JSON.parse(JSON.stringify(value));
+    if (
+      !isRecord(migrated) ||
+      !Array.isArray(migrated.players) ||
+      !Array.isArray(migrated.activeTribes)
+    ) {
+      return null;
+    }
+    const activeTribes = migrated.activeTribes as Tribe[];
+    const spellPool: Record<string, number> = {};
+    for (const definition of TAVERN_SPELL_DEFINITIONS) {
+      spellPool[definition.id] = tavernSpellIsAvailable(
+        definition,
+        activeTribes,
+      )
+        ? SPELL_POOL_COPIES_BY_TIER[definition.tier]
+        : 0;
+    }
+
+    for (const player of migrated.players) {
+      if (!isRecord(player)) {
+        return null;
+      }
+      player.armor = 0;
+      player.heroPowerId = null;
+      player.additionalSpellShop = [];
+      player.spellOnlyRefreshActive = false;
+      player.nextCombatSetEnemyHealthToOne = 0;
+      player.nextCombatDoubleLeftmostAttack = [];
+      player.undeadArmyAttackBonus = 0;
+      player.undeadArmyHealthBonus = 0;
+
+      if (!isRecord(player.spellShop)) {
+        player.spellShop = null;
+        continue;
+      }
+      try {
+        const definition = getTavernSpellDefinition(
+          String(player.spellShop.definitionId),
+        );
+        if (
+          player.alive === true &&
+          typeof player.tavernTier === "number" &&
+          definition.tier <= player.tavernTier &&
+          tavernSpellIsAvailable(definition, activeTribes) &&
+          spellPool[definition.id] > 0
+        ) {
+          refreshMigratedSpell(player.spellShop, definition);
+          spellPool[definition.id] -= 1;
+        } else {
+          player.spellShop = null;
+        }
+      } catch {
+        player.spellShop = null;
+      }
+    }
+
+    refreshLegacyBattleArmor(migrated.lastBattle);
+    if (Array.isArray(migrated.lastRoundBattles)) {
+      migrated.lastRoundBattles.forEach(refreshLegacyBattleArmor);
+    }
+    migrated.version = 10;
     migrated.contentVersion = CURRENT_ROSTER_VERSION;
     migrated.spellPool = spellPool;
     return migrated;
   } catch {
     return null;
   }
+}
+
+export function migrateSchema8GameState(value: unknown): unknown {
+  const schema9 = migrateSchema8To9(value);
+  return schema9 ? migrateSchema9GameState(schema9) : null;
 }
 
 export function migrateSchema7GameState(value: unknown): unknown {
@@ -481,7 +592,7 @@ export function migrateSchema6GameState(value: unknown): unknown {
 
 /**
  * Kept as a public compatibility entry point for existing tests and older
- * installs. It now performs the complete v5 -> v6 -> v7 -> v8 -> v9 chain.
+ * installs. It now performs the complete v5 -> v6 -> ... -> v10 chain.
  */
 export function migrateSchema5GameState(value: unknown): unknown {
   const schema6 = migrateSchema5To6(value);
@@ -503,6 +614,9 @@ export function migrateLegacyGameState(value: unknown): unknown {
   }
   if (value.version === 8) {
     return migrateSchema8GameState(value);
+  }
+  if (value.version === 9) {
+    return migrateSchema9GameState(value);
   }
   return null;
 }
