@@ -90,6 +90,21 @@ export function projectCombatBoard(
         projected[targetIndex] = snapshot;
       }
     }
+
+    if (
+      event.type === "damage" &&
+      event.actorPlayerId === playerId &&
+      event.actorInstanceId &&
+      event.actorMinion
+    ) {
+      const actorSnapshot = asBoardMinion(event.actorMinion);
+      const actorIndex = projected.findIndex(
+        (unit) => unit.instanceId === event.actorInstanceId,
+      );
+      if (actorSnapshot && actorIndex >= 0) {
+        projected[actorIndex] = actorSnapshot;
+      }
+    }
   }
   if (options.flushPendingDeaths && pendingDeathInstanceId) {
     const deadIndex = projected.findIndex(

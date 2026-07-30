@@ -617,6 +617,303 @@
   mask-composite: exclude;
 }
 
+.keyword-vfx-layer {
+  position: absolute;
+  z-index: 3;
+  inset: 0;
+  overflow: hidden;
+  border-radius: inherit;
+  pointer-events: none;
+  user-select: none;
+}
+
+.keyword-vfx {
+  position: absolute;
+  pointer-events: none;
+}
+
+.keyword-vfx-taunt {
+  z-index: 4;
+  inset: 2px;
+  border: 3px ridge rgb(213 197 161 / 90%);
+  border-radius: calc(var(--card-radius) - 2px);
+  box-shadow:
+    inset 0 0 0 1px rgb(44 35 28 / 88%),
+    inset 0 0 18px rgb(221 199 145 / 20%),
+    0 0 8px rgb(224 199 143 / 34%);
+}
+
+.keyword-vfx-taunt::before,
+.keyword-vfx-taunt::after {
+  position: absolute;
+  top: 25%;
+  bottom: 24%;
+  width: 11px;
+  content: "";
+  background:
+    linear-gradient(90deg, rgb(58 48 39 / 96%), rgb(231 211 170 / 96%) 55%, rgb(88 72 55 / 96%));
+  clip-path: polygon(0 12%, 52% 0, 100% 9%, 79% 50%, 100% 91%, 52% 100%, 0 88%, 21% 50%);
+  filter: drop-shadow(0 2px 3px rgb(0 0 0 / 70%));
+}
+
+.keyword-vfx-taunt::before {
+  left: -2px;
+}
+
+.keyword-vfx-taunt::after {
+  right: -2px;
+  transform: scaleX(-1);
+}
+
+.keyword-vfx-divine-shield {
+  z-index: 6;
+  inset: 5px 4px 9px;
+  overflow: hidden;
+  border: 2px solid rgb(255 232 137 / 90%);
+  border-radius: 49% 49% 43% 43% / 45% 45% 55% 55%;
+  background:
+    radial-gradient(ellipse at 50% 45%, transparent 36%, rgb(124 230 255 / 14%) 56%, transparent 72%),
+    linear-gradient(128deg, transparent 20%, rgb(255 255 255 / 34%) 42%, transparent 57%);
+  box-shadow:
+    inset 0 0 14px rgb(127 232 255 / 46%),
+    inset 0 0 30px rgb(255 219 104 / 18%),
+    0 0 4px rgb(255 250 207 / 96%),
+    0 0 15px rgb(84 211 255 / 64%),
+    0 0 26px rgb(255 205 78 / 36%);
+  animation: keyword-divine-shield-shimmer 2.2s ease-in-out infinite;
+}
+
+.keyword-vfx-divine-shield::before {
+  position: absolute;
+  inset: 3% 15% 30%;
+  border-radius: 50%;
+  content: "";
+  background: linear-gradient(128deg, rgb(255 255 255 / 54%), transparent 37%);
+  opacity: 0.72;
+  transform: rotate(-18deg);
+}
+
+.keyword-vfx-divine-shield::after {
+  position: absolute;
+  top: 8px;
+  left: 50%;
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  content: "";
+  background: #fffbe0;
+  box-shadow:
+    0 0 5px #fff,
+    0 0 12px #65d8ff,
+    0 0 18px #ffd85c;
+  transform: translateX(-50%);
+}
+
+.keyword-vfx-poisonous,
+.keyword-vfx-venomous {
+  z-index: 2;
+  right: -14%;
+  bottom: -15%;
+  left: -14%;
+  height: 68%;
+  border-radius: 50% 50% 0 0;
+  background:
+    radial-gradient(circle at 22% 63%, rgb(210 255 107 / 86%) 0 3px, transparent 4px),
+    radial-gradient(circle at 73% 44%, rgb(187 255 94 / 82%) 0 4px, transparent 5px),
+    radial-gradient(circle at 48% 73%, rgb(79 255 119 / 66%) 0 5px, transparent 6px),
+    radial-gradient(ellipse at center bottom, rgb(63 222 104 / 62%), transparent 68%);
+  filter: blur(0.2px) drop-shadow(0 -4px 9px rgb(79 255 117 / 42%));
+  mix-blend-mode: screen;
+  opacity: 0.74;
+  animation: keyword-toxic-breathe 2.4s ease-in-out infinite;
+}
+
+.keyword-vfx-venomous {
+  background:
+    radial-gradient(circle at 25% 61%, rgb(236 255 112 / 94%) 0 3px, transparent 4px),
+    radial-gradient(circle at 71% 39%, rgb(199 255 80 / 90%) 0 4px, transparent 5px),
+    radial-gradient(circle at 49% 72%, rgb(112 255 79 / 78%) 0 5px, transparent 6px),
+    radial-gradient(ellipse at center bottom, rgb(153 255 43 / 68%), transparent 68%);
+  filter: blur(0.2px) drop-shadow(0 -4px 11px rgb(176 255 58 / 50%));
+}
+
+.keyword-vfx-poisonous::before,
+.keyword-vfx-venomous::before {
+  position: absolute;
+  inset: 20% 18% 6%;
+  border: 2px solid rgb(165 255 117 / 44%);
+  border-radius: 50%;
+  content: "";
+  transform: rotate(-8deg);
+}
+
+.keyword-vfx-windfury {
+  z-index: 3;
+  inset: -38%;
+  border-radius: 50%;
+  background:
+    conic-gradient(
+      from 18deg,
+      transparent 0 11%,
+      rgb(125 239 255 / 72%) 13%,
+      transparent 16% 39%,
+      rgb(153 167 255 / 66%) 42%,
+      transparent 46% 73%,
+      rgb(106 230 255 / 68%) 76%,
+      transparent 80%
+    );
+  filter: drop-shadow(0 0 6px rgb(106 220 255 / 46%));
+  -webkit-mask: radial-gradient(circle, transparent 0 42%, #000 48% 58%, transparent 66%);
+  mask: radial-gradient(circle, transparent 0 42%, #000 48% 58%, transparent 66%);
+  opacity: 0.82;
+  animation: keyword-windfury-spin 3.4s linear infinite;
+}
+
+.keyword-vfx-windfury::after {
+  position: absolute;
+  inset: 33%;
+  border-top: 2px solid rgb(206 250 255 / 86%);
+  border-bottom: 2px solid rgb(139 212 255 / 78%);
+  border-radius: 50%;
+  content: "";
+  transform: rotate(-17deg);
+}
+
+.keyword-vfx-reborn {
+  z-index: 3;
+  inset: 14% 13% 22%;
+  border: 2px solid rgb(203 151 255 / 76%);
+  border-radius: 50%;
+  box-shadow:
+    inset 0 0 18px rgb(125 60 219 / 34%),
+    0 0 7px rgb(218 179 255 / 70%),
+    0 0 20px rgb(121 54 206 / 52%);
+  animation: keyword-reborn-pulse 2.5s ease-in-out infinite;
+}
+
+.keyword-vfx-reborn::before {
+  position: absolute;
+  right: -8px;
+  bottom: -12px;
+  left: -8px;
+  height: 22px;
+  content: "";
+  background:
+    radial-gradient(ellipse at center, rgb(179 117 255 / 66%), transparent 66%),
+    linear-gradient(90deg, transparent, rgb(255 218 133 / 54%), transparent);
+  filter: drop-shadow(0 0 7px rgb(160 86 255 / 70%));
+}
+
+.keyword-vfx-reborn::after {
+  position: absolute;
+  bottom: -13px;
+  left: 50%;
+  color: #f7d985;
+  content: "✦";
+  font-size: 17px;
+  line-height: 1;
+  text-shadow:
+    0 0 5px #fff1bd,
+    0 0 12px #a65eff;
+  transform: translateX(-50%);
+}
+
+.keyword-vfx-shield-break {
+  position: absolute;
+  z-index: 3;
+  inset: 5px 4px 34px;
+  border: 3px solid rgb(255 245 190 / 96%);
+  border-radius: 50%;
+  pointer-events: none;
+  box-shadow:
+    inset 0 0 24px rgb(101 220 255 / 78%),
+    0 0 12px #fff,
+    0 0 34px rgb(84 211 255 / 82%),
+    0 0 48px rgb(255 207 75 / 56%);
+  opacity: 0;
+  animation: keyword-shield-break 620ms ease-out both;
+}
+
+.unit-card.is-shield-breaking .keyword-vfx-divine-shield {
+  animation: none;
+  opacity: 0;
+}
+
+.keyword-vfx-shield-break::before,
+.keyword-vfx-shield-break::after {
+  position: absolute;
+  inset: 10%;
+  content: "";
+  background:
+    linear-gradient(64deg, transparent 46%, rgb(255 255 255 / 94%) 48% 50%, transparent 52%),
+    linear-gradient(118deg, transparent 44%, rgb(130 229 255 / 92%) 46% 48%, transparent 50%),
+    linear-gradient(154deg, transparent 55%, rgb(255 219 105 / 84%) 57% 59%, transparent 61%);
+  clip-path: polygon(50% 0, 57% 36%, 100% 50%, 61% 58%, 50% 100%, 42% 62%, 0 50%, 39% 42%);
+}
+
+.keyword-vfx-shield-break::after {
+  transform: rotate(31deg) scale(0.78);
+}
+
+@keyframes keyword-divine-shield-shimmer {
+  0%,
+  100% {
+    filter: brightness(0.96) saturate(1);
+    opacity: 0.86;
+  }
+  50% {
+    filter: brightness(1.22) saturate(1.18);
+    opacity: 1;
+  }
+}
+
+@keyframes keyword-toxic-breathe {
+  0%,
+  100% {
+    opacity: 0.62;
+    transform: translateY(3px) scale(0.96);
+  }
+  50% {
+    opacity: 0.86;
+    transform: translateY(-3px) scale(1.04);
+  }
+}
+
+@keyframes keyword-windfury-spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+@keyframes keyword-reborn-pulse {
+  0%,
+  100% {
+    filter: brightness(0.9);
+    opacity: 0.72;
+    transform: scale(0.94);
+  }
+  50% {
+    filter: brightness(1.22);
+    opacity: 1;
+    transform: scale(1.04);
+  }
+}
+
+@keyframes keyword-shield-break {
+  0% {
+    opacity: 1;
+    transform: scale(0.42);
+  }
+  48% {
+    opacity: 1;
+    transform: scale(1.02);
+  }
+  100% {
+    opacity: 0;
+    transform: scale(1.38);
+  }
+}
+
 @media (hover: hover) and (pointer: fine) {
   .unit-card:hover:not([aria-disabled="true"]):not(.is-disabled):not(.is-unaffordable) {
     border-color: hsl(var(--card-hue) 76% 67% / 86%);
@@ -5254,6 +5551,12 @@
     animation: none;
     filter: grayscale(1);
     opacity: 0.72;
+  }
+
+  .keyword-vfx-shield-break {
+    animation: none;
+    opacity: 0.9;
+    transform: none;
   }
 
   .combat-buff-label,

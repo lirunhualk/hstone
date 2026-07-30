@@ -6949,6 +6949,7 @@ function dealCombatDamage(
     targetPlayerId: targetOwnerId,
     targetInstanceId: target.instanceId,
     amount,
+    actorMinion: cloneMinion(source),
     minion: targetSnapshot,
     message: `${target.name}受到${amount}点伤害，剩余${targetSnapshot.health}点生命。`,
   });

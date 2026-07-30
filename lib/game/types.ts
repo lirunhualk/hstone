@@ -838,6 +838,9 @@ export interface BattleEvent {
   attackDelta?: number;
   healthDelta?: number;
   boardIndex?: number;
+  /** Updated source snapshot when an event consumes or changes the actor. */
+  actorMinion?: MinionInstance;
+  /** Updated target snapshot used by combat playback. */
   minion?: MinionInstance;
   cardName?: string;
   cardKind?: "minion" | "tavernSpell";

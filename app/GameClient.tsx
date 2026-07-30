@@ -69,6 +69,10 @@ import {
   nearestBoardSlotIndex,
 } from "../lib/game/drag-preview";
 import { interactionRequiresModalBackdrop } from "../lib/game/interaction-presentation";
+import {
+  activeMinionKeywordVisuals,
+  type MinionKeywordVisual,
+} from "../lib/game/minion-presentation";
 import { projectCombatBoard } from "../lib/game/playback";
 import { normalizePersistedGameState } from "../lib/game/save";
 
@@ -904,10 +908,37 @@ function unitKeyword(unit: MinionInstance): string {
   );
 }
 
-function UnitCardFace({ unit }: { unit: MinionInstance }) {
+function UnitKeywordVisuals({
+  visuals,
+}: {
+  visuals: readonly MinionKeywordVisual[];
+}) {
+  if (visuals.length === 0) return null;
+
+  return (
+    <span className="keyword-vfx-layer" aria-hidden="true">
+      {visuals.map((visual) => (
+        <span
+          className={`keyword-vfx keyword-vfx-${visual.kind}`}
+          data-keyword-vfx={visual.kind}
+          key={visual.kind}
+        />
+      ))}
+    </span>
+  );
+}
+
+function UnitCardFace({
+  unit,
+  keywordVisuals = activeMinionKeywordVisuals(unit),
+}: {
+  unit: MinionInstance;
+  keywordVisuals?: readonly MinionKeywordVisual[];
+}) {
   return (
     <>
       <CardArtwork unit={unit} kind="portrait" />
+      <UnitKeywordVisuals visuals={keywordVisuals} />
       <span className="card-tier">{unit.tier}</span>
       <span className="card-name">{unit.name}</span>
       <span className="keyword">{unitKeyword(unit)}</span>
@@ -936,6 +967,7 @@ function UnitCard({
   combatAttacking = false,
   combatHit = false,
   combatDamageLabel,
+  combatShieldBreaking = false,
   combatDead = false,
   combatBuffTarget = false,
   combatBuffLabel,
@@ -977,6 +1009,7 @@ function UnitCard({
   combatAttacking?: boolean;
   combatHit?: boolean;
   combatDamageLabel?: string;
+  combatShieldBreaking?: boolean;
   combatDead?: boolean;
   combatBuffTarget?: boolean;
   combatBuffLabel?: string;
@@ -1008,6 +1041,7 @@ function UnitCard({
     event: ReactKeyboardEvent<HTMLButtonElement>,
   ) => void;
 }) {
+  const keywordVisuals = activeMinionKeywordVisuals(unit);
   const combatRole = combatDead
     ? "dead"
     : combatActor
@@ -1041,6 +1075,8 @@ function UnitCard({
       }${combatTarget ? " is-combat-target" : ""}${
         combatAttacking ? " is-attacking" : ""
       }${combatHit ? " is-hit" : ""}${
+        combatShieldBreaking ? " is-shield-breaking" : ""
+      }${
         combatDead ? " is-dead" : ""
       }${
         combatBuffTarget ? " is-combat-buff-target is-buffed" : ""
@@ -1069,6 +1105,12 @@ function UnitCard({
         unit,
       )}，${unit.attack} 攻击，${unit.health} 生命，${
         unit.description
+      }${
+        keywordVisuals.length > 0
+          ? `，当前关键词：${keywordVisuals
+              .map(({ label }) => label)
+              .join("、")}`
+          : ""
       }${choiceTarget ? "，可选择为效果目标" : ""}${
         magneticTarget ? "，可作为磁力吸附目标" : ""
       }${bloodGemTarget ? "，可作为鲜血宝石目标" : ""}${
@@ -1108,6 +1150,10 @@ function UnitCard({
       data-tavern-spell-drop-target={tavernSpellDropTarget || undefined}
       data-newly-generated={newlyGenerated || undefined}
       data-turn-locked={locked || undefined}
+      data-keyword-visuals={
+        keywordVisuals.map(({ kind }) => kind).join(" ") || undefined
+      }
+      data-shield-breaking={combatShieldBreaking || undefined}
       data-testid={testId}
       data-unit-instance-id={unit.instanceId}
       onClick={onClick}
@@ -1116,7 +1162,10 @@ function UnitCard({
       style={{ "--card-hue": TRIBE_HUE[unit.tribe] } as CSSProperties}
       {...dragHandlers}
     >
-      <UnitCardFace unit={unit} />
+      <UnitCardFace unit={unit} keywordVisuals={keywordVisuals} />
+      {combatShieldBreaking && (
+        <span className="keyword-vfx-shield-break" aria-hidden="true" />
+      )}
       {locked && (
         <span className="turn-lock-label" aria-hidden="true">
           本回合锁定
@@ -1752,6 +1801,7 @@ function BoardRow({
   attackingInstanceId,
   hitInstanceId,
   hitLabel,
+  shieldBrokenInstanceId,
   deadInstanceId,
   combatEventIndex,
   buffTargetInstanceId,
@@ -1789,6 +1839,7 @@ function BoardRow({
   attackingInstanceId?: string;
   hitInstanceId?: string;
   hitLabel?: string;
+  shieldBrokenInstanceId?: string;
   deadInstanceId?: string;
   combatEventIndex?: number;
   buffTargetInstanceId?: string;
@@ -1937,6 +1988,7 @@ function BoardRow({
                     combatEventIndex !== undefined &&
                     (unit.instanceId === attackingInstanceId ||
                       unit.instanceId === hitInstanceId ||
+                      unit.instanceId === shieldBrokenInstanceId ||
                       unit.instanceId === deadInstanceId ||
                       unit.instanceId === buffTargetInstanceId ||
                       unit.instanceId === debuffTargetInstanceId ||
@@ -1970,6 +2022,9 @@ function BoardRow({
                     unit.instanceId === hitInstanceId
                       ? hitLabel
                       : undefined
+                  }
+                  combatShieldBreaking={
+                    unit.instanceId === shieldBrokenInstanceId
                   }
                   combatDead={unit.instanceId === deadInstanceId}
                   combatBuffTarget={
@@ -4759,6 +4814,12 @@ export default function GameClient() {
                       : undefined
                   }
                   hitLabel={currentHitLabel}
+                  shieldBrokenInstanceId={
+                    currentBattleEvent?.type === "shieldBroken" &&
+                    currentBattleEvent.targetPlayerId === opponentId
+                      ? currentBattleEvent.targetInstanceId
+                      : undefined
+                  }
                   deadInstanceId={
                     currentBattleEvent?.type === "death" &&
                     currentBattleEvent.actorPlayerId === opponentId
@@ -4960,6 +5021,12 @@ export default function GameClient() {
                     : undefined
                 }
                 hitLabel={currentHitLabel}
+                shieldBrokenInstanceId={
+                  currentBattleEvent?.type === "shieldBroken" &&
+                  currentBattleEvent.targetPlayerId === human.id
+                    ? currentBattleEvent.targetInstanceId
+                    : undefined
+                }
                 deadInstanceId={
                   currentBattleEvent?.type === "death" &&
                   currentBattleEvent.actorPlayerId === human.id

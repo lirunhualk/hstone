@@ -20,6 +20,7 @@ import {
   TOKEN_DEFINITIONS,
   getMinionDefinition,
 } from "../lib/game/content.ts";
+import { activeMinionKeywordVisuals } from "../lib/game/minion-presentation.ts";
 import { projectCombatBoard } from "../lib/game/playback.ts";
 
 function humanPlayer(state: GameState): PlayerState {
@@ -556,6 +557,12 @@ test("combat playback replaces a Reborn entity before applying its later buff sn
   assert.equal(projected.attack, buffed.attack);
   assert.equal(projected.health, buffed.health);
   assert.equal(
+    activeMinionKeywordVisuals(projected).some(
+      ({ kind }) => kind === "reborn",
+    ),
+    false,
+  );
+  assert.equal(
     projectCombatBoard([original], "another-player", events)[0]
       .instanceId,
     original.instanceId,
@@ -708,6 +715,12 @@ test("combat playback projects shield loss and exact remaining minion Health", (
   )[0];
   assert.equal(afterShield.divineShield, false);
   assert.equal(afterShield.health, 12);
+  assert.equal(
+    activeMinionKeywordVisuals(afterShield).some(
+      ({ kind }) => kind === "divine-shield",
+    ),
+    false,
+  );
 
   const afterDamage = projectCombatBoard(
     [target],
@@ -1008,6 +1021,28 @@ test("Venomous is consumed after the first minion it damages", () => {
     battle.playerAId === state.humanPlayerId
       ? battle.playerBId
       : battle.playerAId;
+  const venomousDamage = battle.events.find(
+    (event) =>
+      event.type === "damage" &&
+      event.actorPlayerId === state.humanPlayerId &&
+      event.actorInstanceId === "venomous-attacker",
+  );
+  assert.ok(venomousDamage?.actorMinion);
+  assert.equal(venomousDamage.actorMinion.venomous, false);
+  const projectedVenomousAttacker = projectCombatBoard(
+    battle.initialBoards[state.humanPlayerId].filter(
+      (minion): minion is BoardMinionInstance => minion.kind === "minion",
+    ),
+    state.humanPlayerId,
+    battle.events.slice(0, venomousDamage.index + 1),
+  ).find((minion) => minion.instanceId === "venomous-attacker");
+  assert.ok(projectedVenomousAttacker);
+  assert.equal(
+    activeMinionKeywordVisuals(projectedVenomousAttacker).some(
+      ({ kind }) => kind === "venomous",
+    ),
+    false,
+  );
   assert.equal(battle.finalBoards[opponentId].length, 1);
   assert.equal(battle.finalBoards[opponentId][0].name, "烈毒后续目标");
   assert.equal(battle.finalBoards[opponentId][0].health, 49);
@@ -1044,10 +1079,31 @@ test("Bronze Warden reborns and Titus repeats Kaboom Bot's deathrattle", () => {
     }
   }
   let combat = gameReducer(state, { type: "END_TURN" });
-  assert.ok(
-    combat.lastBattle?.events.some((event) =>
-      event.message.includes("青铜守卫复生了"),
+  const rebornBattle = combat.lastBattle;
+  assert.ok(rebornBattle);
+  const rebornEvent = rebornBattle.events.find(
+    (event) =>
+      event.type === "summon" &&
+      event.summonReason === "reborn" &&
+      event.actorInstanceId === "bronze-fixture",
+  );
+  assert.ok(rebornEvent?.minion);
+  assert.notEqual(rebornEvent.targetInstanceId, rebornEvent.actorInstanceId);
+  assert.equal(rebornEvent.minion.health, 1);
+  assert.equal(rebornEvent.minion.reborn, false);
+  const projectedReborn = projectCombatBoard(
+    rebornBattle.initialBoards[state.humanPlayerId].filter(
+      (minion): minion is BoardMinionInstance => minion.kind === "minion",
     ),
+    state.humanPlayerId,
+    rebornBattle.events.slice(0, rebornEvent.index + 1),
+  ).find((minion) => minion.instanceId === rebornEvent.targetInstanceId);
+  assert.ok(projectedReborn);
+  assert.equal(
+    activeMinionKeywordVisuals(projectedReborn).some(
+      ({ kind }) => kind === "reborn",
+    ),
+    false,
   );
 
   state = createGame(0x817);
@@ -1457,6 +1513,27 @@ test("Golden repeated damage keeps separate hits for Divine Shield", () => {
     battle.playerAId === state.humanPlayerId
       ? battle.playerBId
       : battle.playerAId;
+  const shieldBrokenEvent = battle.events.find(
+    (event) =>
+      event.type === "shieldBroken" &&
+      event.targetInstanceId?.startsWith("blaster-shield-"),
+  );
+  assert.ok(shieldBrokenEvent?.minion);
+  assert.equal(shieldBrokenEvent.minion.divineShield, false);
+  const projectedShieldTarget = projectCombatBoard(
+    battle.initialBoards[opponentId].filter(
+      (minion): minion is BoardMinionInstance => minion.kind === "minion",
+    ),
+    opponentId,
+    battle.events.slice(0, shieldBrokenEvent.index + 1),
+  ).find((minion) => minion.instanceId === shieldBrokenEvent.targetInstanceId);
+  assert.ok(projectedShieldTarget);
+  assert.equal(
+    activeMinionKeywordVisuals(projectedShieldTarget).some(
+      ({ kind }) => kind === "divine-shield",
+    ),
+    false,
+  );
   const shieldTarget = battle.finalBoards[opponentId].find((minion) =>
     minion.instanceId.startsWith("blaster-shield-"),
   );
