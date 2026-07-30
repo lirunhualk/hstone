@@ -83,6 +83,14 @@ import {
   type MinionKeywordVisual,
 } from "../lib/game/minion-presentation";
 import { projectCombatBoard } from "../lib/game/playback";
+import {
+  completeRecruitPresentation,
+  deriveRecruitPresentation,
+  enqueueRecruitPresentation,
+  recruitPresentationAnnouncement,
+  recruitPresentationDuration,
+  type RecruitPresentationEvent,
+} from "../lib/game/recruit-presentation";
 import { normalizePersistedGameState } from "../lib/game/save";
 
 const SAVE_KEY = "hearthstone-battlegrounds-local.save.v11";
@@ -256,6 +264,102 @@ type TavernSpellCastFeedback = {
   label: string;
   token: string;
 };
+
+type RecruitMotionGeometry = {
+  fromLeft: number;
+  fromTop: number;
+  fromWidth: number;
+  fromHeight: number;
+  travelX: number;
+  travelY: number;
+};
+
+type RecruitPresentationBatch = {
+  token: number;
+  events: RecruitPresentationEvent[];
+  announcement: string;
+  motion: RecruitMotionGeometry | null;
+};
+
+function humanPlayerForPresentation(
+  state: GameState,
+): PlayerState | null {
+  return (
+    state.players.find((player) => player.id === state.humanPlayerId) ??
+    null
+  );
+}
+
+function cardElementForPresentation(
+  instanceId: string,
+): HTMLElement | null {
+  const candidates = document.querySelectorAll<HTMLElement>(
+    "[data-unit-instance-id], [data-card-instance-id]",
+  );
+  for (const candidate of candidates) {
+    if (
+      candidate.dataset.unitInstanceId === instanceId ||
+      candidate.dataset.cardInstanceId === instanceId
+    ) {
+      return candidate;
+    }
+  }
+  return null;
+}
+
+function captureRecruitMotion(
+  state: GameState,
+  action: GameAction,
+): RecruitMotionGeometry | null {
+  const player = humanPlayerForPresentation(state);
+  if (!player) return null;
+
+  let instanceId: string | null = null;
+  let targetTestId: "hand-row" | "tavern-keeper" | null = null;
+  if (action.type === "BUY_MINION") {
+    instanceId = player.shop[action.shopIndex]?.instanceId ?? null;
+    targetTestId = "hand-row";
+  } else if (action.type === "BUY_TAVERN_SPELL") {
+    const offers = [
+      ...(player.spellShop ? [player.spellShop] : []),
+      ...player.additionalSpellShop,
+    ];
+    instanceId =
+      (action.spellInstanceId
+        ? offers.find(
+            (spell) => spell.instanceId === action.spellInstanceId,
+          )
+        : player.spellShop
+      )?.instanceId ?? null;
+    targetTestId = "hand-row";
+  } else if (action.type === "SELL_MINION") {
+    instanceId = player.board[action.boardIndex]?.instanceId ?? null;
+    targetTestId = "tavern-keeper";
+  }
+  if (!instanceId || !targetTestId) return null;
+
+  const source = cardElementForPresentation(instanceId);
+  const target = document.querySelector<HTMLElement>(
+    `[data-testid="${targetTestId}"]`,
+  );
+  if (!source || !target) return null;
+  const sourceRect = source.getBoundingClientRect();
+  const targetRect = target.getBoundingClientRect();
+  return {
+    fromLeft: sourceRect.left,
+    fromTop: sourceRect.top,
+    fromWidth: sourceRect.width,
+    fromHeight: sourceRect.height,
+    travelX:
+      targetRect.left +
+      targetRect.width / 2 -
+      (sourceRect.left + sourceRect.width / 2),
+    travelY:
+      targetRect.top +
+      targetRect.height / 2 -
+      (sourceRect.top + sourceRect.height / 2),
+  };
+}
 
 const TRIBE_HUE: Record<Tribe, number> = {
   beast: 106,
@@ -2550,6 +2654,8 @@ export default function GameClient() {
     useState<BloodGemCastFeedback | null>(null);
   const [tavernSpellCastFeedback, setTavernSpellCastFeedback] =
     useState<TavernSpellCastFeedback | null>(null);
+  const [recruitPresentationQueue, setRecruitPresentationQueue] =
+    useState<RecruitPresentationBatch[]>([]);
   const [battleSpeed, setBattleSpeed] = useState<BattleSpeed>(1);
   const [combatRewardNotice, setCombatRewardNotice] =
     useState<CombatRewardSummary | null>(null);
@@ -2564,6 +2670,8 @@ export default function GameClient() {
     });
   const [combatIntroCompletedBattle, setCombatIntroCompletedBattle] =
     useState<BattleSummary | null>(null);
+  const gameRef = useRef(game);
+  const recruitPresentationTokenRef = useRef(0);
   const dragSessionRef = useRef<DragSession | null>(null);
   const cardInspectionRef = useRef<CardInspectionState | null>(null);
   const cardInspectionTimerRef = useRef<number | null>(null);
@@ -2583,6 +2691,12 @@ export default function GameClient() {
   const magneticFocusTargetRef = useRef<string | null>(null);
   const previousMagneticSelectionRef = useRef<string | null>(null);
   const preCombatHandIdsRef = useRef<Set<string> | null>(null);
+  const activeRecruitPresentation =
+    recruitPresentationQueue[0] ?? null;
+
+  useLayoutEffect(() => {
+    gameRef.current = game;
+  }, [game]);
 
   const writeDragSession = useCallback((next: DragSession | null) => {
     dragSessionRef.current = next;
@@ -2750,16 +2864,43 @@ export default function GameClient() {
     return () => window.clearTimeout(noticeTimer);
   }, [clearCombatRewardFeedback, combatRewardNotice]);
 
+  useEffect(() => {
+    if (!activeRecruitPresentation) return;
+    const activeToken = activeRecruitPresentation.token;
+    const presentationTimer = window.setTimeout(() => {
+      setRecruitPresentationQueue((current) =>
+        completeRecruitPresentation(current, activeToken),
+      );
+    }, recruitPresentationDuration(activeRecruitPresentation.events));
+    return () => window.clearTimeout(presentationTimer);
+  }, [activeRecruitPresentation]);
+
   const send = useCallback(
     (action: GameAction) => {
+      const current = gameRef.current;
+      const motion = captureRecruitMotion(current, action);
       dismissCardInspection();
-      setGame((current) => {
-        const next = gameReducer(current, action);
-        if (started) {
-          safeWriteLocalStorage(SAVE_KEY, JSON.stringify(next));
-        }
-        return next;
-      });
+      const next = gameReducer(current, action);
+      const events = deriveRecruitPresentation(current, next, action);
+      gameRef.current = next;
+      if (action.type === "END_TURN" || action.type === "CONTINUE") {
+        setRecruitPresentationQueue([]);
+      } else if (events.length > 0) {
+        recruitPresentationTokenRef.current += 1;
+        const presentation = {
+          token: recruitPresentationTokenRef.current,
+          events,
+          announcement: recruitPresentationAnnouncement(events),
+          motion,
+        };
+        setRecruitPresentationQueue((current) =>
+          enqueueRecruitPresentation(current, presentation),
+        );
+      }
+      if (started) {
+        safeWriteLocalStorage(SAVE_KEY, JSON.stringify(next));
+      }
+      setGame(next);
       setSelection(null);
     },
     [dismissCardInspection, started],
@@ -3646,6 +3787,7 @@ export default function GameClient() {
     clearTavernSpellCastFeedback();
     const next = createGame(newSeed());
     safeWriteLocalStorage(SAVE_KEY, JSON.stringify(next));
+    gameRef.current = next;
     setGame(next);
     setStarted(true);
     setLoaded(true);
@@ -3658,6 +3800,7 @@ export default function GameClient() {
       revealedCount: 0,
       complete: false,
     });
+    setRecruitPresentationQueue([]);
     setCombatIntroCompletedBattle(null);
     clearCombatRewardFeedback();
     magneticFocusTargetRef.current = null;
@@ -4991,11 +5134,58 @@ export default function GameClient() {
           : battle.damageToPlayerB
         : 0
     : 0;
+  const activeRecruitCurrencies =
+    activeRecruitPresentation?.events.filter(
+      (event) => event.kind === "currency",
+    ) ?? [];
+  const activeRecruitCurrency = activeRecruitCurrencies[0];
+  const activeRecruitMove = activeRecruitPresentation?.events.find(
+    (event) => event.kind === "cardMove",
+  );
+  const activeRecruitRefresh =
+    activeRecruitPresentation?.events.find(
+      (event) => event.kind === "shopRefresh",
+    );
+  const activeRecruitUpgrade =
+    activeRecruitPresentation?.events.find(
+      (event) => event.kind === "tavernUpgrade",
+    );
+  const activeRecruitTriples =
+    activeRecruitPresentation?.events.filter(
+      (event) => event.kind === "triple",
+    ) ?? [];
+  const activeRecruitMotion = activeRecruitPresentation?.motion ?? null;
+  const activeRecruitAction =
+    activeRecruitMove?.kind === "cardMove"
+      ? activeRecruitMove.motion
+      : activeRecruitRefresh
+        ? "shop-refresh"
+        : activeRecruitUpgrade
+          ? "tavern-upgrade"
+          : activeRecruitTriples.length > 0
+            ? "triple-merge"
+            : "none";
+  const recruitFeedbackTitle =
+    activeRecruitMove?.kind === "cardMove"
+      ? activeRecruitMove.motion === "shop-to-hand"
+        ? `购买 · ${activeRecruitMove.card.name}`
+        : `出售 · ${activeRecruitMove.card.name}`
+      : activeRecruitRefresh?.kind === "shopRefresh"
+        ? activeRecruitRefresh.free
+          ? "免费刷新"
+          : "刷新酒馆"
+        : activeRecruitUpgrade?.kind === "tavernUpgrade"
+          ? `酒馆升至 ${activeRecruitUpgrade.toTier} 星`
+          : activeRecruitTriples[0]?.kind === "triple"
+            ? `三连 · ${activeRecruitTriples[0].golden.name}`
+            : "";
 
   return (
     <main
       className={`game-shell${dragSession?.active ? " is-dragging" : ""}${
         interactionLocked ? " has-pending-interaction" : ""
+      }${
+        activeRecruitPresentation ? " has-recruit-presentation" : ""
       }`}
       data-phase={game.phase}
       data-loaded={loaded}
@@ -5024,6 +5214,12 @@ export default function GameClient() {
             currentHeroDamageTargetId === human.id
               ? " is-taking-hero-damage"
               : ""
+          }${
+            activeRecruitCurrency?.currency === "health"
+              ? activeRecruitCurrency.delta < 0
+                ? " is-spending"
+                : " is-earning"
+              : ""
           }`}
           aria-atomic="true"
           aria-label={`生命 ${displayedHumanHealth}`}
@@ -5035,6 +5231,26 @@ export default function GameClient() {
         >
           <small>生命</small>
           <strong>{displayedHumanHealth}</strong>
+          {activeRecruitCurrencies
+            .filter((currency) => currency.currency === "health")
+            .map((currency, index) => (
+              <span
+                className="recruit-resource-delta"
+                data-delta={formatSignedStat(currency.delta)}
+                data-currency="health"
+                data-reason={currency.reason}
+                data-testid="recruit-resource-delta"
+                aria-hidden="true"
+                key={`health-${activeRecruitPresentation?.token ?? 0}-${index}`}
+                style={
+                  {
+                    "--resource-delta-index": index,
+                  } as CSSProperties
+                }
+              >
+                {formatSignedStat(currency.delta)}
+              </span>
+            ))}
         </div>
         <div
           className={`hud-stat armor${
@@ -5053,13 +5269,64 @@ export default function GameClient() {
           <small>护甲</small>
           <strong>{displayedHumanArmor}</strong>
         </div>
-        <div className="hud-stat" aria-label={`金币 ${human.gold}`}>
+        <div
+          className={`hud-stat gold${
+            activeRecruitCurrency?.currency === "gold"
+              ? activeRecruitCurrency.delta < 0
+                ? " is-spending"
+                : " is-earning"
+              : ""
+          }`}
+          aria-label={`金币 ${human.gold}`}
+          data-stat="gold"
+          data-testid="human-gold"
+        >
           <small>金币</small>
           <strong>{human.gold}</strong>
+          {activeRecruitCurrencies
+            .filter((currency) => currency.currency === "gold")
+            .map((currency, index) => (
+              <span
+                className="recruit-resource-delta"
+                data-delta={formatSignedStat(currency.delta)}
+                data-currency="gold"
+                data-reason={currency.reason}
+                data-testid="recruit-resource-delta"
+                aria-hidden="true"
+                key={`gold-${activeRecruitPresentation?.token ?? 0}-${index}`}
+                style={
+                  {
+                    "--resource-delta-index":
+                      index + (currency.reason === "sell" ? 1 : 0),
+                  } as CSSProperties
+                }
+              >
+                {formatSignedStat(currency.delta)}
+              </span>
+            ))}
         </div>
-        <div className="hud-stat" aria-label={`酒馆等级 ${human.tavernTier}`}>
+        <div
+          className={`hud-stat tavern-tier${
+            activeRecruitUpgrade ? " is-upgrading" : ""
+          }`}
+          aria-label={`酒馆等级 ${human.tavernTier}`}
+          data-stat="tavern-tier"
+          data-testid="human-tavern-tier"
+        >
           <small>酒馆</small>
           <strong>{human.tavernTier} / 6</strong>
+          {activeRecruitUpgrade?.kind === "tavernUpgrade" && (
+            <span
+              className="tavern-tier-burst"
+              data-from-tier={activeRecruitUpgrade.fromTier}
+              data-to-tier={activeRecruitUpgrade.toTier}
+              data-testid="tavern-upgrade-burst"
+              aria-hidden="true"
+              key={`tier-${activeRecruitPresentation?.token ?? 0}`}
+            >
+              ★ {activeRecruitUpgrade.toTier}
+            </span>
+          )}
         </div>
         <div
           className="hud-hero-power"
@@ -5125,6 +5392,13 @@ export default function GameClient() {
                 : ""
             }${
               dragSession?.target?.kind === "sell" ? " is-sell-target" : ""
+            }${
+              activeRecruitRefresh ? " is-refreshing" : ""
+            }${
+              activeRecruitMove?.kind === "cardMove" &&
+              activeRecruitMove.motion === "board-to-bob"
+                ? " is-receiving-sale"
+                : ""
             }`}
             aria-label="鲍勃的酒馆"
             aria-hidden={game.phase !== "recruit"}
@@ -5132,8 +5406,37 @@ export default function GameClient() {
             data-sell-drop-zone="true"
             data-frozen={human.frozen}
             data-helpful-refreshes={human.helpfulRefreshes}
+            data-recruit-motion={
+              activeRecruitRefresh ? "shop-refresh" : undefined
+            }
             data-testid="sell-drop-zone"
           >
+            <div
+              className="tavern-keeper"
+              data-testid="tavern-keeper"
+              role="img"
+              aria-label="酒馆老板鲍勃"
+              key={
+                activeRecruitMove?.kind === "cardMove" &&
+                activeRecruitMove.motion === "board-to-bob"
+                  ? `keeper-${activeRecruitPresentation?.token ?? 0}`
+                  : "keeper"
+              }
+            >
+              <span className="tavern-keeper-portrait" aria-hidden="true">
+                鲍
+              </span>
+              <strong>鲍勃</strong>
+            </div>
+            {activeRecruitRefresh && (
+              <span
+                className="shop-refresh-sweep"
+                data-free={activeRecruitRefresh.free}
+                data-testid="shop-refresh-sweep"
+                aria-hidden="true"
+                key={`refresh-${activeRecruitPresentation?.token ?? 0}`}
+              />
+            )}
             <div className="sell-drop-feedback" aria-hidden="true">
               <strong>出售给鲍勃</strong>
               <span>
@@ -5792,6 +6095,11 @@ export default function GameClient() {
               buyUnavailableReason
                 ? " is-buy-unavailable"
                 : ""
+            }${
+              activeRecruitMove?.kind === "cardMove" &&
+              activeRecruitMove.motion === "shop-to-hand"
+                ? " is-receiving-purchase"
+                : ""
             }`}
             aria-label="手牌"
             aria-hidden={game.phase !== "recruit"}
@@ -5819,6 +6127,12 @@ export default function GameClient() {
                 : canBuyFromShop
             }
             data-hand-drop-zone="true"
+            data-recruit-motion={
+              activeRecruitMove?.kind === "cardMove" &&
+              activeRecruitMove.motion === "shop-to-hand"
+                ? "shop-to-hand"
+                : undefined
+            }
             data-testid="buy-drop-zone"
           >
             <div className="buy-drop-feedback" aria-hidden="true">
@@ -6639,6 +6953,104 @@ export default function GameClient() {
               .filter(Boolean)
               .join(" · ")}
           </span>
+        </div>
+      )}
+
+      {activeRecruitPresentation && (
+        <div
+          className="toast recruit-feedback-toast"
+          role="status"
+          aria-live="polite"
+          aria-atomic="true"
+          data-action={activeRecruitAction}
+          data-event-kinds={activeRecruitPresentation.events
+            .map((event) => event.kind)
+            .join(" ")}
+          data-presentation-queue-length={
+            recruitPresentationQueue.length
+          }
+          data-presentation-token={activeRecruitPresentation.token}
+          data-testid="recruit-feedback"
+          key={`feedback-${activeRecruitPresentation.token}`}
+        >
+          <strong>{recruitFeedbackTitle}</strong>
+          <span>{activeRecruitPresentation.announcement}</span>
+        </div>
+      )}
+
+      {activeRecruitMove?.kind === "cardMove" &&
+        activeRecruitMotion && (
+          <div
+            className={`${
+              activeRecruitMove.card.kind === "minion"
+                ? "unit-card is-compact"
+                : "tavern-spell-card is-shop-offer"
+            } recruit-card-motion`}
+            aria-hidden="true"
+            data-card-instance-id={activeRecruitMove.card.instanceId}
+            data-recruit-motion={activeRecruitMove.motion}
+            data-testid="recruit-card-motion"
+            key={`motion-${activeRecruitPresentation?.token ?? 0}`}
+            style={
+              {
+                "--card-hue":
+                  activeRecruitMove.card.kind === "minion"
+                    ? TRIBE_HUE[activeRecruitMove.card.tribe]
+                    : 266,
+                "--recruit-travel-x": `${activeRecruitMotion.travelX}px`,
+                "--recruit-travel-y": `${activeRecruitMotion.travelY}px`,
+                left: activeRecruitMotion.fromLeft,
+                top: activeRecruitMotion.fromTop,
+                width: activeRecruitMotion.fromWidth,
+                height: activeRecruitMotion.fromHeight,
+                maxWidth: "none",
+              } as CSSProperties
+            }
+          >
+            {activeRecruitMove.card.kind === "minion" ? (
+              <UnitCardFace unit={activeRecruitMove.card} />
+            ) : (
+              <TavernSpellCardFace
+                card={activeRecruitMove.card}
+                inShop
+                purchaseCost={activeRecruitMove.purchaseCost}
+              />
+            )}
+          </div>
+        )}
+
+      {activeRecruitTriples.length > 0 && (
+        <div
+          className="recruit-triple-stage"
+          data-testid="triple-forge"
+          aria-hidden="true"
+          key={`triple-${activeRecruitPresentation?.token ?? 0}`}
+        >
+          {activeRecruitTriples.map((event, index) => (
+            <div
+              className="recruit-triple-forge"
+              data-known-consumed-count={
+                event.knownConsumedInstanceIds.length
+              }
+              data-golden-instance-id={event.golden.instanceId}
+              key={event.golden.instanceId}
+              style={{ "--triple-index": index } as CSSProperties}
+            >
+              <span className="recruit-triple-rays" />
+              <div
+                className="unit-card recruit-triple-card"
+                style={
+                  {
+                    "--card-hue": TRIBE_HUE[event.golden.tribe],
+                  } as CSSProperties
+                }
+              >
+                <UnitCardFace unit={event.golden} />
+              </div>
+              <strong>三连！</strong>
+              <span>{event.golden.name}</span>
+            </div>
+          ))}
         </div>
       )}
 
