@@ -360,7 +360,10 @@ function isPendingInteraction(
         (optionId) =>
           optionId === "escapeEruptionAttack" ||
           optionId === "escapeEruptionHealth",
-      )
+      ) &&
+      (value.effectMultiplier === undefined ||
+        value.effectMultiplier === 1 ||
+        value.effectMultiplier === 2)
     );
   }
   if (value.kind === "heroPowerChoice") {
@@ -401,7 +404,9 @@ function isPendingInteraction(
     isRecord(value.filter) &&
     validDestination &&
     typeof value.remainingDiscoveries === "number" &&
-    value.remainingDiscoveries > 0
+    value.remainingDiscoveries > 0 &&
+    (value.completionSource === undefined ||
+      value.completionSource === "tavernSpellCast")
   );
 }
 
@@ -2475,6 +2480,8 @@ export default function GameClient() {
     humanInteraction?.kind === "spellcraftChoice"
       ? humanInteraction
       : null;
+  const escapeEruptionAmount =
+    4 * (spellcraftChoiceInteraction?.effectMultiplier ?? 1);
   const heroPowerChoiceInteraction =
     humanInteraction?.kind === "heroPowerChoice"
       ? humanInteraction
@@ -6117,7 +6124,10 @@ export default function GameClient() {
                 }
               >
                 <strong>喷发攻击</strong>
-                <span>使你当前的所有随从永久获得 +4 攻击力。</span>
+                <span>
+                  使你当前的所有随从永久获得 +
+                  {escapeEruptionAmount} 攻击力。
+                </span>
               </button>
               <button
                 type="button"
@@ -6133,7 +6143,10 @@ export default function GameClient() {
                 }
               >
                 <strong>躲避防守</strong>
-                <span>使你当前的所有随从永久获得 +4 生命值。</span>
+                <span>
+                  使你当前的所有随从永久获得 +
+                  {escapeEruptionAmount} 生命值。
+                </span>
               </button>
             </div>
           </div>

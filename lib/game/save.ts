@@ -34,6 +34,10 @@ export const LEGACY_SCHEMA_11_CONTENT_VERSION_V17 =
   "battlegrounds-36.0.3-247416-v17";
 export const LEGACY_SCHEMA_11_CONTENT_VERSION_V18 =
   "battlegrounds-36.0.3-247416-v18";
+export const LEGACY_SCHEMA_11_CONTENT_VERSION_V19 =
+  "battlegrounds-36.0.3-247416-v19";
+export const LEGACY_SCHEMA_11_CONTENT_VERSION_V20 =
+  "battlegrounds-36.0.3-247416-v20";
 
 const SPELL_POOL_COPIES_BY_TIER = [0, 5, 7, 9, 11, 7, 5] as const;
 
@@ -140,6 +144,7 @@ function repairSpellPool(value: Record<string, unknown>): boolean {
 function refreshMinionSupport(
   value: unknown,
   preservePersistentFields = false,
+  preserveCurrentFields = false,
 ): void {
   if (
     !isRecord(value) ||
@@ -156,8 +161,10 @@ function refreshMinionSupport(
     value.astralAutomatonSummoned = false;
     value.ancientSoulFriendlyDeaths = 0;
   }
-  value.effectCounters = {};
-  value.temporaryGoldenCrabDeathrattles = 0;
+  if (!preserveCurrentFields) {
+    value.effectCounters = {};
+    value.temporaryGoldenCrabDeathrattles = 0;
+  }
   if (
     definition.conditionalKeyword?.keyword === "divineShield" &&
     typeof value.attack === "number" &&
@@ -177,6 +184,7 @@ function refreshOwnedMinions(
   migrated: Record<string, unknown>,
   preservePendingSpellcraft = false,
   preservePersistentFields = false,
+  preserveCurrentFields = false,
 ): boolean {
   if (!Array.isArray(migrated.players)) {
     return false;
@@ -198,14 +206,20 @@ function refreshOwnedMinions(
       player.astralAutomatonsSummoned = 0;
       player.eternalKnightsDied = 0;
     }
-    player.nextTavernSpellDiscount = 0;
+    if (!preserveCurrentFields) {
+      player.nextTavernSpellDiscount = 0;
+    }
     for (const zone of ["board", "hand", "shop"] as const) {
       const cards = player[zone];
       if (!Array.isArray(cards)) {
         return false;
       }
       cards.forEach((card) =>
-        refreshMinionSupport(card, preservePersistentFields),
+        refreshMinionSupport(
+          card,
+          preservePersistentFields,
+          preserveCurrentFields,
+        ),
       );
     }
   }
@@ -215,7 +229,11 @@ function refreshOwnedMinions(
     Array.isArray(migrated.pendingInteraction.options)
   ) {
     migrated.pendingInteraction.options.forEach((option) =>
-      refreshMinionSupport(option, preservePersistentFields),
+      refreshMinionSupport(
+        option,
+        preservePersistentFields,
+        preserveCurrentFields,
+      ),
     );
   }
   return true;
@@ -826,23 +844,33 @@ export function migrateSchema11GameState(value: unknown): unknown {
     (value.contentVersion !== LEGACY_SCHEMA_11_CONTENT_VERSION &&
       value.contentVersion !== LEGACY_SCHEMA_11_CONTENT_VERSION_V16 &&
       value.contentVersion !== LEGACY_SCHEMA_11_CONTENT_VERSION_V17 &&
-      value.contentVersion !== LEGACY_SCHEMA_11_CONTENT_VERSION_V18) ||
+      value.contentVersion !== LEGACY_SCHEMA_11_CONTENT_VERSION_V18 &&
+      value.contentVersion !== LEGACY_SCHEMA_11_CONTENT_VERSION_V19 &&
+      value.contentVersion !== LEGACY_SCHEMA_11_CONTENT_VERSION_V20) ||
     !Array.isArray(value.players)
   ) {
     return null;
   }
   try {
-    const preserveCurrentFields =
-      value.contentVersion === LEGACY_SCHEMA_11_CONTENT_VERSION_V18;
+    const preservePersistentFields = [
+      LEGACY_SCHEMA_11_CONTENT_VERSION_V18,
+      LEGACY_SCHEMA_11_CONTENT_VERSION_V19,
+      LEGACY_SCHEMA_11_CONTENT_VERSION_V20,
+    ].includes(value.contentVersion as string);
+    const preserveCurrentFields = [
+      LEGACY_SCHEMA_11_CONTENT_VERSION_V19,
+      LEGACY_SCHEMA_11_CONTENT_VERSION_V20,
+    ].includes(value.contentVersion as string);
     const preservePendingSpellcraft =
       value.contentVersion === LEGACY_SCHEMA_11_CONTENT_VERSION_V17 ||
-      preserveCurrentFields;
+      preservePersistentFields;
     const migrated: unknown = JSON.parse(JSON.stringify(value));
     if (
       !isRecord(migrated) ||
       !refreshOwnedMinions(
         migrated,
         preservePendingSpellcraft,
+        preservePersistentFields,
         preserveCurrentFields,
       ) ||
       !repairSpellPool(migrated)

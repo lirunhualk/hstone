@@ -39,6 +39,13 @@ export interface BuffEffect {
   taunt?: boolean;
 }
 
+export interface BuffKeywordEffect {
+  kind: "buffKeyword";
+  keyword: "divineShield";
+  attack: number;
+  health: number;
+}
+
 export interface SummonEffect {
   kind: "summon";
   definitionId: string;
@@ -85,6 +92,7 @@ export interface GainRandomTavernSpellEffect {
   filter: {
     cost?: number;
     exactTier?: TavernTier;
+    definitionIds?: readonly string[];
   };
   goldenMode?: "doubleCount";
 }
@@ -165,6 +173,7 @@ export interface RallyRemoveTargetKeywordsEffect {
 
 export type RallyEffect =
   | GetRandomMinionEffect
+  | GainRandomTavernSpellEffect
   | RallyBuffEffect
   | RallySummonFromHandEffect
   | RallyRemoveTargetKeywordsEffect;
@@ -314,6 +323,12 @@ export interface MenagerieEndOfTurnEffect {
   health: number;
 }
 
+export type AfterTavernSpellCastEffect =
+  | BuffEffect
+  | MenagerieEndOfTurnEffect
+  | BuffKeywordEffect
+  | ImproveUndeadArmyEffect;
+
 export interface BuffEndOfTurnEffect {
   kind: "buff";
   target: "self" | "adjacentFriendly";
@@ -335,6 +350,8 @@ export type EndOfTurnEffect =
   | BuffEndOfTurnEffect
   | GainBloodGemsEffect
   | GainTavernSpellEffect
+  | GainRandomTavernSpellEffect
+  | ImproveTavernSpellBuffsEffect
   | PeriodicGainRandomMinionEndOfTurnEffect;
 
 export interface CardPurchaseMilestoneEffect {
@@ -410,6 +427,7 @@ export interface MinionDefinition {
   afterFriendlyDied?: FriendlyTribeTrigger;
   afterFriendlyCombatDied?: FriendlyCombatDeathTrigger;
   afterSelfDamaged?: readonly MinionEffect[];
+  afterTavernSpellCast?: readonly AfterTavernSpellCastEffect[];
   startOfTurn?: readonly MinionEffect[];
   startOfCombat?: readonly MinionEffect[];
   inHandStartOfCombat?: InHandStartOfCombatEffect;
@@ -424,6 +442,7 @@ export interface MinionDefinition {
   spellcraft?: SpellcraftSpec;
   extraBattlecries?: number;
   extraDeathrattles?: number;
+  extraEndOfTurnTriggers?: number;
   sellValue?: number;
   goldenSellValue?: number;
   collectible?: boolean;
@@ -930,6 +949,8 @@ export interface PendingDiscoverInteraction extends PendingInteractionBase {
   filter: DiscoverFilter;
   remainingDiscoveries: number;
   destination: DiscoverDestination;
+  /** Optional action completed only after the final chained discovery. */
+  completionSource?: "tavernSpellCast";
 }
 
 export type TavernSpellChoiceId =
@@ -952,6 +973,7 @@ export interface PendingSpellcraftChoiceInteraction
   kind: "spellcraftChoice";
   definitionId: string;
   optionIds: SpellcraftChoiceId[];
+  effectMultiplier?: number;
 }
 
 export interface PendingHeroPowerChoiceInteraction

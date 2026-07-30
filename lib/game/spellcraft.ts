@@ -71,8 +71,11 @@ export const SPELLCRAFT_DEFINITIONS = [
   {
     id: "spellcraft-escape-eruption",
     cardId: "BG30_117t",
+    goldenCardId: "BG30_117_Gt",
     name: "躲避喷发",
     description: "抉择：使你的随从获得+4攻击力；或者+4生命值。",
+    goldenDescription:
+      "抉择：使你的随从获得+8攻击力；或者+8生命值。",
     sourceTier: 4,
     effect: "escapeEruption",
     target: "none",
@@ -89,8 +92,11 @@ export const SPELLCRAFT_DEFINITIONS = [
   {
     id: "spellcraft-meditation",
     cardId: "BG32_835t",
+    goldenCardId: "BG32_835_Gt",
     name: "冥想",
     description: "在本局对战中，你的酒馆法术使随从额外获得+1/+1。",
+    goldenDescription:
+      "在本局对战中，你的酒馆法术使随从额外获得+2/+2。",
     sourceTier: 5,
     effect: "meditation",
     target: "none",
@@ -98,8 +104,11 @@ export const SPELLCRAFT_DEFINITIONS = [
   {
     id: "spellcraft-rime-or-reason",
     cardId: "BG33_319t",
+    goldenCardId: "BG33_319_Gt",
     name: "霜鳞之理",
     description: "随机获取一张能使随从获得属性值的酒馆法术牌。",
+    goldenDescription:
+      "随机获取2张能使随从获得属性值的酒馆法术牌。",
     sourceTier: 4,
     effect: "rimeOrReason",
     target: "none",

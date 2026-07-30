@@ -39,6 +39,7 @@ import type {
   ConsolationCoinSpellInstance,
   DiscoverDestination,
   DiscoverFilter,
+  EndOfTurnEffect,
   GameAction,
   GameState,
   GainRandomTavernSpellEffect,
@@ -798,6 +799,8 @@ function randomGeneratedTavernSpellDefinition(
 ): TavernSpellDefinition | null {
   const eligible = TAVERN_SPELL_DEFINITIONS.filter(
     (definition) =>
+      (effect.filter.definitionIds === undefined ||
+        effect.filter.definitionIds.includes(definition.id)) &&
       (effect.filter.cost === undefined ||
         definition.cost === effect.filter.cost) &&
       (effect.filter.exactTier === undefined ||
@@ -2079,6 +2082,39 @@ function battlecryTriggerCount(player: PlayerState): number {
   );
 }
 
+function endOfTurnTriggerCount(player: PlayerState): number {
+  return (
+    1 +
+    player.board.reduce((largestExtra, minion) => {
+      return minionEffectSources(minion).reduce(
+        (componentLargest, component) => {
+          const extra =
+            getMinionDefinition(component.definitionId)
+              .extraEndOfTurnTriggers ?? 0;
+          return Math.max(
+            componentLargest,
+            extra * (component.golden ? 2 : 1),
+          );
+        },
+        largestExtra,
+      );
+    }, 0)
+  );
+}
+
+function applyOnePerTribeBuff(
+  state: GameState,
+  board: readonly BoardMinionInstance[],
+  attack: number,
+  health: number,
+): void {
+  buffMinions(
+    selectDistinctMinionsByTribe(state, board),
+    attack,
+    health,
+  );
+}
+
 function applyStartOfTurnEffects(
   state: GameState,
   player: PlayerState,
@@ -2104,10 +2140,100 @@ function applyStartOfTurnEffects(
   }
 }
 
+function applyOneEndOfTurnEffect(
+  state: GameState,
+  player: PlayerState,
+  source: BoardMinionInstance,
+  effect: EndOfTurnEffect,
+  scale: number,
+  payoffRepetitions = 1,
+): void {
+  if (
+    effect.kind === "gainBloodGems" ||
+    effect.kind === "gainTavernSpell" ||
+    effect.kind === "gainRandomTavernSpell" ||
+    effect.kind === "improveTavernSpellBuffs"
+  ) {
+    applyRecruitEffects(state, player, source, [effect], scale);
+    return;
+  }
+
+  if (effect.kind === "periodicGainRandomMinion") {
+    const remaining =
+      effectCounter(
+        source,
+        PERIODIC_TURN_COUNTER,
+        effect.everyTurns,
+      ) - 1;
+    if (remaining <= 0) {
+      const rewardCount =
+        effect.count *
+        (effect.goldenMode === "doubleCount" ? scale : 1) *
+        payoffRepetitions;
+      for (let count = 0; count < rewardCount; count += 1) {
+        addDrawnMinionToHand(
+          state,
+          player,
+          drawMatchingFromPool(
+            state,
+            player.tavernTier,
+            (definition) =>
+              definitionHasTribe(definition, effect.tribe),
+          ),
+        );
+      }
+      setEffectCounter(
+        source,
+        PERIODIC_TURN_COUNTER,
+        effect.everyTurns,
+      );
+    } else {
+      setEffectCounter(
+        source,
+        PERIODIC_TURN_COUNTER,
+        remaining,
+      );
+    }
+    refreshDynamicMinionDescription(source);
+    return;
+  }
+
+  if (effect.kind === "onePerTribe") {
+    applyOnePerTribeBuff(
+      state,
+      player.board,
+      effect.attack * scale,
+      effect.health * scale,
+    );
+    return;
+  }
+
+  const sourceIndex = player.board.findIndex(
+    (minion) => minion.instanceId === source.instanceId,
+  );
+  const targets =
+    effect.target === "self"
+      ? [source]
+      : player.board.filter(
+          (_, index) => Math.abs(index - sourceIndex) === 1,
+        );
+  const repetitions =
+    1 +
+    (effect.repeatPerGoldenFriendly
+      ? player.board.filter((minion) => minion.golden).length
+      : 0);
+  buffMinions(
+    targets,
+    effect.attack * scale * repetitions,
+    effect.health * scale * repetitions,
+  );
+}
+
 function applyEndOfTurnEffects(
   state: GameState,
   player: PlayerState,
 ): void {
+  const triggerCount = endOfTurnTriggerCount(player);
   for (const source of [...player.board]) {
     for (const component of minionEffectSources(source)) {
       const effect =
@@ -2116,96 +2242,29 @@ function applyEndOfTurnEffects(
         continue;
       }
       const scale = component.golden ? 2 : 1;
-      if (effect.kind === "gainBloodGems") {
-        addBloodGems(
-          state,
-          player,
-          effect.count * scale,
-          effect.bonusKeyword,
-        );
-        continue;
-      }
-      if (effect.kind === "gainTavernSpell") {
-        applyRecruitEffects(
+      if (effect.kind === "periodicGainRandomMinion") {
+        applyOneEndOfTurnEffect(
           state,
           player,
           source,
-          [effect],
+          effect,
           scale,
+          triggerCount,
         );
         continue;
       }
-      if (effect.kind === "periodicGainRandomMinion") {
-        const remaining =
-          effectCounter(
-            source,
-            PERIODIC_TURN_COUNTER,
-            effect.everyTurns,
-          ) - 1;
-        if (remaining <= 0) {
-          const rewardCount =
-            effect.count *
-            (effect.goldenMode === "doubleCount" ? scale : 1);
-          for (let count = 0; count < rewardCount; count += 1) {
-            addDrawnMinionToHand(
-              state,
-              player,
-              drawMatchingFromPool(
-                state,
-                player.tavernTier,
-                (definition) =>
-                  definitionHasTribe(definition, effect.tribe),
-              ),
-            );
-          }
-          setEffectCounter(
-            source,
-            PERIODIC_TURN_COUNTER,
-            effect.everyTurns,
-          );
-        } else {
-          setEffectCounter(
-            source,
-            PERIODIC_TURN_COUNTER,
-            remaining,
-          );
-        }
-        refreshDynamicMinionDescription(source);
-        continue;
-      }
-      if (effect.kind === "onePerTribe") {
-        const seen = new Set<Tribe>();
-        for (const target of player.board) {
-          const targetTribe =
-            target.tribes.find((tribe) => tribe !== "all") ??
-            (target.tribes.includes("all") ? "all" : "neutral");
-          if (targetTribe === "neutral" || seen.has(targetTribe)) {
-            continue;
-          }
-          seen.add(targetTribe);
-          target.attack += effect.attack * scale;
-          target.health += effect.health * scale;
-        }
-        continue;
-      }
-
-      const sourceIndex = player.board.findIndex(
-        (minion) => minion.instanceId === source.instanceId,
-      );
-      const targets =
-        effect.target === "self"
-          ? [source]
-          : player.board.filter(
-              (_, index) => Math.abs(index - sourceIndex) === 1,
-            );
-      const repetitions =
-        1 +
-        (effect.repeatPerGoldenFriendly
-          ? player.board.filter((minion) => minion.golden).length
-          : 0);
-      for (const target of targets) {
-        target.attack += effect.attack * scale * repetitions;
-        target.health += effect.health * scale * repetitions;
+      for (
+        let repetition = 0;
+        repetition < triggerCount;
+        repetition += 1
+      ) {
+        applyOneEndOfTurnEffect(
+          state,
+          player,
+          source,
+          effect,
+          scale,
+        );
       }
     }
   }
@@ -3038,6 +3097,7 @@ function castSpellcraft(
           playerId: player.id,
           sourceInstanceId: card.instanceId,
           definitionId: definition.id,
+          effectMultiplier,
           optionIds: [
             "escapeEruptionAttack",
             "escapeEruptionHealth",
@@ -3052,10 +3112,11 @@ function castSpellcraft(
           (total, minion) => total + minion.health,
           0,
         );
+        const amount = 4 * effectMultiplier;
         buffMinions(
           player.board,
-          totalAttack <= totalHealth ? 4 : 0,
-          totalAttack <= totalHealth ? 0 : 4,
+          totalAttack <= totalHealth ? amount : 0,
+          totalAttack <= totalHealth ? 0 : amount,
         );
       }
       break;
@@ -3073,11 +3134,15 @@ function castSpellcraft(
       );
       break;
     case "meditation":
-      player.tavernSpellAttackBonus += 1;
-      player.tavernSpellHealthBonus += 1;
+      player.tavernSpellAttackBonus += effectMultiplier;
+      player.tavernSpellHealthBonus += effectMultiplier;
       break;
     case "rimeOrReason":
-      addRandomStatTavernSpell(state, player);
+      for (let count = 0; count < effectMultiplier; count += 1) {
+        if (!addRandomStatTavernSpell(state, player)) {
+          break;
+        }
+      }
       break;
   }
   return true;
@@ -3196,20 +3261,61 @@ function addRandomStatTavernSpell(
   return true;
 }
 
-function applyAfterTavernSpellCastTriggers(player: PlayerState): void {
-  for (const source of player.board) {
+function applyAfterTavernSpellCastTriggers(
+  state: GameState,
+  player: PlayerState,
+): void {
+  for (const source of [...player.board]) {
     for (const component of minionEffectSources(source)) {
-      if (component.definitionId !== "BG27_005") {
-        continue;
+      const effects =
+        getMinionDefinition(component.definitionId)
+          .afterTavernSpellCast ?? [];
+      const scale = component.golden ? 2 : 1;
+      for (const effect of effects) {
+        if (
+          effect.kind === "buff" ||
+          effect.kind === "improveUndeadArmy"
+        ) {
+          applyRecruitEffects(
+            state,
+            player,
+            source,
+            [effect],
+            scale,
+          );
+          continue;
+        }
+        if (effect.kind === "onePerTribe") {
+          applyOnePerTribeBuff(
+            state,
+            player.board,
+            effect.attack * scale,
+            effect.health * scale,
+          );
+          continue;
+        }
+        if (effect.kind === "buffKeyword") {
+          buffMinions(
+            player.board.filter(
+              (target) =>
+                effect.keyword === "divineShield" &&
+                target.divineShield,
+            ),
+            effect.attack * scale,
+            effect.health * scale,
+          );
+        }
       }
-      buffMinions(player.board, component.golden ? 2 : 1, 0);
     }
   }
 }
 
-function finishTavernSpellCast(player: PlayerState): void {
+function finishTavernSpellCast(
+  state: GameState,
+  player: PlayerState,
+): void {
   player.tavernSpellsCastThisTurn += 1;
-  applyAfterTavernSpellCastTriggers(player);
+  applyAfterTavernSpellCastTriggers(state, player);
 }
 
 function chefsChoiceMatches(
@@ -3882,6 +3988,7 @@ function applyTavernSpellEffect(
         { exactTier: 1 },
         1,
         { kind: "hand" },
+        "tavernSpellCast",
       );
       break;
     case "stealRandomShopMinion": {
@@ -3955,6 +4062,7 @@ function applyTavernSpellEffect(
           kind: "hand",
           playableFromRound: state.round + 1,
         },
+        "tavernSpellCast",
       );
       break;
     case "freeRefreshes":
@@ -4053,6 +4161,7 @@ function applyTavernSpellEffect(
           { maximumTier: player.tavernTier, tribe },
           1,
           { kind: "hand" },
+          "tavernSpellCast",
         );
       if (!discovered) {
         addConsolationCoin(state, player);
@@ -4282,6 +4391,7 @@ function applyTavernSpellEffect(
           kind: "hand",
           destroyAfterPlayThroughRound: state.round,
         },
+        "tavernSpellCast",
       );
       break;
     case "blazingInferno":
@@ -4428,6 +4538,7 @@ function applyTavernSpellEffect(
         },
         1,
         { kind: "hand" },
+        "tavernSpellCast",
       );
       break;
     case "headhunter":
@@ -4441,6 +4552,7 @@ function applyTavernSpellEffect(
         },
         1,
         { kind: "hand" },
+        "tavernSpellCast",
       );
       break;
     case "nozdormusProgeny":
@@ -4543,6 +4655,13 @@ function applyTavernSpellEffect(
       }
       break;
   }
+  if (
+    player.isHuman &&
+    state.pendingInteraction?.kind === "discover" &&
+    state.pendingInteraction.completionSource === "tavernSpellCast"
+  ) {
+    return false;
+  }
   return true;
 }
 
@@ -4581,7 +4700,7 @@ function castTavernSpell(
     target,
   );
   if (finished) {
-    finishTavernSpellCast(player);
+    finishTavernSpellCast(state, player);
   }
   return true;
 }
@@ -4854,6 +4973,7 @@ function beginDiscoverInteraction(
   filter: DiscoverFilter,
   discoveries: number,
   destination: DiscoverDestination,
+  completionSource?: PendingDiscoverInteraction["completionSource"],
 ): boolean {
   if (
     discoveries <= 0 ||
@@ -4912,6 +5032,7 @@ function beginDiscoverInteraction(
       filter,
       discoveries - 1,
       destination,
+      completionSource,
     );
     return true;
   }
@@ -4924,6 +5045,7 @@ function beginDiscoverInteraction(
     filter: { ...filter },
     remainingDiscoveries: discoveries,
     destination: { ...destination },
+    completionSource,
   };
   state.pendingInteraction = interaction;
   return true;
@@ -5136,7 +5258,7 @@ function resolvePendingInteraction(
       nextPlayer.nextTurnBoardBuffPulses += 2;
     }
     next.pendingInteraction = null;
-    finishTavernSpellCast(nextPlayer);
+    finishTavernSpellCast(next, nextPlayer);
     return next;
   }
 
@@ -5160,7 +5282,7 @@ function resolvePendingInteraction(
     }
     nextPlayer.heroPowerId = action.optionInstanceId;
     next.pendingInteraction = null;
-    finishTavernSpellCast(nextPlayer);
+    finishTavernSpellCast(next, nextPlayer);
     return next;
   }
 
@@ -5176,10 +5298,11 @@ function resolvePendingInteraction(
     if (!nextPlayer) {
       return state;
     }
+    const amount = 4 * (pending.effectMultiplier ?? 1);
     if (action.optionInstanceId === "escapeEruptionAttack") {
-      buffMinions(nextPlayer.board, 4, 0);
+      buffMinions(nextPlayer.board, amount, 0);
     } else {
-      buffMinions(nextPlayer.board, 0, 4);
+      buffMinions(nextPlayer.board, 0, amount);
     }
     next.pendingInteraction = null;
     return next;
@@ -5243,14 +5366,21 @@ function resolvePendingInteraction(
     applyAfterMagnetizedEffects(next, nextPlayer);
   }
   next.pendingInteraction = null;
-  beginDiscoverInteraction(
+  const continued = beginDiscoverInteraction(
     next,
     nextPlayer,
     nextPending.sourceInstanceId,
     nextPending.filter,
     nextPending.remainingDiscoveries - 1,
     destination,
+    nextPending.completionSource,
   );
+  if (
+    !continued &&
+    nextPending.completionSource === "tavernSpellCast"
+  ) {
+    finishTavernSpellCast(next, nextPlayer);
+  }
   return next;
 }
 
@@ -7224,6 +7354,7 @@ function resolveCombatGainRandomTavernSpell(
   source: MinionInstance,
   component: MinionEffectSource,
   effect: GainRandomTavernSpellEffect,
+  triggerLabel?: string,
 ): void {
   const owner = persistentCombatOwner(context, ownerId);
   if (!owner) {
@@ -7232,9 +7363,12 @@ function resolveCombatGainRandomTavernSpell(
   const componentDefinition = getMinionDefinition(
     component.definitionId,
   );
-  const sourceLabel = component.golden
+  const componentName = component.golden
     ? `金色·${componentDefinition.name}`
     : componentDefinition.name;
+  const sourceLabel = triggerLabel
+    ? `${componentName}的${triggerLabel}`
+    : componentName;
   const gainCount =
     effect.count *
     (component.golden && effect.goldenMode === "doubleCount" ? 2 : 1);
@@ -7434,6 +7568,18 @@ function triggerRally(
     for (const effect of effects) {
       if (effect.kind === "getRandomMinion") {
         resolveCombatGetRandomMinion(
+          context,
+          ownerId,
+          attacker,
+          component,
+          effect,
+          "进击",
+        );
+        continue;
+      }
+
+      if (effect.kind === "gainRandomTavernSpell") {
+        resolveCombatGainRandomTavernSpell(
           context,
           ownerId,
           attacker,
@@ -7881,6 +8027,12 @@ function resolveOneDeathrattle(
           if (owner) {
             owner.bloodGemAttack += effect.attack * scale;
             owner.bloodGemHealth += effect.health * scale;
+          }
+        } else if (effect.kind === "improveTavernSpellBuffs") {
+          const owner = persistentCombatOwner(context, ownerId);
+          if (owner) {
+            owner.tavernSpellAttackBonus += effect.attack * scale;
+            owner.tavernSpellHealthBonus += effect.health * scale;
           }
         } else if (effect.kind === "discountNextTavernSpell") {
           const owner = persistentCombatOwner(context, ownerId);

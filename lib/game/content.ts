@@ -3,7 +3,7 @@ import liveRosterSnapshot from "./generated/battlegrounds-36.0.3-247416.zhCN.jso
 };
 import type { MinionDefinition, Tribe } from "./types.ts";
 
-export const CURRENT_ROSTER_VERSION = "battlegrounds-36.0.3-247416-v20";
+export const CURRENT_ROSTER_VERSION = "battlegrounds-36.0.3-247416-v21";
 /** Compatibility alias for existing save and engine imports. */
 export const CLASSIC_ROSTER_VERSION = CURRENT_ROSTER_VERSION;
 
@@ -874,6 +874,14 @@ const LEGACY_RULE_BY_CARD_ID = new Map(
   ]),
 );
 
+const BOUNTY_TAVERN_SPELL_DEFINITION_IDS = [
+  "tavern-spell-friendly-bounty",
+  "tavern-spell-healthy-bounty",
+  "tavern-spell-hostile-bounty",
+  "tavern-spell-selfish-bounty",
+  "tavern-spell-wealthy-bounty",
+] as const;
+
 const LIVE_RULE_OVERRIDES: Readonly<
   Record<string, Partial<MinionDefinition>>
 > = {
@@ -1027,6 +1035,182 @@ const LIVE_RULE_OVERRIDES: Readonly<
       {
         kind: "discountNextTavernSpell",
         amount: 1,
+      },
+    ],
+  },
+  BG26_ICC_901: {
+    goldenCardId: "BG26_ICC_901_G",
+    goldenDescription: "你的回合结束效果会触发三次。",
+    extraEndOfTurnTriggers: 1,
+  },
+  BG31_178: {
+    goldenCardId: "BG31_178_G",
+    goldenDescription:
+      "在你的回合结束时，随机获取2张酒馆法术牌。",
+    endOfTurn: {
+      kind: "gainRandomTavernSpell",
+      count: 1,
+      filter: {},
+      goldenMode: "doubleCount",
+    },
+  },
+  BG28_595: {
+    goldenCardId: "BG28_595_G",
+    goldenDescription:
+      "在你的回合结束时，随机获取4张酒馆法术牌。",
+    endOfTurn: {
+      kind: "gainRandomTavernSpell",
+      count: 2,
+      filter: {},
+      goldenMode: "doubleCount",
+    },
+  },
+  BG33_820: {
+    goldenCardId: "BG33_820_G",
+    goldenDescription:
+      "嘲讽。在你的回合结束时，随机获取2张悬赏令。",
+    endOfTurn: {
+      kind: "gainRandomTavernSpell",
+      count: 1,
+      filter: {
+        definitionIds: BOUNTY_TAVERN_SPELL_DEFINITION_IDS,
+      },
+      goldenMode: "doubleCount",
+    },
+  },
+  BG32_821: {
+    goldenCardId: "BG32_821_G",
+    goldenDescription:
+      "在你的回合结束时，你的酒馆法术在本局对战中使随从额外获得+2/+2。",
+    endOfTurn: {
+      kind: "improveTavernSpellBuffs",
+      attack: 1,
+      health: 1,
+    },
+  },
+  BG30_117: {
+    goldenCardId: "BG30_117_G",
+    goldenDescription:
+      "塑造法术：\n抉择：使你的随从获得+8攻击力；或者+8生命值。",
+    spellcraft: {
+      definitionId: "spellcraft-escape-eruption",
+    },
+  },
+  BG33_319: {
+    goldenCardId: "BG33_319_G",
+    goldenDescription:
+      "塑造法术：随机获取2张能使随从获得属性值的酒馆法术牌。",
+    spellcraft: {
+      definitionId: "spellcraft-rime-or-reason",
+    },
+  },
+  BG32_835: {
+    goldenCardId: "BG32_835_G",
+    goldenDescription:
+      "塑造法术：在本局对战中，你的酒馆法术使随从额外获得+2/+2。",
+    spellcraft: {
+      definitionId: "spellcraft-meditation",
+    },
+  },
+  BG33_821: {
+    goldenCardId: "BG33_821_G",
+    goldenDescription:
+      "战吼，亡语：随机获取2张悬赏令。",
+    battlecry: [
+      {
+        kind: "gainRandomTavernSpell",
+        count: 1,
+        filter: {
+          definitionIds: BOUNTY_TAVERN_SPELL_DEFINITION_IDS,
+        },
+        goldenMode: "doubleCount",
+      },
+    ],
+    deathrattle: [
+      {
+        kind: "gainRandomTavernSpell",
+        count: 1,
+        filter: {
+          definitionIds: BOUNTY_TAVERN_SPELL_DEFINITION_IDS,
+        },
+        goldenMode: "doubleCount",
+      },
+    ],
+  },
+  BG33_822: {
+    goldenCardId: "BG33_822_G",
+    goldenDescription:
+      "进击：随机获取2张悬赏令。",
+    rally: [
+      {
+        kind: "gainRandomTavernSpell",
+        count: 1,
+        filter: {
+          definitionIds: BOUNTY_TAVERN_SPELL_DEFINITION_IDS,
+        },
+        goldenMode: "doubleCount",
+      },
+    ],
+  },
+  BG32_880: {
+    goldenCardId: "BG32_880_G",
+    goldenDescription:
+      "亡语：在本局对战中，你酒馆法术使随从额外获得+2攻击力。",
+    deathrattle: [
+      {
+        kind: "improveTavernSpellBuffs",
+        attack: 1,
+        health: 0,
+      },
+    ],
+  },
+  BG28_551: {
+    goldenCardId: "BG28_551_G",
+    goldenDescription:
+      "每当你施放一个酒馆法术，使每个类型的各一个友方随从获得+8/+6。",
+    afterTavernSpellCast: [
+      {
+        kind: "onePerTribe",
+        attack: 4,
+        health: 3,
+      },
+    ],
+  },
+  BG28_741: {
+    goldenCardId: "BG28_741_G",
+    goldenDescription:
+      "圣盾。每当你施放一个酒馆法术时，使你具有圣盾的随从获得+8攻击力。",
+    afterTavernSpellCast: [
+      {
+        kind: "buffKeyword",
+        keyword: "divineShield",
+        attack: 4,
+        health: 0,
+      },
+    ],
+  },
+  BG34_692: {
+    goldenCardId: "BG34_692_G",
+    goldenDescription:
+      "在你施放一个酒馆法术后，你的亡灵在本局对战中拥有+4攻击力（无论它们在哪）。",
+    afterTavernSpellCast: [
+      {
+        kind: "improveUndeadArmy",
+        attack: 2,
+        health: 0,
+      },
+    ],
+  },
+  BG27_005: {
+    goldenCardId: "BG27_005_G",
+    goldenDescription:
+      "每当你施放一个酒馆法术，使你的随从获得+1攻击力，触发两次。",
+    afterTavernSpellCast: [
+      {
+        kind: "buff",
+        target: "allFriendly",
+        attack: 1,
+        health: 0,
       },
     ],
   },
@@ -1734,16 +1918,22 @@ const FULLY_SUPPORTED_LIVE_CARD_IDS = new Set([
   "BG26_501",
   "BG26_502",
   "BG26_529",
+  "BG26_ICC_901",
   "BG26_805",
   "BG26_817",
   "BG27_004",
   "BG27_005",
+  "BG28_551",
+  "BG28_595",
+  "BG28_741",
   "BG28_300",
   "BG29_503",
   "BG29_611",
   "BG29_300",
+  "BG30_117",
   "BG30_125",
   "BG31_175",
+  "BG31_178",
   "BG31_330",
   "BG31_803",
   "BG31_815",
@@ -1753,6 +1943,9 @@ const FULLY_SUPPORTED_LIVE_CARD_IDS = new Set([
   "BG32_235",
   "BG32_236",
   "BG32_330",
+  "BG32_821",
+  "BG32_835",
+  "BG32_880",
   "BG32_170",
   "BG32_172",
   "BG32_111",
@@ -1760,8 +1953,12 @@ const FULLY_SUPPORTED_LIVE_CARD_IDS = new Set([
   "BG33_156",
   "BG33_140",
   "BG33_241",
+  "BG33_319",
   "BG33_888",
   "BG33_809",
+  "BG33_820",
+  "BG33_821",
+  "BG33_822",
   "BG33_894",
   "BG34_140",
   "BG34_175",
@@ -1776,6 +1973,7 @@ const FULLY_SUPPORTED_LIVE_CARD_IDS = new Set([
   "BG34_682",
   "BG34_683",
   "BG34_684",
+  "BG34_692",
   "BG34_694",
   "BG34_731",
   "BG35_143",
