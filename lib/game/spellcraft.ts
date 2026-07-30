@@ -13,9 +13,12 @@ export const SPELLCRAFT_DEFINITIONS = [
   {
     id: "spellcraft-crab-rider",
     cardId: "BG27_004t",
+    goldenCardId: "BG27_004_Gt",
     name: "螃蟹坐骑",
     description:
       "直到下个回合，使一个随从获得“亡语：召唤一只3/2的螃蟹”。",
+    goldenDescription:
+      "直到下个回合，使一个随从获得“亡语：召唤一只6/4的螃蟹”。",
     sourceTier: 1,
     effect: "crabRider",
     target: "friendly",

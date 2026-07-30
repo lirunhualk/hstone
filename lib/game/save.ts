@@ -32,6 +32,8 @@ export const LEGACY_SCHEMA_11_CONTENT_VERSION_V16 =
   "battlegrounds-36.0.3-247416-v16";
 export const LEGACY_SCHEMA_11_CONTENT_VERSION_V17 =
   "battlegrounds-36.0.3-247416-v17";
+export const LEGACY_SCHEMA_11_CONTENT_VERSION_V18 =
+  "battlegrounds-36.0.3-247416-v18";
 
 const SPELL_POOL_COPIES_BY_TIER = [0, 5, 7, 9, 11, 7, 5] as const;
 
@@ -135,7 +137,10 @@ function repairSpellPool(value: Record<string, unknown>): boolean {
   return hasValidSpellPool(value) || rebuildSpellPool(value);
 }
 
-function refreshMinionSupport(value: unknown): void {
+function refreshMinionSupport(
+  value: unknown,
+  preservePersistentFields = false,
+): void {
   if (
     !isRecord(value) ||
     value.kind !== "minion" ||
@@ -145,10 +150,22 @@ function refreshMinionSupport(value: unknown): void {
   }
   const definition = getMinionDefinition(value.definitionId);
   value.effectSupport = definition.effectSupport ?? "complete";
-  value.whereverAttackBonus = 0;
-  value.whereverHealthBonus = 0;
-  value.astralAutomatonSummoned = false;
-  value.ancientSoulFriendlyDeaths = 0;
+  if (!preservePersistentFields) {
+    value.whereverAttackBonus = 0;
+    value.whereverHealthBonus = 0;
+    value.astralAutomatonSummoned = false;
+    value.ancientSoulFriendlyDeaths = 0;
+  }
+  value.effectCounters = {};
+  value.temporaryGoldenCrabDeathrattles = 0;
+  if (
+    definition.conditionalKeyword?.keyword === "divineShield" &&
+    typeof value.attack === "number" &&
+    value.attack >= definition.conditionalKeyword.attackAtLeast
+  ) {
+    value.divineShield = true;
+    value.temporaryDivineShield = false;
+  }
   if (value.golden === true) {
     value.cardId = definition.goldenCardId ?? value.cardId;
     value.description =
@@ -159,6 +176,7 @@ function refreshMinionSupport(value: unknown): void {
 function refreshOwnedMinions(
   migrated: Record<string, unknown>,
   preservePendingSpellcraft = false,
+  preservePersistentFields = false,
 ): boolean {
   if (!Array.isArray(migrated.players)) {
     return false;
@@ -176,14 +194,19 @@ function refreshOwnedMinions(
       // those payloads is trustworthy or meaningful.
       player.pendingSpellcraft = [];
     }
-    player.astralAutomatonsSummoned = 0;
-    player.eternalKnightsDied = 0;
+    if (!preservePersistentFields) {
+      player.astralAutomatonsSummoned = 0;
+      player.eternalKnightsDied = 0;
+    }
+    player.nextTavernSpellDiscount = 0;
     for (const zone of ["board", "hand", "shop"] as const) {
       const cards = player[zone];
       if (!Array.isArray(cards)) {
         return false;
       }
-      cards.forEach(refreshMinionSupport);
+      cards.forEach((card) =>
+        refreshMinionSupport(card, preservePersistentFields),
+      );
     }
   }
   if (
@@ -191,7 +214,9 @@ function refreshOwnedMinions(
     migrated.pendingInteraction.kind === "discover" &&
     Array.isArray(migrated.pendingInteraction.options)
   ) {
-    migrated.pendingInteraction.options.forEach(refreshMinionSupport);
+    migrated.pendingInteraction.options.forEach((option) =>
+      refreshMinionSupport(option, preservePersistentFields),
+    );
   }
   return true;
 }
@@ -800,18 +825,26 @@ export function migrateSchema11GameState(value: unknown): unknown {
     value.version !== 11 ||
     (value.contentVersion !== LEGACY_SCHEMA_11_CONTENT_VERSION &&
       value.contentVersion !== LEGACY_SCHEMA_11_CONTENT_VERSION_V16 &&
-      value.contentVersion !== LEGACY_SCHEMA_11_CONTENT_VERSION_V17) ||
+      value.contentVersion !== LEGACY_SCHEMA_11_CONTENT_VERSION_V17 &&
+      value.contentVersion !== LEGACY_SCHEMA_11_CONTENT_VERSION_V18) ||
     !Array.isArray(value.players)
   ) {
     return null;
   }
   try {
+    const preserveCurrentFields =
+      value.contentVersion === LEGACY_SCHEMA_11_CONTENT_VERSION_V18;
     const preservePendingSpellcraft =
-      value.contentVersion === LEGACY_SCHEMA_11_CONTENT_VERSION_V17;
+      value.contentVersion === LEGACY_SCHEMA_11_CONTENT_VERSION_V17 ||
+      preserveCurrentFields;
     const migrated: unknown = JSON.parse(JSON.stringify(value));
     if (
       !isRecord(migrated) ||
-      !refreshOwnedMinions(migrated, preservePendingSpellcraft) ||
+      !refreshOwnedMinions(
+        migrated,
+        preservePendingSpellcraft,
+        preserveCurrentFields,
+      ) ||
       !repairSpellPool(migrated)
     ) {
       return null;

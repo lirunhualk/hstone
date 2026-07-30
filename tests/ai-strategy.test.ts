@@ -407,8 +407,20 @@ test("round-one AI never spends its only three Gold and enters combat empty", ()
       if (player.isHuman) {
         continue;
       }
+      const battle = afterRecruit.lastRoundBattles.find(
+        (candidate) =>
+          candidate.playerAId === player.id ||
+          candidate.playerBId === player.id,
+      );
+      const enteredThroughHandStartOfCombat =
+        battle?.events.some(
+          (event) =>
+            event.type === "summon" &&
+            event.actorPlayerId === player.id &&
+            event.summonReason === "inHandStartOfCombat",
+        ) ?? false;
       assert.ok(
-        player.board.length >= 1,
+        player.board.length >= 1 || enteredThroughHandStartOfCombat,
         `${player.id} entered round-one combat empty for seed ${seed}`,
       );
     }

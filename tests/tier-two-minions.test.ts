@@ -471,7 +471,7 @@ test("selling or tripling away a Stormy Guitarist cancels its pending Spellcraft
     definitionMinion("BG26_501", "tripled-pending-guitarist", {
       poolCopies: 1,
     }),
-    definitionMinion("BG27_004", "tripled-pending-chef-target"),
+    definitionMinion("BG23_002", "tripled-pending-chef-target"),
   ];
   triplePlayer.hand = [
     definitionMinion("BG26_501", "tripled-pending-copy", {

@@ -2718,6 +2718,16 @@
   letter-spacing: -0.05em;
 }
 
+.tavern-spell-cost.is-discounted {
+  border-color: rgb(190 255 155 / 88%);
+  color: #ecffd9;
+  background:
+    radial-gradient(circle at 34% 28%, #c8ff9b, #43a950 56%, #246531 78%, #15371d);
+  box-shadow:
+    0 4px 11px rgb(0 0 0 / 42%),
+    0 0 18px rgb(116 255 121 / 62%);
+}
+
 .tavern-spell-tier {
   right: 5px;
   border-radius: 8px;

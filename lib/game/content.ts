@@ -3,7 +3,7 @@ import liveRosterSnapshot from "./generated/battlegrounds-36.0.3-247416.zhCN.jso
 };
 import type { MinionDefinition, Tribe } from "./types.ts";
 
-export const CURRENT_ROSTER_VERSION = "battlegrounds-36.0.3-247416-v18";
+export const CURRENT_ROSTER_VERSION = "battlegrounds-36.0.3-247416-v19";
 /** Compatibility alias for existing save and engine imports. */
 export const CLASSIC_ROSTER_VERSION = CURRENT_ROSTER_VERSION;
 
@@ -809,6 +809,7 @@ export const LIVE_TOKEN_DEFINITIONS: readonly MinionDefinition[] =
     {
       id: "live-crab-token",
       cardId: "BG27_004t2",
+      goldenCardId: "BG27_004_Gt2",
       name: "螃蟹",
       tier: 1,
       tribe: "beast",
@@ -818,6 +819,7 @@ export const LIVE_TOKEN_DEFINITIONS: readonly MinionDefinition[] =
       attack: 3,
       health: 2,
       description: "由螃蟹坐骑的临时亡语召唤。",
+      goldenDescription: "由金色螃蟹坐骑的临时亡语召唤。",
       collectible: false,
     },
     {
@@ -875,6 +877,82 @@ const LEGACY_RULE_BY_CARD_ID = new Map(
 const LIVE_RULE_OVERRIDES: Readonly<
   Record<string, Partial<MinionDefinition>>
 > = {
+  BG24_009: {
+    goldenCardId: "BG24_009_G",
+    goldenDescription:
+      "战吼：随机吞食酒馆中的一个随从，获得其双倍属性值。",
+    battlecry: [
+      {
+        kind: "consumeRandomShopMinion",
+        goldenMode: "doubleStats",
+      },
+    ],
+  },
+  BG26_529: {
+    goldenCardId: "BG26_529_G",
+    goldenDescription:
+      "每3个回合，在回合结束时，随机获取2张龙牌。（还剩3回合！）",
+    endOfTurn: {
+      kind: "periodicGainRandomMinion",
+      everyTurns: 3,
+      count: 1,
+      tribe: "dragon",
+      goldenMode: "doubleCount",
+    },
+  },
+  BG27_004: {
+    goldenCardId: "BG27_004_G",
+    goldenDescription:
+      "塑造法术：直到下个回合，使一个随从获得“亡语：召唤一只6/4的螃蟹”。",
+    spellcraft: {
+      definitionId: "spellcraft-crab-rider",
+    },
+  },
+  BG31_330: {
+    goldenCardId: "BG31_330_G",
+    goldenDescription:
+      "战吼：你购买的下一张酒馆法术牌消耗的铸币减少（2）枚。",
+    battlecry: [
+      {
+        kind: "discountNextTavernSpell",
+        amount: 1,
+      },
+    ],
+  },
+  BG32_236: {
+    goldenCardId: "BG32_236_G",
+    goldenDescription: "圣盾。战吼：使本随从变为金色。",
+    battlecry: [{ kind: "makeSelfGolden" }],
+  },
+  BG32_330: {
+    goldenCardId: "BG32_330_G",
+    goldenDescription:
+      "战斗开始时：如果本随从在你的手牌中，召唤一个它的具有双倍属性值的复制。",
+    inHandStartOfCombat: {
+      kind: "summonSelfCopy",
+      goldenMode: "doubleStats",
+    },
+  },
+  BG35_801: {
+    goldenCardId: "BG35_801_G",
+    goldenDescription:
+      "一旦你购买了4张牌，获得+8/+8。（还剩4张！）",
+    afterCardPurchased: {
+      purchases: 4,
+      attack: 4,
+      health: 4,
+      goldenMode: "doubleStats",
+    },
+  },
+  BG35_814: {
+    goldenCardId: "BG35_814_G",
+    goldenDescription:
+      "一旦本随从的攻击力达到6点，获得圣盾。（已完成！）",
+    conditionalKeyword: {
+      attackAtLeast: 6,
+      keyword: "divineShield",
+    },
+  },
   BG20_100: {
     battlecry: [{ kind: "gainBloodGems", count: 2 }],
   },
@@ -1336,6 +1414,7 @@ const FULLY_SUPPORTED_LIVE_CARD_IDS = new Set([
   "BG20_100",
   "BG20_203",
   "BG20_301",
+  "BG24_009",
   "BG22_202",
   "BG21_014",
   "BG23_002",
@@ -1353,8 +1432,10 @@ const FULLY_SUPPORTED_LIVE_CARD_IDS = new Set([
   "BG26_148",
   "BG26_159",
   "BG26_501",
+  "BG26_529",
   "BG26_805",
   "BG26_817",
+  "BG27_004",
   "BG27_005",
   "BG28_300",
   "BG29_503",
@@ -1362,12 +1443,15 @@ const FULLY_SUPPORTED_LIVE_CARD_IDS = new Set([
   "BG29_300",
   "BG30_125",
   "BG31_175",
+  "BG31_330",
   "BG31_803",
   "BG31_815",
   "BG31_816",
   "BG31_818",
   "BG31_859",
   "BG32_235",
+  "BG32_236",
+  "BG32_330",
   "BG32_170",
   "BG32_172",
   "BG33_156",
@@ -1383,6 +1467,8 @@ const FULLY_SUPPORTED_LIVE_CARD_IDS = new Set([
   "BG34_637t",
   "BG34_731",
   "BG35_702",
+  "BG35_801",
+  "BG35_814",
   "BG35_433",
   "BG_DAL_775",
   "BG_BOT_911",

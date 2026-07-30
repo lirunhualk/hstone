@@ -65,7 +65,7 @@ function expectedPlainText(html: string): string {
 test("exports the pinned current roster version through the legacy alias", () => {
   assert.equal(
     CURRENT_ROSTER_VERSION,
-    "battlegrounds-36.0.3-247416-v18",
+    "battlegrounds-36.0.3-247416-v19",
   );
   assert.equal(CLASSIC_ROSTER_VERSION, CURRENT_ROSTER_VERSION);
 });
@@ -466,6 +466,7 @@ test("marks every live card honestly as complete or partial", () => {
       "BG20_100",
       "BG20_203",
       "BG20_301",
+      "BG24_009",
       "BG22_202",
       "BG23_002",
       "BG25_001",
@@ -482,9 +483,11 @@ test("marks every live card honestly as complete or partial", () => {
       "BG26_148",
       "BG26_159",
       "BG26_501",
+      "BG26_529",
       "BG21_014",
       "BG26_817",
       "BG26_805",
+      "BG27_004",
       "BG27_005",
       "BG28_300",
       "BG29_503",
@@ -492,6 +495,7 @@ test("marks every live card honestly as complete or partial", () => {
       "BG29_300",
       "BG30_125",
       "BG31_175",
+      "BG31_330",
       "BG31_803",
       "BG31_815",
       "BG31_816",
@@ -500,6 +504,8 @@ test("marks every live card honestly as complete or partial", () => {
       "BG32_172",
       "BG32_170",
       "BG32_235",
+      "BG32_236",
+      "BG32_330",
       "BG33_156",
       "BG33_140",
       "BG33_241",
@@ -513,6 +519,8 @@ test("marks every live card honestly as complete or partial", () => {
       "BG34_637t",
       "BG34_731",
       "BG35_702",
+      "BG35_801",
+      "BG35_814",
       "BG35_433",
       "BG_DAL_775",
       "BG_BOT_911",
@@ -533,13 +541,13 @@ test("marks every live card honestly as complete or partial", () => {
     LIVE_MINION_DEFINITIONS.filter(
       (definition) => definition.effectSupport === "partial",
     ).length,
-    173,
+    165,
   );
   assert.equal(
     LIVE_MINION_DEFINITIONS.filter(
       (definition) => definition.effectSupport === "complete",
     ).length,
-    64,
+    72,
   );
   assert.deepEqual(getMinionDefinition("BG35_702").interactiveBattlecry, {
     kind: "targetedBuff",

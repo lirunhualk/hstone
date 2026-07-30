@@ -1098,7 +1098,14 @@ test("buy, play, and sell update economy and ownership without mutating input", 
   assert.equal(humanPlayer(state).hand[0].instanceId, offered.instanceId);
 
   state = gameReducer(state, { type: "PLAY_MINION", handIndex: 0 });
-  assert.equal(humanPlayer(state).hand.length, 0);
+  assert.equal(
+    humanPlayer(state).hand.some(
+      (card) =>
+        card.kind === "minion" &&
+        card.instanceId === offered.instanceId,
+    ),
+    false,
+  );
   assert.ok(humanPlayer(state).board.length >= 1);
   assert.equal(
     humanPlayer(state).board.filter(

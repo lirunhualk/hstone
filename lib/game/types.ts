@@ -193,6 +193,20 @@ export interface ImproveUndeadArmyEffect {
   health: number;
 }
 
+export interface ConsumeRandomShopMinionEffect {
+  kind: "consumeRandomShopMinion";
+  goldenMode?: "doubleStats";
+}
+
+export interface DiscountNextTavernSpellEffect {
+  kind: "discountNextTavernSpell";
+  amount: number;
+}
+
+export interface MakeSelfGoldenEffect {
+  kind: "makeSelfGolden";
+}
+
 export type MinionEffect =
   | BuffEffect
   | SummonEffect
@@ -213,7 +227,10 @@ export type MinionEffect =
   | ImproveBloodGemsEffect
   | ImproveBallersEffect
   | BuffTavernTypeEffect
-  | ImproveUndeadArmyEffect;
+  | ImproveUndeadArmyEffect
+  | ConsumeRandomShopMinionEffect
+  | DiscountNextTavernSpellEffect
+  | MakeSelfGoldenEffect;
 
 export interface TargetedBuffBattlecry {
   kind: "targetedBuff";
@@ -273,10 +290,36 @@ export interface BuffEndOfTurnEffect {
   repeatPerGoldenFriendly?: boolean;
 }
 
+export interface PeriodicGainRandomMinionEndOfTurnEffect {
+  kind: "periodicGainRandomMinion";
+  everyTurns: number;
+  count: number;
+  tribe: Tribe;
+  goldenMode?: "doubleCount";
+}
+
 export type EndOfTurnEffect =
   | MenagerieEndOfTurnEffect
   | BuffEndOfTurnEffect
-  | GainBloodGemsEffect;
+  | GainBloodGemsEffect
+  | PeriodicGainRandomMinionEndOfTurnEffect;
+
+export interface CardPurchaseMilestoneEffect {
+  purchases: number;
+  attack: number;
+  health: number;
+  goldenMode?: "doubleStats";
+}
+
+export interface InHandStartOfCombatEffect {
+  kind: "summonSelfCopy";
+  goldenMode?: "doubleStats";
+}
+
+export interface ConditionalKeywordEffect {
+  attackAtLeast: number;
+  keyword: "divineShield";
+}
 
 export interface StatAura {
   tribe: Tribe;
@@ -336,8 +379,11 @@ export interface MinionDefinition {
   afterSelfDamaged?: readonly MinionEffect[];
   startOfTurn?: readonly MinionEffect[];
   startOfCombat?: readonly MinionEffect[];
+  inHandStartOfCombat?: InHandStartOfCombatEffect;
   rally?: readonly RallyEffect[];
   endOfTurn?: EndOfTurnEffect;
+  afterCardPurchased?: CardPurchaseMilestoneEffect;
+  conditionalKeyword?: ConditionalKeywordEffect;
   afterSold?: readonly MinionEffect[];
   afterMagnetized?: readonly MinionEffect[];
   aura?: StatAura;
@@ -392,6 +438,8 @@ export interface MinionInstance {
   astralAutomatonSummoned?: boolean;
   /** Friendly deaths observed while this Ancient Soul was held in hand. */
   ancientSoulFriendlyDeaths?: number;
+  /** JSON-safe progress for card-specific counters such as "every 3 turns". */
+  effectCounters?: Record<string, number>;
   /** Total permanent stats on this minion that came specifically from Blood Gems. */
   bloodGemAttack: number;
   bloodGemHealth: number;
@@ -402,6 +450,8 @@ export interface MinionInstance {
   temporaryDivineShield: boolean;
   /** Temporary "Deathrattle: summon a 3/2 Crab" effects from Crab Rider. */
   temporaryCrabDeathrattles: number;
+  /** Temporary Golden Crab Rider deathrattles that summon one 6/4 Crab. */
+  temporaryGoldenCrabDeathrattles?: number;
   /** A hand minion cannot be played before this Recruit round. */
   playableFromRound?: number;
   /** Stir the Graveyard destroys this minion if it is played through this round. */
@@ -704,6 +754,8 @@ export interface PlayerState {
   spellOnlyRefreshActive: boolean;
   frozen: boolean;
   upgradeDiscount: number;
+  /** Gold reduction retained until the next Gold-cost Tavern Spell purchase. */
+  nextTavernSpellDiscount: number;
   tavernSpellsCastThisTurn: number;
   /** Recruit-turn economy and persistent Tavern Spell counters. */
   maxGold: number;
@@ -789,7 +841,12 @@ export interface BattleEvent {
   minion?: MinionInstance;
   cardName?: string;
   cardKind?: "minion" | "tavernSpell";
-  summonReason?: "reborn" | "rallyFromHand" | "beetle" | "spellcraft";
+  summonReason?:
+    | "reborn"
+    | "rallyFromHand"
+    | "inHandStartOfCombat"
+    | "beetle"
+    | "spellcraft";
   removedKeywords?: RallyRemovedKeyword[];
   cardGainResult?: CardGainResult;
 }

@@ -269,6 +269,12 @@ function hasSchema9MinionState(value: unknown): boolean {
     typeof value.temporaryTaunt === "boolean" &&
     typeof value.temporaryDivineShield === "boolean" &&
     typeof value.temporaryCrabDeathrattles === "number" &&
+    typeof value.temporaryGoldenCrabDeathrattles === "number" &&
+    isRecord(value.effectCounters) &&
+    Object.values(value.effectCounters).every(
+      (counter) =>
+        typeof counter === "number" && Number.isInteger(counter),
+    ) &&
     (value.whereverAttackBonus === undefined ||
       typeof value.whereverAttackBonus === "number") &&
     (value.whereverHealthBonus === undefined ||
@@ -621,6 +627,8 @@ function isGameState(value: unknown): value is GameState {
           (typeof player.heroPowerId === "string" &&
             isHeroPowerDefinitionId(player.heroPowerId))) &&
         typeof player.tavernSpellsCastThisTurn === "number" &&
+        typeof player.nextTavernSpellDiscount === "number" &&
+        player.nextTavernSpellDiscount >= 0 &&
         typeof player.maxGold === "number" &&
         player.maxGold >= 10 &&
         typeof player.pendingNextTurnGold === "number" &&
@@ -1454,21 +1462,26 @@ function SpellcraftCard({
 function TavernSpellCardFace({
   card,
   inShop = false,
+  purchaseCost,
 }: {
   card: TavernSpellInstance;
   inShop?: boolean;
+  purchaseCost?: number;
 }) {
   const purchaseCurrency = tavernSpellPurchaseCurrency(card);
+  const displayCost = inShop ? (purchaseCost ?? card.cost) : card.cost;
+  const discounted = inShop && displayCost < card.cost;
   return (
     <>
       <CardArtwork unit={card} kind="portrait" />
       <span
         className={`tavern-spell-cost${
           purchaseCurrency === "health" ? " is-health-cost" : ""
+        }${discounted ? " is-discounted" : ""
         }`}
       >
         {purchaseCurrency === "health" ? "♥" : ""}
-        {card.cost}
+        {displayCost}
       </span>
       <span className="tavern-spell-tier">{card.tier}</span>
       <span className="tavern-spell-name">{card.name}</span>
@@ -1476,8 +1489,10 @@ function TavernSpellCardFace({
       <span className="tavern-spell-hint">
         {inShop
           ? purchaseCurrency === "health"
-            ? `购买 · ${card.cost} 生命`
-            : `购买 · ${card.cost}`
+            ? `购买 · ${displayCost} 生命`
+            : discounted
+              ? `购买 · ${displayCost}（原${card.cost}）`
+              : `购买 · ${displayCost}`
           : tavernSpellNeedsTarget(card)
             ? "拖到随从上施放"
             : "拖到战场或点击施放"}
@@ -1489,6 +1504,7 @@ function TavernSpellCardFace({
 function TavernSpellCard({
   card,
   inShop = false,
+  purchaseCost,
   selected = false,
   playable = false,
   unaffordable = false,
@@ -1500,6 +1516,7 @@ function TavernSpellCard({
 }: {
   card: TavernSpellInstance;
   inShop?: boolean;
+  purchaseCost?: number;
   selected?: boolean;
   playable?: boolean;
   unaffordable?: boolean;
@@ -1510,6 +1527,7 @@ function TavernSpellCard({
   onClick?: () => void;
 }) {
   const purchaseCurrency = tavernSpellPurchaseCurrency(card);
+  const displayCost = inShop ? (purchaseCost ?? card.cost) : card.cost;
   return (
     <button
       type="button"
@@ -1520,7 +1538,7 @@ function TavernSpellCard({
       }${
         dragHandlers ? " is-draggable" : ""
       }${dragging ? " is-drag-source" : ""}`}
-      aria-label={`${card.name}，${card.tier}级酒馆法术，费用${card.cost}${
+      aria-label={`${card.name}，${card.tier}级酒馆法术，费用${displayCost}${
         purchaseCurrency === "health" ? "点生命" : "枚金币"
       }，${card.description}`}
       aria-pressed={selected}
@@ -1532,7 +1550,11 @@ function TavernSpellCard({
       style={{ "--card-hue": 266 } as CSSProperties}
       {...dragHandlers}
     >
-      <TavernSpellCardFace card={card} inShop={inShop} />
+      <TavernSpellCardFace
+        card={card}
+        inShop={inShop}
+        purchaseCost={purchaseCost}
+      />
     </button>
   );
 }
@@ -2747,7 +2769,8 @@ export default function GameClient() {
       : undefined;
   const currentSummonLabel =
     currentBattleEvent?.type === "summon"
-      ? currentBattleEvent.summonReason === "rallyFromHand"
+      ? currentBattleEvent.summonReason === "rallyFromHand" ||
+        currentBattleEvent.summonReason === "inHandStartOfCombat"
         ? "仅本场"
         : currentBattleEvent.summonReason === "reborn"
           ? "复生"
@@ -2947,8 +2970,12 @@ export default function GameClient() {
     (selectedUnit.playableFromRound ?? 0) <= game.round;
   const selectedOfferCost =
     selection?.zone === "spellShop"
-      ? (selectedShopSpell?.cost ?? 0)
+      ? (tavernSpellPurchaseQuote?.cost ?? selectedShopSpell?.cost ?? 0)
       : 3;
+  const selectedTavernSpellDisplayCost =
+    selection?.zone === "spellShop"
+      ? selectedOfferCost
+      : (selectedTavernSpell?.cost ?? 0);
   const selectedOfferCurrency =
     selection?.zone === "spellShop"
       ? (tavernSpellPurchaseQuote?.currency ?? "gold")
@@ -4142,6 +4169,17 @@ export default function GameClient() {
             minion.instanceId === dragMagneticTargetInstanceId,
         )?.name
       : undefined;
+  const draggedOfferCost =
+    dragSession?.zone === "spellShop" &&
+    dragSession.card.kind === "tavernSpell"
+      ? (getTavernSpellPurchaseQuote(
+          game,
+          human.id,
+          dragSession.card.instanceId,
+        )?.cost ?? dragSession.card.cost)
+      : dragSession?.card.kind === "tavernSpell"
+        ? dragSession.card.cost
+        : 3;
   const dragAnnouncement =
     dragSession?.active !== true
       ? ""
@@ -4154,10 +4192,10 @@ export default function GameClient() {
         : dragSession.target?.kind === "hand"
           ? dragSession.card.kind === "tavernSpell" &&
             tavernSpellPurchaseCurrency(dragSession.card) === "health"
-            ? `松手购买${dragSession.card.name}，支付 ${dragSession.card.cost} 点生命`
+            ? `松手购买${dragSession.card.name}，支付 ${draggedOfferCost} 点生命`
             : `松手购买${dragSession.card.name}，支付 ${
                 dragSession.card.kind === "tavernSpell"
-                  ? dragSession.card.cost
+                  ? draggedOfferCost
                   : 3
               } 枚金币`
           : dragSession.target?.kind === "magnetic"
@@ -4183,10 +4221,10 @@ export default function GameClient() {
               : dragSession.zone === "spellShop" &&
                   dragSession.card.kind === "tavernSpell"
                 ? tavernSpellPurchaseCurrency(
-                    dragSession.card,
+                  dragSession.card,
                   ) === "health"
-                  ? `拖到发光的手牌区域购买，花费 ${dragSession.card.cost} 点生命`
-                  : `拖到发光的手牌区域购买，花费 ${dragSession.card.cost} 枚金币`
+                  ? `拖到发光的手牌区域购买，花费 ${draggedOfferCost} 点生命`
+                  : `拖到发光的手牌区域购买，花费 ${draggedOfferCost} 枚金币`
               : dragSession.zone === "board"
                 ? "拖到战场位置来换位，或拖到鲍勃的酒馆出售"
                 : dragSession.card.kind === "bloodGem"
@@ -4627,6 +4665,13 @@ export default function GameClient() {
                       <TavernSpellCard
                         card={offer.spell}
                         inShop
+                        purchaseCost={
+                          getTavernSpellPurchaseQuote(
+                            game,
+                            human.id,
+                            offer.spell.instanceId,
+                          )?.cost
+                        }
                         selected={
                           selection?.zone === "spellShop" &&
                           selection.index === offer.spellIndex
@@ -5119,10 +5164,10 @@ export default function GameClient() {
                       tavernSpellPurchaseCurrency(
                         dragSession.card,
                       ) === "health"
-                    ? `松手支付 ${dragSession.card.cost} 点生命`
+                    ? `松手支付 ${draggedOfferCost} 点生命`
                     : `松手支付 ${
                         dragSession?.card.kind === "tavernSpell"
-                          ? dragSession.card.cost
+                          ? draggedOfferCost
                           : selectedOfferCost
                       } 枚金币`}
               </span>
@@ -5462,7 +5507,7 @@ export default function GameClient() {
                     <h2>{selectedTavernSpell.name}</h2>
                     <p className="detail-meta">
                       {selectedTavernSpell.tier} 级酒馆法术 ·{" "}
-                      {selectedTavernSpell.cost}{" "}
+                      {selectedTavernSpellDisplayCost}{" "}
                       {tavernSpellPurchaseCurrency(
                         selectedTavernSpell,
                       ) === "health"
@@ -5511,7 +5556,7 @@ export default function GameClient() {
                             })
                           }
                         >
-                          购买 · {selectedTavernSpell.cost}
+                          购买 · {selectedOfferCost}
                           {tavernSpellPurchaseCurrency(
                             selectedTavernSpell,
                           ) === "health"
@@ -5953,7 +5998,11 @@ export default function GameClient() {
               health={human.bloodGemHealth}
             />
           ) : dragSession.card.kind === "tavernSpell" ? (
-            <TavernSpellCardFace card={dragSession.card} />
+            <TavernSpellCardFace
+              card={dragSession.card}
+              inShop={dragSession.zone === "spellShop"}
+              purchaseCost={draggedOfferCost}
+            />
           ) : dragSession.card.kind === "spellcraft" ? (
             <SpellcraftCardFace card={dragSession.card} />
           ) : (
