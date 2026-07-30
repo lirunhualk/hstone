@@ -20,6 +20,8 @@ export type EffectSupport = "complete" | "partial";
 
 export type TavernTier = 1 | 2 | 3 | 4 | 5 | 6;
 
+export type TierParity = "odd" | "even";
+
 export type EffectTarget =
   | "self"
   | "randomFriendly"
@@ -36,6 +38,12 @@ export interface BuffEffect {
   attack: number;
   health: number;
   tribe?: Tribe;
+  /** Select several distinct random targets when the target is random. */
+  count?: number;
+  /** Random friendly targeting normally excludes the effect source. */
+  includeSelf?: boolean;
+  /** Restrict eligible friendly minions by their printed Tavern Tier. */
+  tierParity?: TierParity;
   taunt?: boolean;
 }
 
@@ -198,6 +206,12 @@ export interface ImproveBloodGemsEffect {
   health: number;
 }
 
+export interface ApplyBloodGemsToTribeEffect {
+  kind: "applyBloodGemsToTribe";
+  tribe: Tribe;
+  count: number;
+}
+
 export interface ImproveTavernSpellBuffsEffect {
   kind: "improveTavernSpellBuffs";
   attack: number;
@@ -271,6 +285,7 @@ export type MinionEffect =
   | DamageAllMinionsEffect
   | GainBloodGemsEffect
   | ImproveBloodGemsEffect
+  | ApplyBloodGemsToTribeEffect
   | ImproveTavernSpellBuffsEffect
   | ImproveBallersEffect
   | BuffTavernEffect
@@ -283,11 +298,14 @@ export type MinionEffect =
 
 export interface TargetedBuffBattlecry {
   kind: "targetedBuff";
-  target: "otherFriendly";
+  target: "otherFriendly" | "friendlyTribe";
+  targetTribe?: Tribe;
   attack: number;
   health: number;
   attackPerTavernSpell: number;
   healthPerTavernSpell: number;
+  attackPerGoldSpentThisTurn?: number;
+  healthPerGoldSpentThisTurn?: number;
   goldenMode: "repeat";
 }
 
@@ -323,6 +341,22 @@ export interface FriendlyTribeTrigger {
 export interface FriendlyCombatDeathTrigger {
   attack: number;
   health: number;
+}
+
+export interface CardPlayedFilter {
+  tribe?: Tribe;
+  tierParity?: TierParity;
+  maximumTier?: TavernTier;
+}
+
+export interface CardPlayedTrigger {
+  filter: CardPlayedFilter;
+  effects: readonly MinionEffect[];
+}
+
+export interface GoldSpentThresholdTrigger {
+  threshold: number;
+  effects: readonly MinionEffect[];
 }
 
 export interface MenagerieEndOfTurnEffect {
@@ -497,6 +531,9 @@ export interface MinionDefinition {
   interactiveBattlecry?: InteractiveBattlecry;
   deathrattle?: readonly MinionEffect[];
   afterFriendlyPlayed?: FriendlyTribeTrigger;
+  afterCardPlayed?: CardPlayedTrigger;
+  inHandAfterCardPlayed?: CardPlayedTrigger;
+  afterGoldSpent?: GoldSpentThresholdTrigger;
   afterFriendlySummoned?: FriendlyTribeTrigger;
   afterFriendlyDied?: FriendlyTribeTrigger;
   afterFriendlyCombatDied?: FriendlyCombatDeathTrigger;
@@ -857,6 +894,14 @@ export interface PendingSpellcraftGrant {
   round: number;
 }
 
+export interface PendingCardPlayedEvent {
+  sourceInstanceId: string;
+  cardKind: "minion" | "tavernSpell" | "other";
+  tier?: TavernTier;
+  tribe?: Tribe;
+  tribes: Tribe[];
+}
+
 export interface PlayerState {
   id: PlayerId;
   name: string;
@@ -890,6 +935,10 @@ export interface PlayerState {
   tavernSpellsCastThisTurn: number;
   /** Every successfully played hand card this Recruit turn. */
   cardsPlayedThisTurn: number;
+  /** Gold actually deducted during this Recruit turn. */
+  goldSpentThisTurn: number;
+  /** A played card whose interactive effect has not finished resolving yet. */
+  pendingCardPlayed: PendingCardPlayedEvent | null;
   /** Most recently cast Tavern Spell; generated copies do not consume its pool. */
   lastTavernSpellDefinitionId: string | null;
   /** Tavern Spell whose interactive resolution has not completed yet. */

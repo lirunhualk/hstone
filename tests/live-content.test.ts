@@ -65,7 +65,7 @@ function expectedPlainText(html: string): string {
 test("exports the pinned current roster version through the legacy alias", () => {
   assert.equal(
     CURRENT_ROSTER_VERSION,
-    "battlegrounds-36.0.3-247416-v22",
+    "battlegrounds-36.0.3-247416-v23",
   );
   assert.equal(CLASSIC_ROSTER_VERSION, CURRENT_ROSTER_VERSION);
 });
@@ -438,6 +438,167 @@ test("reuses the six exact legacy rules that still match live card text", () => 
   ]);
 });
 
+test("maps the fifth complete-effects batch to its real Golden cards and rules", () => {
+  assert.deepEqual(
+    [
+      "BG26_810",
+      "BG31_824",
+      "BG23_018",
+      "BG33_823",
+      "BG26_814",
+      "BG29_840",
+      "BG29_841",
+      "BG33_893",
+      "BG26_137",
+      "BG30_122",
+      "BG32_846",
+      "BGS_104",
+    ].map((cardId) => getMinionDefinition(cardId).goldenCardId),
+    [
+      "BG26_810_G",
+      "BG31_824_G",
+      "BG23_018_G",
+      "BG33_823_G",
+      "BG26_814_G",
+      "BG29_840_G",
+      "BG29_841_G",
+      "BG33_893_G",
+      "BG26_137_G",
+      "BG30_122_G",
+      "BG32_846_G",
+      "TB_BaconUps_201",
+    ],
+  );
+
+  assert.deepEqual(getMinionDefinition("BG26_810").afterGoldSpent, {
+    threshold: 6,
+    effects: [
+      {
+        kind: "buff",
+        target: "friendlyTribe",
+        tribe: "pirate",
+        attack: 2,
+        health: 0,
+      },
+    ],
+  });
+  assert.deepEqual(getMinionDefinition("BG31_824").afterGoldSpent, {
+    threshold: 5,
+    effects: [
+      {
+        kind: "buff",
+        target: "randomFriendlyTribe",
+        tribe: "pirate",
+        count: 2,
+        includeSelf: true,
+        attack: 3,
+        health: 4,
+      },
+    ],
+  });
+  assert.deepEqual(getMinionDefinition("BG23_018").afterGoldSpent, {
+    threshold: 8,
+    effects: [
+      {
+        kind: "applyBloodGemsToTribe",
+        tribe: "quilboar",
+        count: 2,
+      },
+    ],
+  });
+  assert.equal(
+    getMinionDefinition("BG33_823").afterGoldSpent?.effects[0]?.kind,
+    "gainRandomTavernSpell",
+  );
+  assert.deepEqual(getMinionDefinition("BG26_814").interactiveBattlecry, {
+    kind: "targetedBuff",
+    target: "friendlyTribe",
+    targetTribe: "pirate",
+    attack: 0,
+    health: 1,
+    attackPerTavernSpell: 0,
+    healthPerTavernSpell: 0,
+    healthPerGoldSpentThisTurn: 1,
+    goldenMode: "repeat",
+  });
+  assert.deepEqual(getMinionDefinition("BG29_840").afterCardPlayed, {
+    filter: { tierParity: "odd" },
+    effects: [
+      {
+        kind: "buff",
+        target: "allFriendly",
+        tierParity: "odd",
+        attack: 1,
+        health: 1,
+      },
+    ],
+  });
+  assert.deepEqual(getMinionDefinition("BG29_841").afterCardPlayed, {
+    filter: { tierParity: "even" },
+    effects: [
+      {
+        kind: "buff",
+        target: "allFriendly",
+        tierParity: "even",
+        attack: 2,
+        health: 2,
+      },
+    ],
+  });
+  assert.deepEqual(getMinionDefinition("BG33_893").afterCardPlayed, {
+    filter: { maximumTier: 3 },
+    effects: [
+      {
+        kind: "buff",
+        target: "friendlyTribe",
+        tribe: "murloc",
+        attack: 2,
+        health: 2,
+      },
+    ],
+  });
+  assert.deepEqual(getMinionDefinition("BG26_137").inHandAfterCardPlayed, {
+    filter: { tribe: "murloc" },
+    effects: [{ kind: "buff", target: "self", attack: 6, health: 6 }],
+  });
+  assert.deepEqual(getMinionDefinition("BG30_122").afterCardPlayed, {
+    filter: { tribe: "murloc" },
+    effects: [
+      {
+        kind: "buff",
+        target: "randomFriendly",
+        includeSelf: true,
+        attack: 5,
+        health: 5,
+      },
+      { kind: "buffRandomHandMinion", attack: 5, health: 5 },
+    ],
+  });
+  assert.deepEqual(getMinionDefinition("BG32_846").afterCardPlayed, {
+    filter: { tribe: "elemental" },
+    effects: [
+      {
+        kind: "buff",
+        target: "friendlyTribe",
+        tribe: "elemental",
+        attack: 4,
+        health: 4,
+      },
+    ],
+  });
+  assert.deepEqual(getMinionDefinition("BGS_104").afterCardPlayed, {
+    filter: { tribe: "elemental" },
+    effects: [
+      {
+        kind: "buffTavernType",
+        tribe: "elemental",
+        attack: 4,
+        health: 4,
+      },
+    ],
+  });
+});
+
 test("marks every live card honestly as complete or partial", () => {
   assert.ok(
     LIVE_MINION_DEFINITIONS.every(
@@ -471,6 +632,7 @@ test("marks every live card honestly as complete or partial", () => {
       "BG22_202",
       "BG23_002",
       "BG23_004",
+      "BG23_018",
       "BG25_001",
       "BG25_008",
       "BG25_009",
@@ -483,6 +645,7 @@ test("marks every live card honestly as complete or partial", () => {
       "BG25_354",
       "BG26_146",
       "BG26_135",
+      "BG26_137",
       "BG26_147",
       "BG26_148",
       "BG26_159",
@@ -495,6 +658,8 @@ test("marks every live card honestly as complete or partial", () => {
       "BG21_014",
       "BG26_817",
       "BG26_805",
+      "BG26_810",
+      "BG26_814",
       "BG26_ICC_901",
       "BG27_004",
       "BG27_005",
@@ -505,8 +670,11 @@ test("marks every live card honestly as complete or partial", () => {
       "BG28_308",
       "BG29_503",
       "BG29_611",
+      "BG29_840",
+      "BG29_841",
       "BG29_300",
       "BG30_117",
+      "BG30_122",
       "BG30_125",
       "BG31_175",
       "BG31_178",
@@ -515,6 +683,7 @@ test("marks every live card honestly as complete or partial", () => {
       "BG31_815",
       "BG31_816",
       "BG31_818",
+      "BG31_824",
       "BG31_859",
       "BG32_172",
       "BG32_170",
@@ -524,6 +693,7 @@ test("marks every live card honestly as complete or partial", () => {
       "BG32_330",
       "BG32_821",
       "BG32_835",
+      "BG32_846",
       "BG32_880",
       "BG32_891",
       "BG33_156",
@@ -533,6 +703,8 @@ test("marks every live card honestly as complete or partial", () => {
       "BG33_820",
       "BG33_821",
       "BG33_822",
+      "BG33_823",
+      "BG33_893",
       "BG33_809",
       "BG33_888",
       "BG33_894",
@@ -574,6 +746,7 @@ test("marks every live card honestly as complete or partial", () => {
       "BG_DEEP_015",
       "BGS_004",
       "BGS_049",
+      "BGS_104",
       "BGS_115",
       "BGS_116",
       "BGS_123",
@@ -590,13 +763,13 @@ test("marks every live card honestly as complete or partial", () => {
     LIVE_MINION_DEFINITIONS.filter(
       (definition) => definition.effectSupport === "partial",
     ).length,
-    116,
+    104,
   );
   assert.equal(
     LIVE_MINION_DEFINITIONS.filter(
       (definition) => definition.effectSupport === "complete",
     ).length,
-    121,
+    133,
   );
   assert.deepEqual(getMinionDefinition("BG35_702").interactiveBattlecry, {
     kind: "targetedBuff",

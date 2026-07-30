@@ -239,6 +239,52 @@ function isRecord(value: unknown): value is Record<string, unknown> {
   return value !== null && typeof value === "object";
 }
 
+function isTribe(value: unknown): value is Tribe {
+  return typeof value === "string" && Object.hasOwn(TRIBE_NAMES, value);
+}
+
+function isTavernTier(value: unknown): boolean {
+  return (
+    typeof value === "number" &&
+    Number.isInteger(value) &&
+    value >= 1 &&
+    value <= 6
+  );
+}
+
+function isPendingCardPlayedEvent(value: unknown): boolean {
+  if (
+    !isRecord(value) ||
+    typeof value.sourceInstanceId !== "string" ||
+    (value.cardKind !== "minion" &&
+      value.cardKind !== "tavernSpell" &&
+      value.cardKind !== "other") ||
+    !Array.isArray(value.tribes) ||
+    !value.tribes.every(isTribe)
+  ) {
+    return false;
+  }
+  if (value.cardKind === "minion") {
+    return (
+      isTavernTier(value.tier) &&
+      isTribe(value.tribe) &&
+      value.tribes.length > 0
+    );
+  }
+  if (value.cardKind === "tavernSpell") {
+    return (
+      isTavernTier(value.tier) &&
+      value.tribe === undefined &&
+      value.tribes.length === 0
+    );
+  }
+  return (
+    value.tier === undefined &&
+    value.tribe === undefined &&
+    value.tribes.length === 0
+  );
+}
+
 function isTavernSpellPool(
   value: unknown,
 ): value is Record<string, number> {
@@ -641,6 +687,11 @@ function isGameState(value: unknown): value is GameState {
         typeof player.cardsPlayedThisTurn === "number" &&
         Number.isInteger(player.cardsPlayedThisTurn) &&
         player.cardsPlayedThisTurn >= 0 &&
+        typeof player.goldSpentThisTurn === "number" &&
+        Number.isInteger(player.goldSpentThisTurn) &&
+        player.goldSpentThisTurn >= 0 &&
+        (player.pendingCardPlayed === null ||
+          isPendingCardPlayedEvent(player.pendingCardPlayed)) &&
         (player.lastTavernSpellDefinitionId === null ||
           (typeof player.lastTavernSpellDefinitionId === "string" &&
             TAVERN_SPELL_DEFINITION_IDS.has(

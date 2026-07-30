@@ -51,6 +51,7 @@ import type {
   MagneticAttachment,
   MinionEffect,
   MinionInstance,
+  PendingCardPlayedEvent,
   PendingDiscoverInteraction,
   TavernSpellChoiceId,
   PlayerId,
@@ -199,6 +200,7 @@ const CRIMSON_SURVIVOR_DEFINITION_ID = "BG35_814" as const;
 const DEMON_FODDER_DEFINITION_ID = "live-demon-fodder-token" as const;
 const PERIODIC_TURN_COUNTER = "periodicEndOfTurn";
 const PURCHASE_PROGRESS_COUNTER = "cardPurchases";
+const GOLD_SPEND_PROGRESS_COUNTER = "goldSpendProgress";
 const DYNAMIC_END_OF_TURN_ATTACK_COUNTER = "dynamicEndOfTurnAttack";
 const DYNAMIC_END_OF_TURN_HEALTH_COUNTER = "dynamicEndOfTurnHealth";
 const DYNAMIC_AVENGE_PROGRESS_COUNTER = "dynamicAvengeProgress";
@@ -523,8 +525,26 @@ function refreshDynamicMinionDescription(
   minion: MinionInstance,
   player?: PlayerState,
 ): void {
-  const dynamicEndOfTurn =
-    getMinionDefinition(minion.definitionId).endOfTurn;
+  const definition = getMinionDefinition(minion.definitionId);
+  const goldSpendTrigger = definition.afterGoldSpent;
+  if (goldSpendTrigger) {
+    const progress =
+      effectCounter(minion, GOLD_SPEND_PROGRESS_COUNTER, 0) %
+      goldSpendTrigger.threshold;
+    const remaining = Math.max(
+      1,
+      goldSpendTrigger.threshold - progress,
+    );
+    const printedDescription = minion.golden
+      ? goldenMinionDescription(minion.definitionId)
+      : definition.description;
+    const status = `（还剩${remaining}枚！）`;
+    minion.description = /（还剩\d+枚！）/.test(printedDescription)
+      ? printedDescription.replace(/（还剩\d+枚！）/, status)
+      : `${printedDescription}${status}`;
+    return;
+  }
+  const dynamicEndOfTurn = definition.endOfTurn;
   if (dynamicEndOfTurn?.kind === "dynamicWarbandEndOfTurn") {
     const scale = minion.golden ? 2 : 1;
     const attack =
@@ -1375,11 +1395,170 @@ function ownedMinionCards(player: PlayerState): BoardMinionInstance[] {
   ];
 }
 
-function observeCardPlayed(player: PlayerState): void {
+function beginCardPlayed(
+  player: PlayerState,
+  event: PendingCardPlayedEvent,
+): void {
+  player.pendingCardPlayed = {
+    ...event,
+    tribes: [...event.tribes],
+  };
+}
+
+function playedCardMatches(
+  event: PendingCardPlayedEvent,
+  filter: {
+    tribe?: Tribe;
+    tierParity?: "odd" | "even";
+    maximumTier?: TavernTier;
+  },
+): boolean {
+  if (
+    filter.tribe !== undefined &&
+    (event.cardKind !== "minion" ||
+      (!event.tribes.includes("all") &&
+        !event.tribes.includes(filter.tribe)))
+  ) {
+    return false;
+  }
+  if (
+    filter.tierParity !== undefined &&
+    (event.tier === undefined ||
+      (filter.tierParity === "odd"
+        ? event.tier % 2 !== 1
+        : event.tier % 2 !== 0))
+  ) {
+    return false;
+  }
+  return !(
+    filter.maximumTier !== undefined &&
+    (event.tier === undefined || event.tier > filter.maximumTier)
+  );
+}
+
+function finishCardPlayed(
+  state: GameState,
+  player: PlayerState,
+): void {
+  const event = player.pendingCardPlayed;
+  if (!event) {
+    return;
+  }
+  player.pendingCardPlayed = null;
   player.cardsPlayedThisTurn += 1;
+
+  if (
+    event.cardKind === "minion" &&
+    event.tribe !== undefined
+  ) {
+    applyAfterFriendlyPlayed(state, player, {
+      instanceId: event.sourceInstanceId,
+      tribe: event.tribe,
+      tribes: event.tribes,
+    });
+  }
+
+  for (const watcher of [...player.board]) {
+    if (watcher.instanceId === event.sourceInstanceId) {
+      continue;
+    }
+    for (const component of minionEffectSources(watcher)) {
+      const trigger =
+        getMinionDefinition(component.definitionId).afterCardPlayed;
+      if (!trigger || !playedCardMatches(event, trigger.filter)) {
+        continue;
+      }
+      applyRecruitEffects(
+        state,
+        player,
+        watcher,
+        trigger.effects,
+        component.golden ? 2 : 1,
+      );
+    }
+  }
+
+  const handWatchers = player.hand.filter(
+    (card): card is BoardMinionInstance => card.kind === "minion",
+  );
+  for (const watcher of handWatchers) {
+    const trigger =
+      getMinionDefinition(watcher.definitionId).inHandAfterCardPlayed;
+    if (!trigger || !playedCardMatches(event, trigger.filter)) {
+      continue;
+    }
+    applyRecruitEffects(
+      state,
+      player,
+      watcher,
+      trigger.effects,
+      watcher.golden ? 2 : 1,
+    );
+  }
+
   for (const minion of ownedMinionCards(player)) {
     refreshDynamicMinionDescription(minion, player);
   }
+
+  if (event.cardKind === "minion") {
+    resolveTriples(state, player);
+    resolveStirTheGraveyardDeath(
+      state,
+      player,
+      event.sourceInstanceId,
+    );
+  }
+}
+
+function spendGold(
+  state: GameState,
+  player: PlayerState,
+  amount: number,
+): boolean {
+  if (amount <= 0) {
+    return true;
+  }
+  if (player.gold < amount) {
+    return false;
+  }
+  player.gold -= amount;
+  player.goldSpentThisTurn += amount;
+
+  for (const source of [...player.board]) {
+    const trigger =
+      getMinionDefinition(source.definitionId).afterGoldSpent;
+    if (!trigger || trigger.threshold <= 0) {
+      continue;
+    }
+    const progress = effectCounter(
+      source,
+      GOLD_SPEND_PROGRESS_COUNTER,
+      0,
+    );
+    const total = progress + amount;
+    const triggerCount = Math.floor(total / trigger.threshold);
+    setEffectCounter(
+      source,
+      GOLD_SPEND_PROGRESS_COUNTER,
+      total % trigger.threshold,
+    );
+    refreshDynamicMinionDescription(source, player);
+    const repetitionsPerTrigger = source.golden ? 2 : 1;
+    for (
+      let count = 0;
+      count < triggerCount * repetitionsPerTrigger;
+      count += 1
+    ) {
+      applyRecruitEffects(
+        state,
+        player,
+        source,
+        trigger.effects,
+        1,
+      );
+    }
+  }
+  return true;
 }
 
 function reconcileConditionalMinion(
@@ -1875,53 +2054,75 @@ function recruitEffectTargets(
   source: MinionInstance,
   effect: BuffEffect,
 ): MinionInstance[] {
+  const matchesTier = (minion: MinionInstance): boolean =>
+    effect.tierParity === undefined ||
+    (effect.tierParity === "odd"
+      ? minion.tier % 2 === 1
+      : minion.tier % 2 === 0);
+  const filterTier = (
+    minions: readonly BoardMinionInstance[],
+  ): BoardMinionInstance[] => minions.filter(matchesTier);
+  const chooseRandom = (
+    minions: readonly BoardMinionInstance[],
+  ): BoardMinionInstance[] => {
+    const candidates = [...minions];
+    const selected: BoardMinionInstance[] = [];
+    const count = Math.max(1, effect.count ?? 1);
+    while (selected.length < count && candidates.length > 0) {
+      const index = randomIndex(state, candidates.length);
+      selected.push(candidates[index]);
+      candidates.splice(index, 1);
+    }
+    return selected;
+  };
   switch (effect.target) {
     case "self":
-      return [source];
+      return matchesTier(source) ? [source] : [];
     case "allFriendly":
-      return [...player.board];
+      return filterTier(player.board);
     case "otherFriendly":
-      return player.board.filter(
+      return filterTier(player.board.filter(
         (minion) => minion.instanceId !== source.instanceId,
-      );
+      ));
     case "otherFriendlyTribe":
-      return player.board.filter(
+      return filterTier(player.board.filter(
         (minion) =>
           minion.instanceId !== source.instanceId &&
           minionHasTribe(minion, effect.tribe),
-      );
+      ));
     case "friendlyTribe":
-      return player.board.filter((minion) =>
+      return filterTier(player.board.filter((minion) =>
         minionHasTribe(minion, effect.tribe),
-      );
+      ));
     case "adjacentFriendly": {
       const sourceIndex = player.board.findIndex(
         (minion) => minion.instanceId === source.instanceId,
       );
-      return player.board.filter(
+      if (sourceIndex < 0) {
+        return [];
+      }
+      return filterTier(player.board.filter(
         (minion, index) =>
           minion.instanceId !== source.instanceId &&
           Math.abs(index - sourceIndex) === 1,
-      );
+      ));
     }
     case "randomFriendlyTribe": {
-      const candidates = player.board.filter(
+      const candidates = filterTier(player.board.filter(
         (minion) =>
-          minion.instanceId !== source.instanceId &&
+          (effect.includeSelf ||
+            minion.instanceId !== source.instanceId) &&
           minionHasTribe(minion, effect.tribe),
-      );
-      return candidates.length === 0
-        ? []
-        : [candidates[randomIndex(state, candidates.length)]];
+      ));
+      return chooseRandom(candidates);
     }
     case "randomFriendly": {
-      const candidates = player.board.filter(
-        (minion) => minion.instanceId !== source.instanceId,
-      );
-      if (candidates.length === 0) {
-        return [];
-      }
-      return [candidates[randomIndex(state, candidates.length)]];
+      const candidates = filterTier(player.board.filter(
+        (minion) =>
+          effect.includeSelf ||
+          minion.instanceId !== source.instanceId,
+      ));
+      return chooseRandom(candidates);
     }
   }
 }
@@ -2075,6 +2276,19 @@ function applyRecruitEffects(
         effect.count * scale,
         effect.bonusKeyword,
       );
+    } else if (effect.kind === "applyBloodGemsToTribe") {
+      const targets = player.board.filter((minion) =>
+        minionHasTribe(minion, effect.tribe),
+      );
+      for (
+        let application = 0;
+        application < effect.count * scale;
+        application += 1
+      ) {
+        for (const target of targets) {
+          applyBloodGem(player, target);
+        }
+      }
     } else if (effect.kind === "improveBloodGems") {
       player.bloodGemAttack += effect.attack * scale;
       player.bloodGemHealth += effect.health * scale;
@@ -2234,7 +2448,7 @@ function applyRecruitSummonTriggers(
 function applyAfterFriendlyPlayed(
   state: GameState,
   player: PlayerState,
-  played: MinionInstance,
+  played: Pick<MinionInstance, "instanceId" | "tribe" | "tribes">,
 ): void {
   if (minionHasTribe(played, "elemental")) {
     player.elementalsPlayedThisTurn += 1;
@@ -2961,6 +3175,21 @@ function resolveTriples(state: GameState, player: PlayerState): void {
           total + (minion.temporaryGoldenCrabDeathrattles ?? 0),
         0,
       );
+      if (definition.afterGoldSpent) {
+        setEffectCounter(
+          golden,
+          GOLD_SPEND_PROGRESS_COUNTER,
+          Math.max(
+            ...consumed.map((minion) =>
+              effectCounter(
+                minion,
+                GOLD_SPEND_PROGRESS_COUNTER,
+                0,
+              ),
+            ),
+          ),
+        );
+      }
       if (
         definitionId === UPBEAT_FRONTDRAKE_DEFINITION_ID ||
         definitionId === UPBEAT_DUO_DEFINITION_ID
@@ -3130,7 +3359,6 @@ function buyMinion(
     return false;
   }
   const [minion] = player.shop.splice(shopIndex, 1);
-  player.gold -= BUY_COST;
   claimGeneratedShopMinion(minion);
   applyOwnedUndeadArmyBonus(player, minion);
   reconcileWhereverMinion(
@@ -3140,6 +3368,7 @@ function buyMinion(
   );
   refreshDynamicMinionDescription(minion, player);
   player.hand.push(minion);
+  spendGold(state, player, BUY_COST);
   observeCardPurchase(player);
   resolveTriples(state, player);
   return true;
@@ -3165,16 +3394,9 @@ function buyTavernSpell(
   ) {
     return false;
   }
-  if (currency === "health") {
-    player.health -= cost;
-  } else {
-    player.gold -= cost;
-    player.nextTavernSpellDiscount = 0;
-  }
   state.spellPool[spell.definitionId] =
     (state.spellPool[spell.definitionId] ?? 0) + 1;
   player.hand.push(spell);
-  observeCardPurchase(player);
   if (player.spellShop?.instanceId === spell.instanceId) {
     player.spellShop = player.additionalSpellShop.shift() ?? null;
   } else {
@@ -3182,6 +3404,13 @@ function buyTavernSpell(
       (candidate) => candidate.instanceId !== spell.instanceId,
     );
   }
+  if (currency === "health") {
+    player.health -= cost;
+  } else {
+    spendGold(state, player, cost);
+    player.nextTavernSpellDiscount = 0;
+  }
+  observeCardPurchase(player);
   return true;
 }
 
@@ -3250,7 +3479,13 @@ function playMinion(
       ? player.board.length
       : Math.max(0, Math.min(boardIndex, player.board.length));
   player.board.splice(insertAt, 0, minion);
-  observeCardPlayed(player);
+  beginCardPlayed(player, {
+    sourceInstanceId: minion.instanceId,
+    cardKind: "minion",
+    tier: minion.tier,
+    tribe: minion.tribe,
+    tribes: [...minion.tribes],
+  });
   grantTripleRewardBeforeGeneratedCards(state, player, minion);
   grantPlayedMinionSpellcraft(state, player, minion);
   const battlecry = getMinionDefinition(minion.definitionId).battlecry;
@@ -3259,11 +3494,9 @@ function playMinion(
     applyRecruitEffects(state, player, minion, battlecry);
   }
   applyRecruitSummonTriggers(state, player, minion);
-  applyAfterFriendlyPlayed(state, player, minion);
-  resolveTriples(state, player);
   beginInteractiveBattlecry(state, player, minion);
   if (state.pendingInteraction === null) {
-    resolveStirTheGraveyardDeath(state, player, minion.instanceId);
+    finishCardPlayed(state, player);
   }
   return true;
 }
@@ -3491,7 +3724,13 @@ function magnetizeMinion(
     throw new Error("MAGNETIZE_MINION removed a non-minion hand card");
   }
   const source = removed;
-  observeCardPlayed(player);
+  beginCardPlayed(player, {
+    sourceInstanceId: source.instanceId,
+    cardKind: "minion",
+    tier: source.tier,
+    tribe: source.tribe,
+    tribes: [...source.tribes],
+  });
   grantTripleRewardBeforeGeneratedCards(state, player, source);
   const battlecry = getMinionDefinition(source.definitionId).battlecry;
   const triggerCount = battlecry ? battlecryTriggerCount(player) : 0;
@@ -3501,9 +3740,8 @@ function magnetizeMinion(
 
   fuseMinionIntoHost(state, player, source, target);
 
-  applyAfterFriendlyPlayed(state, player, source);
   applyAfterMagnetizedEffects(state, player);
-  resolveTriples(state, player);
+  finishCardPlayed(state, player);
   return true;
 }
 
@@ -3572,7 +3810,11 @@ function castTripleReward(
     return false;
   }
   player.hand.splice(handIndex, 1);
-  observeCardPlayed(player);
+  beginCardPlayed(player, {
+    sourceInstanceId: card.instanceId,
+    cardKind: "other",
+    tribes: [],
+  });
   beginDiscoverInteraction(
     state,
     player,
@@ -3581,10 +3823,14 @@ function castTripleReward(
     1,
     { kind: "hand" },
   );
+  if (state.pendingInteraction === null) {
+    finishCardPlayed(state, player);
+  }
   return true;
 }
 
 function castBloodGem(
+  state: GameState,
   player: PlayerState,
   cardInstanceId: string,
   targetInstanceId: string,
@@ -3600,7 +3846,11 @@ function castBloodGem(
     return false;
   }
   player.hand.splice(handIndex, 1);
-  observeCardPlayed(player);
+  beginCardPlayed(player, {
+    sourceInstanceId: card.instanceId,
+    cardKind: "other",
+    tribes: [],
+  });
   applyBloodGem(player, target);
   if (minionHasTribe(target, "quilboar")) {
     if (card.bonusKeyword === "rebornForQuilboar") {
@@ -3610,6 +3860,7 @@ function castBloodGem(
       target.temporaryDivineShield = false;
     }
   }
+  finishCardPlayed(state, player);
   return true;
 }
 
@@ -3733,7 +3984,11 @@ function castSpellcraft(
   }
 
   player.hand.splice(handIndex, 1);
-  observeCardPlayed(player);
+  beginCardPlayed(player, {
+    sourceInstanceId: card.instanceId,
+    cardKind: "other",
+    tribes: [],
+  });
   switch (definition.effect) {
     case "crabRider":
       if (target) {
@@ -3836,6 +4091,9 @@ function castSpellcraft(
         }
       }
       break;
+  }
+  if (state.pendingInteraction === null) {
+    finishCardPlayed(state, player);
   }
   return true;
 }
@@ -4014,6 +4272,7 @@ function finishTavernSpellCast(
   }
   player.tavernSpellsCastThisTurn += 1;
   applyAfterTavernSpellCastTriggers(state, player);
+  finishCardPlayed(state, player);
 }
 
 function chefsChoiceMatches(
@@ -5399,7 +5658,12 @@ function castTavernSpell(
     return false;
   }
   player.hand.splice(handIndex, 1);
-  observeCardPlayed(player);
+  beginCardPlayed(player, {
+    sourceInstanceId: card.instanceId,
+    cardKind: "tavernSpell",
+    tier: definition.tier,
+    tribes: [],
+  });
   player.pendingTavernSpellDefinitionId = definition.id;
   const finished = applyTavernSpellEffect(
     state,
@@ -5432,8 +5696,13 @@ function playHandCard(
   }
   if (card.kind === "consolationCoin") {
     player.hand.splice(handIndex, 1);
-    observeCardPlayed(player);
+    beginCardPlayed(player, {
+      sourceInstanceId: card.instanceId,
+      cardKind: "other",
+      tribes: [],
+    });
     player.gold += 1;
+    finishCardPlayed(state, player);
     return true;
   }
   return card.kind === "tripleReward"
@@ -5449,7 +5718,7 @@ function refreshShop(state: GameState, player: PlayerState): boolean {
   if (player.freeRefreshes > 0) {
     player.freeRefreshes -= 1;
   } else {
-    player.gold -= refreshCost;
+    spendGold(state, player, refreshCost);
   }
   player.frozen = false;
   if (player.helpfulRefreshes > 0) {
@@ -5477,7 +5746,7 @@ function upgradeTavern(state: GameState, player: PlayerState): boolean {
   if (player.gold < cost) {
     return false;
   }
-  player.gold -= cost;
+  spendGold(state, player, cost);
   player.tavernTier = (player.tavernTier + 1) as MutableTier;
   player.upgradeDiscount = 0;
   if (playerHasHeroPower(player, "gainGoldAfterUpgrade")) {
@@ -5837,18 +6106,27 @@ function beginInteractiveBattlecry(
     return;
   }
 
-  const candidates = player.board.filter(
-    (minion) => minion.instanceId !== source.instanceId,
-  );
+  const candidates =
+    ability.target === "friendlyTribe"
+      ? player.board.filter((minion) =>
+          minionHasTribe(minion, ability.targetTribe),
+        )
+      : player.board.filter(
+          (minion) => minion.instanceId !== source.instanceId,
+        );
   if (candidates.length === 0) {
     return;
   }
   const attack =
     ability.attack +
-    ability.attackPerTavernSpell * player.tavernSpellsCastThisTurn;
+    ability.attackPerTavernSpell * player.tavernSpellsCastThisTurn +
+    (ability.attackPerGoldSpentThisTurn ?? 0) *
+      player.goldSpentThisTurn;
   const health =
     ability.health +
-    ability.healthPerTavernSpell * player.tavernSpellsCastThisTurn;
+    ability.healthPerTavernSpell * player.tavernSpellsCastThisTurn +
+    (ability.healthPerGoldSpentThisTurn ?? 0) *
+      player.goldSpentThisTurn;
   if (!player.isHuman) {
     const target = bestMinionByScore(player, candidates);
     target.attack += attack * repetitions;
@@ -5898,12 +6176,13 @@ function resolvePendingInteraction(
     const nextTarget = nextPlayer?.board.find(
       (minion) => minion.instanceId === action.optionInstanceId,
     );
-    if (!nextTarget) {
+    if (!nextPlayer || !nextTarget) {
       return state;
     }
     nextTarget.attack += pending.attack * pending.repetitions;
     nextTarget.health += pending.health * pending.repetitions;
     next.pendingInteraction = null;
+    finishCardPlayed(next, nextPlayer);
     return next;
   }
 
@@ -5926,7 +6205,7 @@ function resolvePendingInteraction(
       return state;
     }
     next.pendingInteraction = null;
-    beginDiscoverInteraction(
+    const continued = beginDiscoverInteraction(
       next,
       nextPlayer,
       pending.sourceInstanceId,
@@ -5937,6 +6216,9 @@ function resolvePendingInteraction(
         targetInstanceId: nextTarget.instanceId,
       },
     );
+    if (!continued) {
+      finishCardPlayed(next, nextPlayer);
+    }
     return next;
   }
 
@@ -6019,6 +6301,7 @@ function resolvePendingInteraction(
       buffMinions(nextPlayer.board, 0, amount);
     }
     next.pendingInteraction = null;
+    finishCardPlayed(next, nextPlayer);
     return next;
   }
 
@@ -6074,6 +6357,7 @@ function resolvePendingInteraction(
     if (!target) {
       returnMinionToPool(next, nextSelected);
       next.pendingInteraction = null;
+      finishCardPlayed(next, nextPlayer);
       return next;
     }
     fuseMinionIntoHost(next, nextPlayer, nextSelected, target);
@@ -6094,11 +6378,16 @@ function resolvePendingInteraction(
     nextPending.completionSource === "tavernSpellCast"
   ) {
     finishTavernSpellCast(next, nextPlayer);
+  } else if (!continued) {
+    finishCardPlayed(next, nextPlayer);
   }
   return next;
 }
 
-function playBestAiBloodGem(player: PlayerState): boolean {
+function playBestAiBloodGem(
+  state: GameState,
+  player: PlayerState,
+): boolean {
   const gem = player.hand.find(
     (card): card is BloodGemSpellInstance => card.kind === "bloodGem",
   );
@@ -6121,7 +6410,12 @@ function playBestAiBloodGem(player: PlayerState): boolean {
     player,
     keywordTargets.length > 0 ? keywordTargets : player.board,
   );
-  return castBloodGem(player, gem.instanceId, target.instanceId);
+  return castBloodGem(
+    state,
+    player,
+    gem.instanceId,
+    target.instanceId,
+  );
 }
 
 function playBestAiSpellcraft(
@@ -6337,7 +6631,7 @@ function playAiHand(state: GameState, player: PlayerState): void {
       if (playBestAiSpellcraft(state, player)) {
         continue;
       }
-      if (playBestAiBloodGem(player)) {
+      if (playBestAiBloodGem(state, player)) {
         continue;
       }
       break;
@@ -6383,7 +6677,7 @@ function playAiHand(state: GameState, player: PlayerState): void {
         if (playBestAiSpellcraft(state, player)) {
           continue;
         }
-        if (playBestAiBloodGem(player)) {
+        if (playBestAiBloodGem(state, player)) {
           continue;
         }
         break;
@@ -9476,6 +9770,8 @@ function releaseEliminatedPlayer(
   player.helpfulRefreshes = 0;
   player.lastHelpfulRefreshKind = null;
   player.cardsPlayedThisTurn = 0;
+  player.goldSpentThisTurn = 0;
+  player.pendingCardPlayed = null;
   player.lastTavernSpellDefinitionId = null;
   player.pendingTavernSpellDefinitionId = null;
   player.demonFodderRefreshQueue = [];
@@ -9603,6 +9899,8 @@ function beginNextRecruit(state: GameState): void {
     player.pendingNextTurnGold = 0;
     player.tavernSpellsCastThisTurn = 0;
     player.cardsPlayedThisTurn = 0;
+    player.goldSpentThisTurn = 0;
+    player.pendingCardPlayed = null;
     player.pendingTavernSpellDefinitionId = null;
     for (const minion of ownedMinionCards(player)) {
       refreshDynamicMinionDescription(minion, player);
@@ -9671,6 +9969,8 @@ export function createGame(seed?: number): GameState {
     nextTavernSpellDiscount: 0,
     tavernSpellsCastThisTurn: 0,
     cardsPlayedThisTurn: 0,
+    goldSpentThisTurn: 0,
+    pendingCardPlayed: null,
     lastTavernSpellDefinitionId: null,
     pendingTavernSpellDefinitionId: null,
     demonFodderRefreshQueue: [],
@@ -9821,6 +10121,7 @@ export function gameReducer(state: GameState, action: GameAction): GameState {
       break;
     case "CAST_BLOOD_GEM":
       castBloodGem(
+        next,
         player,
         action.cardInstanceId,
         action.targetInstanceId,

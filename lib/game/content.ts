@@ -3,7 +3,7 @@ import liveRosterSnapshot from "./generated/battlegrounds-36.0.3-247416.zhCN.jso
 };
 import type { MinionDefinition, Tribe } from "./types.ts";
 
-export const CURRENT_ROSTER_VERSION = "battlegrounds-36.0.3-247416-v22";
+export const CURRENT_ROSTER_VERSION = "battlegrounds-36.0.3-247416-v23";
 /** Compatibility alias for existing save and engine imports. */
 export const CLASSIC_ROSTER_VERSION = CURRENT_ROSTER_VERSION;
 
@@ -2029,6 +2029,213 @@ const LIVE_RULE_OVERRIDES: Readonly<
       },
     ],
   },
+  BG26_810: {
+    goldenCardId: "BG26_810_G",
+    goldenDescription:
+      "每当你花掉6枚铸币，使你的海盗获得+2攻击力，触发两次。（还剩6枚！）",
+    afterGoldSpent: {
+      threshold: 6,
+      effects: [
+        {
+          kind: "buff",
+          target: "friendlyTribe",
+          tribe: "pirate",
+          attack: 2,
+          health: 0,
+        },
+      ],
+    },
+  },
+  BG31_824: {
+    goldenCardId: "BG31_824_G",
+    goldenDescription:
+      "每当你花掉5枚铸币，使两个友方海盗获得+3/+4，触发两次。（还剩5枚！）",
+    afterGoldSpent: {
+      threshold: 5,
+      effects: [
+        {
+          kind: "buff",
+          target: "randomFriendlyTribe",
+          tribe: "pirate",
+          count: 2,
+          includeSelf: true,
+          attack: 3,
+          health: 4,
+        },
+      ],
+    },
+  },
+  BG23_018: {
+    goldenCardId: "BG23_018_G",
+    goldenDescription:
+      "每当你花掉8枚铸币，本随从对你的所有野猪人各使用四张鲜血宝石。（还剩8枚！）",
+    afterGoldSpent: {
+      threshold: 8,
+      effects: [
+        {
+          kind: "applyBloodGemsToTribe",
+          tribe: "quilboar",
+          count: 2,
+        },
+      ],
+    },
+  },
+  BG33_823: {
+    goldenCardId: "BG33_823_G",
+    goldenDescription:
+      "在你花掉9枚铸币后，随机获取两张悬赏令。（还剩9枚！）",
+    afterGoldSpent: {
+      threshold: 9,
+      effects: [
+        {
+          kind: "gainRandomTavernSpell",
+          count: 1,
+          filter: {
+            definitionIds: BOUNTY_TAVERN_SPELL_DEFINITION_IDS,
+          },
+          goldenMode: "doubleCount",
+        },
+      ],
+    },
+  },
+  BG26_814: {
+    goldenCardId: "BG26_814_G",
+    goldenDescription:
+      "战吼：使一个海盗获得+1生命值，触发两次。（在本回合中你每花费一枚铸币都会提升！）",
+    interactiveBattlecry: {
+      kind: "targetedBuff",
+      target: "friendlyTribe",
+      targetTribe: "pirate",
+      attack: 0,
+      health: 1,
+      attackPerTavernSpell: 0,
+      healthPerTavernSpell: 0,
+      healthPerGoldSpentThisTurn: 1,
+      goldenMode: "repeat",
+    },
+  },
+  BG29_840: {
+    goldenCardId: "BG29_840_G",
+    goldenDescription:
+      "在你使用奇数等级的牌后，使你的奇数等级的随从获得+2/+2。",
+    afterCardPlayed: {
+      filter: { tierParity: "odd" },
+      effects: [
+        {
+          kind: "buff",
+          target: "allFriendly",
+          tierParity: "odd",
+          attack: 1,
+          health: 1,
+        },
+      ],
+    },
+  },
+  BG29_841: {
+    goldenCardId: "BG29_841_G",
+    goldenDescription:
+      "在你使用偶数等级的牌后，使你的偶数等级的随从获得+4/+4。",
+    afterCardPlayed: {
+      filter: { tierParity: "even" },
+      effects: [
+        {
+          kind: "buff",
+          target: "allFriendly",
+          tierParity: "even",
+          attack: 2,
+          health: 2,
+        },
+      ],
+    },
+  },
+  BG33_893: {
+    goldenCardId: "BG33_893_G",
+    goldenDescription:
+      "在你使用一张等级3或以下的牌后，使你的鱼人获得+4/+4。",
+    afterCardPlayed: {
+      filter: { maximumTier: 3 },
+      effects: [
+        {
+          kind: "buff",
+          target: "friendlyTribe",
+          tribe: "murloc",
+          attack: 2,
+          health: 2,
+        },
+      ],
+    },
+  },
+  BG26_137: {
+    goldenCardId: "BG26_137_G",
+    goldenDescription:
+      "当本牌在你手牌中时，在你使用一张鱼人牌后，获得+12/+12。",
+    inHandAfterCardPlayed: {
+      filter: { tribe: "murloc" },
+      effects: [
+        {
+          kind: "buff",
+          target: "self",
+          attack: 6,
+          health: 6,
+        },
+      ],
+    },
+  },
+  BG30_122: {
+    goldenCardId: "BG30_122_G",
+    goldenDescription:
+      "在你使用一张鱼人牌后，使一个友方随从和你手牌中的一张随从牌获得+10/+10。",
+    afterCardPlayed: {
+      filter: { tribe: "murloc" },
+      effects: [
+        {
+          kind: "buff",
+          target: "randomFriendly",
+          includeSelf: true,
+          attack: 5,
+          health: 5,
+        },
+        {
+          kind: "buffRandomHandMinion",
+          attack: 5,
+          health: 5,
+        },
+      ],
+    },
+  },
+  BG32_846: {
+    goldenCardId: "BG32_846_G",
+    goldenDescription:
+      "在你使用一张元素牌后，使你的元素获得+4/+4，触发两次。",
+    afterCardPlayed: {
+      filter: { tribe: "elemental" },
+      effects: [
+        {
+          kind: "buff",
+          target: "friendlyTribe",
+          tribe: "elemental",
+          attack: 4,
+          health: 4,
+        },
+      ],
+    },
+  },
+  BGS_104: {
+    goldenCardId: "TB_BaconUps_201",
+    goldenDescription:
+      "在你使用一张元素牌后，使酒馆中的元素在本局对战中获得+8/+8。",
+    afterCardPlayed: {
+      filter: { tribe: "elemental" },
+      effects: [
+        {
+          kind: "buffTavernType",
+          tribe: "elemental",
+          attack: 4,
+          health: 4,
+        },
+      ],
+    },
+  },
 };
 
 /**
@@ -2046,6 +2253,7 @@ const FULLY_SUPPORTED_LIVE_CARD_IDS = new Set([
   "BG21_005",
   "BG23_002",
   "BG23_004",
+  "BG23_018",
   "BG25_001",
   "BG25_008",
   "BG25_009",
@@ -2058,6 +2266,7 @@ const FULLY_SUPPORTED_LIVE_CARD_IDS = new Set([
   "BG25_354",
   "BG26_146",
   "BG26_135",
+  "BG26_137",
   "BG26_147",
   "BG26_148",
   "BG26_159",
@@ -2069,6 +2278,8 @@ const FULLY_SUPPORTED_LIVE_CARD_IDS = new Set([
   "BG26_529",
   "BG26_ICC_901",
   "BG26_805",
+  "BG26_810",
+  "BG26_814",
   "BG26_817",
   "BG27_004",
   "BG27_005",
@@ -2079,8 +2290,11 @@ const FULLY_SUPPORTED_LIVE_CARD_IDS = new Set([
   "BG28_308",
   "BG29_503",
   "BG29_611",
+  "BG29_840",
+  "BG29_841",
   "BG29_300",
   "BG30_117",
+  "BG30_122",
   "BG30_125",
   "BG31_175",
   "BG31_178",
@@ -2089,12 +2303,14 @@ const FULLY_SUPPORTED_LIVE_CARD_IDS = new Set([
   "BG31_815",
   "BG31_816",
   "BG31_818",
+  "BG31_824",
   "BG31_859",
   "BG32_235",
   "BG32_236",
   "BG32_330",
   "BG32_821",
   "BG32_835",
+  "BG32_846",
   "BG32_880",
   "BG32_170",
   "BG32_172",
@@ -2109,6 +2325,8 @@ const FULLY_SUPPORTED_LIVE_CARD_IDS = new Set([
   "BG33_820",
   "BG33_821",
   "BG33_822",
+  "BG33_823",
+  "BG33_893",
   "BG33_894",
   "BG34_140",
   "BG34_175",
@@ -2150,6 +2368,7 @@ const FULLY_SUPPORTED_LIVE_CARD_IDS = new Set([
   "BGS_012",
   "BGS_018",
   "BGS_049",
+  "BGS_104",
   "BGS_115",
   "BGS_116",
   "BGS_123",
