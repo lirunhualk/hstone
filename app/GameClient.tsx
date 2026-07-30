@@ -3,6 +3,7 @@
 import {
   useCallback,
   useEffect,
+  useLayoutEffect,
   useMemo,
   useRef,
   useState,
@@ -16,6 +17,7 @@ import {
   createGame,
   gameReducer,
   HELPFUL_REFRESH_LABELS,
+  TAVERN_SPELL_DEFINITIONS,
   getLegalSpellcraftTargetIds,
   getLegalTavernSpellTargetIds,
   getRefreshCost,
@@ -82,6 +84,9 @@ const INITIAL_SEED = 0x53544152;
 const BOARD_LIMIT = 7;
 const MOUSE_DRAG_THRESHOLD_PX = 8;
 const TOUCH_DRAG_THRESHOLD_PX = 12;
+const TAVERN_SPELL_DEFINITION_IDS = new Set(
+  TAVERN_SPELL_DEFINITIONS.map((definition) => definition.id),
+);
 
 function safeReadLocalStorage(key: string): string | null {
   try {
@@ -229,6 +234,26 @@ function isRecord(value: unknown): value is Record<string, unknown> {
   return value !== null && typeof value === "object";
 }
 
+function isTavernSpellPool(
+  value: unknown,
+): value is Record<string, number> {
+  if (!isRecord(value)) {
+    return false;
+  }
+  const entries = Object.entries(value);
+  return (
+    entries.length === TAVERN_SPELL_DEFINITION_IDS.size &&
+    entries.every(
+      ([definitionId, copies]) =>
+        TAVERN_SPELL_DEFINITION_IDS.has(definitionId) &&
+        typeof copies === "number" &&
+        Number.isInteger(copies) &&
+        copies >= 0,
+    ) &&
+    entries.some(([, copies]) => (copies as number) > 0)
+  );
+}
+
 function formatSignedStat(value: number): string {
   return value > 0 ? `+${value}` : `${value}`;
 }
@@ -243,6 +268,16 @@ function hasSchema9MinionState(value: unknown): boolean {
     typeof value.temporaryTaunt === "boolean" &&
     typeof value.temporaryDivineShield === "boolean" &&
     typeof value.temporaryCrabDeathrattles === "number" &&
+    (value.whereverAttackBonus === undefined ||
+      typeof value.whereverAttackBonus === "number") &&
+    (value.whereverHealthBonus === undefined ||
+      typeof value.whereverHealthBonus === "number") &&
+    (value.astralAutomatonSummoned === undefined ||
+      typeof value.astralAutomatonSummoned === "boolean") &&
+    (value.ancientSoulFriendlyDeaths === undefined ||
+      (typeof value.ancientSoulFriendlyDeaths === "number" &&
+        Number.isInteger(value.ancientSoulFriendlyDeaths) &&
+        value.ancientSoulFriendlyDeaths >= 0)) &&
     typeof value.poolCopies === "number" &&
     Number.isInteger(value.poolCopies) &&
     value.poolCopies >= 0 &&
@@ -572,7 +607,7 @@ function isGameState(value: unknown): value is GameState {
     candidate.contentVersion === CURRENT_ROSTER_VERSION &&
     typeof candidate.seed === "number" &&
     typeof candidate.nextInteractionId === "number" &&
-    isRecord(candidate.spellPool) &&
+    isTavernSpellPool(candidate.spellPool) &&
     Array.isArray(candidate.activeTribes) &&
     candidate.activeTribes.length === 5 &&
     Array.isArray(candidate.players) &&
@@ -641,6 +676,12 @@ function isGameState(value: unknown): value is GameState {
         typeof player.deepBlueBonus === "number" &&
         typeof player.undeadArmyAttackBonus === "number" &&
         typeof player.undeadArmyHealthBonus === "number" &&
+        typeof player.astralAutomatonsSummoned === "number" &&
+        Number.isInteger(player.astralAutomatonsSummoned) &&
+        player.astralAutomatonsSummoned >= 0 &&
+        typeof player.eternalKnightsDied === "number" &&
+        Number.isInteger(player.eternalKnightsDied) &&
+        player.eternalKnightsDied >= 0 &&
         typeof player.bloodGemAttack === "number" &&
         player.bloodGemAttack >= 1 &&
         typeof player.bloodGemHealth === "number" &&
@@ -799,23 +840,25 @@ function battleEventDelay(
       ? 850
       : event?.type === "attack"
         ? 800
+        : event?.type === "damage"
+          ? 720
         : event?.type === "buff"
           ? 620
           : event?.type === "handBuff"
             ? 620
-          : event?.type === "keywordRemoved"
-            ? 620
-            : event?.type === "shieldBroken"
-              ? 500
-              : event?.type === "death"
-                ? 600
-                : event?.type === "summon"
-                  ? 650
-                  : event?.type === "cardGain"
-                    ? 720
-                    : event?.type === "heroDamage"
-                      ? 850
-                      : 650;
+            : event?.type === "keywordRemoved"
+              ? 620
+              : event?.type === "shieldBroken"
+                ? 620
+                : event?.type === "death"
+                  ? 680
+                  : event?.type === "summon"
+                    ? 650
+                    : event?.type === "cardGain"
+                      ? 720
+                      : event?.type === "heroDamage"
+                        ? 850
+                        : 650;
   return Math.max(180, Math.round(baseDelay / speed));
 }
 
@@ -881,6 +924,10 @@ function UnitCard({
   dragging = false,
   combatActor = false,
   combatTarget = false,
+  combatAttacking = false,
+  combatHit = false,
+  combatDamageLabel,
+  combatDead = false,
   combatBuffTarget = false,
   combatBuffLabel,
   combatDebuffTarget = false,
@@ -918,6 +965,10 @@ function UnitCard({
   dragging?: boolean;
   combatActor?: boolean;
   combatTarget?: boolean;
+  combatAttacking?: boolean;
+  combatHit?: boolean;
+  combatDamageLabel?: string;
+  combatDead?: boolean;
   combatBuffTarget?: boolean;
   combatBuffLabel?: string;
   combatDebuffTarget?: boolean;
@@ -948,7 +999,9 @@ function UnitCard({
     event: ReactKeyboardEvent<HTMLButtonElement>,
   ) => void;
 }) {
-  const combatRole = combatActor
+  const combatRole = combatDead
+    ? "dead"
+    : combatActor
     ? combatBuffTarget
       ? "actor buff-target"
       : combatDebuffTarget
@@ -977,6 +1030,10 @@ function UnitCard({
       }${dragging ? " is-drag-source" : ""}${
         combatActor ? " is-combat-actor" : ""
       }${combatTarget ? " is-combat-target" : ""}${
+        combatAttacking ? " is-attacking" : ""
+      }${combatHit ? " is-hit" : ""}${
+        combatDead ? " is-dead" : ""
+      }${
         combatBuffTarget ? " is-combat-buff-target is-buffed" : ""
       }${
         combatDebuffTarget
@@ -1059,6 +1116,16 @@ function UnitCard({
       {combatBuffTarget && combatBuffLabel && (
         <span className="combat-buff-label" aria-hidden="true">
           {combatBuffLabel}
+        </span>
+      )}
+      {combatHit && combatDamageLabel && (
+        <span className="combat-damage-label" aria-hidden="true">
+          {combatDamageLabel}
+        </span>
+      )}
+      {combatDead && (
+        <span className="combat-death-label" aria-hidden="true">
+          阵亡
         </span>
       )}
       {combatDebuffTarget && combatDebuffLabel && (
@@ -1512,6 +1579,145 @@ function CardArtwork({
   );
 }
 
+type CombatLinkGeometry = {
+  width: number;
+  height: number;
+  x1: number;
+  y1: number;
+  x2: number;
+  y2: number;
+};
+
+function CombatAttackLink({
+  actorInstanceId,
+  targetInstanceId,
+  eventIndex,
+}: {
+  actorInstanceId: string;
+  targetInstanceId: string;
+  eventIndex: number;
+}) {
+  const svgRef = useRef<SVGSVGElement | null>(null);
+  const [geometry, setGeometry] = useState<CombatLinkGeometry | null>(
+    null,
+  );
+
+  useLayoutEffect(() => {
+    const svg = svgRef.current;
+    const board = svg?.closest(".board") as HTMLElement | null;
+    if (!svg || !board) {
+      setGeometry(null);
+      return;
+    }
+
+    const updateGeometry = () => {
+      const cards = Array.from(
+        board.querySelectorAll<HTMLElement>(
+          "[data-unit-instance-id]",
+        ),
+      );
+      const actor = cards.find(
+        (card) =>
+          card.dataset.unitInstanceId === actorInstanceId,
+      );
+      const target = cards.find(
+        (card) =>
+          card.dataset.unitInstanceId === targetInstanceId,
+      );
+      if (!actor || !target) {
+        setGeometry(null);
+        return;
+      }
+
+      const boardRect = board.getBoundingClientRect();
+      const actorRect = actor.getBoundingClientRect();
+      const targetRect = target.getBoundingClientRect();
+      const actorX =
+        actorRect.left + actorRect.width / 2 - boardRect.left;
+      const actorY =
+        actorRect.top + actorRect.height / 2 - boardRect.top;
+      const targetX =
+        targetRect.left + targetRect.width / 2 - boardRect.left;
+      const targetY =
+        targetRect.top + targetRect.height / 2 - boardRect.top;
+      const dx = targetX - actorX;
+      const dy = targetY - actorY;
+      const distance = Math.hypot(dx, dy);
+      if (distance < 1) {
+        setGeometry(null);
+        return;
+      }
+      const startPadding = Math.min(44, distance * 0.2);
+      const endPadding = Math.min(50, distance * 0.23);
+      const unitX = dx / distance;
+      const unitY = dy / distance;
+      setGeometry({
+        width: Math.max(1, boardRect.width),
+        height: Math.max(1, boardRect.height),
+        x1: actorX + unitX * startPadding,
+        y1: actorY + unitY * startPadding,
+        x2: targetX - unitX * endPadding,
+        y2: targetY - unitY * endPadding,
+      });
+    };
+
+    updateGeometry();
+    const frame = window.requestAnimationFrame(updateGeometry);
+    const resizeObserver = new ResizeObserver(updateGeometry);
+    resizeObserver.observe(board);
+    window.addEventListener("resize", updateGeometry);
+    return () => {
+      window.cancelAnimationFrame(frame);
+      resizeObserver.disconnect();
+      window.removeEventListener("resize", updateGeometry);
+    };
+  }, [actorInstanceId, eventIndex, targetInstanceId]);
+
+  return (
+    <svg
+      ref={svgRef}
+      className="combat-attack-link"
+      data-testid="combat-attack-link"
+      data-actor-instance-id={actorInstanceId}
+      data-target-instance-id={targetInstanceId}
+      viewBox={
+        geometry
+          ? `0 0 ${geometry.width} ${geometry.height}`
+          : undefined
+      }
+      aria-hidden="true"
+    >
+      {geometry && (
+        <>
+          <defs>
+            <marker
+              id="combat-attack-arrowhead"
+              markerWidth="15"
+              markerHeight="15"
+              refX="11"
+              refY="5"
+              orient="auto"
+              markerUnits="userSpaceOnUse"
+              viewBox="0 0 12 10"
+            >
+              <path d="M 0 0 L 12 5 L 0 10 z" />
+            </marker>
+          </defs>
+          <path
+            className="combat-attack-link-glow"
+            d={`M ${geometry.x1} ${geometry.y1} L ${geometry.x2} ${geometry.y2}`}
+          />
+          <path
+            className="combat-attack-link-path"
+            d={`M ${geometry.x1} ${geometry.y1} L ${geometry.x2} ${geometry.y2}`}
+            markerEnd="url(#combat-attack-arrowhead)"
+          />
+        </>
+      )}
+    </svg>
+  );
+}
+
 function BoardRow({
   units,
   side,
@@ -1520,6 +1726,11 @@ function BoardRow({
   dragSession,
   actorInstanceId,
   targetInstanceId,
+  attackingInstanceId,
+  hitInstanceId,
+  hitLabel,
+  deadInstanceId,
+  combatEventIndex,
   buffTargetInstanceId,
   buffLabel,
   debuffTargetInstanceId,
@@ -1552,6 +1763,11 @@ function BoardRow({
   dragSession?: DragSession | null;
   actorInstanceId?: string;
   targetInstanceId?: string;
+  attackingInstanceId?: string;
+  hitInstanceId?: string;
+  hitLabel?: string;
+  deadInstanceId?: string;
+  combatEventIndex?: number;
   buffTargetInstanceId?: string;
   buffLabel?: string;
   debuffTargetInstanceId?: string;
@@ -1694,6 +1910,17 @@ function BoardRow({
                 data-preview-source={previewSlot?.isSource || undefined}
               >
                 <UnitCard
+                  key={
+                    combatEventIndex !== undefined &&
+                    (unit.instanceId === attackingInstanceId ||
+                      unit.instanceId === hitInstanceId ||
+                      unit.instanceId === deadInstanceId ||
+                      unit.instanceId === buffTargetInstanceId ||
+                      unit.instanceId === debuffTargetInstanceId ||
+                      unit.instanceId === summonedInstanceId)
+                      ? `${unit.instanceId}-combat-${combatEventIndex}`
+                      : unit.instanceId
+                  }
                   unit={unit}
                   compact
                   selected={
@@ -1712,6 +1939,16 @@ function BoardRow({
                   }
                   combatActor={unit.instanceId === actorInstanceId}
                   combatTarget={unit.instanceId === targetInstanceId}
+                  combatAttacking={
+                    unit.instanceId === attackingInstanceId
+                  }
+                  combatHit={unit.instanceId === hitInstanceId}
+                  combatDamageLabel={
+                    unit.instanceId === hitInstanceId
+                      ? hitLabel
+                      : undefined
+                  }
+                  combatDead={unit.instanceId === deadInstanceId}
                   combatBuffTarget={
                     unit.instanceId === buffTargetInstanceId
                   }
@@ -2470,6 +2707,30 @@ export default function GameClient() {
       ? `${formatSignedStat(
           currentBattleEvent.attackDelta,
         )}/${formatSignedStat(currentBattleEvent.healthDelta)}`
+      : undefined;
+  const currentHitLabel =
+    currentBattleEvent?.type === "damage"
+      ? `-${currentBattleEvent.amount ?? 0} · 剩余 ${
+          currentBattleEvent.minion
+            ? Math.max(0, currentBattleEvent.minion.health)
+            : "?"
+        }`
+      : currentBattleEvent?.type === "shieldBroken"
+        ? "圣盾破裂"
+        : undefined;
+  const currentStrikeEvent =
+    currentBattleEvent &&
+    (currentBattleEvent.type === "attack" ||
+      currentBattleEvent.type === "damage" ||
+      currentBattleEvent.type === "shieldBroken") &&
+    currentBattleEvent.actorInstanceId &&
+    currentBattleEvent.targetInstanceId
+      ? {
+          index: currentBattleEvent.index,
+          actorPlayerId: currentBattleEvent.actorPlayerId,
+          actorInstanceId: currentBattleEvent.actorInstanceId,
+          targetInstanceId: currentBattleEvent.targetInstanceId,
+        }
       : undefined;
   const currentDebuffLabel =
     currentBattleEvent?.type === "keywordRemoved" &&
@@ -4422,9 +4683,8 @@ export default function GameClient() {
                   units={opponentBoard}
                   side="enemy"
                   actorInstanceId={
-                    currentBattleEvent &&
-                    currentBattleEvent.actorPlayerId === opponentId
-                      ? currentBattleEvent.actorInstanceId
+                    currentStrikeEvent?.actorPlayerId === opponentId
+                      ? currentStrikeEvent?.actorInstanceId
                       : undefined
                   }
                   targetInstanceId={
@@ -4436,6 +4696,27 @@ export default function GameClient() {
                       ? currentBattleEvent.targetInstanceId
                       : undefined
                   }
+                  attackingInstanceId={
+                    currentBattleEvent?.type === "attack" &&
+                    currentBattleEvent.actorPlayerId === opponentId
+                      ? currentBattleEvent.actorInstanceId
+                      : undefined
+                  }
+                  hitInstanceId={
+                    (currentBattleEvent?.type === "damage" ||
+                      currentBattleEvent?.type === "shieldBroken") &&
+                    currentBattleEvent.targetPlayerId === opponentId
+                      ? currentBattleEvent.targetInstanceId
+                      : undefined
+                  }
+                  hitLabel={currentHitLabel}
+                  deadInstanceId={
+                    currentBattleEvent?.type === "death" &&
+                    currentBattleEvent.actorPlayerId === opponentId
+                      ? currentBattleEvent.actorInstanceId
+                      : undefined
+                  }
+                  combatEventIndex={currentBattleEvent?.index}
                   buffTargetInstanceId={
                     currentBattleEvent?.type === "buff" &&
                     currentBattleEvent.targetPlayerId === opponentId
@@ -4483,6 +4764,14 @@ export default function GameClient() {
                         {playbackEventCount}
                       </span>
                       <strong>
+                        {currentBattleEvent?.type === "attack" && (
+                          <span
+                            className="combat-attack-mark"
+                            aria-hidden="true"
+                          >
+                            攻击 →
+                          </span>
+                        )}
                         {currentBattleEvent?.message ?? "准备战斗回放…"}
                       </strong>
                     </div>
@@ -4596,8 +4885,8 @@ export default function GameClient() {
                 selection={selection}
                 dragSession={dragSession}
                 actorInstanceId={
-                  currentBattleEvent?.actorPlayerId === human.id
-                    ? currentBattleEvent.actorInstanceId
+                  currentStrikeEvent?.actorPlayerId === human.id
+                    ? currentStrikeEvent?.actorInstanceId
                     : undefined
                 }
                 targetInstanceId={
@@ -4608,6 +4897,27 @@ export default function GameClient() {
                     ? currentBattleEvent.targetInstanceId
                     : undefined
                 }
+                attackingInstanceId={
+                  currentBattleEvent?.type === "attack" &&
+                  currentBattleEvent.actorPlayerId === human.id
+                    ? currentBattleEvent.actorInstanceId
+                    : undefined
+                }
+                hitInstanceId={
+                  (currentBattleEvent?.type === "damage" ||
+                    currentBattleEvent?.type === "shieldBroken") &&
+                  currentBattleEvent.targetPlayerId === human.id
+                    ? currentBattleEvent.targetInstanceId
+                    : undefined
+                }
+                hitLabel={currentHitLabel}
+                deadInstanceId={
+                  currentBattleEvent?.type === "death" &&
+                  currentBattleEvent.actorPlayerId === human.id
+                    ? currentBattleEvent.actorInstanceId
+                    : undefined
+                }
+                combatEventIndex={currentBattleEvent?.index}
                 buffTargetInstanceId={
                   currentBattleEvent?.type === "buff" &&
                   currentBattleEvent.targetPlayerId === human.id
@@ -4723,6 +5033,17 @@ export default function GameClient() {
                 }}
                 onEmptyClick={deploySelected}
               />
+              {game.phase === "combat" && currentStrikeEvent && (
+                <CombatAttackLink
+                  actorInstanceId={
+                    currentStrikeEvent.actorInstanceId
+                  }
+                  targetInstanceId={
+                    currentStrikeEvent.targetInstanceId
+                  }
+                  eventIndex={currentStrikeEvent.index}
+                />
+              )}
               {game.phase === "recruit" &&
                 !interactionLocked &&
                 human.board.length === 0 && (
@@ -4972,7 +5293,14 @@ export default function GameClient() {
                 ),
               )}
               {human.hand.length === 0 && (
-                <div className="empty-state">购买的牌会进入这里</div>
+                <div className="empty-state hand-empty">
+                  <span>购买的牌会进入这里</span>
+                  <small data-testid="blood-gem-source-hint">
+                    {game.activeTribes.includes("quilboar")
+                      ? "鲜血宝石不会在酒馆直接出售；通过野猪人随从效果获取。"
+                      : "本局未开放野猪人，因此不会出现鲜血宝石；它也不会在酒馆直接出售。"}
+                  </small>
+                </div>
               )}
             </div>
           </section>

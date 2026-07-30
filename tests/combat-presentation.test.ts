@@ -51,13 +51,14 @@ test("combat playback omits framing events represented by the intro and result s
   const events = [
     event("battleStart", 0),
     event("attack", 1),
-    event("heroDamage", 2),
-    event("battleEnd", 3),
+    event("damage", 2),
+    event("heroDamage", 3),
+    event("battleEnd", 4),
   ];
 
   assert.deepEqual(
     events.filter(isCombatPlaybackEvent).map(({ type }) => type),
-    ["attack", "heroDamage"],
+    ["attack", "damage", "heroDamage"],
   );
 });
 

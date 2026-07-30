@@ -65,7 +65,7 @@ function expectedPlainText(html: string): string {
 test("exports the pinned current roster version through the legacy alias", () => {
   assert.equal(
     CURRENT_ROSTER_VERSION,
-    "battlegrounds-36.0.3-247416-v17",
+    "battlegrounds-36.0.3-247416-v18",
   );
   assert.equal(CLASSIC_ROSTER_VERSION, CURRENT_ROSTER_VERSION);
 });
@@ -221,6 +221,47 @@ test("converts localized Hearthstone HTML into readable Chinese plain text", () 
           definition.description,
         ),
     ),
+  );
+});
+
+test("maps persistent Tier 2 minions to their real normal and Golden cards", () => {
+  const automaton = getMinionDefinition("BG_TTN_401");
+  assert.equal(automaton.attack, 3);
+  assert.equal(automaton.health, 4);
+  assert.equal(
+    automaton.description,
+    "在本局对战中，你每召唤过一个其他星元自动机，便拥有+3/+2（无论本随从在哪）。",
+  );
+  assert.equal(automaton.goldenCardId, "BG_TTN_401_G");
+  assert.equal(
+    automaton.goldenDescription,
+    "在本局对战中，你每召唤过一个其他星元自动机，便拥有+6/+4（无论本随从在哪）。",
+  );
+
+  const eternalKnight = getMinionDefinition("BG25_008");
+  assert.equal(eternalKnight.attack, 4);
+  assert.equal(eternalKnight.health, 2);
+  assert.equal(
+    eternalKnight.description,
+    "在本局对战中，每有一个友方永恒骑士死亡，便拥有+4/+2（无论本随从在哪）。",
+  );
+  assert.equal(eternalKnight.goldenCardId, "BG25_008_G");
+  assert.equal(
+    eternalKnight.goldenDescription,
+    "在本局对战中，每有一个友方永恒骑士死亡，便拥有+8/+4（无论本随从在哪）。",
+  );
+
+  const ancientSoul = getMinionDefinition("BG34_231");
+  assert.equal(ancientSoul.attack, 3);
+  assert.equal(ancientSoul.health, 4);
+  assert.equal(
+    ancientSoul.description,
+    "当本随从在你手牌中时，在15个友方随从死亡后，将本随从变为金色。（还剩15个！）",
+  );
+  assert.equal(ancientSoul.goldenCardId, "BG34_231_G");
+  assert.equal(
+    ancientSoul.goldenDescription,
+    "当本随从在你手牌中时，在15个友方随从死亡后，将本随从变为金色。（已完成！）",
   );
 });
 
@@ -428,6 +469,7 @@ test("marks every live card honestly as complete or partial", () => {
       "BG22_202",
       "BG23_002",
       "BG25_001",
+      "BG25_008",
       "BG25_010",
       "BG25_011",
       "BG25_013",
@@ -464,6 +506,7 @@ test("marks every live card honestly as complete or partial", () => {
       "BG33_888",
       "BG34_140",
       "BG34_175",
+      "BG34_231",
       "BG34_523",
       "BG34_630",
       "BG34_636t",
@@ -483,19 +526,20 @@ test("marks every live card honestly as complete or partial", () => {
       "BGS_119",
       "BGS_131",
       "BG_LOE_077",
+      "BG_TTN_401",
     ].sort(),
   );
   assert.equal(
     LIVE_MINION_DEFINITIONS.filter(
       (definition) => definition.effectSupport === "partial",
     ).length,
-    176,
+    173,
   );
   assert.equal(
     LIVE_MINION_DEFINITIONS.filter(
       (definition) => definition.effectSupport === "complete",
     ).length,
-    61,
+    64,
   );
   assert.deepEqual(getMinionDefinition("BG35_702").interactiveBattlecry, {
     kind: "targetedBuff",

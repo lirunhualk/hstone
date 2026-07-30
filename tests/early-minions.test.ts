@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import test from "node:test";
 
 import {
+  TAVERN_SPELL_DEFINITIONS,
   createGame,
   gameReducer,
   type BoardMinionInstance,
@@ -9,10 +10,14 @@ import {
   type PlayerState,
   type TavernSpellInstance,
 } from "../lib/game/engine.ts";
-import { getMinionDefinition } from "../lib/game/content.ts";
+import {
+  CURRENT_ROSTER_VERSION,
+  getMinionDefinition,
+} from "../lib/game/content.ts";
 import {
   LEGACY_SCHEMA_11_CONTENT_VERSION,
   LEGACY_SCHEMA_11_CONTENT_VERSION_V16,
+  LEGACY_SCHEMA_11_CONTENT_VERSION_V17,
   migrateLegacyGameState,
   migrateSchema11GameState,
   normalizePersistedGameState,
@@ -128,6 +133,14 @@ test("v15 saves refresh newly completed early minions without losing the run", (
     }),
   ];
   state.contentVersion = LEGACY_SCHEMA_11_CONTENT_VERSION;
+  for (const savedPlayer of state.players) {
+    const legacyPlayer = savedPlayer as unknown as Record<
+      string,
+      unknown
+    >;
+    delete legacyPlayer.astralAutomatonsSummoned;
+    delete legacyPlayer.eternalKnightsDied;
+  }
 
   const migrated = migrateSchema11GameState(
     JSON.parse(JSON.stringify(state)),
@@ -139,6 +152,13 @@ test("v15 saves refresh newly completed early minions without losing the run", (
   );
   assert.equal(migrated.round, state.round);
   assert.equal(migrated.rngState, state.rngState);
+  assert.ok(
+    migrated.players.every(
+      (savedPlayer) =>
+        savedPlayer.astralAutomatonsSummoned === 0 &&
+        savedPlayer.eternalKnightsDied === 0,
+    ),
+  );
   assert.equal(
     (migrateLegacyGameState(JSON.parse(JSON.stringify(state))) as GameState)
       .contentVersion,
@@ -161,11 +181,14 @@ test("v15 saves refresh newly completed early minions without losing the run", (
   assert.equal(normalizePersistedGameState(current), current);
 });
 
-test("v16 saves gain an empty pending Spellcraft queue during v17 migration", () => {
+test("v16 saves gain an empty pending Spellcraft queue during v18 migration", () => {
   const state = createGame(0xe0fd);
   state.contentVersion = LEGACY_SCHEMA_11_CONTENT_VERSION_V16;
   for (const player of state.players) {
     delete (player as Partial<PlayerState>).pendingSpellcraft;
+    const legacyPlayer = player as unknown as Record<string, unknown>;
+    delete legacyPlayer.astralAutomatonsSummoned;
+    delete legacyPlayer.eternalKnightsDied;
   }
 
   const migrated = normalizePersistedGameState(
@@ -176,8 +199,109 @@ test("v16 saves gain an empty pending Spellcraft queue during v17 migration", ()
     migrated.players.every(
       (player) =>
         Array.isArray(player.pendingSpellcraft) &&
-        player.pendingSpellcraft.length === 0,
+        player.pendingSpellcraft.length === 0 &&
+        player.astralAutomatonsSummoned === 0 &&
+        player.eternalKnightsDied === 0,
     ),
+  );
+});
+
+test("v17 saves preserve pending Spellcraft while gaining v18 persistent history", () => {
+  const state = createGame(0xe0fc);
+  const player = humanPlayer(state);
+  const template = player.shop[0];
+  assert.ok(template);
+  const automatonDefinition = getMinionDefinition("BG_TTN_401");
+  player.hand = [
+    definitionMinion(template, "BG_TTN_401", "saved-automaton", {
+      cardId: automatonDefinition.cardId,
+      description: automatonDefinition.description,
+      attack: automatonDefinition.attack * 2,
+      health: automatonDefinition.health * 2,
+      golden: true,
+      effectSupport: "partial",
+    }),
+  ];
+  player.pendingSpellcraft = [
+    {
+      sourceInstanceId: "saved-guitarist",
+      definitionId: "spellcraft-sick-riffs",
+      golden: false,
+      round: state.round,
+    },
+  ];
+  state.contentVersion = LEGACY_SCHEMA_11_CONTENT_VERSION_V17;
+  for (const savedPlayer of state.players) {
+    const legacyPlayer = savedPlayer as unknown as Record<
+      string,
+      unknown
+    >;
+    delete legacyPlayer.astralAutomatonsSummoned;
+    delete legacyPlayer.eternalKnightsDied;
+  }
+
+  const migrated = normalizePersistedGameState(
+    JSON.parse(JSON.stringify(state)),
+  ) as GameState | null;
+  assert.ok(migrated);
+  assert.equal(migrated.contentVersion, CURRENT_ROSTER_VERSION);
+  assert.deepEqual(
+    humanPlayer(migrated).pendingSpellcraft,
+    player.pendingSpellcraft,
+  );
+  assert.ok(
+    migrated.players.every(
+      (savedPlayer) =>
+        savedPlayer.astralAutomatonsSummoned === 0 &&
+        savedPlayer.eternalKnightsDied === 0,
+    ),
+  );
+  const migratedAutomaton = minionsInHand(humanPlayer(migrated))[0];
+  assert.ok(migratedAutomaton);
+  assert.equal(migratedAutomaton.effectSupport, "complete");
+  assert.equal(migratedAutomaton.cardId, "BG_TTN_401_G");
+  assert.equal(
+    migratedAutomaton.description,
+    automatonDefinition.goldenDescription,
+  );
+  assert.equal(migratedAutomaton.whereverAttackBonus, 0);
+  assert.equal(migratedAutomaton.whereverHealthBonus, 0);
+  assert.equal(migratedAutomaton.astralAutomatonSummoned, false);
+  assert.equal(migratedAutomaton.ancientSoulFriendlyDeaths, 0);
+});
+
+test("current saves repair an empty Tavern Spell pool without discarding the run", () => {
+  const state = createGame(0xe0fb);
+  state.round = 9;
+  const existingOffers = state.players.flatMap((player) => [
+    ...(player.spellShop ? [player.spellShop.instanceId] : []),
+    ...player.additionalSpellShop.map((spell) => spell.instanceId),
+  ]);
+  state.spellPool = {};
+
+  const normalized = normalizePersistedGameState(state);
+  assert.equal(normalized, state);
+  assert.equal(state.round, 9);
+  assert.deepEqual(
+    Object.keys(state.spellPool).sort(),
+    TAVERN_SPELL_DEFINITIONS.map((definition) => definition.id).sort(),
+  );
+  assert.ok(
+    Object.values(state.spellPool).every(
+      (copies) =>
+        Number.isInteger(copies) &&
+        copies >= 0,
+    ),
+  );
+  assert.ok(
+    Object.values(state.spellPool).some((copies) => copies > 0),
+  );
+  assert.deepEqual(
+    state.players.flatMap((player) => [
+      ...(player.spellShop ? [player.spellShop.instanceId] : []),
+      ...player.additionalSpellShop.map((spell) => spell.instanceId),
+    ]),
+    existingOffers,
   );
 });
 
@@ -681,6 +805,11 @@ test("Rot Hide Gnoll gains only combat Attack after each friendly death", () => 
       event.attackDelta === 1,
   );
   assert.ok(buffEvent, "Rot Hide Gnoll should show a combat buff event");
+  assert.ok(buffEvent.minion);
+  assert.equal(
+    buffEvent.minion.attack,
+    getMinionDefinition("BG25_013").attack + 1,
+  );
   assert.match(buffEvent.message, /腐皮豺狼人.*\+1攻击力/u);
   assert.equal(
     humanPlayer(state).board.find(

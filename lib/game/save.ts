@@ -30,11 +30,109 @@ export const LEGACY_SCHEMA_11_CONTENT_VERSION =
   "battlegrounds-36.0.3-247416-v15";
 export const LEGACY_SCHEMA_11_CONTENT_VERSION_V16 =
   "battlegrounds-36.0.3-247416-v16";
+export const LEGACY_SCHEMA_11_CONTENT_VERSION_V17 =
+  "battlegrounds-36.0.3-247416-v17";
 
 const SPELL_POOL_COPIES_BY_TIER = [0, 5, 7, 9, 11, 7, 5] as const;
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return value !== null && typeof value === "object";
+}
+
+function rebuildSpellPool(value: Record<string, unknown>): boolean {
+  if (
+    !Array.isArray(value.activeTribes) ||
+    !Array.isArray(value.players)
+  ) {
+    return false;
+  }
+  const activeTribes = value.activeTribes.filter(
+    (tribe): tribe is Tribe => typeof tribe === "string",
+  );
+  if (activeTribes.length !== value.activeTribes.length) {
+    return false;
+  }
+  const spellPool: Record<string, number> = {};
+  for (const definition of TAVERN_SPELL_DEFINITIONS) {
+    spellPool[definition.id] = tavernSpellIsAvailable(
+      definition,
+      activeTribes,
+    )
+      ? SPELL_POOL_COPIES_BY_TIER[definition.tier]
+      : 0;
+  }
+  for (const player of value.players) {
+    if (!isRecord(player)) {
+      return false;
+    }
+    const offers = [
+      player.spellShop,
+      ...(Array.isArray(player.additionalSpellShop)
+        ? player.additionalSpellShop
+        : []),
+    ];
+    for (const offer of offers) {
+      if (
+        !isRecord(offer) ||
+        offer.kind !== "tavernSpell" ||
+        typeof offer.definitionId !== "string" ||
+        !(offer.definitionId in spellPool)
+      ) {
+        continue;
+      }
+      spellPool[offer.definitionId] = Math.max(
+        0,
+        spellPool[offer.definitionId] - 1,
+      );
+    }
+  }
+  value.spellPool = spellPool;
+  return true;
+}
+
+function hasValidSpellPool(value: Record<string, unknown>): boolean {
+  if (
+    !isRecord(value.spellPool) ||
+    !Array.isArray(value.activeTribes)
+  ) {
+    return false;
+  }
+  const activeTribes = value.activeTribes.filter(
+    (tribe): tribe is Tribe => typeof tribe === "string",
+  );
+  if (activeTribes.length !== value.activeTribes.length) {
+    return false;
+  }
+  const expectedIds = new Set(
+    TAVERN_SPELL_DEFINITIONS.map((definition) => definition.id),
+  );
+  if (
+    Object.keys(value.spellPool).length !== expectedIds.size ||
+    Object.keys(value.spellPool).some((id) => !expectedIds.has(id))
+  ) {
+    return false;
+  }
+  let remainingCopies = 0;
+  for (const definition of TAVERN_SPELL_DEFINITIONS) {
+    const copies = value.spellPool[definition.id];
+    const maximum = tavernSpellIsAvailable(definition, activeTribes)
+      ? SPELL_POOL_COPIES_BY_TIER[definition.tier]
+      : 0;
+    if (
+      typeof copies !== "number" ||
+      !Number.isInteger(copies) ||
+      copies < 0 ||
+      copies > maximum
+    ) {
+      return false;
+    }
+    remainingCopies += copies;
+  }
+  return remainingCopies > 0;
+}
+
+function repairSpellPool(value: Record<string, unknown>): boolean {
+  return hasValidSpellPool(value) || rebuildSpellPool(value);
 }
 
 function refreshMinionSupport(value: unknown): void {
@@ -45,11 +143,23 @@ function refreshMinionSupport(value: unknown): void {
   ) {
     return;
   }
-  value.effectSupport =
-    getMinionDefinition(value.definitionId).effectSupport ?? "complete";
+  const definition = getMinionDefinition(value.definitionId);
+  value.effectSupport = definition.effectSupport ?? "complete";
+  value.whereverAttackBonus = 0;
+  value.whereverHealthBonus = 0;
+  value.astralAutomatonSummoned = false;
+  value.ancientSoulFriendlyDeaths = 0;
+  if (value.golden === true) {
+    value.cardId = definition.goldenCardId ?? value.cardId;
+    value.description =
+      definition.goldenDescription ?? value.description;
+  }
 }
 
-function refreshOwnedMinions(migrated: Record<string, unknown>): boolean {
+function refreshOwnedMinions(
+  migrated: Record<string, unknown>,
+  preservePendingSpellcraft = false,
+): boolean {
   if (!Array.isArray(migrated.players)) {
     return false;
   }
@@ -57,9 +167,17 @@ function refreshOwnedMinions(migrated: Record<string, unknown>): boolean {
     if (!isRecord(player)) {
       return false;
     }
-    // v16 and earlier had no deferred Spellcraft state, so no queue from
-    // those payloads is trustworthy or meaningful.
-    player.pendingSpellcraft = [];
+    if (preservePendingSpellcraft) {
+      if (!Array.isArray(player.pendingSpellcraft)) {
+        return false;
+      }
+    } else {
+      // v16 and earlier had no deferred Spellcraft state, so no queue from
+      // those payloads is trustworthy or meaningful.
+      player.pendingSpellcraft = [];
+    }
+    player.astralAutomatonsSummoned = 0;
+    player.eternalKnightsDied = 0;
     for (const zone of ["board", "hand", "shop"] as const) {
       const cards = player[zone];
       if (!Array.isArray(cards)) {
@@ -681,14 +799,21 @@ export function migrateSchema11GameState(value: unknown): unknown {
     !isRecord(value) ||
     value.version !== 11 ||
     (value.contentVersion !== LEGACY_SCHEMA_11_CONTENT_VERSION &&
-      value.contentVersion !== LEGACY_SCHEMA_11_CONTENT_VERSION_V16) ||
+      value.contentVersion !== LEGACY_SCHEMA_11_CONTENT_VERSION_V16 &&
+      value.contentVersion !== LEGACY_SCHEMA_11_CONTENT_VERSION_V17) ||
     !Array.isArray(value.players)
   ) {
     return null;
   }
   try {
+    const preservePendingSpellcraft =
+      value.contentVersion === LEGACY_SCHEMA_11_CONTENT_VERSION_V17;
     const migrated: unknown = JSON.parse(JSON.stringify(value));
-    if (!isRecord(migrated) || !refreshOwnedMinions(migrated)) {
+    if (
+      !isRecord(migrated) ||
+      !refreshOwnedMinions(migrated, preservePendingSpellcraft) ||
+      !repairSpellPool(migrated)
+    ) {
       return null;
     }
     migrated.contentVersion = CURRENT_ROSTER_VERSION;
@@ -761,7 +886,7 @@ export function normalizePersistedGameState(value: unknown): unknown {
     value.version === 11 &&
     value.contentVersion === CURRENT_ROSTER_VERSION
   ) {
-    return value;
+    return repairSpellPool(value) ? value : null;
   }
   return migrateLegacyGameState(value);
 }

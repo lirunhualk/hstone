@@ -30,7 +30,10 @@ const CORE_SPELL_CARD_IDS = [
 
 const allCardIds = [
   ...new Set([
-    ...MINION_DEFINITIONS.map((definition) => definition.cardId),
+    ...MINION_DEFINITIONS.flatMap((definition) => [
+      definition.cardId,
+      definition.goldenCardId,
+    ]),
     ...HERO_POWER_DEFINITIONS.map((definition) => definition.cardId),
     ...SPELLCRAFT_DEFINITIONS.flatMap((definition) => [
       definition.cardId,

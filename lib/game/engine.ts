@@ -172,6 +172,10 @@ const BLOOD_GEM_CARD_ID = "BG20_GEM" as const;
 const BLOOD_GEM_DEFINITION_ID = "blood-gem" as const;
 const CONSOLATION_COIN_CARD_ID = "BG28_521t" as const;
 const CONSOLATION_COIN_DEFINITION_ID = "consolation-coin" as const;
+const ASTRAL_AUTOMATON_DEFINITION_ID = "BG_TTN_401" as const;
+const ETERNAL_KNIGHT_DEFINITION_ID = "BG25_008" as const;
+const ANCIENT_SOUL_DEFINITION_ID = "BG34_231" as const;
+const ANCIENT_SOUL_DEATHS_REQUIRED = 15;
 const LOBBY_TRIBES: readonly Tribe[] = [
   "beast",
   "mech",
@@ -423,6 +427,10 @@ function createMinionInstance(
     description: definition.description,
     bloodGemAttack: 0,
     bloodGemHealth: 0,
+    whereverAttackBonus: 0,
+    whereverHealthBonus: 0,
+    astralAutomatonSummoned: false,
+    ancientSoulFriendlyDeaths: 0,
     temporaryAttack: 0,
     temporaryHealth: 0,
     temporaryTaunt: false,
@@ -440,6 +448,14 @@ function describeGoldenMinion(description: string): string {
   return `金色随从：基础属性已翻倍；可倍增的效果会按金色规则结算。普通版本牌面：${description}`;
 }
 
+function goldenMinionDescription(definitionId: string): string {
+  const definition = getMinionDefinition(definitionId);
+  return (
+    definition.goldenDescription ??
+    describeGoldenMinion(definition.description)
+  );
+}
+
 function makeGoldenToken(
   minion: BoardMinionInstance,
 ): BoardMinionInstance {
@@ -448,12 +464,16 @@ function makeGoldenToken(
   }
   const definition = getMinionDefinition(minion.definitionId);
   minion.golden = true;
-  minion.name = `金色·${minion.name}`;
+  minion.cardId = definition.goldenCardId ?? definition.cardId;
+  minion.name = `金色·${definition.name}`;
   minion.attack *= 2;
   minion.health *= 2;
   minion.sellValue =
     definition.goldenSellValue ?? minion.sellValue;
-  minion.description = describeGoldenMinion(minion.description);
+  minion.description = goldenMinionDescription(definition.id);
+  if (definition.id === ANCIENT_SOUL_DEFINITION_ID) {
+    minion.ancientSoulFriendlyDeaths = ANCIENT_SOUL_DEATHS_REQUIRED;
+  }
   return minion;
 }
 
@@ -465,6 +485,7 @@ function makeMinionGoldenPreservingEnchantments(
   }
   const definition = getMinionDefinition(minion.definitionId);
   minion.golden = true;
+  minion.cardId = definition.goldenCardId ?? definition.cardId;
   minion.name = `金色·${definition.name}`;
   // Golden Touch and Eyes of the Earth Mother add the second copy of the
   // printed base stats. Existing
@@ -473,8 +494,11 @@ function makeMinionGoldenPreservingEnchantments(
   minion.health += definition.health;
   minion.sellValue =
     definition.goldenSellValue ?? minion.sellValue;
-  minion.description = describeGoldenMinion(definition.description);
+  minion.description = goldenMinionDescription(definition.id);
   minion.grantsTripleReward = false;
+  if (definition.id === ANCIENT_SOUL_DEFINITION_ID) {
+    minion.ancientSoulFriendlyDeaths = ANCIENT_SOUL_DEATHS_REQUIRED;
+  }
   return minion;
 }
 
@@ -509,6 +533,10 @@ function createTripleRewardSpell(
     description: `发现一个 ${rewardTier} 级随从。`,
     bloodGemAttack: 0,
     bloodGemHealth: 0,
+    whereverAttackBonus: 0,
+    whereverHealthBonus: 0,
+    astralAutomatonSummoned: false,
+    ancientSoulFriendlyDeaths: 0,
     temporaryAttack: 0,
     temporaryHealth: 0,
     temporaryTaunt: false,
@@ -1088,6 +1116,149 @@ function applyOwnedUndeadArmyBonus(
   minion.health += player.undeadArmyHealthBonus;
 }
 
+function ancientSoulDescription(remainingDeaths: number): string {
+  return `当本随从在你手牌中时，在15个友方随从死亡后，将本随从变为金色。（还剩${Math.max(
+    0,
+    remainingDeaths,
+  )}个！）`;
+}
+
+function refreshAncientSoulDescription(
+  minion: MinionInstance,
+): void {
+  if (minion.definitionId !== ANCIENT_SOUL_DEFINITION_ID) {
+    return;
+  }
+  if (minion.golden) {
+    minion.description = goldenMinionDescription(minion.definitionId);
+    return;
+  }
+  minion.description = ancientSoulDescription(
+    ANCIENT_SOUL_DEATHS_REQUIRED -
+      (minion.ancientSoulFriendlyDeaths ?? 0),
+  );
+}
+
+function desiredWhereverBonuses(
+  minion: MinionInstance,
+  astralAutomatonsSummoned: number,
+  eternalKnightsDied: number,
+): { attack: number; health: number } {
+  if (minion.definitionId === ASTRAL_AUTOMATON_DEFINITION_ID) {
+    const otherSummons = Math.max(
+      0,
+      astralAutomatonsSummoned -
+        (minion.astralAutomatonSummoned === true ? 1 : 0),
+    );
+    return minion.golden
+      ? { attack: otherSummons * 6, health: otherSummons * 4 }
+      : { attack: otherSummons * 3, health: otherSummons * 2 };
+  }
+  if (minion.definitionId === ETERNAL_KNIGHT_DEFINITION_ID) {
+    return minion.golden
+      ? { attack: eternalKnightsDied * 8, health: eternalKnightsDied * 4 }
+      : { attack: eternalKnightsDied * 4, health: eternalKnightsDied * 2 };
+  }
+  return { attack: 0, health: 0 };
+}
+
+function reconcileWhereverMinion(
+  minion: MinionInstance,
+  astralAutomatonsSummoned: number,
+  eternalKnightsDied: number,
+): { attack: number; health: number } {
+  const desired = desiredWhereverBonuses(
+    minion,
+    astralAutomatonsSummoned,
+    eternalKnightsDied,
+  );
+  const attackDelta =
+    desired.attack - (minion.whereverAttackBonus ?? 0);
+  const healthDelta =
+    desired.health - (minion.whereverHealthBonus ?? 0);
+  minion.attack += attackDelta;
+  minion.health += healthDelta;
+  minion.whereverAttackBonus = desired.attack;
+  minion.whereverHealthBonus = desired.health;
+  refreshAncientSoulDescription(minion);
+  return { attack: attackDelta, health: healthDelta };
+}
+
+function ownedMinionCards(player: PlayerState): BoardMinionInstance[] {
+  return [
+    ...player.board,
+    ...player.hand.filter(
+      (card): card is BoardMinionInstance => card.kind === "minion",
+    ),
+    ...player.shop,
+  ];
+}
+
+function reconcilePlayerWhereverMinions(player: PlayerState): void {
+  const astralAutomatonsSummoned =
+    player.astralAutomatonsSummoned ?? 0;
+  const eternalKnightsDied = player.eternalKnightsDied ?? 0;
+  for (const minion of ownedMinionCards(player)) {
+    reconcileWhereverMinion(
+      minion,
+      astralAutomatonsSummoned,
+      eternalKnightsDied,
+    );
+  }
+}
+
+function observeRecruitAutomatonSummon(
+  player: PlayerState,
+  summoned: MinionInstance,
+): void {
+  if (
+    summoned.kind !== "minion" ||
+    summoned.definitionId !== ASTRAL_AUTOMATON_DEFINITION_ID
+  ) {
+    return;
+  }
+  summoned.astralAutomatonSummoned = true;
+  player.astralAutomatonsSummoned =
+    (player.astralAutomatonsSummoned ?? 0) + 1;
+  reconcilePlayerWhereverMinions(player);
+}
+
+function observeAncientSoulFriendlyDeath(player: PlayerState): void {
+  for (const card of player.hand) {
+    if (
+      card.kind !== "minion" ||
+      card.definitionId !== ANCIENT_SOUL_DEFINITION_ID ||
+      card.golden
+    ) {
+      continue;
+    }
+    card.ancientSoulFriendlyDeaths = Math.min(
+      ANCIENT_SOUL_DEATHS_REQUIRED,
+      (card.ancientSoulFriendlyDeaths ?? 0) + 1,
+    );
+    if (
+      card.ancientSoulFriendlyDeaths >= ANCIENT_SOUL_DEATHS_REQUIRED
+    ) {
+      makeMinionGoldenPreservingEnchantments(card);
+      card.grantsTripleReward = false;
+    }
+    refreshAncientSoulDescription(card);
+  }
+}
+
+function observePersistentFriendlyDeath(
+  player: PlayerState,
+  minion: MinionInstance,
+): void {
+  observeAncientSoulFriendlyDeath(player);
+  if (minion.definitionId !== ETERNAL_KNIGHT_DEFINITION_ID) {
+    return;
+  }
+  player.eternalKnightsDied =
+    (player.eternalKnightsDied ?? 0) + 1;
+  reconcilePlayerWhereverMinions(player);
+}
+
 function tavernCardCapacity(player: PlayerState): number {
   return SHOP_SIZE_BY_TIER[player.tavernTier] + 1;
 }
@@ -1135,6 +1306,11 @@ function fillShop(state: GameState, player: PlayerState): void {
       break;
     }
     applyPersistentTavernBonuses(player, minion);
+    reconcileWhereverMinion(
+      minion,
+      player.astralAutomatonsSummoned ?? 0,
+      player.eternalKnightsDied ?? 0,
+    );
     player.shop.push(minion);
     tavernRefreshed = true;
   }
@@ -1574,6 +1750,14 @@ function applyRecruitSummonTriggers(
   player: PlayerState,
   summoned: MinionInstance,
 ): void {
+  if (summoned.kind === "minion") {
+    reconcileWhereverMinion(
+      summoned,
+      player.astralAutomatonsSummoned ?? 0,
+      player.eternalKnightsDied ?? 0,
+    );
+  }
+  observeRecruitAutomatonSummon(player, summoned);
   for (const watcher of player.board) {
     for (const component of minionEffectSources(watcher)) {
       const trigger = getMinionDefinition(
@@ -1797,13 +1981,19 @@ function resolveTriples(state: GameState, player: PlayerState): void {
       const extraAttack = consumed.reduce(
         (total, minion) =>
           total +
-          (minion.attack - definition.attack - undeadArmyAttack),
+          (minion.attack -
+            definition.attack -
+            undeadArmyAttack -
+            (minion.whereverAttackBonus ?? 0)),
         0,
       );
       const extraHealth = consumed.reduce(
         (total, minion) =>
           total +
-          (minion.health - definition.health - undeadArmyHealth),
+          (minion.health -
+            definition.health -
+            undeadArmyHealth -
+            (minion.whereverHealthBonus ?? 0)),
         0,
       );
       const golden = createMinionInstance(
@@ -1812,6 +2002,7 @@ function resolveTriples(state: GameState, player: PlayerState): void {
         consumed.reduce((total, minion) => total + minion.poolCopies, 0),
       );
       golden.golden = true;
+      golden.cardId = definition.goldenCardId ?? definition.cardId;
       golden.grantsTripleReward = true;
       golden.name = `金色·${definition.name}`;
       golden.attack =
@@ -1901,7 +2092,16 @@ function resolveTriples(state: GameState, player: PlayerState): void {
       }
       golden.sellValue =
         definition.goldenSellValue ?? definition.sellValue ?? 1;
-      golden.description = describeGoldenMinion(definition.description);
+      golden.description = goldenMinionDescription(definition.id);
+      if (definition.id === ANCIENT_SOUL_DEFINITION_ID) {
+        golden.ancientSoulFriendlyDeaths =
+          ANCIENT_SOUL_DEATHS_REQUIRED;
+      }
+      reconcileWhereverMinion(
+        golden,
+        player.astralAutomatonsSummoned ?? 0,
+        player.eternalKnightsDied ?? 0,
+      );
       player.hand.push(golden);
       combined = true;
       break;
@@ -1926,6 +2126,11 @@ function buyMinion(
   player.gold -= BUY_COST;
   claimGeneratedShopMinion(minion);
   applyOwnedUndeadArmyBonus(player, minion);
+  reconcileWhereverMinion(
+    minion,
+    player.astralAutomatonsSummoned ?? 0,
+    player.eternalKnightsDied ?? 0,
+  );
   player.hand.push(minion);
   resolveTriples(state, player);
   return true;
@@ -2054,6 +2259,7 @@ function destroyRecruitMinion(
 
   player.board.splice(boardIndex, 1);
   returnMinionToPool(state, source);
+  observePersistentFriendlyDeath(player, source);
   for (const watcher of player.board) {
     for (const component of minionEffectSources(watcher)) {
       const trigger = getMinionDefinition(
@@ -2530,6 +2736,11 @@ function addDrawnMinionToHand(
   }
   claimGeneratedShopMinion(minion);
   applyOwnedUndeadArmyBonus(player, minion);
+  reconcileWhereverMinion(
+    minion,
+    player.astralAutomatonsSummoned ?? 0,
+    player.eternalKnightsDied ?? 0,
+  );
   player.hand.push(minion);
   resolveTriples(state, player);
 }
@@ -2544,6 +2755,11 @@ function addGeneratedMinionCopyToHand(
   }
   const minion = createMinionInstance(state, definitionId, 0);
   applyOwnedUndeadArmyBonus(player, minion);
+  reconcileWhereverMinion(
+    minion,
+    player.astralAutomatonsSummoned ?? 0,
+    player.eternalKnightsDied ?? 0,
+  );
   player.hand.push(minion);
   resolveTriples(state, player);
 }
@@ -2681,6 +2897,11 @@ function transformMinionKeepingStats(
   returnMinionToPool(state, target);
   delete target.poolCopiesOnPurchase;
   Object.assign(target, replacement, preserved);
+  reconcileWhereverMinion(
+    target,
+    player.astralAutomatonsSummoned ?? 0,
+    player.eternalKnightsDied ?? 0,
+  );
   if (player.board.includes(target)) {
     resolveTriples(state, player);
   }
@@ -2916,6 +3137,11 @@ function addSpecialShopMinion(
   minion: BoardMinionInstance,
 ): void {
   applyPersistentTavernBonuses(player, minion);
+  reconcileWhereverMinion(
+    minion,
+    player.astralAutomatonsSummoned ?? 0,
+    player.eternalKnightsDied ?? 0,
+  );
   player.shop.push(minion);
 }
 
@@ -3095,8 +3321,13 @@ function populateHelpfulRefresh(
       if (!populated) {
         return false;
       }
-      makeMinionGoldenPreservingEnchantments(
-        player.shop[randomIndex(state, player.shop.length)],
+      const target =
+        player.shop[randomIndex(state, player.shop.length)];
+      makeMinionGoldenPreservingEnchantments(target);
+      reconcileWhereverMinion(
+        target,
+        player.astralAutomatonsSummoned ?? 0,
+        player.eternalKnightsDied ?? 0,
       );
       return true;
     }
@@ -3778,8 +4009,13 @@ function applyTavernSpellEffect(
         (minion) => !minion.golden,
       );
       if (candidates.length > 0) {
-        makeMinionGoldenPreservingEnchantments(
-          candidates[randomIndex(state, candidates.length)],
+        const goldenTarget =
+          candidates[randomIndex(state, candidates.length)];
+        makeMinionGoldenPreservingEnchantments(goldenTarget);
+        reconcileWhereverMinion(
+          goldenTarget,
+          player.astralAutomatonsSummoned ?? 0,
+          player.eternalKnightsDied ?? 0,
         );
       }
       break;
@@ -3900,6 +4136,11 @@ function applyTavernSpellEffect(
     case "eyesOfTheEarthMother":
       if (target) {
         makeMinionGoldenPreservingEnchantments(target);
+        reconcileWhereverMinion(
+          target,
+          player.astralAutomatonsSummoned ?? 0,
+          player.eternalKnightsDied ?? 0,
+        );
       }
       break;
     case "lostStaffOfHamuul":
@@ -4119,6 +4360,13 @@ function beginDiscoverInteraction(
     return false;
   }
   const options = reserveDiscoverOptions(state, filter);
+  for (const option of options) {
+    reconcileWhereverMinion(
+      option,
+      player.astralAutomatonsSummoned ?? 0,
+      player.eternalKnightsDied ?? 0,
+    );
+  }
   if (options.length === 0) {
     return false;
   }
@@ -4134,6 +4382,11 @@ function beginDiscoverInteraction(
           destination.destroyAfterPlayThroughRound;
       }
       applyOwnedUndeadArmyBonus(player, selected);
+      reconcileWhereverMinion(
+        selected,
+        player.astralAutomatonsSummoned ?? 0,
+        player.eternalKnightsDied ?? 0,
+      );
       player.hand.push(selected);
       resolveTriples(state, player);
     } else {
@@ -4465,6 +4718,11 @@ function resolvePendingInteraction(
         destination.destroyAfterPlayThroughRound;
     }
     applyOwnedUndeadArmyBonus(nextPlayer, nextSelected);
+    reconcileWhereverMinion(
+      nextSelected,
+      nextPlayer.astralAutomatonsSummoned ?? 0,
+      nextPlayer.eternalKnightsDied ?? 0,
+    );
     nextPlayer.hand.push(nextSelected);
     resolveTriples(next, nextPlayer);
   } else {
@@ -4650,12 +4908,26 @@ function playAiHand(state: GameState, player: PlayerState): void {
       playHandCard(state, player, reward.instanceId);
       continue;
     }
-    const minions = player.hand.filter(
+    const playableMinions = player.hand.filter(
       (card): card is BoardMinionInstance =>
         card.kind === "minion" &&
         (card.playableFromRound ?? 0) <= state.round &&
         (card.destroyAfterPlayThroughRound ?? -1) < state.round,
     );
+    const canKeepAncientSoulInHand =
+      player.board.length > 0 ||
+      playableMinions.some(
+        (card) =>
+          card.definitionId !== ANCIENT_SOUL_DEFINITION_ID ||
+          card.golden,
+      );
+    const minions = canKeepAncientSoulInHand
+      ? playableMinions.filter(
+          (card) =>
+            card.definitionId !== ANCIENT_SOUL_DEFINITION_ID ||
+            card.golden,
+        )
+      : playableMinions;
     if (minions.length === 0) {
       if (playBestAiTavernSpell(state, player)) {
         continue;
@@ -5105,6 +5377,8 @@ interface CombatContext {
   deadMechs: Record<PlayerId, MinionInstance[]>;
   tribeBuffs: Record<PlayerId, Partial<Record<Tribe, CombatStatBuff>>>;
   pendingBeetles: Record<PlayerId, number>;
+  astralAutomatonsSummoned: Record<PlayerId, number>;
+  eternalKnightsDied: Record<PlayerId, number>;
 }
 
 function opponentId(context: CombatContext, ownerId: PlayerId): PlayerId {
@@ -5122,6 +5396,99 @@ function persistentCombatOwner(
   }
   const owner = findPlayer(context.state, ownerId);
   return owner?.alive ? owner : undefined;
+}
+
+function pushWhereverBuffEvent(
+  context: CombatContext,
+  ownerId: PlayerId,
+  actorInstanceId: string,
+  target: MinionInstance,
+  delta: { attack: number; health: number },
+  message: string,
+): void {
+  if (delta.attack === 0 && delta.health === 0) {
+    return;
+  }
+  pushBattleEvent(context.events, {
+    type: "buff",
+    actorPlayerId: ownerId,
+    actorInstanceId,
+    targetPlayerId: ownerId,
+    targetInstanceId: target.instanceId,
+    attackDelta: delta.attack,
+    healthDelta: delta.health,
+    minion: cloneMinion(target),
+    message,
+  });
+}
+
+function reconcileCombatWhereverMinions(
+  context: CombatContext,
+  ownerId: PlayerId,
+  actorInstanceId: string,
+  message: string,
+): void {
+  for (const minion of context.boards[ownerId]) {
+    const delta = reconcileWhereverMinion(
+      minion,
+      context.astralAutomatonsSummoned[ownerId],
+      context.eternalKnightsDied[ownerId],
+    );
+    pushWhereverBuffEvent(
+      context,
+      ownerId,
+      actorInstanceId,
+      minion,
+      delta,
+      message,
+    );
+  }
+}
+
+function observeCombatAutomatonSummon(
+  context: CombatContext,
+  ownerId: PlayerId,
+  summoned: BoardMinionInstance,
+): void {
+  if (summoned.definitionId !== ASTRAL_AUTOMATON_DEFINITION_ID) {
+    return;
+  }
+  summoned.astralAutomatonSummoned = true;
+  context.astralAutomatonsSummoned[ownerId] += 1;
+  const persistentOwner = persistentCombatOwner(context, ownerId);
+  if (persistentOwner) {
+    persistentOwner.astralAutomatonsSummoned += 1;
+    reconcilePlayerWhereverMinions(persistentOwner);
+  }
+  reconcileCombatWhereverMinions(
+    context,
+    ownerId,
+    summoned.instanceId,
+    `${summoned.name}的召唤强化了其他星元自动机。`,
+  );
+}
+
+function observeCombatFriendlyDeath(
+  context: CombatContext,
+  death: DeadMinion,
+): void {
+  const persistentOwner = persistentCombatOwner(
+    context,
+    death.ownerId,
+  );
+  if (persistentOwner) {
+    observePersistentFriendlyDeath(persistentOwner, death.minion);
+  }
+  if (death.minion.definitionId !== ETERNAL_KNIGHT_DEFINITION_ID) {
+    return;
+  }
+  context.eternalKnightsDied[death.ownerId] += 1;
+  reconcileCombatWhereverMinions(
+    context,
+    death.ownerId,
+    death.minion.instanceId,
+    `${death.minion.name}的死亡强化了永恒骑士。`,
+  );
 }
 
 function combatBuffTargets(
@@ -5253,7 +5620,9 @@ function applyExistingAurasToSummoned(
 function applyNewAuraSource(
   board: readonly MinionInstance[],
   source: MinionInstance,
-): void {
+  ownerId: PlayerId,
+): Omit<BattleEvent, "index">[] {
+  const events: Omit<BattleEvent, "index">[] = [];
   for (const component of minionEffectSources(source)) {
     const aura = getMinionDefinition(component.definitionId).aura;
     if (!aura) {
@@ -5267,10 +5636,24 @@ function applyNewAuraSource(
       ) {
         continue;
       }
-      target.attack += aura.attack * scale;
-      target.health += aura.health * scale;
+      const attackDelta = aura.attack * scale;
+      const healthDelta = aura.health * scale;
+      target.attack += attackDelta;
+      target.health += healthDelta;
+      events.push({
+        type: "buff",
+        actorPlayerId: ownerId,
+        actorInstanceId: source.instanceId,
+        targetPlayerId: ownerId,
+        targetInstanceId: target.instanceId,
+        attackDelta,
+        healthDelta,
+        minion: cloneMinion(target),
+        message: `${source.name}的光环使${target.name}获得+${attackDelta}/+${healthDelta}。`,
+      });
     }
   }
+  return events;
 }
 
 function removeCombatAuraSource(
@@ -5287,8 +5670,23 @@ function removeCombatAuraSource(
       if (!minionHasTribe(target, aura.tribe)) {
         continue;
       }
-      target.attack -= aura.attack * scale;
-      target.health -= aura.health * scale;
+      const attackDelta = -aura.attack * scale;
+      const healthDelta = -aura.health * scale;
+      target.attack += attackDelta;
+      target.health += healthDelta;
+      const targetSnapshot = cloneMinion(target);
+      targetSnapshot.health = Math.max(0, targetSnapshot.health);
+      pushBattleEvent(context.events, {
+        type: "buff",
+        actorPlayerId: death.ownerId,
+        actorInstanceId: death.minion.instanceId,
+        targetPlayerId: death.ownerId,
+        targetInstanceId: target.instanceId,
+        attackDelta,
+        healthDelta,
+        minion: targetSnapshot,
+        message: `${death.minion.name}阵亡后，${target.name}失去光环加成。`,
+      });
     }
   }
 }
@@ -5341,7 +5739,8 @@ function triggerAfterFriendlySummoned(
   context: CombatContext,
   ownerId: PlayerId,
   summoned: MinionInstance,
-): void {
+): Omit<BattleEvent, "index">[] {
+  const events: Omit<BattleEvent, "index">[] = [];
   for (const watcher of context.boards[ownerId]) {
     if (watcher.instanceId === summoned.instanceId) {
       continue;
@@ -5355,15 +5754,29 @@ function triggerAfterFriendlySummoned(
       }
       const scale = component.golden ? 2 : 1;
       if (trigger.grantShield) {
-        watcher.attack += (trigger.attack ?? 0) * scale;
-        watcher.health += (trigger.health ?? 0) * scale;
+        const attackDelta = (trigger.attack ?? 0) * scale;
+        const healthDelta = (trigger.health ?? 0) * scale;
+        watcher.attack += attackDelta;
+        watcher.health += healthDelta;
         watcher.divineShield = true;
+        events.push({
+          type: "buff",
+          actorPlayerId: ownerId,
+          actorInstanceId: summoned.instanceId,
+          targetPlayerId: ownerId,
+          targetInstanceId: watcher.instanceId,
+          attackDelta,
+          healthDelta,
+          minion: cloneMinion(watcher),
+          message: `${summoned.name}被召唤后，${watcher.name}获得+${attackDelta}/+${healthDelta}和圣盾。`,
+        });
       } else {
         summoned.attack += (trigger.attack ?? 0) * scale;
         summoned.health += (trigger.health ?? 0) * scale;
       }
     }
   }
+  return events;
 }
 
 function summonCombatMinion(
@@ -5408,6 +5821,11 @@ function insertCombatMinion(
   if (board.length >= MAX_BOARD_SIZE) {
     return null;
   }
+  reconcileWhereverMinion(
+    summoned,
+    context.astralAutomatonsSummoned[ownerId],
+    context.eternalKnightsDied[ownerId],
+  );
   if (summonReason !== "rallyFromHand") {
     applyPersistentTribeBuff(context, ownerId, summoned);
   }
@@ -5415,8 +5833,12 @@ function insertCombatMinion(
   applyExistingAurasToSummoned(board, summoned);
   const boardIndex = Math.min(Math.max(0, insertAt), board.length);
   board.splice(boardIndex, 0, summoned);
-  applyNewAuraSource(board, summoned);
-  triggerAfterFriendlySummoned(context, ownerId, summoned);
+  const auraEvents = applyNewAuraSource(board, summoned, ownerId);
+  const afterSummonEvents = triggerAfterFriendlySummoned(
+    context,
+    ownerId,
+    summoned,
+  );
   pushBattleEvent(context.events, {
     type: "summon",
     actorPlayerId: ownerId,
@@ -5428,6 +5850,10 @@ function insertCombatMinion(
     summonReason,
     message,
   });
+  for (const event of [...auraEvents, ...afterSummonEvents]) {
+    pushBattleEvent(context.events, event);
+  }
+  observeCombatAutomatonSummon(context, ownerId, summoned);
   return summoned;
 }
 
@@ -5594,6 +6020,7 @@ function dealCombatDamage(
       actorInstanceId: source.instanceId,
       targetPlayerId: targetOwnerId,
       targetInstanceId: target.instanceId,
+      minion: cloneMinion(target),
       message: `${target.name}的圣盾被击破。`,
     });
     return;
@@ -5605,6 +6032,18 @@ function dealCombatDamage(
   if (source.venomous) {
     source.venomous = false;
   }
+  const targetSnapshot = cloneMinion(target);
+  targetSnapshot.health = Math.max(0, targetSnapshot.health);
+  pushBattleEvent(context.events, {
+    type: "damage",
+    actorPlayerId: sourceOwnerId,
+    actorInstanceId: source.instanceId,
+    targetPlayerId: targetOwnerId,
+    targetInstanceId: target.instanceId,
+    amount,
+    minion: targetSnapshot,
+    message: `${target.name}受到${amount}点伤害，剩余${targetSnapshot.health}点生命。`,
+  });
   triggerSelfDamaged(context, targetOwnerId, target);
 }
 
@@ -5701,6 +6140,11 @@ function resolveCombatGetRandomMinion(
       continue;
     }
     applyOwnedUndeadArmyBonus(owner, gained);
+    reconcileWhereverMinion(
+      gained,
+      owner.astralAutomatonsSummoned ?? 0,
+      owner.eternalKnightsDied ?? 0,
+    );
     const gainedSnapshot = cloneMinion(gained);
     owner.hand.push(gained);
     resolveTriples(context.state, owner);
@@ -6091,8 +6535,25 @@ function triggerAfterFriendlyDied(
       const trigger = definition.afterFriendlyDied;
       const scale = component.golden ? 2 : 1;
       if (trigger && minionHasTribe(death.minion, trigger.tribe)) {
-        watcher.attack += (trigger.attack ?? 0) * scale;
-        watcher.health += (trigger.health ?? 0) * scale;
+        const attackDelta = (trigger.attack ?? 0) * scale;
+        const healthDelta = (trigger.health ?? 0) * scale;
+        watcher.attack += attackDelta;
+        watcher.health += healthDelta;
+        if (attackDelta !== 0 || healthDelta !== 0) {
+          pushBattleEvent(context.events, {
+            type: "buff",
+            actorPlayerId: ownerId,
+            actorInstanceId: watcher.instanceId,
+            targetPlayerId: ownerId,
+            targetInstanceId: watcher.instanceId,
+            attackDelta,
+            healthDelta,
+            minion: cloneMinion(watcher),
+            message: `${watcher.name}因友方随从死亡获得+${
+              attackDelta
+            }/+${healthDelta}。`,
+          });
+        }
         if (trigger.damageEnemy) {
           for (let hit = 0; hit < scale; hit += 1) {
             const target = targetForEnemyDamage(
@@ -6133,6 +6594,7 @@ function triggerAfterFriendlyDied(
         targetInstanceId: watcher.instanceId,
         attackDelta,
         healthDelta,
+        minion: cloneMinion(watcher),
         message: `${watcher.name}因友方随从死亡获得+${
           attackDelta
         }攻击力${
@@ -6204,6 +6666,19 @@ function resolveOneDeathrattle(
             effect,
           )) {
             applyBuff(target, effect, scale);
+            pushBattleEvent(context.events, {
+              type: "buff",
+              actorPlayerId: ownerId,
+              actorInstanceId: source.instanceId,
+              targetPlayerId: ownerId,
+              targetInstanceId: target.instanceId,
+              attackDelta: effect.attack * scale,
+              healthDelta: effect.health * scale,
+              minion: cloneMinion(target),
+              message: `${source.name}的亡语使${target.name}获得+${
+                effect.attack * scale
+              }/+${effect.health * scale}。`,
+            });
           }
         } else if (effect.kind === "grantShield") {
           const candidates = [...board];
@@ -6216,6 +6691,15 @@ function resolveOneDeathrattle(
             const target = candidates[targetIndex];
             target.divineShield = true;
             candidates.splice(targetIndex, 1);
+            pushBattleEvent(context.events, {
+              type: "buff",
+              actorPlayerId: ownerId,
+              actorInstanceId: source.instanceId,
+              targetPlayerId: ownerId,
+              targetInstanceId: target.instanceId,
+              minion: cloneMinion(target),
+              message: `${source.name}的亡语使${target.name}获得圣盾。`,
+            });
           }
         } else if (effect.kind === "damageEnemy") {
           const target = targetForEnemyDamage(context, enemyId, effect.target);
@@ -6367,13 +6851,21 @@ function resolveCombatDeaths(context: CombatContext): void {
       if (minionHasTribe(death.minion, "mech")) {
         context.deadMechs[death.ownerId].push(cloneMinion(death.minion));
       }
-      removeCombatAuraSource(context, death);
+      const deathSnapshot = cloneMinion(death.minion);
+      deathSnapshot.health = 0;
       pushBattleEvent(context.events, {
         type: "death",
         actorPlayerId: death.ownerId,
         actorInstanceId: death.minion.instanceId,
+        minion: deathSnapshot,
         message: `${death.minion.name}被消灭。`,
       });
+    }
+    for (const death of deaths) {
+      removeCombatAuraSource(context, death);
+    }
+    for (const death of deaths) {
+      observeCombatFriendlyDeath(context, death);
     }
     for (const death of deaths) {
       triggerAfterFriendlyDied(context, death.ownerId, death);
@@ -6398,23 +6890,15 @@ function resolveCombatDeaths(context: CombatContext): void {
       }
       reborn.health = 1;
       reborn.reborn = false;
-      applyPersistentTribeBuff(context, death.ownerId, reborn);
-      applyCombatSummonHeroPower(context, death.ownerId, reborn);
-      const board = context.boards[death.ownerId];
-      const boardIndex = Math.min(death.index, board.length);
-      board.splice(boardIndex, 0, reborn);
-      triggerAfterFriendlySummoned(context, death.ownerId, reborn);
-      pushBattleEvent(context.events, {
-        type: "summon",
-        actorPlayerId: death.ownerId,
-        actorInstanceId: death.minion.instanceId,
-        targetPlayerId: death.ownerId,
-        targetInstanceId: reborn.instanceId,
-        boardIndex,
-        minion: cloneMinion(reborn),
-        summonReason: "reborn",
-        message: `${death.minion.name}复生了。`,
-      });
+      insertCombatMinion(
+        context,
+        death.ownerId,
+        reborn,
+        death.index,
+        death.minion,
+        `${death.minion.name}复生了。`,
+        "reborn",
+      );
     }
     for (const ownerId of context.playerIds) {
       summonPendingBeetles(context, ownerId);
@@ -6556,6 +7040,28 @@ function simulateBattle(
   const boardA = cloneBoard(playerA.board);
   const boardB = cloneBoard(playerB.board);
   const events: BattleEvent[] = [];
+  const astralAutomatonsSummoned = {
+    [playerA.id]: playerA.astralAutomatonsSummoned,
+    [playerB.id]: playerB.astralAutomatonsSummoned,
+  };
+  const eternalKnightsDied = {
+    [playerA.id]: playerA.eternalKnightsDied,
+    [playerB.id]: playerB.eternalKnightsDied,
+  };
+  for (const minion of boardA) {
+    reconcileWhereverMinion(
+      minion,
+      astralAutomatonsSummoned[playerA.id],
+      eternalKnightsDied[playerA.id],
+    );
+  }
+  for (const minion of boardB) {
+    reconcileWhereverMinion(
+      minion,
+      astralAutomatonsSummoned[playerB.id],
+      eternalKnightsDied[playerB.id],
+    );
+  }
   buffMinions(
     boardA,
     playerA.nextCombatAttackBonus,
@@ -6609,6 +7115,8 @@ function simulateBattle(
       [playerA.id]: playerA.nextCombatBeetles,
       [playerB.id]: isGhost ? 0 : playerB.nextCombatBeetles,
     },
+    astralAutomatonsSummoned,
+    eternalKnightsDied,
   };
   const healthABefore = playerA.health;
   const healthBBefore = playerB.health;
@@ -7047,6 +7555,8 @@ export function createGame(seed?: number): GameState {
     deepBlueBonus: 0,
     undeadArmyAttackBonus: 0,
     undeadArmyHealthBonus: 0,
+    astralAutomatonsSummoned: 0,
+    eternalKnightsDied: 0,
     bloodGemAttack: 1,
     bloodGemHealth: 1,
   }));

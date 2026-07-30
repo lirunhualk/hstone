@@ -42,6 +42,15 @@ export function projectCombatBoard(
       event.actorPlayerId === playerId &&
       event.actorInstanceId
     ) {
+      const snapshot = event.minion
+        ? asBoardMinion(event.minion)
+        : undefined;
+      const dyingIndex = projected.findIndex(
+        (unit) => unit.instanceId === event.actorInstanceId,
+      );
+      if (snapshot && dyingIndex >= 0) {
+        projected[dyingIndex] = snapshot;
+      }
       pendingDeathInstanceId = event.actorInstanceId;
       continue;
     }
@@ -65,7 +74,9 @@ export function projectCombatBoard(
     }
 
     if (
-      (event.type === "buff" ||
+      (event.type === "damage" ||
+        event.type === "shieldBroken" ||
+        event.type === "buff" ||
         event.type === "keywordRemoved") &&
       event.targetPlayerId === playerId &&
       event.targetInstanceId &&

@@ -297,6 +297,8 @@ export interface MinionDefinition {
   id: string;
   /** Hearthstone CardID used only to locate the familiar card artwork. */
   cardId: string;
+  /** Real premium CardID when the Golden card has distinct artwork. */
+  goldenCardId?: string;
   name: string;
   tier: TavernTier;
   /** Primary type retained for the current single-type engine compatibility. */
@@ -314,6 +316,8 @@ export interface MinionDefinition {
   attack: number;
   health: number;
   description: string;
+  /** Printed Golden text when its values or completion state differ. */
+  goldenDescription?: string;
   taunt?: boolean;
   divineShield?: boolean;
   reborn?: boolean;
@@ -381,6 +385,13 @@ export interface MinionInstance {
   cleave: boolean;
   alwaysAttacksLowestAttack: boolean;
   description: string;
+  /** Derived "wherever this is" stats already represented in attack/health. */
+  whereverAttackBonus?: number;
+  whereverHealthBonus?: number;
+  /** Whether this Astral Automaton has already contributed to its owner count. */
+  astralAutomatonSummoned?: boolean;
+  /** Friendly deaths observed while this Ancient Soul was held in hand. */
+  ancientSoulFriendlyDeaths?: number;
   /** Total permanent stats on this minion that came specifically from Blood Gems. */
   bloodGemAttack: number;
   bloodGemHealth: number;
@@ -728,6 +739,9 @@ export interface PlayerState {
   /** Permanent "wherever they are" stats granted by Slaughter. */
   undeadArmyAttackBonus: number;
   undeadArmyHealthBonus: number;
+  /** Persistent game-wide history used by Astral Automaton and Eternal Knight. */
+  astralAutomatonsSummoned: number;
+  eternalKnightsDied: number;
   /** Permanent per-player Blood Gem values; new Gems read these on cast. */
   bloodGemAttack: number;
   bloodGemHealth: number;
@@ -739,6 +753,7 @@ export interface PlayerState {
 export type BattleEventType =
   | "battleStart"
   | "attack"
+  | "damage"
   | "buff"
   | "handBuff"
   | "keywordRemoved"

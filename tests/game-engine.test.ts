@@ -640,6 +640,265 @@ test("combat playback inserts a normal summon before projecting a buff onto it",
   assert.equal(projected[1].health, 4);
 });
 
+test("combat playback projects shield loss and exact remaining minion Health", () => {
+  const state = createGame(0x8143);
+  const template = humanPlayer(state).shop[0];
+  const target = fixtureMinion(
+    template,
+    "playback-damage-target",
+    {
+      health: 12,
+      divineShield: true,
+    },
+  );
+  const shieldBroken = {
+    ...target,
+    divineShield: false,
+  };
+  const damaged = {
+    ...shieldBroken,
+    health: 5,
+  };
+  const dead = {
+    ...damaged,
+    health: 0,
+  };
+  const playerId = state.humanPlayerId;
+  const events: BattleEvent[] = [
+    {
+      index: 0,
+      type: "shieldBroken",
+      actorPlayerId: "enemy",
+      actorInstanceId: "enemy-attacker",
+      targetPlayerId: playerId,
+      targetInstanceId: target.instanceId,
+      minion: shieldBroken,
+      message: "测试随从的圣盾被击破。",
+    },
+    {
+      index: 1,
+      type: "damage",
+      actorPlayerId: "enemy",
+      actorInstanceId: "enemy-attacker",
+      targetPlayerId: playerId,
+      targetInstanceId: target.instanceId,
+      amount: 7,
+      minion: damaged,
+      message: "测试随从受到7点伤害，剩余5点生命。",
+    },
+    {
+      index: 2,
+      type: "death",
+      actorPlayerId: playerId,
+      actorInstanceId: target.instanceId,
+      minion: dead,
+      message: "测试随从被消灭。",
+    },
+    {
+      index: 3,
+      type: "battleEnd",
+      message: "战斗结束。",
+    },
+  ];
+
+  const afterShield = projectCombatBoard(
+    [target],
+    playerId,
+    events.slice(0, 1),
+  )[0];
+  assert.equal(afterShield.divineShield, false);
+  assert.equal(afterShield.health, 12);
+
+  const afterDamage = projectCombatBoard(
+    [target],
+    playerId,
+    events.slice(0, 2),
+  )[0];
+  assert.equal(afterDamage.health, 5);
+
+  const duringDeath = projectCombatBoard(
+    [target],
+    playerId,
+    events.slice(0, 3),
+  )[0];
+  assert.equal(duringDeath.health, 0);
+  assert.equal(
+    projectCombatBoard([target], playerId, events).length,
+    0,
+  );
+  assert.equal(
+    projectCombatBoard([target], "another-player", events)[0].health,
+    12,
+  );
+});
+
+test("combat snapshots project Deathrattle buffs, Shields, and aura loss", () => {
+  const state = createGame(0x8144);
+  const template = humanPlayer(state).shop[0];
+  prepareLockedCombat(state);
+  for (const player of state.players) {
+    player.board = player.isHuman
+      ? [
+          definitionMinion(
+            template,
+            "spawn-of-nzoth",
+            "snapshot-spawn",
+            { health: 1, taunt: true },
+          ),
+          definitionMinion(
+            template,
+            "selfless-hero",
+            "snapshot-selfless",
+            { health: 1, taunt: true },
+          ),
+          fixtureMinion(template, "snapshot-survivor", {
+            attack: 1,
+            health: 50,
+          }),
+        ]
+      : [
+          fixtureMinion(template, `snapshot-enemy-${player.id}`, {
+            attack: 10,
+            health: 100,
+          }),
+        ];
+  }
+
+  const combat = gameReducer(state, { type: "END_TURN" });
+  const battle = combat.lastBattle;
+  assert.ok(battle);
+  const buffEvent = battle.events.find(
+    (event) =>
+      event.type === "buff" &&
+      event.actorInstanceId === "snapshot-spawn" &&
+      event.targetInstanceId === "snapshot-survivor",
+  );
+  assert.ok(buffEvent?.minion);
+  assert.equal(buffEvent.minion.attack, 2);
+  assert.equal(buffEvent.minion.health, 51);
+  const afterBuff = projectCombatBoard(
+    battle.initialBoards[state.humanPlayerId].filter(
+      (minion): minion is BoardMinionInstance =>
+        minion.kind === "minion",
+    ),
+    state.humanPlayerId,
+    battle.events.slice(0, buffEvent.index + 1),
+  ).find((minion) => minion.instanceId === "snapshot-survivor");
+  assert.equal(afterBuff?.attack, 2);
+  assert.equal(afterBuff?.health, 51);
+
+  const shieldEvent = battle.events.find(
+    (event) =>
+      event.type === "buff" &&
+      event.actorInstanceId === "snapshot-selfless" &&
+      event.targetInstanceId === "snapshot-survivor",
+  );
+  assert.ok(shieldEvent?.minion);
+  assert.equal(shieldEvent.minion.divineShield, true);
+  const afterShield = projectCombatBoard(
+    battle.initialBoards[state.humanPlayerId].filter(
+      (minion): minion is BoardMinionInstance =>
+        minion.kind === "minion",
+    ),
+    state.humanPlayerId,
+    battle.events.slice(0, shieldEvent.index + 1),
+  ).find((minion) => minion.instanceId === "snapshot-survivor");
+  assert.equal(afterShield?.divineShield, true);
+
+  const auraState = createGame(0x8145);
+  const auraTemplate = humanPlayer(auraState).shop[0];
+  prepareLockedCombat(auraState);
+  for (const player of auraState.players) {
+    player.board = player.isHuman
+      ? [
+          definitionMinion(
+            auraTemplate,
+            "murloc-warleader",
+            "snapshot-warleader",
+            { health: 1 },
+          ),
+          definitionMinion(
+            auraTemplate,
+            "murloc-tidehunter",
+            "snapshot-murloc",
+            { health: 50 },
+          ),
+        ]
+      : [
+          fixtureMinion(auraTemplate, `aura-enemy-${player.id}`, {
+            attack: 10,
+            health: 100,
+          }),
+        ];
+  }
+  const auraCombat = gameReducer(auraState, { type: "END_TURN" });
+  const auraBattle = auraCombat.lastBattle;
+  assert.ok(auraBattle);
+  const auraLoss = auraBattle.events.find(
+    (event) =>
+      event.type === "buff" &&
+      event.actorInstanceId === "snapshot-warleader" &&
+      event.targetInstanceId === "snapshot-murloc" &&
+      event.attackDelta === -2,
+  );
+  assert.ok(auraLoss?.minion);
+  assert.equal(
+    auraLoss.minion.attack,
+    getMinionDefinition("murloc-tidehunter").attack,
+  );
+});
+
+test("combat summon snapshots precede Deflect-o-Bot's refreshed Shield", () => {
+  const state = createGame(0x8146);
+  const template = humanPlayer(state).shop[0];
+  prepareLockedCombat(state);
+  for (const player of state.players) {
+    player.board = player.isHuman
+      ? [
+          definitionMinion(
+            template,
+            "mechano-egg",
+            "snapshot-mechano-egg",
+            { health: 1, taunt: true },
+          ),
+          definitionMinion(
+            template,
+            "deflect-o-bot",
+            "snapshot-deflect-o-bot",
+            { health: 50, divineShield: false },
+          ),
+        ]
+      : [
+          fixtureMinion(template, `deflect-enemy-${player.id}`, {
+            attack: 10,
+            health: 100,
+          }),
+        ];
+  }
+
+  const combat = gameReducer(state, { type: "END_TURN" });
+  const battle = combat.lastBattle;
+  assert.ok(battle);
+  const summonEvent = battle.events.find(
+    (event) =>
+      event.type === "summon" &&
+      event.actorInstanceId === "snapshot-mechano-egg",
+  );
+  const deflectEvent = battle.events.find(
+    (event) =>
+      event.type === "buff" &&
+      event.targetInstanceId === "snapshot-deflect-o-bot" &&
+      event.minion?.divineShield === true,
+  );
+  assert.ok(summonEvent);
+  assert.ok(deflectEvent?.minion);
+  assert.ok(summonEvent.index < deflectEvent.index);
+  assert.equal(
+    deflectEvent.minion.attack,
+    getMinionDefinition("deflect-o-bot").attack + 2,
+  );
+});
+
 test("Zapp attacks the lowest-attack minion twice before combat passes", () => {
   const state = createGame(0x815);
   const template = humanPlayer(state).shop[0];
@@ -689,6 +948,17 @@ test("Zapp attacks the lowest-attack minion twice before combat passes", () => {
     ),
   );
   assert.ok(firstAttacks[1].message.includes("风怒"));
+  const firstDamage = combat.lastBattle.events.find(
+    (event) =>
+      event.type === "damage" &&
+      event.actorInstanceId === "zapp-fixture" &&
+      event.targetInstanceId === firstAttacks[0].targetInstanceId,
+  );
+  assert.ok(firstDamage);
+  assert.ok(firstDamage.index > firstAttacks[0].index);
+  assert.equal(firstDamage.minion?.instanceId, firstDamage.targetInstanceId);
+  assert.ok((firstDamage.minion?.health ?? -1) >= 0);
+  assert.match(firstDamage.message, /剩余\d+点生命/);
 });
 
 test("Venomous is consumed after the first minion it damages", () => {

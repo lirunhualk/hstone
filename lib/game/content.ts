@@ -3,7 +3,7 @@ import liveRosterSnapshot from "./generated/battlegrounds-36.0.3-247416.zhCN.jso
 };
 import type { MinionDefinition, Tribe } from "./types.ts";
 
-export const CURRENT_ROSTER_VERSION = "battlegrounds-36.0.3-247416-v17";
+export const CURRENT_ROSTER_VERSION = "battlegrounds-36.0.3-247416-v18";
 /** Compatibility alias for existing save and engine imports. */
 export const CLASSIC_ROSTER_VERSION = CURRENT_ROSTER_VERSION;
 
@@ -1106,6 +1106,21 @@ const LIVE_RULE_OVERRIDES: Readonly<
       },
     ],
   },
+  BG_TTN_401: {
+    goldenCardId: "BG_TTN_401_G",
+    goldenDescription:
+      "在本局对战中，你每召唤过一个其他星元自动机，便拥有+6/+4（无论本随从在哪）。",
+  },
+  BG25_008: {
+    goldenCardId: "BG25_008_G",
+    goldenDescription:
+      "在本局对战中，每有一个友方永恒骑士死亡，便拥有+8/+4（无论本随从在哪）。",
+  },
+  BG34_231: {
+    goldenCardId: "BG34_231_G",
+    goldenDescription:
+      "当本随从在你手牌中时，在15个友方随从死亡后，将本随从变为金色。（已完成！）",
+  },
   BG34_175: {
     afterMagnetized: [
       {
@@ -1325,6 +1340,7 @@ const FULLY_SUPPORTED_LIVE_CARD_IDS = new Set([
   "BG21_014",
   "BG23_002",
   "BG25_001",
+  "BG25_008",
   "BG25_010",
   "BG25_011",
   "BG25_013",
@@ -1360,6 +1376,7 @@ const FULLY_SUPPORTED_LIVE_CARD_IDS = new Set([
   "BG33_888",
   "BG34_140",
   "BG34_175",
+  "BG34_231",
   "BG34_523",
   "BG34_630",
   "BG34_636t",
@@ -1379,6 +1396,7 @@ const FULLY_SUPPORTED_LIVE_CARD_IDS = new Set([
   "BGS_119",
   "BGS_131",
   "BG_LOE_077",
+  "BG_TTN_401",
 ]);
 
 function createLiveDefinition(card: LiveRosterCard): MinionDefinition {

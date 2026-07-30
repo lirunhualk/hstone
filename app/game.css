@@ -507,6 +507,61 @@
   height: 100%;
 }
 
+.shop-panel .card-row > .unit-card,
+.shop-panel .card-row > .shop-spell-slot {
+  animation: shop-offer-materialize 520ms
+    cubic-bezier(0.18, 0.82, 0.28, 1) both;
+}
+
+.shop-panel .card-row > :nth-child(2) {
+  animation-delay: 32ms;
+}
+
+.shop-panel .card-row > :nth-child(3) {
+  animation-delay: 64ms;
+}
+
+.shop-panel .card-row > :nth-child(4) {
+  animation-delay: 96ms;
+}
+
+.shop-panel .card-row > :nth-child(5) {
+  animation-delay: 128ms;
+}
+
+.shop-panel .card-row > :nth-child(6) {
+  animation-delay: 160ms;
+}
+
+.shop-panel .card-row > :nth-child(7) {
+  animation-delay: 192ms;
+}
+
+@keyframes shop-offer-materialize {
+  0% {
+    filter: brightness(1.85) saturate(1.35);
+    opacity: 0.22;
+    transform: translateY(-8px) scale(0.88);
+    box-shadow:
+      0 0 0 2px rgb(222 248 255 / 42%),
+      0 0 34px rgb(91 184 255 / 64%);
+  }
+  56% {
+    filter: brightness(1.25) saturate(1.15);
+    opacity: 1;
+    transform: translateY(1px) scale(1.025);
+    box-shadow:
+      0 8px 20px rgb(0 0 0 / 24%),
+      0 0 0 2px rgb(192 238 255 / 26%),
+      0 0 26px rgb(91 184 255 / 42%);
+  }
+  100% {
+    filter: none;
+    opacity: 1;
+    transform: none;
+  }
+}
+
 .shop-panel.is-frozen .tavern-spell-card {
   border-color: rgb(174 232 255 / 78%);
   filter: saturate(0.78) contrast(1.06) brightness(1.04);
@@ -1185,6 +1240,71 @@
   line-height: 1;
   transform: translateX(-50%);
   animation: combat-buff-pop 300ms ease both;
+}
+
+.combat-damage-label,
+.combat-death-label {
+  position: absolute;
+  z-index: 30;
+  left: 50%;
+  border-radius: 999px;
+  pointer-events: none;
+  font-weight: 950;
+  line-height: 1;
+  white-space: nowrap;
+  transform: translateX(-50%);
+}
+
+.combat-damage-label {
+  bottom: 8px;
+  padding: 5px 8px;
+  border: 1px solid rgb(255 231 232 / 92%);
+  color: #fff7f7;
+  background: linear-gradient(135deg, #b91f38, #ff5c69);
+  box-shadow:
+    0 5px 16px rgb(0 0 0 / 42%),
+    0 0 24px rgb(255 74 92 / 62%);
+  font-size: 11px;
+  animation: combat-damage-pop 620ms ease both;
+}
+
+.combat-death-label {
+  top: 50%;
+  padding: 7px 12px;
+  border: 1px solid rgb(255 235 235 / 90%);
+  color: #fff;
+  background: rgb(110 17 27 / 92%);
+  box-shadow:
+    0 7px 18px rgb(0 0 0 / 48%),
+    0 0 30px rgb(255 73 85 / 46%);
+  font-size: 12px;
+  letter-spacing: 0.12em;
+  transform: translate(-50%, -50%);
+}
+
+.unit-card.is-hit .stat[data-stat="health"] {
+  color: #fff;
+  background: rgb(181 24 45 / 92%);
+  box-shadow: 0 0 16px rgb(255 73 85 / 72%);
+}
+
+@keyframes combat-damage-pop {
+  0% {
+    opacity: 0;
+    transform: translate(-50%, 10px) scale(0.72);
+  }
+  38% {
+    opacity: 1;
+    transform: translate(-50%, -4px) scale(1.12);
+  }
+  78% {
+    opacity: 1;
+    transform: translate(-50%, -8px) scale(1);
+  }
+  100% {
+    opacity: 0;
+    transform: translate(-50%, -18px) scale(0.94);
+  }
 }
 
 .combat-debuff-label,
@@ -4001,6 +4121,62 @@
   -webkit-line-clamp: 2;
 }
 
+.combat-attack-mark {
+  display: inline-block;
+  margin-right: 7px;
+  padding: 2px 6px;
+  border-radius: 999px;
+  color: #211606;
+  background: linear-gradient(135deg, #fff2ba, #f6be55);
+  box-shadow: 0 0 16px rgb(246 190 85 / 44%);
+  font-size: 11px;
+  font-weight: 950;
+  letter-spacing: 0.04em;
+  vertical-align: 1px;
+}
+
+.combat-attack-link {
+  position: absolute;
+  z-index: 24;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  overflow: visible;
+  pointer-events: none;
+}
+
+.combat-attack-link-glow,
+.combat-attack-link-path {
+  fill: none;
+  stroke-linecap: round;
+}
+
+.combat-attack-link-glow {
+  stroke: rgb(255 79 91 / 48%);
+  stroke-width: 11;
+  filter: blur(3px);
+}
+
+.combat-attack-link-path {
+  stroke: #ffe092;
+  stroke-width: 3;
+  stroke-dasharray: 10 6;
+  filter: drop-shadow(0 0 5px rgb(255 81 91 / 90%));
+  animation: combat-attack-link-flow 420ms linear infinite;
+}
+
+.combat-attack-link marker path {
+  fill: #ff5965;
+  stroke: #fff1c8;
+  stroke-width: 0.8;
+}
+
+@keyframes combat-attack-link-flow {
+  to {
+    stroke-dashoffset: -16;
+  }
+}
+
 .combat-playback-progress {
   color: var(--accent);
   font-size: 11px;
@@ -4179,6 +4355,17 @@
   text-align: center;
 }
 
+.hand-empty {
+  align-content: center;
+  gap: 5px;
+}
+
+.hand-empty small {
+  max-width: 460px;
+  color: rgb(207 238 255 / 82%);
+  font-size: 11px;
+}
+
 .game-shell[data-phase="combat"] .play-column,
 .game-shell[data-phase="result"] .play-column,
 .game-shell.combat-phase .play-column {
@@ -4229,6 +4416,10 @@
   animation: card-attack 320ms cubic-bezier(0.25, 0.9, 0.35, 1);
 }
 
+.board-row[data-side="enemy"] .unit-card.is-attacking {
+  animation-name: card-attack-enemy;
+}
+
 .unit-card.is-hit {
   animation: card-hit 220ms ease;
 }
@@ -4247,7 +4438,7 @@
 
 .unit-card.is-dead {
   pointer-events: none;
-  animation: card-death 320ms ease forwards;
+  animation: card-death 620ms ease forwards;
 }
 
 @keyframes card-attack {
@@ -4257,6 +4448,16 @@
   }
   46% {
     transform: translateY(-18px) scale(1.035);
+  }
+}
+
+@keyframes card-attack-enemy {
+  0%,
+  100% {
+    transform: translateY(0) scale(1);
+  }
+  46% {
+    transform: translateY(18px) scale(1.035);
   }
 }
 
@@ -4326,12 +4527,17 @@
 }
 
 @keyframes card-death {
-  from {
+  0% {
     filter: grayscale(0);
     opacity: 1;
     transform: scale(1);
   }
-  to {
+  52% {
+    filter: grayscale(0.88);
+    opacity: 1;
+    transform: scale(0.97);
+  }
+  100% {
     filter: grayscale(1);
     opacity: 0;
     transform: scale(0.92);
@@ -5034,9 +5240,18 @@
     transform: none;
   }
 
+  .unit-card.is-dead {
+    animation: none;
+    filter: grayscale(1);
+    opacity: 0.72;
+  }
+
   .combat-buff-label,
   .combat-debuff-label,
-  .combat-summon-label {
+  .combat-summon-label,
+  .combat-damage-label,
+  .combat-death-label,
+  .combat-attack-link-path {
     animation: none;
   }
 
