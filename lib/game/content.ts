@@ -3,7 +3,7 @@ import liveRosterSnapshot from "./generated/battlegrounds-36.0.3-247416.zhCN.jso
 };
 import type { MinionDefinition, Tribe } from "./types.ts";
 
-export const CURRENT_ROSTER_VERSION = "battlegrounds-36.0.3-247416-v21";
+export const CURRENT_ROSTER_VERSION = "battlegrounds-36.0.3-247416-v22";
 /** Compatibility alias for existing save and engine imports. */
 export const CLASSIC_ROSTER_VERSION = CURRENT_ROSTER_VERSION;
 
@@ -863,6 +863,25 @@ export const LIVE_TOKEN_DEFINITIONS: readonly MinionDefinition[] =
       attack: 3,
       health: 3,
       description: "由商贩元素获取。",
+      collectible: false,
+    },
+    {
+      id: "live-demon-fodder-token",
+      cardId: "BG35_150t",
+      goldenCardId: "BG35_150t_G",
+      name: "恶魔饲料",
+      tier: 1,
+      tribe: "demon",
+      tribes: ["demon"],
+      associatedTribes: [],
+      effectSupport: "complete",
+      attack: 2,
+      health: 2,
+      description:
+        "当本随从在酒馆中时，会将自身随机喂给一个友方恶魔，并填补空位。",
+      goldenDescription:
+        "当本随从在酒馆中时，会将自身随机喂给一个友方恶魔使其获得双倍属性值，并填补空位。",
+      shopFodder: true,
       collectible: false,
     },
   ] satisfies readonly MinionDefinition[]);
@@ -1882,6 +1901,134 @@ const LIVE_RULE_OVERRIDES: Readonly<
       goldenMode: "repeat",
     },
   },
+  BG34_500: {
+    goldenCardId: "BG34_500_G",
+    goldenDescription:
+      "在你的回合结束时，吞食酒馆中生命值最高的随从以获得其双倍属性值。",
+    endOfTurn: {
+      kind: "consumeHighestHealthShop",
+      goldenMode: "doubleStats",
+    },
+  },
+  BG35_151: {
+    goldenCardId: "BG35_151_G",
+    goldenDescription:
+      "在你的回合结束时，在你的下3次刷新中各添加两个恶魔饲料。",
+    endOfTurn: {
+      kind: "queueDemonFodder",
+      refreshes: 3,
+      count: 1,
+      goldenMode: "doubleCount",
+    },
+  },
+  BG21_005: {
+    goldenCardId: "BG21_005_G",
+    goldenDescription:
+      "在你的回合结束时，你的恶魔各吞食酒馆中的一个随从，获得其双倍属性值。",
+    endOfTurn: {
+      kind: "demonsConsumeShop",
+      goldenMode: "doubleStats",
+    },
+  },
+  BG26_199: {
+    goldenCardId: "BG26_199_G",
+    goldenDescription:
+      "每2个回合，在回合结束时，获取本随从相邻随从的各一张原始版复制。（还剩2回合！）",
+    endOfTurn: {
+      kind: "copyLeftOriginal",
+      everyTurns: 2,
+      goldenMode: "adjacent",
+    },
+  },
+  BG28_308: {
+    goldenCardId: "BG28_308_G",
+    goldenDescription:
+      "在你的回合结束时，消灭相邻的亡灵并再次召唤完全相同的复制。",
+    endOfTurn: {
+      kind: "destroyAndResummonLeftUndead",
+      goldenMode: "adjacentUndead",
+    },
+  },
+  BG35_123: {
+    goldenCardId: "BG35_123_G",
+    goldenDescription:
+      "在你的回合结束时，获取你施放的上一个酒馆法术的2张复制。",
+    endOfTurn: {
+      kind: "copyLastTavernSpell",
+      count: 1,
+      goldenMode: "doubleCount",
+    },
+  },
+  BG35_142: {
+    goldenCardId: "BG35_142_G",
+    goldenDescription:
+      "在你的回合结束时，获取莫格顿大妈和莫格顿老爹各一张。",
+    endOfTurn: {
+      kind: "gainRandomOrAllMinion",
+      definitionIds: ["BG35_140", "BG35_141"],
+      goldenMode: "all",
+    },
+  },
+  BG35_334: {
+    goldenCardId: "BG35_334_G",
+    goldenDescription:
+      "在你的回合结束时，使你的随从获得+2/+2。复仇（1）：永久提升此效果。",
+    endOfTurn: {
+      kind: "dynamicWarbandEndOfTurn",
+      attack: 1,
+      health: 1,
+      avengeThreshold: 1,
+      avengeAttack: 1,
+      avengeHealth: 1,
+    },
+  },
+  BG35_701: {
+    goldenCardId: "BG35_701_G",
+    goldenDescription:
+      "在你的回合结束时，使你最左边的海盗获得+4/+6。在本回合中你每使用过一张牌，重复一次。（重复0次）",
+    endOfTurn: {
+      kind: "leftmostTribeRepeatPerCardPlayed",
+      tribe: "pirate",
+      attack: 2,
+      health: 3,
+    },
+  },
+  BG35_431: {
+    goldenCardId: "BG35_431_G",
+    goldenDescription:
+      "风怒。在你的回合结束时，本随从对你的所有随从各使用2张鲜血宝石。本随从每拥有一个额外关键词，重复一次。",
+    endOfTurn: {
+      kind: "applyBloodGemToAllPerBonusKeyword",
+      count: 1,
+      goldenMode: "doubleCount",
+    },
+  },
+  BG35_150: {
+    goldenCardId: "BG35_150_G",
+    goldenDescription:
+      "战吼：在你的下3次刷新中各添加两个恶魔饲料。",
+    battlecry: [
+      {
+        kind: "queueDemonFodder",
+        refreshes: 3,
+        count: 1,
+        goldenMode: "doubleCount",
+      },
+    ],
+  },
+  BG35_155: {
+    goldenCardId: "BG35_155_G",
+    goldenDescription:
+      "在你出售一个随从后，在你的下一次刷新中添加两个恶魔饲料。",
+    afterFriendlySold: [
+      {
+        kind: "queueDemonFodder",
+        refreshes: 1,
+        count: 1,
+        goldenMode: "doubleCount",
+      },
+    ],
+  },
 };
 
 /**
@@ -1896,6 +2043,7 @@ const FULLY_SUPPORTED_LIVE_CARD_IDS = new Set([
   "BG24_009",
   "BG22_202",
   "BG21_014",
+  "BG21_005",
   "BG23_002",
   "BG23_004",
   "BG25_001",
@@ -1914,6 +2062,7 @@ const FULLY_SUPPORTED_LIVE_CARD_IDS = new Set([
   "BG26_148",
   "BG26_159",
   "BG26_160",
+  "BG26_199",
   "BG26_360",
   "BG26_501",
   "BG26_502",
@@ -1927,6 +2076,7 @@ const FULLY_SUPPORTED_LIVE_CARD_IDS = new Set([
   "BG28_595",
   "BG28_741",
   "BG28_300",
+  "BG28_308",
   "BG29_503",
   "BG29_611",
   "BG29_300",
@@ -1963,6 +2113,7 @@ const FULLY_SUPPORTED_LIVE_CARD_IDS = new Set([
   "BG34_140",
   "BG34_175",
   "BG34_231",
+  "BG34_500",
   "BG34_523",
   "BG34_630",
   "BG34_634t",
@@ -1977,7 +2128,15 @@ const FULLY_SUPPORTED_LIVE_CARD_IDS = new Set([
   "BG34_694",
   "BG34_731",
   "BG35_143",
+  "BG35_123",
+  "BG35_142",
+  "BG35_150",
+  "BG35_151",
+  "BG35_155",
+  "BG35_334",
   "BG35_340",
+  "BG35_431",
+  "BG35_701",
   "BG35_702",
   "BG35_801",
   "BG35_814",

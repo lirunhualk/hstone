@@ -235,6 +235,13 @@ export interface ConsumeRandomShopMinionEffect {
   goldenMode?: "doubleStats";
 }
 
+export interface QueueDemonFodderEffect {
+  kind: "queueDemonFodder";
+  refreshes: number;
+  count: number;
+  goldenMode?: "doubleCount";
+}
+
 export interface DiscountNextTavernSpellEffect {
   kind: "discountNextTavernSpell";
   amount: number;
@@ -270,6 +277,7 @@ export type MinionEffect =
   | BuffTavernTypeEffect
   | ImproveUndeadArmyEffect
   | ConsumeRandomShopMinionEffect
+  | QueueDemonFodderEffect
   | DiscountNextTavernSpellEffect
   | MakeSelfGoldenEffect;
 
@@ -345,6 +353,61 @@ export interface PeriodicGainRandomMinionEndOfTurnEffect {
   goldenMode?: "doubleCount";
 }
 
+export interface ConsumeHighestHealthShopEffect {
+  kind: "consumeHighestHealthShop";
+  goldenMode?: "doubleStats";
+}
+
+export interface DemonsConsumeShopEffect {
+  kind: "demonsConsumeShop";
+  goldenMode?: "doubleStats";
+}
+
+export interface CopyLeftOriginalEffect {
+  kind: "copyLeftOriginal";
+  everyTurns: number;
+  goldenMode?: "adjacent";
+}
+
+export interface DestroyAndResummonLeftUndeadEffect {
+  kind: "destroyAndResummonLeftUndead";
+  goldenMode?: "adjacentUndead";
+}
+
+export interface CopyLastTavernSpellEffect {
+  kind: "copyLastTavernSpell";
+  count: number;
+  goldenMode?: "doubleCount";
+}
+
+export interface GainRandomOrAllMinionEffect {
+  kind: "gainRandomOrAllMinion";
+  definitionIds: readonly string[];
+  goldenMode?: "all";
+}
+
+export interface DynamicWarbandEndOfTurnEffect {
+  kind: "dynamicWarbandEndOfTurn";
+  attack: number;
+  health: number;
+  avengeThreshold: number;
+  avengeAttack: number;
+  avengeHealth: number;
+}
+
+export interface LeftmostTribeRepeatPerCardPlayedEffect {
+  kind: "leftmostTribeRepeatPerCardPlayed";
+  tribe: Tribe;
+  attack: number;
+  health: number;
+}
+
+export interface ApplyBloodGemToAllPerBonusKeywordEffect {
+  kind: "applyBloodGemToAllPerBonusKeyword";
+  count: number;
+  goldenMode?: "doubleCount";
+}
+
 export type EndOfTurnEffect =
   | MenagerieEndOfTurnEffect
   | BuffEndOfTurnEffect
@@ -352,7 +415,17 @@ export type EndOfTurnEffect =
   | GainTavernSpellEffect
   | GainRandomTavernSpellEffect
   | ImproveTavernSpellBuffsEffect
-  | PeriodicGainRandomMinionEndOfTurnEffect;
+  | PeriodicGainRandomMinionEndOfTurnEffect
+  | QueueDemonFodderEffect
+  | ConsumeHighestHealthShopEffect
+  | DemonsConsumeShopEffect
+  | CopyLeftOriginalEffect
+  | DestroyAndResummonLeftUndeadEffect
+  | CopyLastTavernSpellEffect
+  | GainRandomOrAllMinionEffect
+  | DynamicWarbandEndOfTurnEffect
+  | LeftmostTribeRepeatPerCardPlayedEffect
+  | ApplyBloodGemToAllPerBonusKeywordEffect;
 
 export interface CardPurchaseMilestoneEffect {
   purchases: number;
@@ -414,6 +487,7 @@ export interface MinionDefinition {
   taunt?: boolean;
   divineShield?: boolean;
   reborn?: boolean;
+  stealth?: boolean;
   poisonous?: boolean;
   venomous?: boolean;
   windfury?: boolean;
@@ -436,6 +510,7 @@ export interface MinionDefinition {
   afterCardPurchased?: CardPurchaseMilestoneEffect;
   conditionalKeyword?: ConditionalKeywordEffect;
   afterSold?: readonly MinionEffect[];
+  afterFriendlySold?: readonly MinionEffect[];
   afterMagnetized?: readonly MinionEffect[];
   aura?: StatAura;
   magnetic?: MagneticSpec;
@@ -445,6 +520,8 @@ export interface MinionDefinition {
   extraEndOfTurnTriggers?: number;
   sellValue?: number;
   goldenSellValue?: number;
+  /** A generated Fodder feeds itself while offered instead of entering the pool. */
+  shopFodder?: boolean;
   collectible?: boolean;
 }
 
@@ -477,6 +554,8 @@ export interface MinionInstance {
   taunt: boolean;
   divineShield: boolean;
   reborn: boolean;
+  /** Reserved for the Bonus Keyword set even before stealth-granting cards land. */
+  stealth?: boolean;
   poisonous: boolean;
   venomous: boolean;
   windfury: boolean;
@@ -809,6 +888,17 @@ export interface PlayerState {
   /** Gold reduction retained until the next Gold-cost Tavern Spell purchase. */
   nextTavernSpellDiscount: number;
   tavernSpellsCastThisTurn: number;
+  /** Every successfully played hand card this Recruit turn. */
+  cardsPlayedThisTurn: number;
+  /** Most recently cast Tavern Spell; generated copies do not consume its pool. */
+  lastTavernSpellDefinitionId: string | null;
+  /** Tavern Spell whose interactive resolution has not completed yet. */
+  pendingTavernSpellDefinitionId: string | null;
+  /**
+   * Fodder counts for successive manual Refreshes. Each queue slot is consumed
+   * by one successful Refresh action, including a helpful Wisdomball page.
+   */
+  demonFodderRefreshQueue: number[];
   /** Recruit-turn economy and persistent Tavern Spell counters. */
   maxGold: number;
   pendingNextTurnGold: number;

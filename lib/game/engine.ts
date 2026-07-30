@@ -39,6 +39,7 @@ import type {
   ConsolationCoinSpellInstance,
   DiscoverDestination,
   DiscoverFilter,
+  DynamicWarbandEndOfTurnEffect,
   EndOfTurnEffect,
   GameAction,
   GameState,
@@ -54,6 +55,7 @@ import type {
   TavernSpellChoiceId,
   PlayerId,
   PlayerState,
+  QueueDemonFodderEffect,
   RallyRemoveTargetKeywordsEffect,
   RallyRemovedKeyword,
   RallySummonFromHandEffect,
@@ -191,10 +193,15 @@ const ETERNAL_KNIGHT_DEFINITION_ID = "BG25_008" as const;
 const ANCIENT_SOUL_DEFINITION_ID = "BG34_231" as const;
 const ANCIENT_SOUL_DEATHS_REQUIRED = 15;
 const UPBEAT_FRONTDRAKE_DEFINITION_ID = "BG26_529" as const;
+const UPBEAT_DUO_DEFINITION_ID = "BG26_199" as const;
 const HUNGRY_TROG_DEFINITION_ID = "BG35_801" as const;
 const CRIMSON_SURVIVOR_DEFINITION_ID = "BG35_814" as const;
+const DEMON_FODDER_DEFINITION_ID = "live-demon-fodder-token" as const;
 const PERIODIC_TURN_COUNTER = "periodicEndOfTurn";
 const PURCHASE_PROGRESS_COUNTER = "cardPurchases";
+const DYNAMIC_END_OF_TURN_ATTACK_COUNTER = "dynamicEndOfTurnAttack";
+const DYNAMIC_END_OF_TURN_HEALTH_COUNTER = "dynamicEndOfTurnHealth";
+const DYNAMIC_AVENGE_PROGRESS_COUNTER = "dynamicAvengeProgress";
 const LOBBY_TRIBES: readonly Tribe[] = [
   "beast",
   "mech",
@@ -417,6 +424,9 @@ function initialEffectCounters(
   if (definitionId === UPBEAT_FRONTDRAKE_DEFINITION_ID) {
     return { [PERIODIC_TURN_COUNTER]: 3 };
   }
+  if (definitionId === UPBEAT_DUO_DEFINITION_ID) {
+    return { [PERIODIC_TURN_COUNTER]: 2 };
+  }
   if (definitionId === HUNGRY_TROG_DEFINITION_ID) {
     return { [PURCHASE_PROGRESS_COUNTER]: 0 };
   }
@@ -450,6 +460,7 @@ function createMinionInstance(
     taunt: definition.taunt === true,
     divineShield: definition.divineShield === true,
     reborn: definition.reborn === true,
+    stealth: definition.stealth === true,
     poisonous: definition.poisonous === true,
     venomous: definition.venomous === true,
     windfury: definition.windfury === true,
@@ -510,7 +521,44 @@ function setEffectCounter(
 
 function refreshDynamicMinionDescription(
   minion: MinionInstance,
+  player?: PlayerState,
 ): void {
+  const dynamicEndOfTurn =
+    getMinionDefinition(minion.definitionId).endOfTurn;
+  if (dynamicEndOfTurn?.kind === "dynamicWarbandEndOfTurn") {
+    const scale = minion.golden ? 2 : 1;
+    const attack =
+      dynamicEndOfTurn.attack * scale +
+      effectCounter(
+        minion,
+        DYNAMIC_END_OF_TURN_ATTACK_COUNTER,
+        0,
+      );
+    const health =
+      dynamicEndOfTurn.health * scale +
+      effectCounter(
+        minion,
+        DYNAMIC_END_OF_TURN_HEALTH_COUNTER,
+        0,
+      );
+    minion.description =
+      `在你的回合结束时，使你的随从获得+${attack}/+${health}。` +
+      `复仇（${dynamicEndOfTurn.avengeThreshold}）：永久提升此效果。`;
+    return;
+  }
+  if (
+    dynamicEndOfTurn?.kind ===
+      "leftmostTribeRepeatPerCardPlayed" &&
+    player
+  ) {
+    const scale = minion.golden ? 2 : 1;
+    minion.description =
+      `在你的回合结束时，使你最左边的海盗获得+` +
+      `${dynamicEndOfTurn.attack * scale}/+` +
+      `${dynamicEndOfTurn.health * scale}。在本回合中你每使用过一张牌，` +
+      `重复一次。（重复${player.cardsPlayedThisTurn}次）`;
+    return;
+  }
   if (minion.definitionId === UPBEAT_FRONTDRAKE_DEFINITION_ID) {
     const remaining = Math.max(
       1,
@@ -522,6 +570,21 @@ function refreshDynamicMinionDescription(
         ? "（就是这回合！）"
         : `（还剩${remaining}回合！）`;
     minion.description = `每3个回合，在回合结束时，随机获取${reward}。${status}`;
+    return;
+  }
+  if (minion.definitionId === UPBEAT_DUO_DEFINITION_ID) {
+    const remaining = Math.max(
+      1,
+      effectCounter(minion, PERIODIC_TURN_COUNTER, 2),
+    );
+    const status =
+      remaining === 1
+        ? "（就是这回合！）"
+        : `（还剩${remaining}回合！）`;
+    minion.description =
+      minion.golden
+        ? `每2个回合，在回合结束时，获取本随从相邻随从各一张原始版复制。${status}`
+        : `每2个回合，在回合结束时，获取一张本随从左边随从的原始版复制。${status}`;
     return;
   }
   if (minion.definitionId === HUNGRY_TROG_DEFINITION_ID) {
@@ -1312,6 +1375,13 @@ function ownedMinionCards(player: PlayerState): BoardMinionInstance[] {
   ];
 }
 
+function observeCardPlayed(player: PlayerState): void {
+  player.cardsPlayedThisTurn += 1;
+  for (const minion of ownedMinionCards(player)) {
+    refreshDynamicMinionDescription(minion, player);
+  }
+}
+
 function reconcileConditionalMinion(
   minion: MinionInstance,
 ): boolean {
@@ -1332,6 +1402,7 @@ function reconcileConditionalMinion(
 function reconcileConditionalMinions(player: PlayerState): void {
   for (const minion of ownedMinionCards(player)) {
     reconcileConditionalMinion(minion);
+    refreshDynamicMinionDescription(minion, player);
   }
 }
 
@@ -1464,7 +1535,11 @@ function applyAfterTavernRefreshEffects(
   }
 }
 
-function fillShop(state: GameState, player: PlayerState): void {
+function fillShop(
+  state: GameState,
+  player: PlayerState,
+  applyRefreshEffects = true,
+): void {
   const normalMinionTargetSize = SHOP_SIZE_BY_TIER[player.tavernTier];
   const totalTargetSize = tavernCardCapacity(player);
   const currentSpellCount = tavernSpellShopOffers(player).length;
@@ -1486,6 +1561,7 @@ function fillShop(state: GameState, player: PlayerState): void {
       player.astralAutomatonsSummoned ?? 0,
       player.eternalKnightsDied ?? 0,
     );
+    refreshDynamicMinionDescription(minion, player);
     player.shop.push(minion);
     tavernRefreshed = true;
   }
@@ -1501,8 +1577,112 @@ function fillShop(state: GameState, player: PlayerState): void {
       tavernRefreshed = true;
     }
   }
-  if (tavernRefreshed) {
+  if (tavernRefreshed && applyRefreshEffects) {
     applyAfterTavernRefreshEffects(state, player);
+  }
+}
+
+function tavernOfferCount(player: PlayerState): number {
+  return player.shop.length + tavernSpellShopOffers(player).length;
+}
+
+function releaseOneTavernOfferForFodder(
+  state: GameState,
+  player: PlayerState,
+): boolean {
+  const minionIndex = player.shop.findLastIndex(
+    (minion) =>
+      getMinionDefinition(minion.definitionId).shopFodder !== true,
+  );
+  if (minionIndex >= 0) {
+    const [released] = player.shop.splice(minionIndex, 1);
+    returnMinionToPool(state, released);
+    return true;
+  }
+  const additionalSpell = player.additionalSpellShop.pop();
+  if (additionalSpell) {
+    state.spellPool[additionalSpell.definitionId] =
+      (state.spellPool[additionalSpell.definitionId] ?? 0) + 1;
+    return true;
+  }
+  if (player.spellShop) {
+    state.spellPool[player.spellShop.definitionId] =
+      (state.spellPool[player.spellShop.definitionId] ?? 0) + 1;
+    player.spellShop = null;
+    return true;
+  }
+  return tavernOfferCount(player) < tavernCardCapacity(player);
+}
+
+function refillFodderSlot(
+  state: GameState,
+  player: PlayerState,
+): void {
+  if (tavernOfferCount(player) >= tavernCardCapacity(player)) {
+    return;
+  }
+  const minion = drawFromPool(state, player.tavernTier);
+  if (!minion) {
+    return;
+  }
+  applyPersistentTavernBonuses(player, minion);
+  reconcileWhereverMinion(
+    minion,
+    player.astralAutomatonsSummoned ?? 0,
+    player.eternalKnightsDied ?? 0,
+  );
+  refreshDynamicMinionDescription(minion, player);
+  player.shop.push(minion);
+}
+
+function resolveShopFodder(
+  state: GameState,
+  player: PlayerState,
+): void {
+  while (true) {
+    const fodderIndex = player.shop.findIndex(
+      (minion) =>
+        getMinionDefinition(minion.definitionId).shopFodder === true,
+    );
+    const demons = player.board.filter((minion) =>
+      minionHasTribe(minion, "demon"),
+    );
+    if (fodderIndex < 0 || demons.length === 0) {
+      return;
+    }
+    const target = demons[randomIndex(state, demons.length)];
+    const [fodder] = player.shop.splice(fodderIndex, 1);
+    consumeShopMinionInto(state, target, fodder, fodder.golden ? 2 : 1);
+    refillFodderSlot(state, player);
+  }
+}
+
+function applyQueuedDemonFodderToRefresh(
+  state: GameState,
+  player: PlayerState,
+): void {
+  const fodderCount = player.demonFodderRefreshQueue.shift() ?? 0;
+  while (
+    player.demonFodderRefreshQueue.length > 0 &&
+    player.demonFodderRefreshQueue.at(-1) === 0
+  ) {
+    player.demonFodderRefreshQueue.pop();
+  }
+  for (let count = 0; count < fodderCount; count += 1) {
+    if (
+      tavernOfferCount(player) >= tavernCardCapacity(player) &&
+      !releaseOneTavernOfferForFodder(state, player)
+    ) {
+      break;
+    }
+    const fodder = createMinionInstance(
+      state,
+      DEMON_FODDER_DEFINITION_ID,
+      0,
+    );
+    applyPersistentTavernBonuses(player, fodder);
+    player.shop.push(fodder);
+    resolveShopFodder(state, player);
   }
 }
 
@@ -1746,6 +1926,20 @@ function recruitEffectTargets(
   }
 }
 
+function queueDemonFodder(
+  player: PlayerState,
+  effect: QueueDemonFodderEffect,
+  scale: number,
+): void {
+  const count =
+    effect.count *
+    (effect.goldenMode === "doubleCount" ? scale : 1);
+  for (let refresh = 0; refresh < effect.refreshes; refresh += 1) {
+    player.demonFodderRefreshQueue[refresh] =
+      (player.demonFodderRefreshQueue[refresh] ?? 0) + count;
+  }
+}
+
 function applyRecruitEffects(
   state: GameState,
   player: PlayerState,
@@ -1964,6 +2158,8 @@ function applyRecruitEffects(
       source.attack += consumed.attack * statScale;
       source.health += consumed.health * statScale;
       returnMinionToPool(state, consumed);
+    } else if (effect.kind === "queueDemonFodder") {
+      queueDemonFodder(player, effect, scale);
     } else if (effect.kind === "discountNextTavernSpell") {
       player.nextTavernSpellDiscount =
         (player.nextTavernSpellDiscount ?? 0) +
@@ -1992,13 +2188,14 @@ function applyRecruitEffects(
         }
         applyOwnedUndeadArmyBonus(player, summoned);
         player.board.push(summoned);
-        applyRecruitSummonTriggers(player, summoned);
+        applyRecruitSummonTriggers(state, player, summoned);
       }
     }
   }
 }
 
 function applyRecruitSummonTriggers(
+  state: GameState,
   player: PlayerState,
   summoned: MinionInstance,
 ): void {
@@ -2008,6 +2205,7 @@ function applyRecruitSummonTriggers(
       player.astralAutomatonsSummoned ?? 0,
       player.eternalKnightsDied ?? 0,
     );
+    refreshDynamicMinionDescription(summoned, player);
   }
   observeRecruitAutomatonSummon(player, summoned);
   for (const watcher of player.board) {
@@ -2027,6 +2225,9 @@ function applyRecruitSummonTriggers(
       summoned.attack += (trigger.attack ?? 0) * scale;
       summoned.health += (trigger.health ?? 0) * scale;
     }
+  }
+  if (summoned.kind === "minion" && minionHasTribe(summoned, "demon")) {
+    resolveShopFodder(state, player);
   }
 }
 
@@ -2140,6 +2341,244 @@ function applyStartOfTurnEffects(
   }
 }
 
+function consumeShopMinionInto(
+  state: GameState,
+  target: BoardMinionInstance,
+  consumed: BoardMinionInstance,
+  statScale: number,
+): void {
+  target.attack += consumed.attack * statScale;
+  target.health += consumed.health * statScale;
+  returnMinionToPool(state, consumed);
+  reconcileConditionalMinion(target);
+}
+
+function consumeHighestHealthShopMinion(
+  state: GameState,
+  player: PlayerState,
+  source: BoardMinionInstance,
+  statScale: number,
+): void {
+  if (
+    !player.board.some(
+      (minion) => minion.instanceId === source.instanceId,
+    ) ||
+    player.shop.length === 0
+  ) {
+    return;
+  }
+  const highestHealth = Math.max(
+    ...player.shop.map((minion) => minion.health),
+  );
+  const candidates = player.shop.filter(
+    (minion) => minion.health === highestHealth,
+  );
+  const consumed =
+    candidates[randomIndex(state, candidates.length)];
+  player.shop.splice(player.shop.indexOf(consumed), 1);
+  consumeShopMinionInto(state, source, consumed, statScale);
+}
+
+function haveDemonsConsumeShop(
+  state: GameState,
+  player: PlayerState,
+  statScale: number,
+): void {
+  const demons = player.board.filter((minion) =>
+    minionHasTribe(minion, "demon"),
+  );
+  for (const demon of demons) {
+    if (player.shop.length === 0) {
+      return;
+    }
+    const consumedIndex = randomIndex(state, player.shop.length);
+    const [consumed] = player.shop.splice(consumedIndex, 1);
+    consumeShopMinionInto(state, demon, consumed, statScale);
+  }
+}
+
+function copyAdjacentOriginalsToHand(
+  state: GameState,
+  player: PlayerState,
+  source: BoardMinionInstance,
+  includeRight: boolean,
+  repetitions: number,
+): void {
+  for (let repetition = 0; repetition < repetitions; repetition += 1) {
+    const sourceIndex = player.board.findIndex(
+      (minion) => minion.instanceId === source.instanceId,
+    );
+    if (sourceIndex < 0) {
+      return;
+    }
+    const adjacent = [
+      player.board[sourceIndex - 1],
+      ...(includeRight ? [player.board[sourceIndex + 1]] : []),
+    ].filter(
+      (target): target is BoardMinionInstance => target !== undefined,
+    );
+    for (const target of adjacent) {
+      addGeneratedMinionCopyToHand(
+        state,
+        player,
+        target.definitionId,
+      );
+    }
+  }
+}
+
+interface ExactRecruitResummonSnapshot {
+  minion: BoardMinionInstance;
+  boardIndex: number;
+}
+
+function summonExactRecruitSnapshot(
+  state: GameState,
+  player: PlayerState,
+  snapshot: ExactRecruitResummonSnapshot,
+): void {
+  if (player.board.length >= MAX_BOARD_SIZE) {
+    returnMinionToPool(state, snapshot.minion);
+    return;
+  }
+  const resummoned = cloneMinion(snapshot.minion);
+  resummoned.instanceId = `minion-${state.nextInstanceId}`;
+  state.nextInstanceId += 1;
+  reconcileWhereverMinion(
+    resummoned,
+    player.astralAutomatonsSummoned ?? 0,
+    player.eternalKnightsDied ?? 0,
+  );
+  player.board.splice(
+    Math.min(snapshot.boardIndex, player.board.length),
+    0,
+    resummoned,
+  );
+  applyRecruitSummonTriggers(state, player, resummoned);
+}
+
+function destroyAndResummonAdjacentUndead(
+  state: GameState,
+  player: PlayerState,
+  source: BoardMinionInstance,
+  includeRight: boolean,
+): void {
+  const sourceIndex = player.board.findIndex(
+    (minion) => minion.instanceId === source.instanceId,
+  );
+  if (sourceIndex < 0) {
+    return;
+  }
+  const snapshots: ExactRecruitResummonSnapshot[] = [
+    { minion: player.board[sourceIndex - 1], boardIndex: sourceIndex - 1 },
+    ...(includeRight
+      ? [
+          {
+            minion: player.board[sourceIndex + 1],
+            boardIndex: sourceIndex + 1,
+          },
+        ]
+      : []),
+  ]
+    .filter(
+      (
+        entry,
+      ): entry is {
+        minion: BoardMinionInstance;
+        boardIndex: number;
+      } =>
+        entry.minion !== undefined &&
+        minionHasTribe(entry.minion, "undead"),
+    )
+    .map(({ minion, boardIndex }) => ({
+      minion: cloneMinion(minion),
+      boardIndex,
+    }));
+  const destroyedSnapshots: ExactRecruitResummonSnapshot[] = [];
+  for (const snapshot of snapshots) {
+    const destroyed = destroyRecruitMinion(
+      state,
+      player,
+      snapshot.minion.instanceId,
+      { returnToPool: false },
+    );
+    if (destroyed) {
+      destroyedSnapshots.push(snapshot);
+    }
+  }
+  for (const snapshot of destroyedSnapshots) {
+    summonExactRecruitSnapshot(state, player, snapshot);
+  }
+  resolveTriples(state, player);
+}
+
+function copyLastTavernSpellToHand(
+  state: GameState,
+  player: PlayerState,
+  count: number,
+): void {
+  const definitionId = player.lastTavernSpellDefinitionId;
+  if (!definitionId) {
+    return;
+  }
+  const definition = getTavernSpellDefinition(definitionId);
+  for (
+    let copy = 0;
+    copy < count && player.hand.length < MAX_HAND_SIZE;
+    copy += 1
+  ) {
+    player.hand.push(createTavernSpell(state, definition));
+  }
+}
+
+function gainRandomOrAllMinion(
+  state: GameState,
+  player: PlayerState,
+  definitionIds: readonly string[],
+  gainAll: boolean,
+): void {
+  if (gainAll) {
+    for (const definitionId of definitionIds) {
+      if (player.hand.length >= MAX_HAND_SIZE) {
+        return;
+      }
+      addDrawnMinionToHand(
+        state,
+        player,
+        drawMatchingFromPool(
+          state,
+          player.tavernTier,
+          (definition) => definition.id === definitionId,
+        ),
+      );
+    }
+    return;
+  }
+  if (player.hand.length >= MAX_HAND_SIZE) {
+    return;
+  }
+  addDrawnMinionToHand(
+    state,
+    player,
+    drawMatchingFromPool(
+      state,
+      player.tavernTier,
+      (definition) => definitionIds.includes(definition.id),
+    ),
+  );
+}
+
+function bonusKeywordCount(minion: BoardMinionInstance): number {
+  return [
+    minion.divineShield,
+    minion.reborn,
+    minion.stealth === true,
+    minion.taunt,
+    minion.venomous,
+    minion.windfury,
+  ].filter(Boolean).length;
+}
+
 function applyOneEndOfTurnEffect(
   state: GameState,
   player: PlayerState,
@@ -2152,7 +2591,8 @@ function applyOneEndOfTurnEffect(
     effect.kind === "gainBloodGems" ||
     effect.kind === "gainTavernSpell" ||
     effect.kind === "gainRandomTavernSpell" ||
-    effect.kind === "improveTavernSpellBuffs"
+    effect.kind === "improveTavernSpellBuffs" ||
+    effect.kind === "queueDemonFodder"
   ) {
     applyRecruitEffects(state, player, source, [effect], scale);
     return;
@@ -2195,6 +2635,133 @@ function applyOneEndOfTurnEffect(
       );
     }
     refreshDynamicMinionDescription(source);
+    return;
+  }
+
+  if (effect.kind === "copyLeftOriginal") {
+    const remaining =
+      effectCounter(
+        source,
+        PERIODIC_TURN_COUNTER,
+        effect.everyTurns,
+      ) - 1;
+    if (remaining <= 0) {
+      copyAdjacentOriginalsToHand(
+        state,
+        player,
+        source,
+        effect.goldenMode === "adjacent" && scale > 1,
+        payoffRepetitions,
+      );
+      setEffectCounter(
+        source,
+        PERIODIC_TURN_COUNTER,
+        effect.everyTurns,
+      );
+    } else {
+      setEffectCounter(
+        source,
+        PERIODIC_TURN_COUNTER,
+        remaining,
+      );
+    }
+    refreshDynamicMinionDescription(source);
+    return;
+  }
+
+  if (effect.kind === "consumeHighestHealthShop") {
+    consumeHighestHealthShopMinion(
+      state,
+      player,
+      source,
+      effect.goldenMode === "doubleStats" ? scale : 1,
+    );
+    return;
+  }
+
+  if (effect.kind === "demonsConsumeShop") {
+    haveDemonsConsumeShop(
+      state,
+      player,
+      effect.goldenMode === "doubleStats" ? scale : 1,
+    );
+    return;
+  }
+
+  if (effect.kind === "destroyAndResummonLeftUndead") {
+    destroyAndResummonAdjacentUndead(
+      state,
+      player,
+      source,
+      effect.goldenMode === "adjacentUndead" && scale > 1,
+    );
+    return;
+  }
+
+  if (effect.kind === "copyLastTavernSpell") {
+    copyLastTavernSpellToHand(
+      state,
+      player,
+      effect.count *
+        (effect.goldenMode === "doubleCount" ? scale : 1),
+    );
+    return;
+  }
+
+  if (effect.kind === "gainRandomOrAllMinion") {
+    gainRandomOrAllMinion(
+      state,
+      player,
+      effect.definitionIds,
+      effect.goldenMode === "all" && scale > 1,
+    );
+    return;
+  }
+
+  if (effect.kind === "dynamicWarbandEndOfTurn") {
+    buffMinions(
+      player.board,
+      effect.attack * scale +
+        effectCounter(
+          source,
+          DYNAMIC_END_OF_TURN_ATTACK_COUNTER,
+          0,
+        ),
+      effect.health * scale +
+        effectCounter(
+          source,
+          DYNAMIC_END_OF_TURN_HEALTH_COUNTER,
+          0,
+        ),
+    );
+    return;
+  }
+
+  if (effect.kind === "leftmostTribeRepeatPerCardPlayed") {
+    const target = player.board.find((minion) =>
+      minionHasTribe(minion, effect.tribe),
+    );
+    if (target) {
+      const repetitions = 1 + player.cardsPlayedThisTurn;
+      buffMinions(
+        [target],
+        effect.attack * scale * repetitions,
+        effect.health * scale * repetitions,
+      );
+    }
+    return;
+  }
+
+  if (effect.kind === "applyBloodGemToAllPerBonusKeyword") {
+    const applications =
+      effect.count *
+      (effect.goldenMode === "doubleCount" ? scale : 1) *
+      (1 + bonusKeywordCount(source));
+    for (let application = 0; application < applications; application += 1) {
+      for (const target of player.board) {
+        applyBloodGem(player, target);
+      }
+    }
     return;
   }
 
@@ -2242,7 +2809,10 @@ function applyEndOfTurnEffects(
         continue;
       }
       const scale = component.golden ? 2 : 1;
-      if (effect.kind === "periodicGainRandomMinion") {
+      if (
+        effect.kind === "periodicGainRandomMinion" ||
+        effect.kind === "copyLeftOriginal"
+      ) {
         applyOneEndOfTurnEffect(
           state,
           player,
@@ -2391,13 +2961,22 @@ function resolveTriples(state: GameState, player: PlayerState): void {
           total + (minion.temporaryGoldenCrabDeathrattles ?? 0),
         0,
       );
-      if (definitionId === UPBEAT_FRONTDRAKE_DEFINITION_ID) {
+      if (
+        definitionId === UPBEAT_FRONTDRAKE_DEFINITION_ID ||
+        definitionId === UPBEAT_DUO_DEFINITION_ID
+      ) {
+        const defaultTurns =
+          definitionId === UPBEAT_FRONTDRAKE_DEFINITION_ID ? 3 : 2;
         setEffectCounter(
           golden,
           PERIODIC_TURN_COUNTER,
           Math.min(
             ...consumed.map((minion) =>
-              effectCounter(minion, PERIODIC_TURN_COUNTER, 3),
+              effectCounter(
+                minion,
+                PERIODIC_TURN_COUNTER,
+                defaultTurns,
+              ),
             ),
           ),
         );
@@ -2421,6 +3000,38 @@ function resolveTriples(state: GameState, player: PlayerState): void {
           PURCHASE_PROGRESS_COUNTER,
           purchaseProgress,
         );
+      } else if (
+        definition.endOfTurn?.kind === "dynamicWarbandEndOfTurn"
+      ) {
+        setEffectCounter(
+          golden,
+          DYNAMIC_END_OF_TURN_ATTACK_COUNTER,
+          consumed.reduce(
+            (total, minion) =>
+              total +
+              effectCounter(
+                minion,
+                DYNAMIC_END_OF_TURN_ATTACK_COUNTER,
+                0,
+              ),
+            0,
+          ),
+        );
+        setEffectCounter(
+          golden,
+          DYNAMIC_END_OF_TURN_HEALTH_COUNTER,
+          consumed.reduce(
+            (total, minion) =>
+              total +
+              effectCounter(
+                minion,
+                DYNAMIC_END_OF_TURN_HEALTH_COUNTER,
+                0,
+              ),
+            0,
+          ),
+        );
+        setEffectCounter(golden, DYNAMIC_AVENGE_PROGRESS_COUNTER, 0);
       }
       const playableFromRound = Math.max(
         0,
@@ -2455,6 +3066,9 @@ function resolveTriples(state: GameState, player: PlayerState): void {
       golden.reborn =
         definition.reborn === true ||
         consumed.some((minion) => minion.reborn);
+      golden.stealth =
+        definition.stealth === true ||
+        consumed.some((minion) => minion.stealth === true);
       golden.poisonous =
         definition.poisonous === true ||
         consumed.some((minion) => minion.poisonous);
@@ -2524,6 +3138,7 @@ function buyMinion(
     player.astralAutomatonsSummoned ?? 0,
     player.eternalKnightsDied ?? 0,
   );
+  refreshDynamicMinionDescription(minion, player);
   player.hand.push(minion);
   observeCardPurchase(player);
   resolveTriples(state, player);
@@ -2587,6 +3202,17 @@ function sellMinionTransaction(
     minion,
     getMinionDefinition(minion.definitionId).afterSold,
   );
+  for (const watcher of [...player.board]) {
+    for (const component of minionEffectSources(watcher)) {
+      applyRecruitEffects(
+        state,
+        player,
+        watcher,
+        getMinionDefinition(component.definitionId).afterFriendlySold,
+        component.golden ? 2 : 1,
+      );
+    }
+  }
   return minion;
 }
 
@@ -2624,6 +3250,7 @@ function playMinion(
       ? player.board.length
       : Math.max(0, Math.min(boardIndex, player.board.length));
   player.board.splice(insertAt, 0, minion);
+  observeCardPlayed(player);
   grantTripleRewardBeforeGeneratedCards(state, player, minion);
   grantPlayedMinionSpellcraft(state, player, minion);
   const battlecry = getMinionDefinition(minion.definitionId).battlecry;
@@ -2631,7 +3258,7 @@ function playMinion(
   for (let count = 0; count < triggerCount; count += 1) {
     applyRecruitEffects(state, player, minion, battlecry);
   }
-  applyRecruitSummonTriggers(player, minion);
+  applyRecruitSummonTriggers(state, player, minion);
   applyAfterFriendlyPlayed(state, player, minion);
   resolveTriples(state, player);
   beginInteractiveBattlecry(state, player, minion);
@@ -2641,10 +3268,59 @@ function playMinion(
   return true;
 }
 
+interface DestroyRecruitMinionOptions {
+  returnToPool?: boolean;
+}
+
+function advanceRecruitDynamicEndOfTurnAvenge(
+  player: PlayerState,
+  watcher: BoardMinionInstance,
+  effect: DynamicWarbandEndOfTurnEffect,
+  scale: number,
+): void {
+  const progress =
+    effectCounter(
+      watcher,
+      DYNAMIC_AVENGE_PROGRESS_COUNTER,
+      0,
+    ) + 1;
+  if (progress < effect.avengeThreshold) {
+    setEffectCounter(
+      watcher,
+      DYNAMIC_AVENGE_PROGRESS_COUNTER,
+      progress,
+    );
+    return;
+  }
+  setEffectCounter(watcher, DYNAMIC_AVENGE_PROGRESS_COUNTER, 0);
+  setEffectCounter(
+    watcher,
+    DYNAMIC_END_OF_TURN_ATTACK_COUNTER,
+    effectCounter(
+      watcher,
+      DYNAMIC_END_OF_TURN_ATTACK_COUNTER,
+      0,
+    ) +
+      effect.avengeAttack * scale,
+  );
+  setEffectCounter(
+    watcher,
+    DYNAMIC_END_OF_TURN_HEALTH_COUNTER,
+    effectCounter(
+      watcher,
+      DYNAMIC_END_OF_TURN_HEALTH_COUNTER,
+      0,
+    ) +
+      effect.avengeHealth * scale,
+  );
+  refreshDynamicMinionDescription(watcher, player);
+}
+
 function destroyRecruitMinion(
   state: GameState,
   player: PlayerState,
   instanceId: string,
+  options: DestroyRecruitMinionOptions = {},
 ): BoardMinionInstance | null {
   const boardIndex = player.board.findIndex(
     (minion) => minion.instanceId === instanceId,
@@ -2655,19 +3331,28 @@ function destroyRecruitMinion(
   }
 
   player.board.splice(boardIndex, 1);
-  returnMinionToPool(state, source);
+  if (options.returnToPool !== false) {
+    returnMinionToPool(state, source);
+  }
   observePersistentFriendlyDeath(player, source);
   for (const watcher of player.board) {
     for (const component of minionEffectSources(watcher)) {
-      const trigger = getMinionDefinition(
-        component.definitionId,
-      ).afterFriendlyDied;
-      if (!trigger || !minionHasTribe(source, trigger.tribe)) {
-        continue;
-      }
+      const definition = getMinionDefinition(component.definitionId);
+      const trigger = definition.afterFriendlyDied;
       const scale = component.golden ? 2 : 1;
-      watcher.attack += (trigger.attack ?? 0) * scale;
-      watcher.health += (trigger.health ?? 0) * scale;
+      if (trigger && minionHasTribe(source, trigger.tribe)) {
+        watcher.attack += (trigger.attack ?? 0) * scale;
+        watcher.health += (trigger.health ?? 0) * scale;
+      }
+      const dynamicEndOfTurn = definition.endOfTurn;
+      if (dynamicEndOfTurn?.kind === "dynamicWarbandEndOfTurn") {
+        advanceRecruitDynamicEndOfTurnAvenge(
+          player,
+          watcher,
+          dynamicEndOfTurn,
+          scale,
+        );
+      }
     }
   }
 
@@ -2697,7 +3382,7 @@ function destroyRecruitMinion(
       0,
       crab,
     );
-    applyRecruitSummonTriggers(player, crab);
+    applyRecruitSummonTriggers(state, player, crab);
   }
   for (
     let count = 0;
@@ -2718,7 +3403,7 @@ function destroyRecruitMinion(
       0,
       crab,
     );
-    applyRecruitSummonTriggers(player, crab);
+    applyRecruitSummonTriggers(state, player, crab);
   }
   if (source.reborn && player.board.length < MAX_BOARD_SIZE) {
     const reborn = createMinionInstance(
@@ -2737,7 +3422,7 @@ function destroyRecruitMinion(
       0,
       reborn,
     );
-    applyRecruitSummonTriggers(player, reborn);
+    applyRecruitSummonTriggers(state, player, reborn);
   }
   return source;
 }
@@ -2806,6 +3491,7 @@ function magnetizeMinion(
     throw new Error("MAGNETIZE_MINION removed a non-minion hand card");
   }
   const source = removed;
+  observeCardPlayed(player);
   grantTripleRewardBeforeGeneratedCards(state, player, source);
   const battlecry = getMinionDefinition(source.definitionId).battlecry;
   const triggerCount = battlecry ? battlecryTriggerCount(player) : 0;
@@ -2861,6 +3547,9 @@ function fuseMinionIntoHost(
     target.temporaryDivineShield = false;
   }
   target.reborn ||= source.reborn;
+  if (source.stealth === true) {
+    target.stealth = true;
+  }
   target.poisonous ||= source.poisonous;
   target.venomous ||= source.venomous;
   target.windfury ||= source.windfury;
@@ -2883,6 +3572,7 @@ function castTripleReward(
     return false;
   }
   player.hand.splice(handIndex, 1);
+  observeCardPlayed(player);
   beginDiscoverInteraction(
     state,
     player,
@@ -2910,6 +3600,7 @@ function castBloodGem(
     return false;
   }
   player.hand.splice(handIndex, 1);
+  observeCardPlayed(player);
   applyBloodGem(player, target);
   if (minionHasTribe(target, "quilboar")) {
     if (card.bonusKeyword === "rebornForQuilboar") {
@@ -3042,6 +3733,7 @@ function castSpellcraft(
   }
 
   player.hand.splice(handIndex, 1);
+  observeCardPlayed(player);
   switch (definition.effect) {
     case "crabRider":
       if (target) {
@@ -3182,6 +3874,7 @@ function addDrawnMinionToHand(
     player.astralAutomatonsSummoned ?? 0,
     player.eternalKnightsDied ?? 0,
   );
+  refreshDynamicMinionDescription(minion, player);
   player.hand.push(minion);
   resolveTriples(state, player);
 }
@@ -3314,6 +4007,11 @@ function finishTavernSpellCast(
   state: GameState,
   player: PlayerState,
 ): void {
+  if (player.pendingTavernSpellDefinitionId) {
+    player.lastTavernSpellDefinitionId =
+      player.pendingTavernSpellDefinitionId;
+    player.pendingTavernSpellDefinitionId = null;
+  }
   player.tavernSpellsCastThisTurn += 1;
   applyAfterTavernSpellCastTriggers(state, player);
 }
@@ -3624,6 +4322,7 @@ function addSpecialShopMinion(
     player.astralAutomatonsSummoned ?? 0,
     player.eternalKnightsDied ?? 0,
   );
+  refreshDynamicMinionDescription(minion, player);
   player.shop.push(minion);
 }
 
@@ -3672,7 +4371,6 @@ function fillSpecialMinionPage(
   if (player.shop.length === 0) {
     return false;
   }
-  applyAfterTavernRefreshEffects(state, player);
   return true;
 }
 
@@ -3693,7 +4391,6 @@ function fillWarbandCopyPage(
       ),
     );
   }
-  applyAfterTavernRefreshEffects(state, player);
   return true;
 }
 
@@ -3916,6 +4613,7 @@ function populateHelpfulRefresh(
 function refreshWithWisdomball(
   state: GameState,
   player: PlayerState,
+  applyRefreshEffects = true,
 ): HelpfulRefreshKind | null {
   releaseShop(state, player);
   player.frozen = false;
@@ -3924,11 +4622,17 @@ function refreshWithWisdomball(
   for (const kind of kinds) {
     if (populateHelpfulRefresh(state, player, kind)) {
       player.lastHelpfulRefreshKind = kind;
+      if (applyRefreshEffects) {
+        applyAfterTavernRefreshEffects(state, player);
+      }
       return kind;
     }
   }
   releaseShop(state, player);
-  fillShop(state, player);
+  fillShop(state, player, false);
+  if (applyRefreshEffects) {
+    applyAfterTavernRefreshEffects(state, player);
+  }
   player.lastHelpfulRefreshKind = null;
   return null;
 }
@@ -3961,14 +4665,17 @@ function refreshWithHamuul(
   releaseShop(state, player);
   player.frozen = false;
   if (tribe) {
-    fillSpecialMinionPage(
+    const populated = fillSpecialMinionPage(
       state,
       player,
       player.tavernTier,
       1,
       (definition) => definitionHasTribe(definition, tribe),
       false,
-    )
+    );
+    if (populated) {
+      applyAfterTavernRefreshEffects(state, player);
+    }
   }
 }
 
@@ -4692,6 +5399,8 @@ function castTavernSpell(
     return false;
   }
   player.hand.splice(handIndex, 1);
+  observeCardPlayed(player);
+  player.pendingTavernSpellDefinitionId = definition.id;
   const finished = applyTavernSpellEffect(
     state,
     player,
@@ -4723,6 +5432,7 @@ function playHandCard(
   }
   if (card.kind === "consolationCoin") {
     player.hand.splice(handIndex, 1);
+    observeCardPlayed(player);
     player.gold += 1;
     return true;
   }
@@ -4743,15 +5453,19 @@ function refreshShop(state: GameState, player: PlayerState): boolean {
   }
   player.frozen = false;
   if (player.helpfulRefreshes > 0) {
-    const helpfulKind = refreshWithWisdomball(state, player);
+    const helpfulKind = refreshWithWisdomball(state, player, false);
     if (helpfulKind !== null) {
       player.helpfulRefreshes -= 1;
     }
+    applyQueuedDemonFodderToRefresh(state, player);
+    applyAfterTavernRefreshEffects(state, player);
     return true;
   }
   player.lastHelpfulRefreshKind = null;
   releaseShop(state, player);
-  fillShop(state, player);
+  fillShop(state, player, false);
+  applyQueuedDemonFodderToRefresh(state, player);
+  applyAfterTavernRefreshEffects(state, player);
   return true;
 }
 
@@ -7737,6 +8451,89 @@ function performImmediateAttack(
   });
 }
 
+function advanceDynamicEndOfTurnAvenge(
+  context: CombatContext,
+  ownerId: PlayerId,
+  watcher: MinionInstance,
+  effect: DynamicWarbandEndOfTurnEffect,
+  scale: number,
+): void {
+  const progress =
+    effectCounter(
+      watcher,
+      DYNAMIC_AVENGE_PROGRESS_COUNTER,
+      0,
+    ) + 1;
+  if (progress < effect.avengeThreshold) {
+    setEffectCounter(
+      watcher,
+      DYNAMIC_AVENGE_PROGRESS_COUNTER,
+      progress,
+    );
+    return;
+  }
+  setEffectCounter(watcher, DYNAMIC_AVENGE_PROGRESS_COUNTER, 0);
+  const attackIncrease = effect.avengeAttack * scale;
+  const healthIncrease = effect.avengeHealth * scale;
+  setEffectCounter(
+    watcher,
+    DYNAMIC_END_OF_TURN_ATTACK_COUNTER,
+    effectCounter(
+      watcher,
+      DYNAMIC_END_OF_TURN_ATTACK_COUNTER,
+      0,
+    ) + attackIncrease,
+  );
+  setEffectCounter(
+    watcher,
+    DYNAMIC_END_OF_TURN_HEALTH_COUNTER,
+    effectCounter(
+      watcher,
+      DYNAMIC_END_OF_TURN_HEALTH_COUNTER,
+      0,
+    ) + healthIncrease,
+  );
+  refreshDynamicMinionDescription(watcher);
+
+  const owner = persistentCombatOwner(context, ownerId);
+  const persistent = owner?.board.find(
+    (minion) => minion.instanceId === watcher.instanceId,
+  );
+  if (persistent) {
+    setEffectCounter(persistent, DYNAMIC_AVENGE_PROGRESS_COUNTER, 0);
+    setEffectCounter(
+      persistent,
+      DYNAMIC_END_OF_TURN_ATTACK_COUNTER,
+      effectCounter(
+        persistent,
+        DYNAMIC_END_OF_TURN_ATTACK_COUNTER,
+        0,
+      ) + attackIncrease,
+    );
+    setEffectCounter(
+      persistent,
+      DYNAMIC_END_OF_TURN_HEALTH_COUNTER,
+      effectCounter(
+        persistent,
+        DYNAMIC_END_OF_TURN_HEALTH_COUNTER,
+        0,
+      ) + healthIncrease,
+    );
+    refreshDynamicMinionDescription(persistent, owner);
+  }
+  pushBattleEvent(context.events, {
+    type: "buff",
+    actorPlayerId: ownerId,
+    actorInstanceId: watcher.instanceId,
+    targetPlayerId: ownerId,
+    targetInstanceId: watcher.instanceId,
+    attackDelta: 0,
+    healthDelta: 0,
+    minion: cloneMinion(watcher),
+    message: `${watcher.name}的复仇永久提升了回合结束效果。`,
+  });
+}
+
 function triggerAfterFriendlyDied(
   context: CombatContext,
   ownerId: PlayerId,
@@ -7794,29 +8591,39 @@ function triggerAfterFriendlyDied(
 
       const combatDeathTrigger =
         definition.afterFriendlyCombatDied;
-      if (!combatDeathTrigger) {
-        continue;
+      if (combatDeathTrigger) {
+        const attackDelta = combatDeathTrigger.attack * scale;
+        const healthDelta = combatDeathTrigger.health * scale;
+        watcher.attack += attackDelta;
+        watcher.health += healthDelta;
+        reconcileConditionalMinion(watcher);
+        pushBattleEvent(context.events, {
+          type: "buff",
+          actorPlayerId: ownerId,
+          actorInstanceId: watcher.instanceId,
+          targetPlayerId: ownerId,
+          targetInstanceId: watcher.instanceId,
+          attackDelta,
+          healthDelta,
+          minion: cloneMinion(watcher),
+          message: `${watcher.name}因友方随从死亡获得+${
+            attackDelta
+          }攻击力${
+            healthDelta > 0 ? `和+${healthDelta}生命值` : ""
+          }。`,
+        });
       }
-      const attackDelta = combatDeathTrigger.attack * scale;
-      const healthDelta = combatDeathTrigger.health * scale;
-      watcher.attack += attackDelta;
-      watcher.health += healthDelta;
-      reconcileConditionalMinion(watcher);
-      pushBattleEvent(context.events, {
-        type: "buff",
-        actorPlayerId: ownerId,
-        actorInstanceId: watcher.instanceId,
-        targetPlayerId: ownerId,
-        targetInstanceId: watcher.instanceId,
-        attackDelta,
-        healthDelta,
-        minion: cloneMinion(watcher),
-        message: `${watcher.name}因友方随从死亡获得+${
-          attackDelta
-        }攻击力${
-          healthDelta > 0 ? `和+${healthDelta}生命值` : ""
-        }。`,
-      });
+
+      const dynamicEndOfTurn = definition.endOfTurn;
+      if (dynamicEndOfTurn?.kind === "dynamicWarbandEndOfTurn") {
+        advanceDynamicEndOfTurnAvenge(
+          context,
+          ownerId,
+          watcher,
+          dynamicEndOfTurn,
+          scale,
+        );
+      }
     }
   }
 }
@@ -8668,6 +9475,10 @@ function releaseEliminatedPlayer(
   player.spellOnlyRefreshActive = false;
   player.helpfulRefreshes = 0;
   player.lastHelpfulRefreshKind = null;
+  player.cardsPlayedThisTurn = 0;
+  player.lastTavernSpellDefinitionId = null;
+  player.pendingTavernSpellDefinitionId = null;
+  player.demonFodderRefreshQueue = [];
   player.frozen = false;
 }
 
@@ -8791,6 +9602,11 @@ function beginNextRecruit(state: GameState): void {
       player.pendingNextTurnGold;
     player.pendingNextTurnGold = 0;
     player.tavernSpellsCastThisTurn = 0;
+    player.cardsPlayedThisTurn = 0;
+    player.pendingTavernSpellDefinitionId = null;
+    for (const minion of ownedMinionCards(player)) {
+      refreshDynamicMinionDescription(minion, player);
+    }
     player.elementalsPlayedThisTurn = 0;
     if (playerHasHeroPower(player, "freeRefreshAtTurnStart")) {
       player.freeRefreshes += 1;
@@ -8854,6 +9670,10 @@ export function createGame(seed?: number): GameState {
     upgradeDiscount: 0,
     nextTavernSpellDiscount: 0,
     tavernSpellsCastThisTurn: 0,
+    cardsPlayedThisTurn: 0,
+    lastTavernSpellDefinitionId: null,
+    pendingTavernSpellDefinitionId: null,
+    demonFodderRefreshQueue: [],
     maxGold: 10,
     pendingNextTurnGold: 0,
     freeRefreshes: 0,

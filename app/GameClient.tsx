@@ -289,6 +289,8 @@ function hasSchema9MinionState(value: unknown): boolean {
       (typeof value.ancientSoulFriendlyDeaths === "number" &&
         Number.isInteger(value.ancientSoulFriendlyDeaths) &&
         value.ancientSoulFriendlyDeaths >= 0)) &&
+    (value.stealth === undefined ||
+      typeof value.stealth === "boolean") &&
     typeof value.poolCopies === "number" &&
     Number.isInteger(value.poolCopies) &&
     value.poolCopies >= 0 &&
@@ -636,6 +638,26 @@ function isGameState(value: unknown): value is GameState {
           (typeof player.heroPowerId === "string" &&
             isHeroPowerDefinitionId(player.heroPowerId))) &&
         typeof player.tavernSpellsCastThisTurn === "number" &&
+        typeof player.cardsPlayedThisTurn === "number" &&
+        Number.isInteger(player.cardsPlayedThisTurn) &&
+        player.cardsPlayedThisTurn >= 0 &&
+        (player.lastTavernSpellDefinitionId === null ||
+          (typeof player.lastTavernSpellDefinitionId === "string" &&
+            TAVERN_SPELL_DEFINITION_IDS.has(
+              player.lastTavernSpellDefinitionId,
+            ))) &&
+        (player.pendingTavernSpellDefinitionId === null ||
+          (typeof player.pendingTavernSpellDefinitionId === "string" &&
+            TAVERN_SPELL_DEFINITION_IDS.has(
+              player.pendingTavernSpellDefinitionId,
+            ))) &&
+        Array.isArray(player.demonFodderRefreshQueue) &&
+        player.demonFodderRefreshQueue.every(
+          (count) =>
+            typeof count === "number" &&
+            Number.isInteger(count) &&
+            count >= 0,
+        ) &&
         typeof player.nextTavernSpellDiscount === "number" &&
         player.nextTavernSpellDiscount >= 0 &&
         typeof player.maxGold === "number" &&

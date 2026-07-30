@@ -38,6 +38,8 @@ export const LEGACY_SCHEMA_11_CONTENT_VERSION_V19 =
   "battlegrounds-36.0.3-247416-v19";
 export const LEGACY_SCHEMA_11_CONTENT_VERSION_V20 =
   "battlegrounds-36.0.3-247416-v20";
+export const LEGACY_SCHEMA_11_CONTENT_VERSION_V21 =
+  "battlegrounds-36.0.3-247416-v21";
 
 const SPELL_POOL_COPIES_BY_TIER = [0, 5, 7, 9, 11, 7, 5] as const;
 
@@ -846,7 +848,8 @@ export function migrateSchema11GameState(value: unknown): unknown {
       value.contentVersion !== LEGACY_SCHEMA_11_CONTENT_VERSION_V17 &&
       value.contentVersion !== LEGACY_SCHEMA_11_CONTENT_VERSION_V18 &&
       value.contentVersion !== LEGACY_SCHEMA_11_CONTENT_VERSION_V19 &&
-      value.contentVersion !== LEGACY_SCHEMA_11_CONTENT_VERSION_V20) ||
+      value.contentVersion !== LEGACY_SCHEMA_11_CONTENT_VERSION_V20 &&
+      value.contentVersion !== LEGACY_SCHEMA_11_CONTENT_VERSION_V21) ||
     !Array.isArray(value.players)
   ) {
     return null;
@@ -856,10 +859,12 @@ export function migrateSchema11GameState(value: unknown): unknown {
       LEGACY_SCHEMA_11_CONTENT_VERSION_V18,
       LEGACY_SCHEMA_11_CONTENT_VERSION_V19,
       LEGACY_SCHEMA_11_CONTENT_VERSION_V20,
+      LEGACY_SCHEMA_11_CONTENT_VERSION_V21,
     ].includes(value.contentVersion as string);
     const preserveCurrentFields = [
       LEGACY_SCHEMA_11_CONTENT_VERSION_V19,
       LEGACY_SCHEMA_11_CONTENT_VERSION_V20,
+      LEGACY_SCHEMA_11_CONTENT_VERSION_V21,
     ].includes(value.contentVersion as string);
     const preservePendingSpellcraft =
       value.contentVersion === LEGACY_SCHEMA_11_CONTENT_VERSION_V17 ||
@@ -876,6 +881,18 @@ export function migrateSchema11GameState(value: unknown): unknown {
       !repairSpellPool(migrated)
     ) {
       return null;
+    }
+    if (!Array.isArray(migrated.players)) {
+      return null;
+    }
+    for (const player of migrated.players) {
+      if (!isRecord(player)) {
+        return null;
+      }
+      player.cardsPlayedThisTurn = 0;
+      player.lastTavernSpellDefinitionId = null;
+      player.pendingTavernSpellDefinitionId = null;
+      player.demonFodderRefreshQueue = [];
     }
     migrated.contentVersion = CURRENT_ROSTER_VERSION;
     return migrated;
