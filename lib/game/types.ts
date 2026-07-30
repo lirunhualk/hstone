@@ -79,6 +79,16 @@ export interface GainTavernSpellEffect {
   goldenMode?: "doubleCount";
 }
 
+export interface GainRandomTavernSpellEffect {
+  kind: "gainRandomTavernSpell";
+  count: number;
+  filter: {
+    cost?: number;
+    exactTier?: TavernTier;
+  };
+  goldenMode?: "doubleCount";
+}
+
 export interface BuffRandomHandMinionEffect {
   kind: "buffRandomHandMinion";
   attack: number;
@@ -179,10 +189,23 @@ export interface ImproveBloodGemsEffect {
   health: number;
 }
 
+export interface ImproveTavernSpellBuffsEffect {
+  kind: "improveTavernSpellBuffs";
+  attack: number;
+  health: number;
+}
+
 export interface ImproveBallersEffect {
   kind: "improveBallers";
   attack: number;
   health: number;
+}
+
+export interface BuffTavernEffect {
+  kind: "buffTavern";
+  attack: number;
+  health: number;
+  goldenMode?: "repeat";
 }
 
 export interface BuffTavernTypeEffect {
@@ -220,6 +243,7 @@ export type MinionEffect =
   | GainNextTurnGoldEffect
   | GainFreeRefreshesEffect
   | GainTavernSpellEffect
+  | GainRandomTavernSpellEffect
   | BuffRandomHandMinionEffect
   | GainMinionEffect
   | DamageHeroEffect
@@ -231,7 +255,9 @@ export type MinionEffect =
   | DamageAllMinionsEffect
   | GainBloodGemsEffect
   | ImproveBloodGemsEffect
+  | ImproveTavernSpellBuffsEffect
   | ImproveBallersEffect
+  | BuffTavernEffect
   | BuffTavernTypeEffect
   | ImproveUndeadArmyEffect
   | ConsumeRandomShopMinionEffect

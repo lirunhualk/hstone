@@ -41,6 +41,7 @@ import type {
   DiscoverFilter,
   GameAction,
   GameState,
+  GainRandomTavernSpellEffect,
   GainTavernSpellEffect,
   GetRandomMinionEffect,
   HelpfulRefreshKind,
@@ -789,6 +790,23 @@ function drawTavernSpell(
   }
   state.spellPool[definition.id] -= 1;
   return createTavernSpell(state, definition);
+}
+
+function randomGeneratedTavernSpellDefinition(
+  state: GameState,
+  effect: GainRandomTavernSpellEffect,
+): TavernSpellDefinition | null {
+  const eligible = TAVERN_SPELL_DEFINITIONS.filter(
+    (definition) =>
+      (effect.filter.cost === undefined ||
+        definition.cost === effect.filter.cost) &&
+      (effect.filter.exactTier === undefined ||
+        definition.tier === effect.filter.exactTier) &&
+      tavernSpellIsAvailable(definition, state.activeTribes),
+  );
+  return eligible.length === 0
+    ? null
+    : eligible[randomIndex(state, eligible.length)];
 }
 
 function addBloodGems(
@@ -1762,6 +1780,19 @@ function applyRecruitEffects(
           candidates.splice(targetIndex, 1);
         }
       }
+    } else if (effect.kind === "buffRandomHandMinion") {
+      const candidates = player.hand.filter(
+        (card): card is BoardMinionInstance => card.kind === "minion",
+      );
+      if (candidates.length > 0) {
+        const target =
+          candidates[randomIndex(state, candidates.length)];
+        buffMinions(
+          [target],
+          effect.attack * scale,
+          effect.health * scale,
+        );
+      }
     } else if (effect.kind === "gainGold") {
       player.gold += effect.amount * scale;
     } else if (effect.kind === "gainNextTurnGold") {
@@ -1780,6 +1811,24 @@ function applyRecruitEffects(
         count < gainCount && player.hand.length < MAX_HAND_SIZE;
         count += 1
       ) {
+        player.hand.push(createTavernSpell(state, definition));
+      }
+    } else if (effect.kind === "gainRandomTavernSpell") {
+      const gainCount =
+        effect.count *
+        (effect.goldenMode === "doubleCount" ? scale : 1);
+      for (
+        let count = 0;
+        count < gainCount && player.hand.length < MAX_HAND_SIZE;
+        count += 1
+      ) {
+        const definition = randomGeneratedTavernSpellDefinition(
+          state,
+          effect,
+        );
+        if (!definition) {
+          break;
+        }
         player.hand.push(createTavernSpell(state, definition));
       }
     } else if (effect.kind === "gainMinion") {
@@ -1849,6 +1898,17 @@ function applyRecruitEffects(
         );
         player.ballerHealthBonus += effect.health * scale;
       }
+    } else if (effect.kind === "buffTavern") {
+      const repetitions =
+        effect.goldenMode === "repeat" ? scale : 1;
+      const attack = effect.attack * repetitions;
+      const health = effect.health * repetitions;
+      player.tavernMinionAttackBonus += attack;
+      player.tavernMinionHealthBonus += health;
+      buffMinions(player.shop, attack, health);
+    } else if (effect.kind === "improveTavernSpellBuffs") {
+      player.tavernSpellAttackBonus += effect.attack * scale;
+      player.tavernSpellHealthBonus += effect.health * scale;
     } else if (effect.kind === "buffTavernType") {
       const attack = effect.attack * scale;
       const health = effect.health * scale;
@@ -2936,9 +2996,14 @@ function castSpellcraft(
       break;
     case "anglersLure":
       if (target) {
-        applyTemporarySpellcraftBuff(target, 2, 6, {
-          taunt: true,
-        });
+        applyTemporarySpellcraftBuff(
+          target,
+          2 * effectMultiplier,
+          6 * effectMultiplier,
+          {
+            taunt: true,
+          },
+        );
       }
       break;
     case "glowingCrown":
@@ -2959,7 +3024,8 @@ function castSpellcraft(
       break;
     case "deepBlueBlues":
       if (target) {
-        const amount = 2 + player.deepBlueBonus;
+        const amount =
+          (2 + player.deepBlueBonus) * effectMultiplier;
         applyTemporarySpellcraftBuff(target, amount, amount);
         player.deepBlueBonus += 1;
       }
@@ -4061,8 +4127,10 @@ function applyTavernSpellEffect(
       break;
     }
     case "bloodGemBarrage":
-      player.tavernBloodGemBarrageAttack += player.bloodGemAttack;
-      player.tavernBloodGemBarrageHealth += player.bloodGemHealth;
+      player.tavernBloodGemBarrageAttack +=
+        player.bloodGemAttack + player.tavernSpellAttackBonus;
+      player.tavernBloodGemBarrageHealth +=
+        player.bloodGemHealth + player.tavernSpellHealthBonus;
       break;
     case "cloneHorn": {
       const original = drawMatchingFromPool(
@@ -4601,6 +4669,7 @@ const AI_ECONOMY_EFFECT_KINDS = new Set<MinionEffect["kind"]>([
   "gainGold",
   "gainNextTurnGold",
   "gainTavernSpell",
+  "gainRandomTavernSpell",
   "gainMinion",
   "getRandomMinion",
   "gainBloodGems",
@@ -7149,6 +7218,83 @@ function resolveCombatGainTavernSpell(
   }
 }
 
+function resolveCombatGainRandomTavernSpell(
+  context: CombatContext,
+  ownerId: PlayerId,
+  source: MinionInstance,
+  component: MinionEffectSource,
+  effect: GainRandomTavernSpellEffect,
+): void {
+  const owner = persistentCombatOwner(context, ownerId);
+  if (!owner) {
+    return;
+  }
+  const componentDefinition = getMinionDefinition(
+    component.definitionId,
+  );
+  const sourceLabel = component.golden
+    ? `金色·${componentDefinition.name}`
+    : componentDefinition.name;
+  const gainCount =
+    effect.count *
+    (component.golden && effect.goldenMode === "doubleCount" ? 2 : 1);
+
+  for (let count = 0; count < gainCount; count += 1) {
+    if (owner.hand.length >= MAX_HAND_SIZE) {
+      pushBattleEvent(context.events, {
+        type: "cardGain",
+        actorPlayerId: ownerId,
+        actorInstanceId: source.instanceId,
+        targetPlayerId: ownerId,
+        amount: 0,
+        cardKind: "tavernSpell",
+        cardGainResult: "handFull",
+        message: owner.isHuman
+          ? `手牌已满，${sourceLabel}未能使你获得随机酒馆法术。`
+          : `${sourceLabel}未能使${owner.name}获得一张酒馆法术。`,
+      });
+      continue;
+    }
+    const spellDefinition = randomGeneratedTavernSpellDefinition(
+      context.state,
+      effect,
+    );
+    if (!spellDefinition) {
+      pushBattleEvent(context.events, {
+        type: "cardGain",
+        actorPlayerId: ownerId,
+        actorInstanceId: source.instanceId,
+        targetPlayerId: ownerId,
+        amount: 0,
+        cardKind: "tavernSpell",
+        cardGainResult: "noCandidate",
+        message: owner.isHuman
+          ? `${sourceLabel}没有找到符合条件的酒馆法术。`
+          : `${sourceLabel}没有找到可获取的酒馆法术。`,
+      });
+      continue;
+    }
+    const gained = createTavernSpell(context.state, spellDefinition);
+    owner.hand.push(gained);
+    pushBattleEvent(context.events, {
+      type: "cardGain",
+      actorPlayerId: ownerId,
+      actorInstanceId: source.instanceId,
+      targetPlayerId: ownerId,
+      targetInstanceId: owner.isHuman
+        ? gained.instanceId
+        : undefined,
+      amount: 1,
+      cardName: owner.isHuman ? gained.name : undefined,
+      cardKind: "tavernSpell",
+      cardGainResult: "added",
+      message: owner.isHuman
+        ? `${sourceLabel}使你获得了「${gained.name}」。`
+        : `${sourceLabel}使${owner.name}获得了一张酒馆法术。`,
+    });
+  }
+}
+
 function selectHighestAttackHandMinions(
   state: GameState,
   owner: PlayerState,
@@ -7722,6 +7868,27 @@ function resolveOneDeathrattle(
               source,
             );
           }
+        } else if (effect.kind === "buffRandomHandMinion") {
+          resolveCombatHandBuff(
+            context,
+            ownerId,
+            source,
+            component,
+            effect,
+          );
+        } else if (effect.kind === "improveBloodGems") {
+          const owner = persistentCombatOwner(context, ownerId);
+          if (owner) {
+            owner.bloodGemAttack += effect.attack * scale;
+            owner.bloodGemHealth += effect.health * scale;
+          }
+        } else if (effect.kind === "discountNextTavernSpell") {
+          const owner = persistentCombatOwner(context, ownerId);
+          if (owner) {
+            owner.nextTavernSpellDiscount =
+              (owner.nextTavernSpellDiscount ?? 0) +
+              effect.amount * scale;
+          }
         } else if (effect.kind === "getRandomMinion") {
           resolveCombatGetRandomMinion(
             context,
@@ -7732,6 +7899,14 @@ function resolveOneDeathrattle(
           );
         } else if (effect.kind === "gainTavernSpell") {
           resolveCombatGainTavernSpell(
+            context,
+            ownerId,
+            source,
+            component,
+            effect,
+          );
+        } else if (effect.kind === "gainRandomTavernSpell") {
+          resolveCombatGainRandomTavernSpell(
             context,
             ownerId,
             source,

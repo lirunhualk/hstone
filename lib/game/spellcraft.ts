@@ -26,8 +26,11 @@ export const SPELLCRAFT_DEFINITIONS = [
   {
     id: "spellcraft-anglers-lure",
     cardId: "BG23_004t",
+    goldenCardId: "BG23_004_Gt",
     name: "钓客的诱饵",
     description: "直到下个回合，使一个随从获得+2/+6和嘲讽。",
+    goldenDescription:
+      "直到下个回合，使一个随从获得+4/+12和嘲讽。",
     sourceTier: 3,
     effect: "anglersLure",
     target: "friendly",
@@ -56,8 +59,11 @@ export const SPELLCRAFT_DEFINITIONS = [
   {
     id: "spellcraft-deep-blue-blues",
     cardId: "BG26_502t",
+    goldenCardId: "BG26_502_Gt",
     name: "深沉蓝调",
     description: "直到下个回合，使一个随从获得+2/+2。提升你此后的深沉蓝调效果。",
+    goldenDescription:
+      "直到下个回合，使一个随从获得+4/+4。提升你此后的深沉蓝调效果。",
     sourceTier: 3,
     effect: "deepBlueBlues",
     target: "friendly",

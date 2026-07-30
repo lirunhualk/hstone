@@ -3,7 +3,7 @@ import liveRosterSnapshot from "./generated/battlegrounds-36.0.3-247416.zhCN.jso
 };
 import type { MinionDefinition, Tribe } from "./types.ts";
 
-export const CURRENT_ROSTER_VERSION = "battlegrounds-36.0.3-247416-v19";
+export const CURRENT_ROSTER_VERSION = "battlegrounds-36.0.3-247416-v20";
 /** Compatibility alias for existing save and engine imports. */
 export const CLASSIC_ROSTER_VERSION = CURRENT_ROSTER_VERSION;
 
@@ -908,6 +908,128 @@ const LIVE_RULE_OVERRIDES: Readonly<
       definitionId: "spellcraft-crab-rider",
     },
   },
+  BG23_004: {
+    goldenCardId: "BG23_004_G",
+    goldenDescription:
+      "塑造法术：直到下个回合，使一个随从获得+4/+12和嘲讽。",
+    spellcraft: {
+      definitionId: "spellcraft-anglers-lure",
+    },
+  },
+  BG26_502: {
+    goldenCardId: "BG26_502_G",
+    goldenDescription:
+      "塑造法术：直到下个回合，使一个随从获得+4/+4。提升你此后的深沉蓝调效果。",
+    spellcraft: {
+      definitionId: "spellcraft-deep-blue-blues",
+    },
+  },
+  BG26_360: {
+    goldenCardId: "BG26_360_G",
+    goldenDescription:
+      "亡语：随机使你手牌中的一张随从牌获得+14/+14。",
+    deathrattle: [
+      {
+        kind: "buffRandomHandMinion",
+        attack: 7,
+        health: 7,
+      },
+    ],
+  },
+  BG26_160: {
+    goldenCardId: "BG26_160_G",
+    goldenDescription:
+      "亡语：在本局对战中，你的鲜血宝石会额外获得+2攻击力。",
+    deathrattle: [
+      {
+        kind: "improveBloodGems",
+        attack: 1,
+        health: 0,
+      },
+    ],
+  },
+  BG25_041: {
+    goldenCardId: "BG25_041_G",
+    goldenDescription:
+      "战吼：使酒馆中的随从在本局对战中获得+2/+1，触发两次。",
+    battlecry: [
+      {
+        kind: "buffTavern",
+        attack: 2,
+        health: 1,
+        goldenMode: "repeat",
+      },
+    ],
+  },
+  BG34_635t: {
+    goldenCardId: "BG34_635_Gt",
+    goldenDescription:
+      "战吼：在本局对战中，你的酒馆法术使随从额外获得+2生命值。",
+    battlecry: [
+      {
+        kind: "improveTavernSpellBuffs",
+        attack: 0,
+        health: 1,
+      },
+    ],
+  },
+  BG34_638t: {
+    goldenCardId: "BG34_638_Gt",
+    goldenDescription:
+      "战吼：在本局对战中，你的酒馆法术使随从额外获得+2攻击力。",
+    battlecry: [
+      {
+        kind: "improveTavernSpellBuffs",
+        attack: 1,
+        health: 0,
+      },
+    ],
+  },
+  BG34_634t: {
+    goldenCardId: "BG34_634_Gt",
+    goldenDescription:
+      "战吼：随机获取两张消耗2枚铸币的酒馆法术牌。",
+    battlecry: [
+      {
+        kind: "gainRandomTavernSpell",
+        count: 1,
+        filter: { cost: 2 },
+        goldenMode: "doubleCount",
+      },
+    ],
+  },
+  BG33_894: {
+    goldenCardId: "BG33_894_G",
+    goldenDescription:
+      "战吼，亡语：随机获取两张等级1的酒馆法术牌。",
+    battlecry: [
+      {
+        kind: "gainRandomTavernSpell",
+        count: 1,
+        filter: { exactTier: 1 },
+        goldenMode: "doubleCount",
+      },
+    ],
+    deathrattle: [
+      {
+        kind: "gainRandomTavernSpell",
+        count: 1,
+        filter: { exactTier: 1 },
+        goldenMode: "doubleCount",
+      },
+    ],
+  },
+  BG35_340: {
+    goldenCardId: "BG35_340_G",
+    goldenDescription:
+      "嘲讽。亡语：你购买的下一张酒馆法术牌消耗的铸币减少（2）枚。",
+    deathrattle: [
+      {
+        kind: "discountNextTavernSpell",
+        amount: 1,
+      },
+    ],
+  },
   BG31_330: {
     goldenCardId: "BG31_330_G",
     goldenDescription:
@@ -1591,6 +1713,7 @@ const FULLY_SUPPORTED_LIVE_CARD_IDS = new Set([
   "BG22_202",
   "BG21_014",
   "BG23_002",
+  "BG23_004",
   "BG25_001",
   "BG25_008",
   "BG25_009",
@@ -1599,13 +1722,17 @@ const FULLY_SUPPORTED_LIVE_CARD_IDS = new Set([
   "BG25_013",
   "BG25_016",
   "BG25_022",
+  "BG25_041",
   "BG25_354",
   "BG26_146",
   "BG26_135",
   "BG26_147",
   "BG26_148",
   "BG26_159",
+  "BG26_160",
+  "BG26_360",
   "BG26_501",
+  "BG26_502",
   "BG26_529",
   "BG26_805",
   "BG26_817",
@@ -1635,19 +1762,24 @@ const FULLY_SUPPORTED_LIVE_CARD_IDS = new Set([
   "BG33_241",
   "BG33_888",
   "BG33_809",
+  "BG33_894",
   "BG34_140",
   "BG34_175",
   "BG34_231",
   "BG34_523",
   "BG34_630",
+  "BG34_634t",
+  "BG34_635t",
   "BG34_636t",
   "BG34_637t",
+  "BG34_638t",
   "BG34_682",
   "BG34_683",
   "BG34_684",
   "BG34_694",
   "BG34_731",
   "BG35_143",
+  "BG35_340",
   "BG35_702",
   "BG35_801",
   "BG35_814",
