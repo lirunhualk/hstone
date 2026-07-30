@@ -8,7 +8,9 @@ import {
   useRef,
   useState,
   type CSSProperties,
+  type FocusEventHandler,
   type KeyboardEvent as ReactKeyboardEvent,
+  type MouseEventHandler,
   type PointerEvent as ReactPointerEvent,
   type PointerEventHandler,
 } from "react";
@@ -63,6 +65,13 @@ import {
   projectCombatArmor,
   projectCombatHealth,
 } from "../lib/game/combat-presentation";
+import {
+  cardInspectionDelay,
+  movedBeyondCardInspectionTolerance,
+  placeCardInspection,
+  type CardInspectionAnchor,
+  type CardInspectionTrigger,
+} from "../lib/game/card-inspection";
 import {
   createBoardDragPreview,
   createLiftedCardDragPreview,
@@ -152,6 +161,21 @@ type DraggableCard =
   | SpellcraftSpellInstance
   | TavernSpellInstance;
 
+type InspectableCard = PlayerState["hand"][number];
+
+type CardInspectionState = {
+  card: InspectableCard;
+  anchor: CardInspectionAnchor;
+  trigger: CardInspectionTrigger;
+};
+
+type TouchInspectionGesture = {
+  pointerId: number;
+  cardInstanceId: string;
+  startX: number;
+  startY: number;
+};
+
 type ShopDisplayOffer =
   | {
       kind: "minion";
@@ -186,6 +210,19 @@ type DragPointerHandlers = {
   onPointerUp: PointerEventHandler<HTMLButtonElement>;
   onPointerCancel: PointerEventHandler<HTMLButtonElement>;
   onLostPointerCapture: PointerEventHandler<HTMLButtonElement>;
+};
+
+type CardInspectionHandlers = {
+  onPointerEnter: PointerEventHandler<HTMLButtonElement>;
+  onPointerLeave: PointerEventHandler<HTMLButtonElement>;
+  onPointerDown: PointerEventHandler<HTMLButtonElement>;
+  onPointerMove: PointerEventHandler<HTMLButtonElement>;
+  onPointerUp: PointerEventHandler<HTMLButtonElement>;
+  onPointerCancel: PointerEventHandler<HTMLButtonElement>;
+  onLostPointerCapture: PointerEventHandler<HTMLButtonElement>;
+  onClickCapture: MouseEventHandler<HTMLButtonElement>;
+  onFocus: FocusEventHandler<HTMLButtonElement>;
+  onBlur: FocusEventHandler<HTMLButtonElement>;
 };
 
 type BattleSpeed = 1 | 2;
@@ -850,6 +887,55 @@ function dragThreshold(pointerType: string): number {
     : MOUSE_DRAG_THRESHOLD_PX;
 }
 
+function mergeCardPointerHandlers(
+  inspectionHandlers?: CardInspectionHandlers,
+  dragHandlers?: DragPointerHandlers,
+) {
+  const mergePointerHandler = (
+    inspectionHandler:
+      | PointerEventHandler<HTMLButtonElement>
+      | undefined,
+    dragHandler:
+      | PointerEventHandler<HTMLButtonElement>
+      | undefined,
+  ): PointerEventHandler<HTMLButtonElement> | undefined => {
+    if (!inspectionHandler) return dragHandler;
+    if (!dragHandler) return inspectionHandler;
+    return (event) => {
+      inspectionHandler(event);
+      dragHandler(event);
+    };
+  };
+
+  return {
+    onPointerEnter: inspectionHandlers?.onPointerEnter,
+    onPointerLeave: inspectionHandlers?.onPointerLeave,
+    onPointerDown: mergePointerHandler(
+      inspectionHandlers?.onPointerDown,
+      dragHandlers?.onPointerDown,
+    ),
+    onPointerMove: mergePointerHandler(
+      inspectionHandlers?.onPointerMove,
+      dragHandlers?.onPointerMove,
+    ),
+    onPointerUp: mergePointerHandler(
+      inspectionHandlers?.onPointerUp,
+      dragHandlers?.onPointerUp,
+    ),
+    onPointerCancel: mergePointerHandler(
+      inspectionHandlers?.onPointerCancel,
+      dragHandlers?.onPointerCancel,
+    ),
+    onLostPointerCapture: mergePointerHandler(
+      inspectionHandlers?.onLostPointerCapture,
+      dragHandlers?.onLostPointerCapture,
+    ),
+    onClickCapture: inspectionHandlers?.onClickCapture,
+    onFocus: inspectionHandlers?.onFocus,
+    onBlur: inspectionHandlers?.onBlur,
+  };
+}
+
 function countMagneticAttachments(
   attachments: readonly MagneticAttachment[],
 ): number {
@@ -1071,6 +1157,7 @@ function UnitCard({
   locked = false,
   disabled = false,
   dragHandlers,
+  inspectionHandlers,
   testId,
   onClick,
   onKeyDown,
@@ -1113,6 +1200,7 @@ function UnitCard({
   locked?: boolean;
   disabled?: boolean;
   dragHandlers?: DragPointerHandlers;
+  inspectionHandlers?: CardInspectionHandlers;
   testId?: string;
   onClick?: () => void;
   onKeyDown?: (
@@ -1238,7 +1326,7 @@ function UnitCard({
       onKeyDown={onKeyDown}
       disabled={disabled}
       style={{ "--card-hue": TRIBE_HUE[unit.tribe] } as CSSProperties}
-      {...dragHandlers}
+      {...mergeCardPointerHandlers(inspectionHandlers, dragHandlers)}
     >
       <UnitCardFace unit={unit} keywordVisuals={keywordVisuals} />
       {combatShieldBreaking && (
@@ -1364,11 +1452,13 @@ function MagneticAttachmentList({
 function TripleRewardCard({
   card,
   disabled = false,
+  inspectionHandlers,
   testId,
   onPlay,
 }: {
   card: TripleRewardSpellInstance;
   disabled?: boolean;
+  inspectionHandlers?: CardInspectionHandlers;
   testId?: string;
   onPlay: () => void;
 }) {
@@ -1383,6 +1473,7 @@ function TripleRewardCard({
       disabled={disabled}
       onClick={onPlay}
       style={{ "--card-hue": TRIBE_HUE.neutral } as CSSProperties}
+      {...mergeCardPointerHandlers(inspectionHandlers)}
     >
       <CardArtwork unit={card} kind="portrait" />
       <span className="triple-reward-tier">{card.tier}</span>
@@ -1398,11 +1489,13 @@ function TripleRewardCard({
 function ConsolationCoinCard({
   card,
   disabled = false,
+  inspectionHandlers,
   testId,
   onPlay,
 }: {
   card: ConsolationCoinSpellInstance;
   disabled?: boolean;
+  inspectionHandlers?: CardInspectionHandlers;
   testId?: string;
   onPlay: () => void;
 }) {
@@ -1417,6 +1510,7 @@ function ConsolationCoinCard({
       disabled={disabled}
       onClick={onPlay}
       style={{ "--card-hue": 42 } as CSSProperties}
+      {...mergeCardPointerHandlers(inspectionHandlers)}
     >
       <CardArtwork unit={card} kind="portrait" />
       <span className="tavern-spell-cost">0</span>
@@ -1477,6 +1571,7 @@ function BloodGemCard({
   disabled = false,
   dragging = false,
   dragHandlers,
+  inspectionHandlers,
   testId,
   onClick,
 }: {
@@ -1488,6 +1583,7 @@ function BloodGemCard({
   disabled?: boolean;
   dragging?: boolean;
   dragHandlers?: DragPointerHandlers;
+  inspectionHandlers?: CardInspectionHandlers;
   testId?: string;
   onClick?: () => void;
 }) {
@@ -1511,7 +1607,7 @@ function BloodGemCard({
       disabled={disabled}
       onClick={onClick}
       style={{ "--card-hue": TRIBE_HUE.quilboar } as CSSProperties}
-      {...dragHandlers}
+      {...mergeCardPointerHandlers(inspectionHandlers, dragHandlers)}
     >
       <BloodGemCardFace card={card} attack={attack} health={health} />
     </button>
@@ -1545,6 +1641,7 @@ function SpellcraftCard({
   disabled = false,
   dragging = false,
   dragHandlers,
+  inspectionHandlers,
   testId,
   onClick,
 }: {
@@ -1554,6 +1651,7 @@ function SpellcraftCard({
   disabled?: boolean;
   dragging?: boolean;
   dragHandlers?: DragPointerHandlers;
+  inspectionHandlers?: CardInspectionHandlers;
   testId?: string;
   onClick?: () => void;
 }) {
@@ -1579,7 +1677,7 @@ function SpellcraftCard({
       disabled={disabled}
       onClick={onClick}
       style={{ "--card-hue": 222 } as CSSProperties}
-      {...dragHandlers}
+      {...mergeCardPointerHandlers(inspectionHandlers, dragHandlers)}
     >
       <SpellcraftCardFace card={card} />
     </button>
@@ -1638,6 +1736,7 @@ function TavernSpellCard({
   disabled = false,
   dragging = false,
   dragHandlers,
+  inspectionHandlers,
   testId,
   onClick,
 }: {
@@ -1650,6 +1749,7 @@ function TavernSpellCard({
   disabled?: boolean;
   dragging?: boolean;
   dragHandlers?: DragPointerHandlers;
+  inspectionHandlers?: CardInspectionHandlers;
   testId?: string;
   onClick?: () => void;
 }) {
@@ -1675,7 +1775,7 @@ function TavernSpellCard({
       disabled={disabled}
       onClick={onClick}
       style={{ "--card-hue": 266 } as CSSProperties}
-      {...dragHandlers}
+      {...mergeCardPointerHandlers(inspectionHandlers, dragHandlers)}
     >
       <TavernSpellCardFace
         card={card}
@@ -1726,6 +1826,122 @@ function CardArtwork({
         <span className="art-fallback">{unit.name}</span>
       )}
     </span>
+  );
+}
+
+function inspectionCardMeta(
+  card: InspectableCard,
+  bloodGemAttack: number,
+  bloodGemHealth: number,
+): string {
+  if (card.kind === "tripleReward") {
+    return `${card.tier} 星三连奖励`;
+  }
+  if (card.kind === "minion") {
+    return `${card.tier} 星 · ${printedTribeLabel(card)} · ${
+      card.attack
+    } 攻 / ${card.health} 血 · ${unitKeyword(card)}`;
+  }
+  if (card.kind === "tavernSpell") {
+    return `${card.tier} 星酒馆法术 · ${card.cost} 费`;
+  }
+  if (card.kind === "spellcraft") {
+    return `${
+      (card.effectMultiplier ?? 1) > 1 ? "金色" : "普通"
+    }塑造法术 · 0 费`;
+  }
+  if (card.kind === "bloodGem") {
+    return `鲜血宝石 · 当前 +${bloodGemAttack}/+${bloodGemHealth}`;
+  }
+  return "酒馆法术 · 0 费";
+}
+
+function inspectionCardDescription(
+  card: InspectableCard,
+  bloodGemAttack: number,
+  bloodGemHealth: number,
+): string {
+  if (card.kind === "tripleReward") {
+    return `发现一个 ${card.tier} 星随从。`;
+  }
+  if (card.kind === "bloodGem") {
+    const bonus = bloodGemBonusText(card);
+    return `使一个友方随从获得 +${bloodGemAttack}/+${bloodGemHealth}${
+      bonus ? `；${bonus}` : ""
+    }。`;
+  }
+  return card.description;
+}
+
+function CardInspectionPreview({
+  inspection,
+  layout,
+  bloodGemAttack,
+  bloodGemHealth,
+}: {
+  inspection: CardInspectionState;
+  layout: {
+    left: number;
+    top: number;
+    width: number;
+    height: number;
+    side: "left" | "right" | "overlap";
+  };
+  bloodGemAttack: number;
+  bloodGemHealth: number;
+}) {
+  const triggerLabel =
+    inspection.trigger === "hover"
+      ? "悬停检查"
+      : inspection.trigger === "focus"
+        ? "键盘检查"
+        : "长按检查";
+  return (
+    <aside
+      className="card-inspection-preview"
+      role="tooltip"
+      aria-live="polite"
+      data-card-instance-id={inspection.card.instanceId}
+      data-placement={layout.side}
+      data-testid="card-inspection-preview"
+      data-trigger={inspection.trigger}
+      style={
+        {
+          left: layout.left,
+          top: layout.top,
+          width: layout.width,
+          height: layout.height,
+        } as CSSProperties
+      }
+    >
+      <span className="card-inspection-kicker">
+        {triggerLabel} · Esc 关闭
+      </span>
+      <div className="card-inspection-art">
+        <CardArtwork
+          key={inspection.card.cardId}
+          unit={inspection.card}
+          kind="detail"
+        />
+      </div>
+      <div className="card-inspection-copy">
+        <strong>{inspection.card.name}</strong>
+        <span>
+          {inspectionCardMeta(
+            inspection.card,
+            bloodGemAttack,
+            bloodGemHealth,
+          )}
+        </span>
+        <p>
+          {inspectionCardDescription(
+            inspection.card,
+            bloodGemAttack,
+            bloodGemHealth,
+          )}
+        </p>
+      </div>
+    </aside>
   );
 }
 
@@ -1899,6 +2115,7 @@ function BoardRow({
   tavernSpellDropTargetId,
   tavernSpellCastFeedback,
   getDragHandlers,
+  getCardInspectionHandlers,
   onUnitClick,
   onChoiceTarget,
   onMagneticTarget,
@@ -1940,6 +2157,9 @@ function BoardRow({
     source: DragSource,
     card: DraggableCard,
   ) => DragPointerHandlers;
+  getCardInspectionHandlers?: (
+    card: InspectableCard,
+  ) => CardInspectionHandlers;
   onUnitClick?: (index: number) => void;
   onChoiceTarget?: (instanceId: string) => void;
   onMagneticTarget?: (instanceId: string) => void;
@@ -2174,6 +2394,7 @@ function BoardRow({
                         )
                       : undefined
                   }
+                  inspectionHandlers={getCardInspectionHandlers?.(unit)}
                   onClick={
                     isChoiceTarget && onChoiceTarget
                       ? () => onChoiceTarget(unit.instanceId)
@@ -2322,6 +2543,8 @@ export default function GameClient() {
   const [infoTab, setInfoTab] = useState<InfoTab>("details");
   const [showRestart, setShowRestart] = useState(false);
   const [dragSession, setDragSession] = useState<DragSession | null>(null);
+  const [cardInspection, setCardInspection] =
+    useState<CardInspectionState | null>(null);
   const [magneticAnnouncement, setMagneticAnnouncement] = useState("");
   const [bloodGemCastFeedback, setBloodGemCastFeedback] =
     useState<BloodGemCastFeedback | null>(null);
@@ -2342,6 +2565,13 @@ export default function GameClient() {
   const [combatIntroCompletedBattle, setCombatIntroCompletedBattle] =
     useState<BattleSummary | null>(null);
   const dragSessionRef = useRef<DragSession | null>(null);
+  const cardInspectionRef = useRef<CardInspectionState | null>(null);
+  const cardInspectionTimerRef = useRef<number | null>(null);
+  const pendingInspectionCardIdRef = useRef<string | null>(null);
+  const touchInspectionGestureRef =
+    useRef<TouchInspectionGesture | null>(null);
+  const suppressLongPressClickRef = useRef<string | null>(null);
+  const pointerInitiatedFocusRef = useRef(false);
   const dragCaptureElementRef = useRef<HTMLButtonElement | null>(null);
   const suppressCardClickRef = useRef(false);
   const battlePlaybackTimerRef = useRef<number | null>(null);
@@ -2358,6 +2588,34 @@ export default function GameClient() {
     dragSessionRef.current = next;
     setDragSession(next);
   }, []);
+
+  const writeCardInspection = useCallback(
+    (next: CardInspectionState | null) => {
+      cardInspectionRef.current = next;
+      setCardInspection(next);
+    },
+    [],
+  );
+
+  const cardInspectionLayout = useMemo(() => {
+    if (!cardInspection) return null;
+    const width = Math.max(1, Math.min(290, window.innerWidth - 24));
+    const height = Math.max(
+      1,
+      Math.min(430, window.innerHeight - 24),
+    );
+    return {
+      width,
+      height,
+      ...placeCardInspection({
+        anchor: cardInspection.anchor,
+        previewWidth: width,
+        previewHeight: height,
+        viewportWidth: window.innerWidth,
+        viewportHeight: window.innerHeight,
+      }),
+    };
+  }, [cardInspection]);
 
   const liftedDragPreview = useMemo(() => {
     if (!dragSession?.active) {
@@ -2387,6 +2645,20 @@ export default function GameClient() {
     window.clearTimeout(combatIntroTimerRef.current);
     combatIntroTimerRef.current = null;
   }, []);
+
+  const clearCardInspectionTimer = useCallback(() => {
+    if (cardInspectionTimerRef.current !== null) {
+      window.clearTimeout(cardInspectionTimerRef.current);
+      cardInspectionTimerRef.current = null;
+    }
+    pendingInspectionCardIdRef.current = null;
+  }, []);
+
+  const dismissCardInspection = useCallback(() => {
+    clearCardInspectionTimer();
+    touchInspectionGestureRef.current = null;
+    writeCardInspection(null);
+  }, [clearCardInspectionTimer, writeCardInspection]);
 
   const clearBloodGemCastFeedback = useCallback(() => {
     if (bloodGemCastTimerRef.current !== null) {
@@ -2480,6 +2752,7 @@ export default function GameClient() {
 
   const send = useCallback(
     (action: GameAction) => {
+      dismissCardInspection();
       setGame((current) => {
         const next = gameReducer(current, action);
         if (started) {
@@ -2489,7 +2762,7 @@ export default function GameClient() {
       });
       setSelection(null);
     },
-    [started],
+    [dismissCardInspection, started],
   );
 
   const human = useMemo(
@@ -3617,6 +3890,214 @@ export default function GameClient() {
     [game, human.board, human.hand, human.id, send],
   );
 
+  const showCardInspection = useCallback(
+    (
+      card: InspectableCard,
+      source: HTMLButtonElement,
+      trigger: CardInspectionTrigger,
+    ) => {
+      if (
+        interactionLocked ||
+        combatIntroActive ||
+        dragSessionRef.current?.active ||
+        !source.isConnected
+      ) {
+        return;
+      }
+      if (trigger === "longPress") {
+        suppressLongPressClickRef.current = card.instanceId;
+      }
+      const rect = source.getBoundingClientRect();
+      writeCardInspection({
+        card,
+        trigger,
+        anchor: {
+          left: rect.left,
+          top: rect.top,
+          right: rect.right,
+          bottom: rect.bottom,
+          width: rect.width,
+          height: rect.height,
+        },
+      });
+    },
+    [combatIntroActive, interactionLocked, writeCardInspection],
+  );
+
+  const scheduleCardInspection = useCallback(
+    (
+      card: InspectableCard,
+      source: HTMLButtonElement,
+      trigger: "hover" | "longPress",
+    ) => {
+      clearCardInspectionTimer();
+      pendingInspectionCardIdRef.current = card.instanceId;
+      cardInspectionTimerRef.current = window.setTimeout(() => {
+        cardInspectionTimerRef.current = null;
+        if (
+          pendingInspectionCardIdRef.current !== card.instanceId
+        ) {
+          return;
+        }
+        pendingInspectionCardIdRef.current = null;
+        showCardInspection(card, source, trigger);
+      }, cardInspectionDelay(trigger));
+    },
+    [clearCardInspectionTimer, showCardInspection],
+  );
+
+  const getCardInspectionHandlers = useCallback(
+    (card: InspectableCard): CardInspectionHandlers => {
+      const closeCardInspection = (
+        trigger?: CardInspectionTrigger,
+      ) => {
+        if (pendingInspectionCardIdRef.current === card.instanceId) {
+          clearCardInspectionTimer();
+        }
+        const current = cardInspectionRef.current;
+        if (
+          current?.card.instanceId === card.instanceId &&
+          (trigger === undefined || current.trigger === trigger)
+        ) {
+          writeCardInspection(null);
+        }
+      };
+      const cancelTouchInspection = (pointerId: number) => {
+        const gesture = touchInspectionGestureRef.current;
+        if (gesture?.pointerId !== pointerId) return;
+        touchInspectionGestureRef.current = null;
+        if (
+          pendingInspectionCardIdRef.current === card.instanceId
+        ) {
+          clearCardInspectionTimer();
+        }
+      };
+
+      return {
+        onPointerEnter: (event) => {
+          if (
+            event.pointerType !== "mouse" ||
+            interactionLocked ||
+            combatIntroActive ||
+            dragSessionRef.current?.active
+          ) {
+            return;
+          }
+          scheduleCardInspection(
+            card,
+            event.currentTarget,
+            "hover",
+          );
+        },
+        onPointerLeave: (event) => {
+          if (event.pointerType !== "mouse") return;
+          closeCardInspection("hover");
+        },
+        onPointerDown: (event) => {
+          suppressLongPressClickRef.current = null;
+          pointerInitiatedFocusRef.current = true;
+          window.setTimeout(() => {
+            pointerInitiatedFocusRef.current = false;
+          }, 0);
+          dismissCardInspection();
+          if (
+            (event.pointerType !== "touch" &&
+              event.pointerType !== "pen") ||
+            !event.isPrimary ||
+            event.button !== 0 ||
+            interactionLocked ||
+            combatIntroActive
+          ) {
+            return;
+          }
+          touchInspectionGestureRef.current = {
+            pointerId: event.pointerId,
+            cardInstanceId: card.instanceId,
+            startX: event.clientX,
+            startY: event.clientY,
+          };
+          scheduleCardInspection(
+            card,
+            event.currentTarget,
+            "longPress",
+          );
+        },
+        onPointerMove: (event) => {
+          const gesture = touchInspectionGestureRef.current;
+          if (
+            gesture?.pointerId !== event.pointerId ||
+            gesture.cardInstanceId !== card.instanceId ||
+            !movedBeyondCardInspectionTolerance(
+              gesture.startX,
+              gesture.startY,
+              event.clientX,
+              event.clientY,
+            )
+          ) {
+            return;
+          }
+          cancelTouchInspection(event.pointerId);
+          closeCardInspection("longPress");
+        },
+        onPointerUp: (event) => {
+          cancelTouchInspection(event.pointerId);
+          window.setTimeout(() => {
+            if (
+              suppressLongPressClickRef.current === card.instanceId
+            ) {
+              suppressLongPressClickRef.current = null;
+            }
+          }, 0);
+        },
+        onPointerCancel: (event) => {
+          cancelTouchInspection(event.pointerId);
+          closeCardInspection("longPress");
+          if (
+            suppressLongPressClickRef.current === card.instanceId
+          ) {
+            suppressLongPressClickRef.current = null;
+          }
+        },
+        onLostPointerCapture: (event) => {
+          cancelTouchInspection(event.pointerId);
+        },
+        onClickCapture: (event) => {
+          if (
+            suppressLongPressClickRef.current !== card.instanceId
+          ) {
+            return;
+          }
+          suppressLongPressClickRef.current = null;
+          event.preventDefault();
+          event.stopPropagation();
+        },
+        onFocus: (event) => {
+          if (
+            pointerInitiatedFocusRef.current ||
+            interactionLocked ||
+            combatIntroActive
+          ) {
+            return;
+          }
+          clearCardInspectionTimer();
+          showCardInspection(card, event.currentTarget, "focus");
+        },
+        onBlur: () => {
+          closeCardInspection("focus");
+        },
+      };
+    },
+    [
+      clearCardInspectionTimer,
+      combatIntroActive,
+      dismissCardInspection,
+      interactionLocked,
+      scheduleCardInspection,
+      showCardInspection,
+      writeCardInspection,
+    ],
+  );
+
   const select = useCallback((nextSelection: Exclude<Selection, null>) => {
     setSelection(nextSelection);
     setInfoTab("details");
@@ -3950,6 +4431,9 @@ export default function GameClient() {
         return true;
       }
 
+      if (!current.active && active) {
+        dismissCardInspection();
+      }
       writeDragSession({
         ...current,
         clientX,
@@ -3959,7 +4443,11 @@ export default function GameClient() {
       });
       return true;
     },
-    [resolveDragTarget, writeDragSession],
+    [
+      dismissCardInspection,
+      resolveDragTarget,
+      writeDragSession,
+    ],
   );
 
   const moveDrag = useCallback(
@@ -4227,8 +4715,23 @@ export default function GameClient() {
       // gesture must not consume the fresh click that is about to begin.
       suppressCardClickRef.current = false;
     };
+    const handleWindowPointerDown = () => {
+      dismissCardInspection();
+      cancelStaleDrag();
+    };
+    const handleWindowBlur = () => {
+      dismissCardInspection();
+      cancelStaleDrag();
+    };
     const handleEscape = (event: KeyboardEvent) => {
       if (event.key !== "Escape") return;
+      if (
+        cardInspectionRef.current ||
+        cardInspectionTimerRef.current !== null
+      ) {
+        dismissCardInspection();
+        return;
+      }
       if (dragSessionRef.current) {
         cancelStaleDrag();
         return;
@@ -4261,18 +4764,25 @@ export default function GameClient() {
     window.addEventListener("pointercancel", handleWindowPointerEnd, {
       passive: false,
     });
-    window.addEventListener("pointerdown", cancelStaleDrag, true);
-    window.addEventListener("blur", cancelStaleDrag);
+    window.addEventListener("pointerdown", handleWindowPointerDown, true);
+    window.addEventListener("blur", handleWindowBlur);
+    window.addEventListener("resize", dismissCardInspection);
     window.addEventListener("keydown", handleEscape);
     return () => {
       window.removeEventListener("pointermove", handleWindowPointerMove);
       window.removeEventListener("pointerup", handleWindowPointerEnd);
       window.removeEventListener("pointercancel", handleWindowPointerEnd);
-      window.removeEventListener("pointerdown", cancelStaleDrag, true);
-      window.removeEventListener("blur", cancelStaleDrag);
+      window.removeEventListener(
+        "pointerdown",
+        handleWindowPointerDown,
+        true,
+      );
+      window.removeEventListener("blur", handleWindowBlur);
+      window.removeEventListener("resize", dismissCardInspection);
       window.removeEventListener("keydown", handleEscape);
     };
   }, [
+    dismissCardInspection,
     finishDragSession,
     moveDragSession,
     selectedBloodGem,
@@ -4280,6 +4790,13 @@ export default function GameClient() {
     selectedHandTavernSpell,
     selectedMagneticSource,
   ]);
+
+  useEffect(
+    () => () => {
+      clearCardInspectionTimer();
+    },
+    [clearCardInspectionTimer],
+  );
 
   useEffect(() => {
     const current = dragSessionRef.current;
@@ -4772,6 +5289,9 @@ export default function GameClient() {
                             )
                           : undefined
                       }
+                      inspectionHandlers={getCardInspectionHandlers(
+                        offer.unit,
+                      )}
                       onClick={() => {
                         if (
                           selectedHandTavernSpell &&
@@ -4832,6 +5352,9 @@ export default function GameClient() {
                               )
                             : undefined
                         }
+                        inspectionHandlers={getCardInspectionHandlers(
+                          offer.spell,
+                        )}
                         onClick={() =>
                           selectCard({
                             zone: "spellShop",
@@ -4866,6 +5389,9 @@ export default function GameClient() {
                 <BoardRow
                   units={opponentBoard}
                   side="enemy"
+                  getCardInspectionHandlers={
+                    getCardInspectionHandlers
+                  }
                   actorInstanceId={
                     currentStrikeEvent?.actorPlayerId === opponentId
                       ? currentStrikeEvent?.actorInstanceId
@@ -5072,6 +5598,7 @@ export default function GameClient() {
               <BoardRow
                 units={friendlyCombatBoard}
                 side="friendly"
+                getCardInspectionHandlers={getCardInspectionHandlers}
                 selection={selection}
                 dragSession={dragSession}
                 actorInstanceId={
@@ -5346,6 +5873,7 @@ export default function GameClient() {
                   <TripleRewardCard
                     card={card}
                     key={card.instanceId}
+                    inspectionHandlers={getCardInspectionHandlers(card)}
                     testId={`triple-reward-card-${index}`}
                     disabled={interactionLocked}
                     onPlay={() =>
@@ -5359,6 +5887,7 @@ export default function GameClient() {
                   <ConsolationCoinCard
                     card={card}
                     key={card.instanceId}
+                    inspectionHandlers={getCardInspectionHandlers(card)}
                     testId={`consolation-coin-card-${index}`}
                     disabled={interactionLocked}
                     onPlay={() =>
@@ -5393,6 +5922,7 @@ export default function GameClient() {
                           )
                         : undefined
                     }
+                    inspectionHandlers={getCardInspectionHandlers(card)}
                     onClick={() =>
                       selectCard({ zone: "hand", index })
                     }
@@ -5420,6 +5950,7 @@ export default function GameClient() {
                           )
                         : undefined
                     }
+                    inspectionHandlers={getCardInspectionHandlers(card)}
                     onClick={() =>
                       selectCard({ zone: "hand", index })
                     }
@@ -5447,6 +5978,7 @@ export default function GameClient() {
                           )
                         : undefined
                     }
+                    inspectionHandlers={getCardInspectionHandlers(card)}
                     onClick={() =>
                       selectCard({ zone: "hand", index })
                     }
@@ -5482,6 +6014,7 @@ export default function GameClient() {
                           )
                         : undefined
                     }
+                    inspectionHandlers={getCardInspectionHandlers(card)}
                     onClick={() =>
                       selectCard({ zone: "hand", index })
                     }
@@ -6035,6 +6568,18 @@ export default function GameClient() {
       >
         {interactionAnnouncement}
       </span>
+
+      {!interactionLocked &&
+        !combatIntroActive &&
+        cardInspection &&
+        cardInspectionLayout && (
+          <CardInspectionPreview
+            inspection={cardInspection}
+            layout={cardInspectionLayout}
+            bloodGemAttack={human.bloodGemAttack}
+            bloodGemHealth={human.bloodGemHealth}
+          />
+        )}
 
       {aimedSpellPath && (
         <svg
