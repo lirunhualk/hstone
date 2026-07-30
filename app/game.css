@@ -1762,25 +1762,18 @@
 }
 
 .card-inspection-copy > span {
-  overflow: hidden;
   color: #f3c978;
   font-size: 10px;
   font-weight: 760;
   line-height: 1.3;
-  text-overflow: ellipsis;
-  white-space: nowrap;
+  white-space: normal;
 }
 
 .card-inspection-copy > p {
-  display: -webkit-box;
-  overflow: hidden;
   margin: 1px 0 0;
   color: #e6edf5;
   font-size: 12px;
   line-height: 1.4;
-  text-overflow: ellipsis;
-  -webkit-box-orient: vertical;
-  -webkit-line-clamp: 3;
 }
 
 @keyframes card-inspection-enter {
