@@ -48,6 +48,7 @@ import type {
   GetRandomMinionEffect,
   HelpfulRefreshKind,
   HeroPowerDefinition,
+  HumanScoutingReport,
   MagneticAttachment,
   MinionEffect,
   MinionInstance,
@@ -60,6 +61,7 @@ import type {
   RallyRemoveTargetKeywordsEffect,
   RallyRemovedKeyword,
   RallySummonFromHandEffect,
+  ScheduledPairing,
   SpellcraftDefinition,
   SpellcraftSpellInstance,
   TavernSpellDefinition,
@@ -84,6 +86,7 @@ export type {
   HandCardInstance,
   HelpfulRefreshKind,
   HeroPowerDefinition,
+  HumanScoutingReport,
   MagneticAttachment,
   MinionDefinition,
   MinionEffect,
@@ -91,6 +94,7 @@ export type {
   PendingInteraction,
   PlayerId,
   PlayerState,
+  ScheduledPairing,
   SpellFamily,
   SpellcraftDefinition,
   SpellcraftEffect,
@@ -9276,39 +9280,194 @@ function resolveCombatDeaths(context: CombatContext): void {
   }
 }
 
-function buildPairings(state: GameState): Pairing[] {
-  const alive = state.players.filter((player) => player.alive);
-  shuffleInPlace(state, alive);
-  const pairings: Pairing[] = [];
+interface AlivePairingPlan {
+  pairs: Array<readonly [PlayerState, PlayerState]>;
+  rematches: number;
+}
+
+function pairingRandomSeed(state: GameState, aliveCount: number): number {
+  return normalizeSeed(
+    (
+      state.seed ^
+      Math.imul(state.round, 0x9e37_79b9) ^
+      Math.imul(aliveCount, 0x85eb_ca6b)
+    ) >>> 0,
+  );
+}
+
+function shuffleForPairings(
+  state: GameState,
+  players: readonly PlayerState[],
+): PlayerState[] {
+  const shuffled = [...players];
+  let value = pairingRandomSeed(state, shuffled.length);
+  const nextPairingRandom = () => {
+    value ^= value << 13;
+    value ^= value >>> 17;
+    value ^= value << 5;
+    value >>>= 0;
+    return value / 0x1_0000_0000;
+  };
+  for (let index = shuffled.length - 1; index > 0; index -= 1) {
+    const swapIndex = Math.floor(nextPairingRandom() * (index + 1));
+    [shuffled[index], shuffled[swapIndex]] = [
+      shuffled[swapIndex],
+      shuffled[index],
+    ];
+  }
+  return shuffled;
+}
+
+function isImmediateRematch(
+  playerA: PlayerState,
+  playerB: PlayerState,
+): boolean {
+  return (
+    playerA.lastOpponentId === playerB.id ||
+    playerB.lastOpponentId === playerA.id
+  );
+}
+
+function bestAlivePairingPlan(
+  players: readonly PlayerState[],
+): AlivePairingPlan {
+  if (players.length < 2) {
+    return { pairs: [], rematches: 0 };
+  }
+  const playerA = players[0];
+  let bestPlan: AlivePairingPlan | null = null;
+  for (let opponentIndex = 1; opponentIndex < players.length; opponentIndex += 1) {
+    const playerB = players[opponentIndex];
+    const remaining = players.filter(
+      (_, index) => index !== 0 && index !== opponentIndex,
+    );
+    const tailPlan = bestAlivePairingPlan(remaining);
+    const candidate: AlivePairingPlan = {
+      pairs: [[playerA, playerB], ...tailPlan.pairs],
+      rematches:
+        tailPlan.rematches +
+        (isImmediateRematch(playerA, playerB) ? 1 : 0),
+    };
+    if (!bestPlan || candidate.rematches < bestPlan.rematches) {
+      bestPlan = candidate;
+    }
+  }
+  return bestPlan ?? { pairs: [], rematches: 0 };
+}
+
+/**
+ * Recruit-phase pairings use a dedicated deterministic random stream. Shop
+ * rolls and AI decisions therefore cannot silently change the opponent shown
+ * to the player before END_TURN.
+ */
+export function getScheduledPairings(
+  state: GameState,
+): ScheduledPairing[] {
+  const alive = shuffleForPairings(
+    state,
+    state.players.filter((player) => player.alive),
+  );
   const ghost =
     alive.length % 2 === 1
       ? state.players
-          .filter((player) => !player.alive && player.eliminatedRound !== undefined)
+          .filter(
+            (player) =>
+              !player.alive && player.eliminatedRound !== undefined,
+          )
           .sort((left, right) => {
             const roundDifference =
-              (right.eliminatedRound ?? -1) - (left.eliminatedRound ?? -1);
+              (right.eliminatedRound ?? -1) -
+              (left.eliminatedRound ?? -1);
             return roundDifference !== 0
               ? roundDifference
               : left.id.localeCompare(right.id);
           })[0]
       : undefined;
 
-  const pairedAlive = ghost ? alive.slice(0, -1) : alive;
-  for (let index = 0; index < pairedAlive.length; index += 2) {
-    pairings.push({
-      playerA: pairedAlive[index],
-      playerB: pairedAlive[index + 1],
-      isGhost: false,
-    });
-  }
+  let livingPlan: AlivePairingPlan;
+  let ghostParticipant: PlayerState | undefined;
   if (ghost) {
+    let bestGhostPlan:
+      | {
+          participant: PlayerState;
+          living: AlivePairingPlan;
+          rematches: number;
+        }
+      | undefined;
+    for (let index = 0; index < alive.length; index += 1) {
+      const participant = alive[index];
+      const living = bestAlivePairingPlan(
+        alive.filter((_, candidateIndex) => candidateIndex !== index),
+      );
+      const rematches =
+        living.rematches +
+        (isImmediateRematch(participant, ghost) ? 1 : 0);
+      if (!bestGhostPlan || rematches < bestGhostPlan.rematches) {
+        bestGhostPlan = { participant, living, rematches };
+      }
+    }
+    ghostParticipant = bestGhostPlan?.participant;
+    livingPlan = bestGhostPlan?.living ?? { pairs: [], rematches: 0 };
+  } else {
+    const pairedAlive =
+      alive.length % 2 === 0 ? alive : alive.slice(0, -1);
+    livingPlan = bestAlivePairingPlan(pairedAlive);
+  }
+
+  const pairings: ScheduledPairing[] = livingPlan.pairs.map(
+    ([playerA, playerB]) => ({
+      playerAId: playerA.id,
+      playerBId: playerB.id,
+      isGhost: false,
+    }),
+  );
+  if (ghost && ghostParticipant) {
     pairings.push({
-      playerA: alive[alive.length - 1],
-      playerB: ghost,
+      playerAId: ghostParticipant.id,
+      playerBId: ghost.id,
       isGhost: true,
     });
   }
   return pairings;
+}
+
+export function getScheduledOpponent(
+  state: GameState,
+  playerId: PlayerId,
+): { opponentId: PlayerId; isGhost: boolean } | null {
+  if (state.phase !== "recruit") {
+    return null;
+  }
+  const pairing = getScheduledPairings(state).find(
+    (candidate) =>
+      candidate.playerAId === playerId ||
+      candidate.playerBId === playerId,
+  );
+  if (!pairing) {
+    return null;
+  }
+  return {
+    opponentId:
+      pairing.playerAId === playerId
+        ? pairing.playerBId
+        : pairing.playerAId,
+    isGhost: pairing.isGhost,
+  };
+}
+
+function buildPairings(state: GameState): Pairing[] {
+  return getScheduledPairings(state).map((pairing) => {
+    const playerA = findPlayer(state, pairing.playerAId);
+    const playerB = findPlayer(state, pairing.playerBId);
+    if (!playerA || !playerB) {
+      throw new Error("Scheduled pairing references an unknown player");
+    }
+    return {
+      playerA,
+      playerB,
+      isGhost: pairing.isGhost,
+    };
+  });
 }
 
 function resultForPlayer(
@@ -9860,6 +10019,27 @@ function endTurn(state: GameState): void {
         battle.playerAId === state.humanPlayerId ||
         battle.playerBId === state.humanPlayerId,
     ) ?? null;
+  if (state.lastBattle) {
+    const opponentId =
+      state.lastBattle.playerAId === state.humanPlayerId
+        ? state.lastBattle.playerBId
+        : state.lastBattle.playerAId;
+    const report: HumanScoutingReport = {
+      opponentId,
+      observedRound: state.lastBattle.round,
+      resultForHuman:
+        state.lastBattle.resultForHuman ??
+        resultForPlayer(state.lastBattle.winnerId, state.humanPlayerId),
+      isGhost: state.lastBattle.isGhost,
+      board: cloneBoard(
+        (state.lastBattle.initialBoards[opponentId] ?? []).filter(
+          (minion): minion is BoardMinionInstance =>
+            minion.kind === "minion",
+        ),
+      ),
+    };
+    state.humanScoutingReports[opponentId] = report;
+  }
   settleEliminations(state);
   state.phase = "combat";
 }
@@ -10028,6 +10208,7 @@ export function createGame(seed?: number): GameState {
     pendingInteraction: null,
     lastBattle: null,
     lastRoundBattles: [],
+    humanScoutingReports: {},
     winnerId: null,
   };
   const shuffledTribes = [...LOBBY_TRIBES];

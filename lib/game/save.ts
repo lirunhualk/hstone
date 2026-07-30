@@ -49,6 +49,69 @@ function isRecord(value: unknown): value is Record<string, unknown> {
   return value !== null && typeof value === "object";
 }
 
+function repairHumanScoutingReports(
+  value: Record<string, unknown>,
+): boolean {
+  if (value.humanScoutingReports === undefined) {
+    const reports: Record<string, unknown> = {};
+    const humanPlayerId =
+      typeof value.humanPlayerId === "string"
+        ? value.humanPlayerId
+        : null;
+    const battleCandidates = [
+      value.lastBattle,
+      ...(Array.isArray(value.lastRoundBattles)
+        ? value.lastRoundBattles
+        : []),
+    ];
+    const battle = battleCandidates.find(
+      (candidate) =>
+        humanPlayerId !== null &&
+        isRecord(candidate) &&
+        (candidate.playerAId === humanPlayerId ||
+          candidate.playerBId === humanPlayerId),
+    );
+    if (
+      humanPlayerId !== null &&
+      isRecord(battle) &&
+      typeof battle.playerAId === "string" &&
+      typeof battle.playerBId === "string" &&
+      typeof battle.round === "number" &&
+      Number.isInteger(battle.round) &&
+      typeof battle.isGhost === "boolean" &&
+      isRecord(battle.initialBoards)
+    ) {
+      const opponentId =
+        battle.playerAId === humanPlayerId
+          ? battle.playerBId
+          : battle.playerAId;
+      const board = battle.initialBoards[opponentId];
+      const resultForHuman =
+        battle.resultForHuman === "win" ||
+        battle.resultForHuman === "loss" ||
+        battle.resultForHuman === "tie"
+          ? battle.resultForHuman
+          : battle.winnerId === null
+            ? "tie"
+            : battle.winnerId === humanPlayerId
+              ? "win"
+              : "loss";
+      if (Array.isArray(board)) {
+        reports[opponentId] = {
+          opponentId,
+          observedRound: battle.round,
+          resultForHuman,
+          isGhost: battle.isGhost,
+          board: JSON.parse(JSON.stringify(board)),
+        };
+      }
+    }
+    value.humanScoutingReports = reports;
+    return true;
+  }
+  return isRecord(value.humanScoutingReports);
+}
+
 function rebuildSpellPool(value: Record<string, unknown>): boolean {
   if (
     !Array.isArray(value.activeTribes) ||
@@ -835,6 +898,9 @@ export function migrateSchema10GameState(value: unknown): unknown {
     migrated.version = 11;
     migrated.contentVersion = CURRENT_ROSTER_VERSION;
     migrated.spellPool = spellPool;
+    if (!repairHumanScoutingReports(migrated)) {
+      return null;
+    }
     return migrated;
   } catch {
     return null;
@@ -900,6 +966,9 @@ export function migrateSchema11GameState(value: unknown): unknown {
       player.lastTavernSpellDefinitionId = null;
       player.pendingTavernSpellDefinitionId = null;
       player.demonFodderRefreshQueue = [];
+    }
+    if (!repairHumanScoutingReports(migrated)) {
+      return null;
     }
     migrated.contentVersion = CURRENT_ROSTER_VERSION;
     return migrated;
@@ -971,7 +1040,10 @@ export function normalizePersistedGameState(value: unknown): unknown {
     value.version === 11 &&
     value.contentVersion === CURRENT_ROSTER_VERSION
   ) {
-    return repairSpellPool(value) ? value : null;
+    return repairSpellPool(value) &&
+      repairHumanScoutingReports(value)
+      ? value
+      : null;
   }
   return migrateLegacyGameState(value);
 }

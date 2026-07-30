@@ -23,6 +23,7 @@ import {
   getLegalSpellcraftTargetIds,
   getLegalTavernSpellTargetIds,
   getAiStrategyProfile,
+  getScheduledOpponent,
   getRefreshCost,
   getHeroPowerDefinition,
   getTavernSpellPurchaseQuote,
@@ -43,6 +44,7 @@ import {
   type ConsolationCoinSpellInstance,
   type GameAction,
   type GameState,
+  type HumanScoutingReport,
   type MagneticAttachment,
   type MinionInstance,
   type PendingInteraction,
@@ -83,6 +85,11 @@ import {
   type MinionKeywordVisual,
 } from "../lib/game/minion-presentation";
 import { projectCombatBoard } from "../lib/game/playback";
+import {
+  getHumanScoutingReport,
+  getPublicLastRoundResult,
+  getVisibleWarband,
+} from "../lib/game/opponent-intelligence";
 import {
   completeRecruitPresentation,
   deriveRecruitPresentation,
@@ -139,7 +146,7 @@ type Selection =
   | { zone: "shop" | "spellShop" | "hand" | "board"; index: number }
   | null;
 
-type InfoTab = "details" | "battle";
+type InfoTab = "details" | "scouting" | "battle";
 
 type DragSource = {
   zone: "shop" | "spellShop" | "hand" | "board";
@@ -804,6 +811,41 @@ function isPendingSpellcraftGrant(value: unknown): boolean {
   }
 }
 
+function isHumanScoutingReport(
+  value: unknown,
+  opponentId: string,
+): value is HumanScoutingReport {
+  return (
+    isRecord(value) &&
+    value.opponentId === opponentId &&
+    typeof value.observedRound === "number" &&
+    Number.isInteger(value.observedRound) &&
+    value.observedRound >= 1 &&
+    (value.resultForHuman === "win" ||
+      value.resultForHuman === "loss" ||
+      value.resultForHuman === "tie") &&
+    typeof value.isGhost === "boolean" &&
+    Array.isArray(value.board) &&
+    value.board.every(
+      (minion) =>
+        isRecord(minion) &&
+        minion.kind === "minion" &&
+        Array.isArray(minion.attachments) &&
+        minion.attachments.every(isMagneticAttachment) &&
+        hasSchema9MinionState(minion),
+    )
+  );
+}
+
+function isHumanScoutingReports(value: unknown): boolean {
+  return (
+    isRecord(value) &&
+    Object.entries(value).every(([opponentId, report]) =>
+      isHumanScoutingReport(report, opponentId),
+    )
+  );
+}
+
 function isGameState(value: unknown): value is GameState {
   if (!value || typeof value !== "object") return false;
   const candidate = value as Partial<GameState>;
@@ -813,6 +855,7 @@ function isGameState(value: unknown): value is GameState {
     typeof candidate.seed === "number" &&
     typeof candidate.nextInteractionId === "number" &&
     isTavernSpellPool(candidate.spellPool) &&
+    isHumanScoutingReports(candidate.humanScoutingReports) &&
     Array.isArray(candidate.activeTribes) &&
     candidate.activeTribes.length === 5 &&
     Array.isArray(candidate.players) &&
@@ -2577,20 +2620,34 @@ function PlayerRow({
   player,
   humanId,
   opponentId,
+  opponentLabel = "本轮对手",
+  opponentIsGhost = false,
   rank,
+  selected,
+  observedBoardCount,
+  observedRound,
   displayHealth,
   displayArmor,
   displayAlive,
   takingHeroDamage = false,
+  disabled = false,
+  onSelect,
 }: {
   player: PlayerState;
   humanId: string;
   opponentId?: string;
+  opponentLabel?: string;
+  opponentIsGhost?: boolean;
   rank: number;
+  selected: boolean;
+  observedBoardCount?: number;
+  observedRound?: number;
   displayHealth?: number;
   displayArmor?: number;
   displayAlive?: boolean;
   takingHeroDamage?: boolean;
+  disabled?: boolean;
+  onSelect: () => void;
 }) {
   const renderedHealth = Math.max(
     0,
@@ -2603,12 +2660,29 @@ function PlayerRow({
     : getAiStrategyProfile(player.id);
 
   return (
-    <div
+    <button
+      type="button"
       className={`player-row${player.id === humanId ? " is-player" : ""}${
         !renderedAlive ? " is-dead" : ""
       }${player.id === opponentId ? " is-opponent" : ""}${
         takingHeroDamage ? " is-taking-hero-damage" : ""
+      }${selected ? " is-selected" : ""}`}
+      aria-current={player.id === humanId ? "true" : undefined}
+      aria-pressed={selected}
+      aria-label={`查看${player.name}的侦察信息${
+        !renderedAlive ? "，已淘汰" : ""
+      }${
+        player.id === opponentId ? `，${opponentLabel}` : ""
       }`}
+      disabled={disabled}
+      onClick={onSelect}
+      onKeyDown={(event) => {
+        if (event.key !== "Enter" && event.key !== " ") {
+          return;
+        }
+        event.preventDefault();
+        onSelect();
+      }}
       data-rank={
         renderedAlive ? rank : (player.placement ?? rank)
       }
@@ -2623,19 +2697,35 @@ function PlayerRow({
         <strong>{player.name}</strong>
         <small>
           {player.id === opponentId
-            ? `本轮对手 · ${aiStrategy?.label ?? "AI"}`
+            ? `${opponentLabel}${
+                opponentIsGhost ? "（幽灵）" : ""
+              } · ${aiStrategy?.label ?? "AI"}`
             : renderedAlive
-              ? `${aiStrategy?.label ?? "玩家"} · ${player.board.length} 随从 · ${player.tavernTier}星`
+              ? player.isHuman
+                ? `你的战队 · ${player.board.length} 随从 · ${player.tavernTier}星`
+                : `${aiStrategy?.label ?? "AI"} · ${
+                    observedBoardCount === undefined
+                      ? "阵容未知"
+                      : `第 ${observedRound} 回合见到 ${observedBoardCount} 随从`
+                  } · ${player.tavernTier}星`
               : `第 ${player.placement ?? rank} 名`}
         </small>
       </span>
       <span className="player-survivability">
-        {renderedArmor > 0 && (
-          <span className="player-armor">护甲 {renderedArmor}</span>
+        {!renderedAlive ? (
+          <span className="player-eliminated-mark">
+            <span aria-hidden="true">☠</span> 已淘汰
+          </span>
+        ) : (
+          <>
+            {renderedArmor > 0 && (
+              <span className="player-armor">护甲 {renderedArmor}</span>
+            )}
+            <span className="player-health">生命 {renderedHealth}</span>
+          </>
         )}
-        <span className="player-health">生命 {renderedHealth}</span>
       </span>
-    </div>
+    </button>
   );
 }
 
@@ -2645,6 +2735,8 @@ export default function GameClient() {
   const [started, setStarted] = useState(false);
   const [selection, setSelection] = useState<Selection>(null);
   const [infoTab, setInfoTab] = useState<InfoTab>("details");
+  const [selectedStandingPlayerId, setSelectedStandingPlayerId] =
+    useState<string | null>(null);
   const [showRestart, setShowRestart] = useState(false);
   const [dragSession, setDragSession] = useState<DragSession | null>(null);
   const [cardInspection, setCardInspection] =
@@ -3110,14 +3202,22 @@ export default function GameClient() {
       : battle.playerAId
     : human.lastOpponentId;
   const opponent = game.players.find((player) => player.id === opponentId);
+  const scheduledHumanOpponent =
+    game.phase === "recruit"
+      ? getScheduledOpponent(game, game.humanPlayerId)
+      : null;
+  const highlightedOpponentId =
+    game.phase === "recruit"
+      ? scheduledHumanOpponent?.opponentId
+      : game.phase === "combat"
+        ? opponentId
+        : undefined;
   const opponentInitialBoard =
     battle && opponentId
-      ? (
-          battle.initialBoards[opponentId] ??
-          opponent?.board ??
-          []
-        ).filter(isBoardMinionInstance)
-      : opponent?.board ?? [];
+      ? (battle.initialBoards[opponentId] ?? []).filter(
+          isBoardMinionInstance,
+        )
+      : [];
   const playbackEvents = useMemo(
     () => battle?.events.filter(isCombatPlaybackEvent) ?? [],
     [battle],
@@ -3475,11 +3575,32 @@ export default function GameClient() {
         human.board.some((target) => canMagnetize(card, target)))
     );
   };
+  const selectedStandingPlayer =
+    selectedStandingPlayerId === null
+      ? null
+      : (game.players.find(
+          (player) => player.id === selectedStandingPlayerId,
+        ) ?? null);
+  const selectedScoutingReport =
+    selectedStandingPlayer &&
+    selectedStandingPlayer.id !== game.humanPlayerId
+      ? getHumanScoutingReport(game, selectedStandingPlayer.id)
+      : null;
+  const selectedVisibleWarband = selectedStandingPlayer
+    ? getVisibleWarband(game, selectedStandingPlayer.id)
+    : null;
+  const scoutingResultRevealed =
+    game.phase !== "combat" || battlePlaybackComplete;
+  const selectedLastRoundResult =
+    selectedStandingPlayer && scoutingResultRevealed
+      ? getPublicLastRoundResult(game, selectedStandingPlayer.id)
+      : null;
   const infoOpen =
     selectedUnit !== null ||
     selectedBloodGem !== null ||
     selectedSpellcraft !== null ||
     selectedTavernSpell !== null ||
+    (infoTab === "scouting" && selectedStandingPlayer !== null) ||
     (infoTab === "battle" && battle !== null);
   const upgradeCost = getUpgradeCost(game, human.id);
   const refreshCost = getRefreshCost(game, human.id);
@@ -3792,6 +3913,7 @@ export default function GameClient() {
     setStarted(true);
     setLoaded(true);
     setSelection(null);
+    setSelectedStandingPlayerId(null);
     setShowRestart(false);
     setInfoTab("details");
     setMagneticAnnouncement("");
@@ -4243,6 +4365,7 @@ export default function GameClient() {
 
   const select = useCallback((nextSelection: Exclude<Selection, null>) => {
     setSelection(nextSelection);
+    setSelectedStandingPlayerId(null);
     setInfoTab("details");
   }, []);
 
@@ -4257,6 +4380,18 @@ export default function GameClient() {
       select(nextSelection);
     },
     [interactionLocked, select],
+  );
+
+  const selectStandingPlayer = useCallback(
+    (playerId: string) => {
+      if (game.phase === "combat" && !battlePlaybackComplete) {
+        return;
+      }
+      setSelection(null);
+      setSelectedStandingPlayerId(playerId);
+      setInfoTab("scouting");
+    },
+    [battlePlaybackComplete, game.phase],
   );
 
   const resolveDragTarget = useCallback(
@@ -6360,52 +6495,74 @@ export default function GameClient() {
               <span>{displayedAlivePlayerCount} 存活</span>
             </div>
             <div className="standings" data-testid="standings">
-              {standings.map((player, index) => (
-                <PlayerRow
-                  player={player}
-                  humanId={game.humanPlayerId}
-                  opponentId={
-                    game.phase === "combat" ? opponentId : undefined
-                  }
-                  displayHealth={
-                    game.phase === "combat" && battle
-                      ? player.id === human.id
-                        ? displayedHumanHealth
-                        : player.id === opponentId
-                          ? (displayedOpponentHealth ?? undefined)
-                          : undefined
-                      : undefined
-                  }
-                  displayArmor={
-                    game.phase === "combat" && battle
-                      ? projectedStandingArmor(player)
-                      : player.armor
-                  }
-                  displayAlive={
-                    game.phase === "combat" &&
-                    battle &&
-                    (player.id === human.id ||
-                      player.id === opponentId)
-                      ? (player.id === human.id
+              {standings.map((player, index) => {
+                const scoutingReport =
+                  player.id === game.humanPlayerId
+                    ? null
+                    : getHumanScoutingReport(game, player.id);
+                return (
+                  <PlayerRow
+                    player={player}
+                    humanId={game.humanPlayerId}
+                    opponentId={highlightedOpponentId}
+                    opponentLabel={
+                      game.phase === "recruit"
+                        ? "下轮对手"
+                        : "本轮对手"
+                    }
+                    opponentIsGhost={
+                      game.phase === "recruit"
+                        ? (scheduledHumanOpponent?.isGhost ?? false)
+                        : (battle?.isGhost ?? false)
+                    }
+                    selected={
+                      selectedStandingPlayerId === player.id &&
+                      infoTab === "scouting"
+                    }
+                    observedBoardCount={scoutingReport?.board.length}
+                    observedRound={scoutingReport?.observedRound}
+                    displayHealth={
+                      game.phase === "combat" && battle
+                        ? player.id === human.id
                           ? displayedHumanHealth
-                          : (displayedOpponentHealth ??
-                            player.health)) > 0
-                      : undefined
-                  }
-                  takingHeroDamage={
-                    currentHeroDamageTargetId === player.id
-                  }
-                  rank={index + 1}
-                  key={player.id}
-                />
-              ))}
+                          : player.id === opponentId
+                            ? (displayedOpponentHealth ?? undefined)
+                            : undefined
+                        : undefined
+                    }
+                    displayArmor={
+                      game.phase === "combat" && battle
+                        ? projectedStandingArmor(player)
+                        : player.armor
+                    }
+                    displayAlive={
+                      game.phase === "combat" &&
+                      battle &&
+                      (player.id === human.id ||
+                        player.id === opponentId)
+                        ? (player.id === human.id
+                            ? displayedHumanHealth
+                            : (displayedOpponentHealth ??
+                              player.health)) > 0
+                        : undefined
+                    }
+                    takingHeroDamage={
+                      currentHeroDamageTargetId === player.id
+                    }
+                    disabled={!scoutingResultRevealed}
+                    onSelect={() => selectStandingPlayer(player.id)}
+                    rank={index + 1}
+                    key={player.id}
+                  />
+                );
+              })}
             </div>
           </section>
 
           <section
             className={`panel info-panel${infoOpen ? " is-open" : ""}`}
             data-open={infoOpen}
-            aria-label="随从详情与战报"
+            aria-label="随从详情、侦察与战报"
           >
             <div className="tabs" role="tablist" aria-label="信息切换">
               <button
@@ -6416,6 +6573,26 @@ export default function GameClient() {
                 onClick={() => setInfoTab("details")}
               >
                 详情
+              </button>
+              <button
+                type="button"
+                className={`tab${
+                  infoTab === "scouting" ? " is-active" : ""
+                }`}
+                role="tab"
+                aria-selected={infoTab === "scouting"}
+                disabled={!scoutingResultRevealed}
+                onClick={() => {
+                  setSelection(null);
+                  setSelectedStandingPlayerId(
+                    selectedStandingPlayerId ??
+                      highlightedOpponentId ??
+                      human.id,
+                  );
+                  setInfoTab("scouting");
+                }}
+              >
+                侦察
               </button>
               <button
                 type="button"
@@ -6432,6 +6609,7 @@ export default function GameClient() {
                 aria-label="关闭详情面板"
                 onClick={() => {
                   setSelection(null);
+                  setSelectedStandingPlayerId(null);
                   setInfoTab("details");
                 }}
               >
@@ -6783,6 +6961,158 @@ export default function GameClient() {
                   <div className="empty-state details-empty">
                     <strong>选择一个随从</strong>
                     <span>查看属性、能力与可用操作</span>
+                  </div>
+                )}
+              </div>
+            ) : infoTab === "scouting" ? (
+              <div
+                className="scouting-content"
+                data-testid="scouting-panel"
+              >
+                {selectedStandingPlayer && selectedVisibleWarband ? (
+                  <>
+                    <header className="scouting-identity">
+                      <span
+                        className="scouting-avatar"
+                        aria-hidden="true"
+                      >
+                        {selectedStandingPlayer.name.slice(0, 1)}
+                      </span>
+                      <span>
+                        <small>
+                          {selectedStandingPlayer.isHuman
+                            ? "本机玩家"
+                            : getAiStrategyProfile(
+                                selectedStandingPlayer.id,
+                              ).label}
+                        </small>
+                        <strong>{selectedStandingPlayer.name}</strong>
+                        <span>
+                          {selectedStandingPlayer.alive
+                            ? `${selectedStandingPlayer.tavernTier} 星酒馆`
+                            : `第 ${
+                                selectedStandingPlayer.placement ?? "?"
+                              } 名`}
+                          {" · "}生命{" "}
+                          {Math.max(
+                            0,
+                            projectedStandingHealth(
+                              selectedStandingPlayer,
+                            ),
+                          )}
+                          {projectedStandingArmor(
+                            selectedStandingPlayer,
+                          ) > 0
+                            ? ` · 护甲 ${projectedStandingArmor(
+                                selectedStandingPlayer,
+                              )}`
+                            : ""}
+                        </span>
+                      </span>
+                      {selectedStandingPlayer.id ===
+                        highlightedOpponentId && (
+                        <span className="scouting-next-badge">
+                          {game.phase === "recruit"
+                            ? "下轮对手"
+                            : "本轮对手"}
+                          {(game.phase === "recruit"
+                            ? scheduledHumanOpponent?.isGhost
+                            : battle?.isGhost)
+                            ? " · 幽灵"
+                            : ""}
+                        </span>
+                      )}
+                    </header>
+
+                    <section className="scouting-result">
+                      <h3>上一轮结果</h3>
+                      {!scoutingResultRevealed ? (
+                        <p>战斗回放结束后揭晓。</p>
+                      ) : selectedLastRoundResult ? (
+                        <>
+                          <strong
+                            data-result={selectedLastRoundResult.result}
+                          >
+                            {resultLabel(selectedLastRoundResult.result)}
+                          </strong>
+                          <p>
+                            对阵 {selectedLastRoundResult.opponentName}
+                            {selectedLastRoundResult.isGhost
+                              ? "（幽灵）"
+                              : ""}
+                            {" · "}
+                            {selectedLastRoundResult.damageDealt > 0
+                              ? `造成 ${selectedLastRoundResult.damageDealt} 点英雄伤害`
+                              : selectedLastRoundResult.damageTaken > 0
+                                ? `承受 ${selectedLastRoundResult.damageTaken} 点英雄伤害`
+                                : "双方均未受到英雄伤害"}
+                          </p>
+                        </>
+                      ) : (
+                        <p>尚无可展示的战斗结果。</p>
+                      )}
+                    </section>
+
+                    <section className="scouting-warband">
+                      <div className="scouting-section-title">
+                        <h3>
+                          {selectedVisibleWarband.visibility === "own"
+                            ? "当前战队"
+                            : "最后见到的战队"}
+                        </h3>
+                        {selectedVisibleWarband.observedRound !== null && (
+                          <span>
+                            第 {selectedVisibleWarband.observedRound} 回合
+                          </span>
+                        )}
+                      </div>
+                      {selectedVisibleWarband.visibility === "unknown" ? (
+                        <div
+                          className="empty-state scouting-unknown"
+                          data-testid="scouting-warband-unknown"
+                        >
+                          <strong>阵容未知</strong>
+                          <span>
+                            你尚未与该玩家交手；不会读取其当前隐藏战队。
+                          </span>
+                        </div>
+                      ) : selectedVisibleWarband.board.length > 0 ? (
+                        <div
+                          className="scouting-board"
+                          data-testid="scouting-warband"
+                        >
+                          {selectedVisibleWarband.board.map(
+                            (minion, index) => (
+                              <UnitCard
+                                unit={minion}
+                                compact
+                                disabled
+                                testId={`scouting-minion-${index}`}
+                                key={minion.instanceId}
+                              />
+                            ),
+                          )}
+                        </div>
+                      ) : (
+                        <div className="empty-state scouting-unknown">
+                          当时没有随从。
+                        </div>
+                      )}
+                    </section>
+
+                    {selectedVisibleWarband.visibility === "observed" && (
+                      <p className="scouting-privacy-note">
+                        仅显示你第{" "}
+                        {selectedScoutingReport?.observedRound ??
+                          selectedVisibleWarband.observedRound}{" "}
+                        回合亲眼见到的开战阵容；对手之后的购买、出售和站位均保持隐藏。
+                      </p>
+                    )}
+                  </>
+                ) : (
+                  <div className="empty-state details-empty">
+                    <strong>选择一名玩家</strong>
+                    <span>查看公开状态、上一轮结果与已见阵容</span>
                   </div>
                 )}
               </div>

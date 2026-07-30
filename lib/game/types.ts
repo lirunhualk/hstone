@@ -1132,6 +1132,21 @@ export type PendingInteraction =
 
 export type BattleResult = "win" | "loss" | "tie";
 
+export interface HumanScoutingReport {
+  opponentId: PlayerId;
+  observedRound: number;
+  resultForHuman: BattleResult;
+  isGhost: boolean;
+  /** The opposing warband exactly as the human saw it at combat start. */
+  board: BoardMinionInstance[];
+}
+
+export interface ScheduledPairing {
+  playerAId: PlayerId;
+  playerBId: PlayerId;
+  isGhost: boolean;
+}
+
 export interface BattleSummary {
   round: number;
   playerAId: PlayerId;
@@ -1183,6 +1198,11 @@ export interface GameState {
    * matchup for fair scouting, then replaced by the next combat round.
    */
   lastRoundBattles: BattleSummary[];
+  /**
+   * One private report per opponent, populated only by the human's own
+   * combats. It must never be refreshed from an AI player's current board.
+   */
+  humanScoutingReports: Record<PlayerId, HumanScoutingReport>;
   winnerId: PlayerId | null;
 }
 
