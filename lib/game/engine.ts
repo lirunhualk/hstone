@@ -1766,6 +1766,8 @@ function applyRecruitEffects(
       player.gold += effect.amount * scale;
     } else if (effect.kind === "gainNextTurnGold") {
       player.pendingNextTurnGold += effect.amount * scale;
+    } else if (effect.kind === "gainFreeRefreshes") {
+      player.freeRefreshes += effect.count * scale;
     } else if (effect.kind === "gainTavernSpell") {
       const gainCount =
         effect.count *
@@ -2060,6 +2062,16 @@ function applyEndOfTurnEffects(
           player,
           effect.count * scale,
           effect.bonusKeyword,
+        );
+        continue;
+      }
+      if (effect.kind === "gainTavernSpell") {
+        applyRecruitEffects(
+          state,
+          player,
+          source,
+          [effect],
+          scale,
         );
         continue;
       }

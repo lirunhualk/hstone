@@ -67,6 +67,11 @@ export interface GainNextTurnGoldEffect {
   amount: number;
 }
 
+export interface GainFreeRefreshesEffect {
+  kind: "gainFreeRefreshes";
+  count: number;
+}
+
 export interface GainTavernSpellEffect {
   kind: "gainTavernSpell";
   definitionId: string;
@@ -213,6 +218,7 @@ export type MinionEffect =
   | GrantShieldEffect
   | GainGoldEffect
   | GainNextTurnGoldEffect
+  | GainFreeRefreshesEffect
   | GainTavernSpellEffect
   | BuffRandomHandMinionEffect
   | GainMinionEffect
@@ -302,6 +308,7 @@ export type EndOfTurnEffect =
   | MenagerieEndOfTurnEffect
   | BuffEndOfTurnEffect
   | GainBloodGemsEffect
+  | GainTavernSpellEffect
   | PeriodicGainRandomMinionEndOfTurnEffect;
 
 export interface CardPurchaseMilestoneEffect {

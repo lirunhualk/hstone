@@ -1025,6 +1025,179 @@ const LIVE_RULE_OVERRIDES: Readonly<
       },
     ],
   },
+  BG34_683: {
+    goldenCardId: "BG34_683_G",
+    goldenDescription: "战吼：获取2张鲜血宝石弹幕。",
+    battlecry: [
+      {
+        kind: "gainTavernSpell",
+        definitionId: "tavern-spell-blood-gem-barrage",
+        count: 1,
+        goldenMode: "doubleCount",
+      },
+    ],
+  },
+  BG34_682: {
+    goldenCardId: "BG34_682_G",
+    goldenDescription: "亡语：获取2张鲜血宝石弹幕。",
+    deathrattle: [
+      {
+        kind: "gainTavernSpell",
+        definitionId: "tavern-spell-blood-gem-barrage",
+        count: 1,
+        goldenMode: "doubleCount",
+      },
+    ],
+  },
+  BG34_684: {
+    goldenCardId: "BG34_684_G",
+    goldenDescription: "在你的回合结束时，获取2张查抄宝石。",
+    endOfTurn: {
+      kind: "gainTavernSpell",
+      definitionId: "tavern-spell-gem-confiscation",
+      count: 1,
+      goldenMode: "doubleCount",
+    },
+  },
+  BG35_143: {
+    goldenCardId: "BG35_143_G",
+    goldenDescription: "战吼，亡语：获取2张深水族群。",
+    battlecry: [
+      {
+        kind: "gainTavernSpell",
+        definitionId: "tavern-spell-deepwater-clan",
+        count: 1,
+        goldenMode: "doubleCount",
+      },
+    ],
+    deathrattle: [
+      {
+        kind: "gainTavernSpell",
+        definitionId: "tavern-spell-deepwater-clan",
+        count: 1,
+        goldenMode: "doubleCount",
+      },
+    ],
+  },
+  BG35_881: {
+    goldenCardId: "BG35_881_G",
+    goldenDescription: "战吼，亡语：获取2张奥术吸收。",
+    battlecry: [
+      {
+        kind: "gainTavernSpell",
+        definitionId: "tavern-spell-arcane-absorption",
+        count: 1,
+        goldenMode: "doubleCount",
+      },
+    ],
+    deathrattle: [
+      {
+        kind: "gainTavernSpell",
+        definitionId: "tavern-spell-arcane-absorption",
+        count: 1,
+        goldenMode: "doubleCount",
+      },
+    ],
+  },
+  BG32_111: {
+    goldenCardId: "BG32_111_G",
+    goldenDescription: "战吼，亡语：获取2张乱放的茶具。",
+    battlecry: [
+      {
+        kind: "gainTavernSpell",
+        definitionId: "tavern-spell-misplaced-tea-set",
+        count: 1,
+        goldenMode: "doubleCount",
+      },
+    ],
+    deathrattle: [
+      {
+        kind: "gainTavernSpell",
+        definitionId: "tavern-spell-misplaced-tea-set",
+        count: 1,
+        goldenMode: "doubleCount",
+      },
+    ],
+  },
+  BG35_882: {
+    goldenCardId: "BG35_882_G",
+    goldenDescription: "战吼：获取2张燃焰。",
+    battlecry: [
+      {
+        kind: "gainTavernSpell",
+        definitionId: "tavern-spell-blazing-inferno",
+        count: 1,
+        goldenMode: "doubleCount",
+      },
+    ],
+  },
+  BG32_891: {
+    goldenCardId: "BG32_891_G",
+    goldenDescription: "嘲讽。亡语：获取2张富足之杖。",
+    deathrattle: [
+      {
+        kind: "gainTavernSpell",
+        definitionId: "tavern-spell-staff-of-enrichment",
+        count: 1,
+        goldenMode: "doubleCount",
+      },
+    ],
+  },
+  BG33_809: {
+    goldenCardId: "BG33_809_G",
+    goldenDescription: "嘲讽。圣盾。亡语：获取2张圣洁庇护。",
+    deathrattle: [
+      {
+        kind: "gainTavernSpell",
+        definitionId: "tavern-spell-sanctify",
+        count: 1,
+        goldenMode: "doubleCount",
+      },
+    ],
+  },
+  BG34_694: {
+    goldenCardId: "BG34_694_G",
+    goldenDescription: "亡语：获取2张惊扰墓穴。",
+    deathrattle: [
+      {
+        kind: "gainTavernSpell",
+        definitionId: "tavern-spell-stir-the-graveyard",
+        count: 1,
+        goldenMode: "doubleCount",
+      },
+    ],
+  },
+  BG25_009: {
+    goldenCardId: "BG25_009_G",
+    goldenDescription: "复生。亡语：召唤一个金色的永恒骑士。",
+    deathrattle: [
+      {
+        kind: "summon",
+        definitionId: "BG25_008",
+        count: 1,
+        goldenMode: "goldenToken",
+      },
+    ],
+  },
+  BGS_123: {
+    goldenCardId: "TB_BaconUps_162",
+    goldenDescription: "战吼：随机获取2张元素牌。",
+    battlecry: [
+      {
+        kind: "getRandomMinion",
+        count: 1,
+        filter: { tribe: "elemental" },
+        maximumTier: "ownerTavern",
+        source: "sharedPool",
+        goldenMode: "doubleCount",
+      },
+    ],
+  },
+  BGS_116: {
+    goldenCardId: "TB_BaconUps_167",
+    goldenDescription: "战吼：获得4次免费的刷新。",
+    battlecry: [{ kind: "gainFreeRefreshes", count: 2 }],
+  },
   BGS_115: {
     afterSold: [
       {
@@ -1420,6 +1593,7 @@ const FULLY_SUPPORTED_LIVE_CARD_IDS = new Set([
   "BG23_002",
   "BG25_001",
   "BG25_008",
+  "BG25_009",
   "BG25_010",
   "BG25_011",
   "BG25_013",
@@ -1454,10 +1628,13 @@ const FULLY_SUPPORTED_LIVE_CARD_IDS = new Set([
   "BG32_330",
   "BG32_170",
   "BG32_172",
+  "BG32_111",
+  "BG32_891",
   "BG33_156",
   "BG33_140",
   "BG33_241",
   "BG33_888",
+  "BG33_809",
   "BG34_140",
   "BG34_175",
   "BG34_231",
@@ -1465,10 +1642,17 @@ const FULLY_SUPPORTED_LIVE_CARD_IDS = new Set([
   "BG34_630",
   "BG34_636t",
   "BG34_637t",
+  "BG34_682",
+  "BG34_683",
+  "BG34_684",
+  "BG34_694",
   "BG34_731",
+  "BG35_143",
   "BG35_702",
   "BG35_801",
   "BG35_814",
+  "BG35_881",
+  "BG35_882",
   "BG35_433",
   "BG_DAL_775",
   "BG_BOT_911",
@@ -1478,6 +1662,8 @@ const FULLY_SUPPORTED_LIVE_CARD_IDS = new Set([
   "BGS_018",
   "BGS_049",
   "BGS_115",
+  "BGS_116",
+  "BGS_123",
   "BGS_071",
   "BGS_119",
   "BGS_131",
