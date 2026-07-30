@@ -22,6 +22,11 @@ import {
   HERO_POWER_DEFINITIONS,
   getHeroPowerDefinition,
 } from "./hero-powers.ts";
+import {
+  aiTargetBoardSize,
+  getAiStrategyProfile,
+  shouldAiUpgrade,
+} from "./ai.ts";
 import type {
   BattleEvent,
   BattleResult,
@@ -53,6 +58,7 @@ import type {
   SpellcraftDefinition,
   SpellcraftSpellInstance,
   TavernSpellDefinition,
+  TavernSpellEffect,
   TavernSpellInstance,
   TavernTier,
   Tribe,
@@ -99,6 +105,13 @@ export {
   getHeroPowerDefinition,
   isHeroPowerDefinitionId,
 } from "./hero-powers.ts";
+
+export {
+  AI_STRATEGY_PROFILES,
+  aiTargetBoardSize,
+  getAiStrategyProfile,
+  shouldAiUpgrade,
+} from "./ai.ts";
 
 export {
   SPELLCRAFT_DEFINITIONS,
@@ -159,7 +172,6 @@ const HELPFUL_UTILITY_MINION_IDS = new Set([
   "BG_LOE_077",
   "BG25_354",
 ]);
-const TIER_UP_ROUND = [0, 0, 2, 4, 6, 9, 11] as const;
 const DEFAULT_SEED = 0x4853544e;
 const MAX_BOARD_SIZE = 7;
 const MAX_HAND_SIZE = 10;
@@ -3707,11 +3719,27 @@ function applyTavernSpellEffect(
         };
         return false;
       }
-      player.nextTurnBoardAttackBonus +=
-        (2 + player.tavernSpellAttackBonus) * 2;
-      player.nextTurnBoardHealthBonus +=
-        (2 + player.tavernSpellHealthBonus) * 2;
-      player.nextTurnBoardBuffPulses += 2;
+      {
+        const profile = getAiStrategyProfile(player.id);
+        const needsImmediateTempo =
+          player.health + player.armor <
+            profile.minimumUpgradeHealth ||
+          player.board.length < aiTargetBoardSize(state.round);
+        if (needsImmediateTempo) {
+          buffMinionsFromTavernSpell(
+            player,
+            player.board,
+            2,
+            2,
+          );
+        } else {
+          player.nextTurnBoardAttackBonus +=
+            (2 + player.tavernSpellAttackBonus) * 2;
+          player.nextTurnBoardHealthBonus +=
+            (2 + player.tavernSpellHealthBonus) * 2;
+          player.nextTurnBoardBuffPulses += 2;
+        }
+      }
       break;
     case "stackedAvalanche": {
       if (!target) {
@@ -4271,11 +4299,21 @@ function tribeCount(player: PlayerState, tribe: Tribe): number {
   return player.board.filter((minion) => minionHasTribe(minion, tribe)).length;
 }
 
+const AI_ECONOMY_EFFECT_KINDS = new Set<MinionEffect["kind"]>([
+  "gainGold",
+  "gainNextTurnGold",
+  "gainTavernSpell",
+  "gainMinion",
+  "getRandomMinion",
+  "gainBloodGems",
+]);
+
 function minionScore(
   player: PlayerState,
   minion: BoardMinionInstance,
 ): number {
-  let score = minion.attack + minion.health;
+  const profile = getAiStrategyProfile(player.id);
+  let score = (minion.attack + minion.health) * profile.statWeight;
   if (minion.divineShield) {
     score += Math.max(3, minion.attack * 0.65);
   }
@@ -4297,25 +4335,83 @@ function minionScore(
   const definitions = minionEffectSources(minion).map((component) =>
     getMinionDefinition(component.definitionId),
   );
+  const ownedDefinitions = player.board.flatMap((owned) =>
+    minionEffectSources(owned).map((component) =>
+      getMinionDefinition(component.definitionId),
+    ),
+  );
+  const battlecryScale =
+    1 +
+    ownedDefinitions.reduce(
+      (best, definition) =>
+        Math.max(best, definition.extraBattlecries ?? 0),
+      0,
+    );
+  const deathrattleScale =
+    1 +
+    ownedDefinitions.reduce(
+      (best, definition) =>
+        Math.max(best, definition.extraDeathrattles ?? 0),
+      0,
+    );
   if (definitions.some((definition) => definition.deathrattle)) {
-    score += 2.5;
+    score += profile.deathrattleBonus * deathrattleScale;
   }
   if (definitions.some((definition) => definition.battlecry)) {
-    score += 1.5;
+    score += profile.battlecryBonus * battlecryScale;
   }
-  const synergyTribe = minion.tribes.find(
+  if (
+    definitions.some(
+      (definition) =>
+        (definition.battlecry ?? []).some((effect) =>
+          AI_ECONOMY_EFFECT_KINDS.has(effect.kind),
+        ) ||
+        (definition.afterSold ?? []).some((effect) =>
+          AI_ECONOMY_EFFECT_KINDS.has(effect.kind),
+        ) ||
+        (definition.sellValue ?? 1) > 1,
+    )
+  ) {
+    score += profile.economyBonus;
+  }
+  if (
+    definitions.some((definition) => definition.magnetic) &&
+    player.board.some((target) => canMagnetize(minion, target))
+  ) {
+    score += profile.magneticBonus;
+  }
+  const synergyTribes = minion.tribes.filter(
     (tribe) => tribe !== "all" && tribe !== "neutral",
   );
-  if (synergyTribe) {
-    score += tribeCount(player, synergyTribe) * 0.8;
+  const strongestTribeCount = synergyTribes.reduce(
+    (best, tribe) => Math.max(best, tribeCount(player, tribe)),
+    0,
+  );
+  score += strongestTribeCount * profile.synergyWeight;
+  if (
+    profile.preferredTribe !== null &&
+    minionHasTribe(minion, profile.preferredTribe)
+  ) {
+    const committedCopies = tribeCount(player, profile.preferredTribe);
+    const commitment =
+      committedCopies >= 2 ? 1 : committedCopies === 1 ? 0.55 : 0.15;
+    score += profile.preferredTribeBonus * commitment;
   }
+  score += minion.tier * profile.highTierBonus;
   const copies = ownedNormalCount(player, minion.definitionId);
   if (copies === 1) {
-    score += 3;
+    score += profile.pairBonus;
   } else if (copies >= 2) {
-    score += 10;
+    score += profile.tripleBonus;
   }
   return score;
+}
+
+export function scoreMinionForAi(
+  player: PlayerState,
+  minion: BoardMinionInstance,
+): number {
+  return minionScore(player, minion);
 }
 
 function bestMinionByScore(
@@ -4810,7 +4906,14 @@ function playBestAiTavernSpell(
 ): boolean {
   const spells = player.hand.filter(
     (card): card is TavernSpellInstance => card.kind === "tavernSpell",
-  );
+  ).sort((left, right) => {
+    const scoreDifference =
+      tavernSpellAiScore(player, right) -
+      tavernSpellAiScore(player, left);
+    return scoreDifference !== 0
+      ? scoreDifference
+      : left.instanceId.localeCompare(right.instanceId);
+  });
   for (const spell of spells) {
     const definition = getTavernSpellDefinition(spell.definitionId);
     if (tavernSpellNeedsTarget(definition)) {
@@ -4883,6 +4986,45 @@ function playBestAiTavernSpell(
   return false;
 }
 
+function aiReservedRallyHandMinionIds(
+  player: PlayerState,
+): Set<string> {
+  let reserveCount = 0;
+  for (const minion of player.board) {
+    for (const component of minionEffectSources(minion)) {
+      const definition = getMinionDefinition(component.definitionId);
+      for (const rally of definition.rally ?? []) {
+        if (rally.kind !== "summonFromHand") {
+          continue;
+        }
+        const count =
+          rally.count *
+          (component.golden && rally.goldenMode === "doubleCount"
+            ? 2
+            : 1);
+        reserveCount = Math.max(reserveCount, count);
+      }
+    }
+  }
+  if (reserveCount === 0) {
+    return new Set();
+  }
+  return new Set(
+    player.hand
+      .filter(
+        (card): card is BoardMinionInstance => card.kind === "minion",
+      )
+      .sort((left, right) => {
+        if (left.attack !== right.attack) {
+          return right.attack - left.attack;
+        }
+        return left.instanceId.localeCompare(right.instanceId);
+      })
+      .slice(0, reserveCount)
+      .map((minion) => minion.instanceId),
+  );
+}
+
 function playAiHand(state: GameState, player: PlayerState): void {
   while (
     player.hand.length > 0 ||
@@ -4914,20 +5056,25 @@ function playAiHand(state: GameState, player: PlayerState): void {
         (card.playableFromRound ?? 0) <= state.round &&
         (card.destroyAfterPlayThroughRound ?? -1) < state.round,
     );
+    const reservedRallyTargets =
+      aiReservedRallyHandMinionIds(player);
+    const unreservedPlayableMinions = playableMinions.filter(
+      (card) => !reservedRallyTargets.has(card.instanceId),
+    );
     const canKeepAncientSoulInHand =
       player.board.length > 0 ||
-      playableMinions.some(
+      unreservedPlayableMinions.some(
         (card) =>
           card.definitionId !== ANCIENT_SOUL_DEFINITION_ID ||
           card.golden,
       );
     const minions = canKeepAncientSoulInHand
-      ? playableMinions.filter(
+      ? unreservedPlayableMinions.filter(
           (card) =>
             card.definitionId !== ANCIENT_SOUL_DEFINITION_ID ||
             card.golden,
         )
-      : playableMinions;
+      : unreservedPlayableMinions;
     if (minions.length === 0) {
       if (playBestAiTavernSpell(state, player)) {
         continue;
@@ -4961,6 +5108,20 @@ function playAiHand(state: GameState, player: PlayerState): void {
         });
       const magnetic = magneticOptions[0];
       if (!magnetic) {
+        const profile = getAiStrategyProfile(player.id);
+        const strongestHandMinion = bestMinionByScore(player, minions);
+        const weakestIndex = weakestBoardIndex(player);
+        const handScore = minionScore(player, strongestHandMinion);
+        const weakestScore = minionScore(
+          player,
+          player.board[weakestIndex],
+        );
+        if (
+          handScore >= weakestScore + profile.replacementMargin &&
+          sellMinion(state, player, weakestIndex)
+        ) {
+          continue;
+        }
         if (playBestAiTavernSpell(state, player)) {
           continue;
         }
@@ -4997,7 +5158,27 @@ function playAiHand(state: GameState, player: PlayerState): void {
   }
 }
 
-function tavernSpellAiScore(
+function canAiSpendHealth(
+  player: PlayerState,
+  cost: number,
+): boolean {
+  const floor = getAiStrategyProfile(player.id).healthSpendFloor;
+  return player.health > cost && player.health - cost >= floor;
+}
+
+function canAiPurchaseTavernSpell(
+  player: PlayerState,
+  spell: TavernSpellInstance,
+): boolean {
+  if (player.hand.length >= MAX_HAND_SIZE) {
+    return false;
+  }
+  return tavernSpellPurchaseCurrency(spell) === "health"
+    ? canAiSpendHealth(player, spell.cost)
+    : player.gold >= spell.cost;
+}
+
+function baseTavernSpellAiScore(
   player: PlayerState,
   spell: TavernSpellInstance,
 ): number {
@@ -5033,7 +5214,7 @@ function tavernSpellAiScore(
     case "chefsChoice":
       return targetCount > 0 ? 6 : 0;
     case "hastyExcavation":
-      return player.health > 8 ? 4 : 0;
+      return canAiSpendHealth(player, spell.cost) ? 4 : 0;
     case "gainOneGold":
       return 1.5;
     case "gainTwoGold":
@@ -5135,6 +5316,42 @@ function tavernSpellAiScore(
   }
 }
 
+const AI_ECONOMY_TAVERN_SPELL_EFFECTS = new Set<
+  TavernSpellDefinition["effect"]
+>([
+  "discoverTierOne",
+  "recruitTrainee",
+  "stealRandomShopMinion",
+  "knockoffWisdomball",
+  "hastyExcavation",
+  "gainOneGold",
+  "gainTwoGold",
+  "freeRefreshes",
+  "increaseMaxGold",
+  "carefulInvestment",
+  "cloneHorn",
+  "temperatureShift",
+  "reservedCorpse",
+  "headhunter",
+  "saloonsFinest",
+]);
+
+function tavernSpellAiScore(
+  player: PlayerState,
+  spell: TavernSpellInstance,
+): number {
+  const profile = getAiStrategyProfile(player.id);
+  const effect = getTavernSpellDefinition(spell.definitionId).effect;
+  const economyBonus = AI_ECONOMY_TAVERN_SPELL_EFFECTS.has(effect)
+    ? profile.economyBonus * 0.75
+    : 0;
+  return (
+    baseTavernSpellAiScore(player, spell) *
+      profile.spellValueMultiplier +
+    economyBonus
+  );
+}
+
 function stateRoundValue(player: PlayerState): number {
   return player.maxGold < 13 ? 5 : 1;
 }
@@ -5184,60 +5401,303 @@ function bestMagneticShopIndex(player: PlayerState): number {
   return bestIndex;
 }
 
-function arrangeAiBoard(player: PlayerState): void {
+function arrangeAiBoard(
+  player: PlayerState,
+  opponent?: PlayerState,
+): void {
+  const profile = getAiStrategyProfile(player.id);
+  const opponentHasTaunt =
+    opponent?.board.some((minion) => minion.taunt) ?? false;
+  const opponentHasShieldedTaunt =
+    opponent?.board.some(
+      (minion) => minion.taunt && minion.divineShield,
+    ) ?? false;
+  const opponentHasCleave =
+    opponent?.board.some((minion) => minion.cleave) ?? false;
+  const hasDeathrattle = (minion: BoardMinionInstance) =>
+    minionEffectSources(minion).some(
+      (component) =>
+        getMinionDefinition(component.definitionId).deathrattle !==
+        undefined,
+    );
+  const isSupport = (minion: BoardMinionInstance) =>
+    minionEffectSources(minion).some((component) => {
+      const definition = getMinionDefinition(component.definitionId);
+      return (
+        (definition.extraBattlecries ?? 0) > 0 ||
+        (definition.extraDeathrattles ?? 0) > 0 ||
+        definition.aura !== undefined ||
+        definition.afterFriendlyPlayed !== undefined ||
+        definition.afterFriendlySummoned !== undefined ||
+        definition.afterFriendlyDied !== undefined
+      );
+    });
+
   player.board.sort((left, right) => {
-    const leftDeathrattle =
-      minionEffectSources(left).some(
-        (component) =>
-          getMinionDefinition(component.definitionId).deathrattle !==
-          undefined,
-      )
-        ? 1
-        : 0;
-    const rightDeathrattle =
-      minionEffectSources(right).some(
-        (component) =>
-          getMinionDefinition(component.definitionId).deathrattle !==
-          undefined,
-      )
-        ? 1
-        : 0;
-    if (leftDeathrattle !== rightDeathrattle) {
-      return rightDeathrattle - leftDeathrattle;
-    }
-    if (left.taunt !== right.taunt) {
-      return left.taunt ? 1 : -1;
+    const attackOrder = (minion: BoardMinionInstance) => {
+      if (minion.taunt) {
+        return 5;
+      }
+      if (opponentHasTaunt && minion.cleave) {
+        return 0;
+      }
+      if (hasDeathrattle(minion)) {
+        return profile.id === "deathrattle" ? 0 : 1;
+      }
+      if (isSupport(minion)) {
+        return 4;
+      }
+      return 2;
+    };
+    const orderDifference = attackOrder(left) - attackOrder(right);
+    if (orderDifference !== 0) {
+      return orderDifference;
     }
     if (left.attack !== right.attack) {
       return right.attack - left.attack;
     }
     return left.instanceId.localeCompare(right.instanceId);
   });
+
+  if (
+    opponentHasShieldedTaunt &&
+    profile.scoutingWeight >= 0.5
+  ) {
+    const shieldBreakerIndex = player.board.reduce(
+      (bestIndex, minion, index) => {
+        if (
+          minion.attack <= 0 ||
+          minion.taunt ||
+          minion.cleave ||
+          isSupport(minion)
+        ) {
+          return bestIndex;
+        }
+        if (bestIndex < 0) {
+          return index;
+        }
+        const best = player.board[bestIndex];
+        return minion.attack < best.attack ||
+          (minion.attack === best.attack &&
+            minion.instanceId.localeCompare(best.instanceId) < 0)
+          ? index
+          : bestIndex;
+      },
+      -1,
+    );
+    if (shieldBreakerIndex > 0) {
+      const [shieldBreaker] = player.board.splice(
+        shieldBreakerIndex,
+        1,
+      );
+      player.board.unshift(shieldBreaker);
+    }
+  }
+
+  if (opponentHasCleave) {
+    const firstTauntIndex = player.board.findIndex(
+      (minion) => minion.taunt,
+    );
+    if (firstTauntIndex > 1) {
+      const bufferIndex = player.board.reduce(
+        (bestIndex, minion, index) => {
+          if (
+            index >= firstTauntIndex ||
+            minion.taunt ||
+            hasDeathrattle(minion) ||
+            isSupport(minion)
+          ) {
+            return bestIndex;
+          }
+          if (bestIndex < 0) {
+            return index;
+          }
+          const best = player.board[bestIndex];
+          const minionValue = minion.attack + minion.health;
+          const bestValue = best.attack + best.health;
+          return minionValue < bestValue ||
+            (minionValue === bestValue &&
+              minion.instanceId.localeCompare(best.instanceId) < 0)
+            ? index
+            : bestIndex;
+        },
+        -1,
+      );
+      if (bufferIndex >= 0 && bufferIndex !== firstTauntIndex - 1) {
+        const [buffer] = player.board.splice(bufferIndex, 1);
+        const nextTauntIndex = player.board.findIndex(
+          (minion) => minion.taunt,
+        );
+        player.board.splice(nextTauntIndex, 0, buffer);
+      }
+    }
+  }
+}
+
+export function planAiBoardOrder(
+  player: PlayerState,
+  opponent?: PlayerState,
+): string[] {
+  const workingPlayer: PlayerState = {
+    ...player,
+    board: [...player.board],
+  };
+  arrangeAiBoard(workingPlayer, opponent);
+  return workingPlayer.board.map((minion) => minion.instanceId);
+}
+
+function previouslyObservedOpponent(
+  battles: readonly BattleSummary[],
+  observer: PlayerState,
+  opponent: PlayerState,
+): PlayerState | undefined {
+  if (observer.lastOpponentId !== opponent.id) {
+    return undefined;
+  }
+  const previousMatchup = battles.find(
+    (battle) =>
+      (battle.playerAId === observer.id &&
+        battle.playerBId === opponent.id) ||
+      (battle.playerAId === opponent.id &&
+        battle.playerBId === observer.id),
+  );
+  const observedBoard =
+    previousMatchup?.initialBoards[opponent.id]?.filter(
+      (minion): minion is BoardMinionInstance =>
+        minion.kind === "minion",
+    );
+  if (!observedBoard) {
+    return undefined;
+  }
+  return {
+    ...opponent,
+    board: observedBoard,
+    hand: [],
+    shop: [],
+    spellShop: null,
+    additionalSpellShop: [],
+  };
+}
+
+function shouldUpgradeAiTavern(
+  state: GameState,
+  player: PlayerState,
+): boolean {
+  const bestIndex = bestShopIndex(player);
+  const bestAffordableSpellScore =
+    tavernSpellShopOffers(player)
+      .filter((spell) => canAiPurchaseTavernSpell(player, spell))
+      .reduce(
+        (best, spell) =>
+          Math.max(best, tavernSpellAiScore(player, spell)),
+        Number.NEGATIVE_INFINITY,
+      );
+  const weakestIndex =
+    player.board.length > 0 ? weakestBoardIndex(player) : -1;
+  return shouldAiUpgrade({
+    profile: getAiStrategyProfile(player.id),
+    round: state.round,
+    tavernTier: player.tavernTier,
+    health: player.health,
+    armor: player.armor,
+    gold: player.gold,
+    upgradeCost: getUpgradeCost(state, player.id),
+    boardSize: player.board.length,
+    bestShopScore:
+      bestIndex >= 0
+        ? minionScore(player, player.shop[bestIndex])
+        : Number.NEGATIVE_INFINITY,
+    weakestBoardScore:
+      weakestIndex >= 0
+        ? minionScore(player, player.board[weakestIndex])
+        : 0,
+    bestAffordableSpellScore,
+  });
+}
+
+const AI_IMMEDIATE_MINION_SPELL_EFFECTS =
+  new Set<TavernSpellEffect>([
+    "discoverTierOne",
+    "stealRandomShopMinion",
+    "recruitTrainee",
+    "chefsChoice",
+    "friendlyBounty",
+    "planarTelescope",
+    "cloneHorn",
+    "temperatureShift",
+    "reservedCorpse",
+    "headhunter",
+  ]);
+
+function immediateAiSpellGoldGain(effect: TavernSpellEffect): number {
+  switch (effect) {
+    case "hastyExcavation":
+    case "gainOneGold":
+      return 1;
+    case "gainTwoGold":
+      return 2;
+    default:
+      return 0;
+  }
+}
+
+/**
+ * A real player does not spend the only three Gold on a small buff and enter
+ * combat with an empty board. Until the stage target is met, a spell must
+ * either supply a playable minion itself or leave enough Gold to buy one.
+ */
+function aiSpellPreservesTempo(
+  player: PlayerState,
+  spell: TavernSpellInstance,
+): boolean {
+  const definition = getTavernSpellDefinition(spell.definitionId);
+  if (AI_IMMEDIATE_MINION_SPELL_EFFECTS.has(definition.effect)) {
+    return true;
+  }
+  const goldCost =
+    tavernSpellPurchaseCurrency(spell) === "health" ? 0 : spell.cost;
+  return (
+    player.gold -
+      goldCost +
+      immediateAiSpellGoldGain(definition.effect) >=
+    BUY_COST
+  );
 }
 
 function runAiRecruit(state: GameState, player: PlayerState): void {
+  const profile = getAiStrategyProfile(player.id);
   let actions = 0;
+  let upgradedThisTurn = false;
   playAiHand(state, player);
 
-  const nextTier = player.tavernTier + 1;
-  const shouldUpgrade =
-    player.tavernTier < 6 &&
-    state.round >= TIER_UP_ROUND[nextTier] &&
-    (player.health >= 16 || player.board.length >= Math.min(5, state.round));
-  if (shouldUpgrade && upgradeTavern(state, player)) {
+  if (
+    shouldUpgradeAiTavern(state, player) &&
+    upgradeTavern(state, player)
+  ) {
+    upgradedThisTurn = true;
     actions += 1;
   }
 
   let refreshes = 0;
   while (actions < 50) {
     playAiHand(state, player);
+    if (
+      !upgradedThisTurn &&
+      shouldUpgradeAiTavern(state, player) &&
+      upgradeTavern(state, player)
+    ) {
+      upgradedThisTurn = true;
+      actions += 1;
+      continue;
+    }
+    const shopIndex = bestShopIndex(player);
+    const bestMinionOffer =
+      shopIndex >= 0 ? player.shop[shopIndex] : undefined;
+    const bestMinionScore = bestMinionOffer
+      ? minionScore(player, bestMinionOffer)
+      : Number.NEGATIVE_INFINITY;
     const spellOffer = tavernSpellShopOffers(player)
-      .filter((offer) => {
-        const currency = tavernSpellPurchaseCurrency(offer);
-        return currency === "health"
-          ? player.health > offer.cost && player.health > 8
-          : player.gold >= offer.cost;
-      })
+      .filter((offer) => canAiPurchaseTavernSpell(player, offer))
       .sort((left, right) => {
         const scoreDifference =
           tavernSpellAiScore(player, right) -
@@ -5251,14 +5711,41 @@ function runAiRecruit(state: GameState, player: PlayerState): void {
       : "gold";
     const canAffordSpell =
       spellOffer !== null &&
-      (spellCurrency === "health"
-        ? player.health > spellOffer.cost && player.health > 8
-        : player.gold >= spellOffer.cost);
+      canAiPurchaseTavernSpell(player, spellOffer);
+    const spellScore = spellOffer
+      ? tavernSpellAiScore(player, spellOffer)
+      : Number.NEGATIVE_INFINITY;
+    const spellEfficiency = spellOffer
+      ? spellScore / Math.max(1, spellOffer.cost)
+      : Number.NEGATIVE_INFINITY;
+    const minionEfficiency =
+      bestMinionOffer && player.gold >= BUY_COST
+        ? bestMinionScore / BUY_COST
+        : Number.NEGATIVE_INFINITY;
+    const minionCompletesTriple =
+      bestMinionOffer !== undefined &&
+      ownedNormalCount(player, bestMinionOffer.definitionId) >= 2;
+    const needsBoardMinion =
+      bestMinionOffer !== undefined &&
+      player.gold >= BUY_COST &&
+      player.board.length < aiTargetBoardSize(state.round);
+    const spellPreservesTempo =
+      spellOffer === null ||
+      !needsBoardMinion ||
+      aiSpellPreservesTempo(player, spellOffer);
+    const preferSpell =
+      spellPreservesTempo &&
+      (spellCurrency === "health" ||
+        bestMinionOffer === undefined ||
+        player.gold < BUY_COST ||
+        (!minionCompletesTriple &&
+          spellEfficiency >= minionEfficiency * 0.85));
     if (
       spellOffer &&
       player.hand.length < MAX_HAND_SIZE &&
       canAffordSpell &&
-      tavernSpellAiScore(player, spellOffer) >=
+      preferSpell &&
+      spellScore >=
         (spellCurrency === "health"
           ? 3
           : Math.max(1.5, spellOffer.cost * 1.7)) &&
@@ -5267,10 +5754,31 @@ function runAiRecruit(state: GameState, player: PlayerState): void {
       actions += 1;
       continue;
     }
-    const shopIndex = bestShopIndex(player);
-    if (shopIndex >= 0 && player.gold >= BUY_COST) {
+    if (
+      shopIndex >= 0 &&
+      player.gold >= BUY_COST &&
+      player.hand.length < MAX_HAND_SIZE
+    ) {
       if (player.board.length < MAX_BOARD_SIZE) {
-        if (buyMinion(state, player, shopIndex)) {
+        const weakestIndex =
+          player.board.length > 0 ? weakestBoardIndex(player) : -1;
+        const weakestScore =
+          weakestIndex >= 0
+            ? minionScore(player, player.board[weakestIndex])
+            : Number.NEGATIVE_INFINITY;
+        const ownedCopies = ownedNormalCount(
+          player,
+          player.shop[shopIndex].definitionId,
+        );
+        const shouldBuy =
+          player.board.length < aiTargetBoardSize(state.round) ||
+          ownedCopies >= 1 ||
+          bestMinionScore >=
+            weakestScore + profile.replacementMargin / 2;
+        if (
+          shouldBuy &&
+          buyMinion(state, player, shopIndex)
+        ) {
           actions += 1;
           continue;
         }
@@ -5287,7 +5795,10 @@ function runAiRecruit(state: GameState, player: PlayerState): void {
         const weakestIndex = weakestBoardIndex(player);
         const candidateScore = minionScore(player, player.shop[shopIndex]);
         const weakestScore = minionScore(player, player.board[weakestIndex]);
-        if (candidateScore >= weakestScore + 2.5) {
+        if (
+          candidateScore >=
+          weakestScore + profile.replacementMargin
+        ) {
           sellMinion(state, player, weakestIndex);
           actions += 1;
           if (buyMinion(state, player, bestShopIndex(player))) {
@@ -5299,9 +5810,25 @@ function runAiRecruit(state: GameState, player: PlayerState): void {
     }
 
     const refreshCost = player.freeRefreshes > 0 ? 0 : REFRESH_COST;
+    const refreshLimit =
+      profile.maxRefreshes +
+      (player.health + player.armor <
+      profile.minimumUpgradeHealth
+        ? 1
+        : 0);
+    const canBuyAfterRefresh =
+      player.hand.length < MAX_HAND_SIZE &&
+      player.gold - refreshCost >= BUY_COST;
+    const canSpeculativelyRefresh =
+      player.hand.length < MAX_HAND_SIZE &&
+      refreshes === 0 &&
+      ((refreshCost === 0 && player.freeRefreshes > 0) ||
+        (refreshCost === REFRESH_COST &&
+          player.gold === REFRESH_COST &&
+          player.board.length >= aiTargetBoardSize(state.round)));
     if (
-      player.gold >= BUY_COST + refreshCost &&
-      refreshes < 3
+      refreshes < refreshLimit &&
+      (canBuyAfterRefresh || canSpeculativelyRefresh)
     ) {
       refreshShop(state, player);
       refreshes += 1;
@@ -5314,12 +5841,32 @@ function runAiRecruit(state: GameState, player: PlayerState): void {
   playAiHand(state, player);
   const bestRemaining =
     player.shop.length > 0 ? player.shop[bestShopIndex(player)] : undefined;
-  player.frozen =
+  const bestRemainingSpell = [...tavernSpellShopOffers(player)].sort(
+    (left, right) => {
+      const scoreDifference =
+        tavernSpellAiScore(player, right) -
+        tavernSpellAiScore(player, left);
+      return scoreDifference !== 0
+        ? scoreDifference
+        : left.instanceId.localeCompare(right.instanceId);
+    },
+  )[0];
+  const freezePairCount = profile.id === "triple" ? 1 : 2;
+  const freezeMinion =
     bestRemaining !== undefined &&
-    player.gold < BUY_COST &&
-    (ownedNormalCount(player, bestRemaining.definitionId) >= 2 ||
+    (player.gold < BUY_COST ||
+      player.hand.length >= MAX_HAND_SIZE) &&
+    (ownedNormalCount(player, bestRemaining.definitionId) >=
+      freezePairCount ||
       minionScore(player, bestRemaining) >=
-        7 + player.tavernTier * 2);
+        7 +
+          player.tavernTier * 2 -
+          profile.freezeScoreBonus);
+  const freezeSpell =
+    bestRemainingSpell !== undefined &&
+    tavernSpellAiScore(player, bestRemainingSpell) >=
+      8 - profile.freezeScoreBonus;
+  player.frozen = freezeMinion || freezeSpell;
   arrangeAiBoard(player);
 }
 
@@ -7388,6 +7935,7 @@ function settleEliminations(state: GameState): void {
 }
 
 function endTurn(state: GameState): void {
+  const previousRoundBattles = state.lastRoundBattles;
   const human = humanPlayer(state);
   if (human.alive) {
     applyEndOfTurnEffects(state, human);
@@ -7412,6 +7960,24 @@ function endTurn(state: GameState): void {
   const pairings = buildPairings(state);
   const battles: BattleSummary[] = [];
   for (const pairing of pairings) {
+    const playerAObservation = previouslyObservedOpponent(
+      previousRoundBattles,
+      pairing.playerA,
+      pairing.playerB,
+    );
+    const playerBObservation = pairing.isGhost
+      ? undefined
+      : previouslyObservedOpponent(
+          previousRoundBattles,
+          pairing.playerB,
+          pairing.playerA,
+        );
+    if (!pairing.playerA.isHuman) {
+      arrangeAiBoard(pairing.playerA, playerAObservation);
+    }
+    if (!pairing.isGhost && !pairing.playerB.isHuman) {
+      arrangeAiBoard(pairing.playerB, playerBObservation);
+    }
     pairing.playerA.lastOpponentId = pairing.playerB.id;
     if (!pairing.isGhost) {
       pairing.playerB.lastOpponentId = pairing.playerA.id;
@@ -7440,7 +8006,6 @@ function beginNextRecruit(state: GameState): void {
   state.round += 1;
   state.phase = "recruit";
   state.lastBattle = null;
-  state.lastRoundBattles = [];
   for (const player of state.players) {
     for (const minion of player.board) {
       clearTemporarySpellcraftBuffs(minion);

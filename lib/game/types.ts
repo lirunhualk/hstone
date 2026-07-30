@@ -923,7 +923,11 @@ export interface GameState {
   pendingInteraction: PendingInteraction | null;
   /** The human player's most recently resolved battle. */
   lastBattle: BattleSummary | null;
-  /** All battles resolved by the latest END_TURN action. */
+  /**
+   * All battles resolved by the latest END_TURN action. The latest round is
+   * retained during Recruit so AI can use only a personally observed previous
+   * matchup for fair scouting, then replaced by the next combat round.
+   */
   lastRoundBattles: BattleSummary[];
   winnerId: PlayerId | null;
 }

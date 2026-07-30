@@ -20,6 +20,7 @@ import {
   TAVERN_SPELL_DEFINITIONS,
   getLegalSpellcraftTargetIds,
   getLegalTavernSpellTargetIds,
+  getAiStrategyProfile,
   getRefreshCost,
   getHeroPowerDefinition,
   getTavernSpellPurchaseQuote,
@@ -2117,6 +2118,9 @@ function PlayerRow({
   );
   const renderedArmor = Math.max(0, displayArmor ?? player.armor);
   const renderedAlive = displayAlive ?? player.alive;
+  const aiStrategy = player.isHuman
+    ? null
+    : getAiStrategyProfile(player.id);
 
   return (
     <div
@@ -2139,9 +2143,9 @@ function PlayerRow({
         <strong>{player.name}</strong>
         <small>
           {player.id === opponentId
-            ? "本轮对手"
+            ? `本轮对手 · ${aiStrategy?.label ?? "AI"}`
             : renderedAlive
-              ? `${player.board.length} 随从 · ${player.tavernTier}星`
+              ? `${aiStrategy?.label ?? "玩家"} · ${player.board.length} 随从 · ${player.tavernTier}星`
               : `第 ${player.placement ?? rank} 名`}
         </small>
       </span>

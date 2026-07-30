@@ -1923,7 +1923,10 @@ test("END_TURN runs seven AI turns and one complete deterministic combat round",
   assert.equal(nextRecruit.phase, "recruit");
   assert.equal(nextRecruit.round, 2);
   assert.equal(nextRecruit.lastBattle, null);
-  assert.equal(nextRecruit.lastRoundBattles.length, 0);
+  assert.equal(
+    nextRecruit.lastRoundBattles.length,
+    combat.lastRoundBattles.length,
+  );
   assert.equal(humanPlayer(nextRecruit).tavernSpellsCastThisTurn, 0);
 });
 
