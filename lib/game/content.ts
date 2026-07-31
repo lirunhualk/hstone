@@ -3,7 +3,7 @@ import liveRosterSnapshot from "./generated/battlegrounds-36.0.3-247416.zhCN.jso
 };
 import type { MinionDefinition, Tribe } from "./types.ts";
 
-export const CURRENT_ROSTER_VERSION = "battlegrounds-36.0.3-247416-v29";
+export const CURRENT_ROSTER_VERSION = "battlegrounds-36.0.3-247416-v30";
 /** Compatibility alias for existing save and engine imports. */
 export const CLASSIC_ROSTER_VERSION = CURRENT_ROSTER_VERSION;
 
@@ -1306,6 +1306,67 @@ const LIVE_RULE_OVERRIDES: Readonly<
       },
     ],
   },
+  BG29_816: {
+    goldenCardId: "BG29_816_G",
+    goldenDescription:
+      "每当另一条友方的龙攻击时，使其获得+6/+2。",
+    afterFriendlyAttacks: [
+      {
+        kind: "buffAttacker",
+        tribe: "dragon",
+        otherOnly: true,
+        attack: 3,
+        health: 1,
+        goldenMode: "doubleStats",
+      },
+    ],
+  },
+  BGS_126: {
+    goldenCardId: "TB_BaconUps_166",
+    goldenDescription:
+      "在本随从攻击并消灭一个随从后，对相邻的随从均造成超过目标生命值的伤害。",
+    afterAttackKills: {
+      kind: "excessDamageToAdjacent",
+      goldenMode: "bothAdjacent",
+    },
+  },
+  BGS_078: {
+    goldenCardId: "TB_BaconUps_135",
+    goldenDescription:
+      "进击：触发你最左边的亡语（本随从的除外），触发两次。",
+    rally: [
+      {
+        kind: "triggerLeftmostDeathrattle",
+        goldenMode: "repeat",
+      },
+    ],
+  },
+  BG33_240: {
+    goldenCardId: "BG33_240_G",
+    goldenDescription:
+      "进击：使2条友方的龙获得本随从的生命值上限，触发两次（魅惑之翼除外）。",
+    rally: [
+      {
+        kind: "grantSourceMaxHealth",
+        target: "otherFriendlyTribe",
+        tribe: "dragon",
+        count: 2,
+        goldenMode: "repeat",
+      },
+    ],
+  },
+  BG34_921: {
+    goldenCardId: "BG34_921_G",
+    goldenDescription:
+      "每当一个友方随从攻击时，施放闪亮的戒指，触发两次。",
+    afterFriendlyAttacks: [
+      {
+        kind: "castTavernSpell",
+        definitionId: "tavern-spell-shiny-ring",
+        goldenMode: "repeat",
+      },
+    ],
+  },
   BG34_632: {
     goldenCardId: "BG34_632_G",
     goldenDescription:
@@ -2551,6 +2612,7 @@ const FULLY_SUPPORTED_LIVE_CARD_IDS = new Set([
   "BG28_308",
   "BG29_503",
   "BG29_611",
+  "BG29_816",
   "BG29_813",
   "BG29_840",
   "BG29_841",
@@ -2583,6 +2645,7 @@ const FULLY_SUPPORTED_LIVE_CARD_IDS = new Set([
   "BG33_156",
   "BG33_140",
   "BG33_241",
+  "BG33_240",
   "BG33_318",
   "BG33_323",
   "BG33_319",
@@ -2617,6 +2680,7 @@ const FULLY_SUPPORTED_LIVE_CARD_IDS = new Set([
   "BG34_694",
   "BG34_731",
   "BG34_765",
+  "BG34_921",
   "BG34_925",
   "BG34_926",
   "BG35_143",
@@ -2646,9 +2710,11 @@ const FULLY_SUPPORTED_LIVE_CARD_IDS = new Set([
   "BGS_115",
   "BGS_116",
   "BGS_123",
+  "BGS_126",
   "BGS_071",
   "BGS_119",
   "BGS_131",
+  "BGS_078",
   "BG_LOE_077",
   "BG_TTN_401",
 ]);

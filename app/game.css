@@ -1800,7 +1800,8 @@
 }
 
 .combat-start-of-combat-label,
-.combat-avenge-label {
+.combat-avenge-label,
+.combat-trigger-label {
   position: absolute;
   z-index: 31;
   top: 8px;
@@ -1839,6 +1840,15 @@
   box-shadow:
     0 6px 16px rgb(0 0 0 / 42%),
     0 0 24px rgb(209 78 189 / 62%);
+}
+
+.combat-trigger-label {
+  border-color: rgb(255 227 146 / 92%);
+  color: #fff7d5;
+  background: linear-gradient(135deg, #7b3e0d, #e08f24);
+  box-shadow:
+    0 6px 16px rgb(0 0 0 / 42%),
+    0 0 24px rgb(224 143 36 / 65%);
 }
 
 .unit-card.is-hit .stat[data-stat="health"] {
@@ -5208,7 +5218,8 @@
 }
 
 .combat-start-of-combat-mark,
-.combat-avenge-mark {
+.combat-avenge-mark,
+.combat-trigger-mark {
   display: inline-block;
   margin-right: 7px;
   padding: 2px 7px;
@@ -5235,6 +5246,13 @@
   color: #fff9dd;
   background: linear-gradient(135deg, #6b238f, #d14ebd);
   box-shadow: 0 0 18px rgb(209 78 189 / 58%);
+}
+
+.combat-trigger-mark {
+  border-color: rgb(255 227 146 / 82%);
+  color: #fff7d5;
+  background: linear-gradient(135deg, #7b3e0d, #e08f24);
+  box-shadow: 0 0 18px rgb(224 143 36 / 62%);
 }
 
 .combat-attack-link {
@@ -5544,6 +5562,11 @@
 }
 
 .unit-card.is-avenge-trigger {
+  z-index: 9;
+  animation: card-avenge 620ms cubic-bezier(0.2, 0.9, 0.3, 1);
+}
+
+.unit-card.is-effect-trigger {
   z-index: 9;
   animation: card-avenge 620ms cubic-bezier(0.2, 0.9, 0.3, 1);
 }
@@ -6600,6 +6623,7 @@
   .unit-card.is-buffed,
   .unit-card.is-start-of-combat-trigger,
   .unit-card.is-avenge-trigger,
+  .unit-card.is-effect-trigger,
   .unit-card.is-debuffed,
   .unit-card.is-summoned,
   .unit-card.is-dead,
@@ -6639,6 +6663,7 @@
   .combat-buff-label,
   .combat-start-of-combat-label,
   .combat-avenge-label,
+  .combat-trigger-label,
   .combat-debuff-label,
   .combat-summon-label,
   .combat-damage-label,

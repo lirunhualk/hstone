@@ -1201,6 +1201,9 @@ function battleEventDelay(
             ? 720
             : event?.type === "avenge"
               ? 720
+              : event?.type === "trigger" ||
+                  event?.type === "tavernSpellCast"
+                ? 720
               : event?.type === "buff"
                 ? 620
                 : event?.type === "handBuff"
@@ -1318,6 +1321,7 @@ function UnitCard({
   combatDead = false,
   combatStartOfCombat = false,
   combatAvenge = false,
+  combatTrigger = false,
   combatBuffTarget = false,
   combatBuffLabel,
   combatDebuffTarget = false,
@@ -1363,6 +1367,7 @@ function UnitCard({
   combatDead?: boolean;
   combatStartOfCombat?: boolean;
   combatAvenge?: boolean;
+  combatTrigger?: boolean;
   combatBuffTarget?: boolean;
   combatBuffLabel?: string;
   combatDebuffTarget?: boolean;
@@ -1401,6 +1406,8 @@ function UnitCard({
       ? "start-of-combat"
       : combatAvenge
         ? "avenge"
+        : combatTrigger
+          ? "trigger"
         : combatActor
           ? combatBuffTarget
             ? "actor buff-target"
@@ -1439,6 +1446,8 @@ function UnitCard({
         combatStartOfCombat ? " is-start-of-combat-trigger" : ""
       }${
         combatAvenge ? " is-avenge-trigger" : ""
+      }${
+        combatTrigger ? " is-effect-trigger" : ""
       }${
         combatBuffTarget ? " is-combat-buff-target is-buffed" : ""
       }${
@@ -1487,6 +1496,8 @@ function UnitCard({
       }${
         combatAvenge ? "，正在触发复仇" : ""
       }${
+        combatTrigger ? "，正在触发特殊效果" : ""
+      }${
         locked ? "，锁定至下个招募回合" : ""
       }`}
       aria-pressed={selected}
@@ -1521,6 +1532,7 @@ function UnitCard({
       data-shield-breaking={combatShieldBreaking || undefined}
       data-start-of-combat-trigger={combatStartOfCombat || undefined}
       data-avenge-trigger={combatAvenge || undefined}
+      data-effect-trigger={combatTrigger || undefined}
       data-testid={testId}
       data-unit-instance-id={unit.instanceId}
       onClick={onClick}
@@ -1561,6 +1573,11 @@ function UnitCard({
       {combatAvenge && (
         <span className="combat-avenge-label" aria-hidden="true">
           复仇！
+        </span>
+      )}
+      {combatTrigger && (
+        <span className="combat-trigger-label" aria-hidden="true">
+          触发！
         </span>
       )}
       {combatDebuffTarget && combatDebuffLabel && (
@@ -2310,6 +2327,7 @@ function BoardRow({
   deadInstanceId,
   startOfCombatInstanceId,
   avengeInstanceId,
+  triggerInstanceId,
   combatEventIndex,
   buffTargetInstanceId,
   buffLabel,
@@ -2351,6 +2369,7 @@ function BoardRow({
   deadInstanceId?: string;
   startOfCombatInstanceId?: string;
   avengeInstanceId?: string;
+  triggerInstanceId?: string;
   combatEventIndex?: number;
   buffTargetInstanceId?: string;
   buffLabel?: string;
@@ -2505,6 +2524,7 @@ function BoardRow({
                       unit.instanceId === deadInstanceId ||
                       unit.instanceId === startOfCombatInstanceId ||
                       unit.instanceId === avengeInstanceId ||
+                      unit.instanceId === triggerInstanceId ||
                       unit.instanceId === buffTargetInstanceId ||
                       unit.instanceId === debuffTargetInstanceId ||
                       unit.instanceId === summonedInstanceId)
@@ -2547,6 +2567,9 @@ function BoardRow({
                   }
                   combatAvenge={
                     unit.instanceId === avengeInstanceId
+                  }
+                  combatTrigger={
+                    unit.instanceId === triggerInstanceId
                   }
                   combatBuffTarget={
                     unit.instanceId === buffTargetInstanceId
@@ -5959,6 +5982,14 @@ export default function GameClient() {
                       ? currentBattleEvent.actorInstanceId
                       : undefined
                   }
+                  triggerInstanceId={
+                    (currentBattleEvent?.type === "trigger" ||
+                      currentBattleEvent?.type ===
+                        "tavernSpellCast") &&
+                    currentBattleEvent.actorPlayerId === opponentId
+                      ? currentBattleEvent.actorInstanceId
+                      : undefined
+                  }
                   combatEventIndex={currentBattleEvent?.index}
                   buffTargetInstanceId={
                     currentBattleEvent?.type === "buff" &&
@@ -6030,6 +6061,16 @@ export default function GameClient() {
                             aria-hidden="true"
                           >
                             复仇！
+                          </span>
+                        )}
+                        {(currentBattleEvent?.type === "trigger" ||
+                          currentBattleEvent?.type ===
+                            "tavernSpellCast") && (
+                          <span
+                            className="combat-trigger-mark"
+                            aria-hidden="true"
+                          >
+                            触发！
                           </span>
                         )}
                         {currentBattleEvent?.message ?? "准备战斗回放…"}
@@ -6192,6 +6233,14 @@ export default function GameClient() {
                 }
                 avengeInstanceId={
                   currentBattleEvent?.type === "avenge" &&
+                  currentBattleEvent.actorPlayerId === human.id
+                    ? currentBattleEvent.actorInstanceId
+                    : undefined
+                }
+                triggerInstanceId={
+                  (currentBattleEvent?.type === "trigger" ||
+                    currentBattleEvent?.type ===
+                      "tavernSpellCast") &&
                   currentBattleEvent.actorPlayerId === human.id
                     ? currentBattleEvent.actorInstanceId
                     : undefined

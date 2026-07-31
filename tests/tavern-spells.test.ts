@@ -862,13 +862,19 @@ test("the playable Tavern Spell pool covers all five current Solo Tier 6 spells"
   }
 });
 
-test("Tavern Spell support metadata exposes the two bounded local approximations", () => {
+test("Tavern Spell support metadata exposes the three bounded local approximations", () => {
   const partial = TAVERN_SPELL_DEFINITIONS.filter(
     (definition) => definition.effectSupport === "partial",
   );
   assert.deepEqual(
     partial.map((definition) => definition.cardId).sort(),
-    ["BG30_802", "EBG_Spell_037"],
+    ["BG30_802", "BG30_804", "EBG_Spell_037"],
+  );
+  assert.match(
+    getTavernSpellDefinition(
+      "tavern-spell-careful-mutation",
+    ).implementationNote ?? "",
+    /6星目标/u,
   );
   assert.match(
     getTavernSpellDefinition(
@@ -886,7 +892,7 @@ test("Tavern Spell support metadata exposes the two bounded local approximations
     TAVERN_SPELL_DEFINITIONS.filter(
       (definition) => definition.effectSupport === "complete",
     ).length,
-    63,
+    62,
   );
 });
 
@@ -4310,7 +4316,7 @@ test("Invoke the Devourer performs a real sale before buffing the only remaining
   );
 });
 
-test("Saloon's Finest creates seven independently purchasable spell offers and conserves the shared pool", () => {
+test("Saloon's Finest fills the current Tavern capacity and conserves the shared pool", () => {
   let state = createGame(0x7510);
   let player = humanPlayer(state);
   player.tavernTier = 5;
@@ -4335,7 +4341,7 @@ test("Saloon's Finest creates seven independently purchasable spell offers and c
   ];
   assert.equal(player.spellOnlyRefreshActive, true);
   assert.equal(player.shop.length, 0);
-  assert.equal(offers.length, 7);
+  assert.equal(offers.length, 6);
   assert.ok(
     offers.every(
       (offer) =>
@@ -4377,7 +4383,7 @@ test("Saloon's Finest creates seven independently purchasable spell offers and c
     ...(player.spellShop ? [player.spellShop.instanceId] : []),
     ...player.additionalSpellShop.map((offer) => offer.instanceId),
   ];
-  assert.equal(remainingOfferIds.length, 6);
+  assert.equal(remainingOfferIds.length, 5);
   player.frozen = true;
   state = gameReducer(state, { type: "END_TURN" });
   state = gameReducer(state, { type: "CONTINUE" });
@@ -4393,11 +4399,7 @@ test("Saloon's Finest creates seven independently purchasable spell offers and c
   );
   assert.equal(player.frozen, false);
   assert.deepEqual(nextTurnOfferIds, remainingOfferIds);
-  assert.equal(
-    player.shop.length,
-    0,
-    "Tier 5 already has its six-card start-of-turn Tavern cap",
-  );
+  assert.equal(player.shop.length, 1);
   for (const definition of TAVERN_SPELL_DEFINITIONS) {
     assert.equal(
       totalSpellCopies(state, definition.id),
@@ -4405,6 +4407,30 @@ test("Saloon's Finest creates seven independently purchasable spell offers and c
       `${definition.name} must remain conserved across a frozen round`,
     );
   }
+});
+
+test("Saloon's Finest fills all seven Tavern slots at Tier 6", () => {
+  let state = createGame(0x7511);
+  let player = humanPlayer(state);
+  player.tavernTier = 6;
+  player.hand = [
+    tavernSpell(
+      "tavern-spell-saloons-finest",
+      "tier-six-saloons-finest",
+    ),
+  ];
+
+  state = gameReducer(state, {
+    type: "CAST_TAVERN_SPELL",
+    cardInstanceId: "tier-six-saloons-finest",
+  });
+  player = humanPlayer(state);
+  assert.equal(
+    Number(player.spellShop !== null) +
+      player.additionalSpellShop.length,
+    7,
+  );
+  assert.equal(player.shop.length, 0);
 });
 
 test("Knockoff Wisdomball grants exactly two paid helpful Refreshes and never creates an empty Tavern", () => {

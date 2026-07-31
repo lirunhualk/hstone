@@ -1090,7 +1090,7 @@ test("a ghost Hungry Forager reads its zero-ownership snapshot without mutating 
   assert.deepEqual(combat.pool, poolBefore);
 });
 
-test("v27 saves migrate through v29 with refreshed Golden Forager metadata and no persisted combat queue", () => {
+test("v27 saves migrate through v30 with refreshed Golden Forager metadata and no persisted combat queue", () => {
   const legacy = structuredClone(createGame(0x5d008));
   legacy.contentVersion = LEGACY_SCHEMA_11_CONTENT_VERSION_V27;
   const player = humanPlayer(legacy);
@@ -1119,7 +1119,7 @@ test("v27 saves migrate through v29 with refreshed Golden Forager metadata and n
 
   assert.equal(
     CURRENT_ROSTER_VERSION,
-    "battlegrounds-36.0.3-247416-v29",
+    "battlegrounds-36.0.3-247416-v30",
   );
   assert.equal(
     migratedState.contentVersion,

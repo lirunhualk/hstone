@@ -67,10 +67,12 @@ import type {
   QueueDemonFodderEffect,
   RallyCastChefsChoiceEffect,
   RallyGrantSourceAttackEffect,
+  RallyGrantSourceMaxHealthEffect,
   RallyGrantVenomousEffect,
   RallyRemoveTargetKeywordsEffect,
   RallyRemovedKeyword,
   RallySummonFromHandEffect,
+  RallyTriggerLeftmostDeathrattleEffect,
   ScheduledPairing,
   SpellcraftDefinition,
   SpellcraftSpellInstance,
@@ -4714,7 +4716,7 @@ function refreshWithTavernSpells(
   player.spellOnlyRefreshActive = true;
   const excluded = new Set(["tavern-spell-saloons-finest"]);
   const offers: TavernSpellInstance[] = [];
-  while (offers.length < 7) {
+  while (offers.length < tavernCardCapacity(player)) {
     const offer = drawTavernSpell(
       state,
       player.tavernTier,
@@ -6109,6 +6111,74 @@ function minionScore(
         (amount.attack + amount.health) *
         0.45;
     }
+    for (const effect of definition.afterFriendlyAttacks ?? []) {
+      if (effect.kind === "buffAttacker") {
+        const eligibleAttackers = player.board.filter(
+          (target) =>
+            target.instanceId !== minion.instanceId &&
+            target.attack > 0 &&
+            (!effect.tribe ||
+              minionHasTribe(target, effect.tribe)),
+        ).length;
+        const scale =
+          minion.golden &&
+          effect.goldenMode === "doubleStats"
+            ? 2
+            : 1;
+        score +=
+          eligibleAttackers *
+          (effect.attack + effect.health) *
+          scale *
+          0.65;
+      } else if (effect.kind === "castTavernSpell") {
+        const repetitions =
+          minion.golden && effect.goldenMode === "repeat" ? 2 : 1;
+        const likelyAttackers = Math.max(
+          1,
+          player.board.filter((target) => target.attack > 0).length,
+        );
+        score +=
+          likelyAttackers *
+          player.board.length *
+          repetitions *
+          0.55;
+      }
+    }
+    if (
+      definition.afterAttackKills?.kind ===
+      "excessDamageToAdjacent"
+    ) {
+      score += minion.attack * (minion.golden ? 0.8 : 0.55);
+    }
+    for (const effect of definition.rally ?? []) {
+      if (effect.kind === "grantSourceMaxHealth") {
+        const eligibleTargets = player.board.filter(
+          (target) =>
+            target.definitionId !== minion.definitionId &&
+            minionHasTribe(target, effect.tribe),
+        ).length;
+        const repetitions =
+          minion.golden && effect.goldenMode === "repeat" ? 2 : 1;
+        score +=
+          Math.min(effect.count, eligibleTargets) *
+          minion.health *
+          repetitions *
+          0.25;
+      } else if (effect.kind === "triggerLeftmostDeathrattle") {
+        const target = player.board.find(
+          (candidate) =>
+            candidate.instanceId !== minion.instanceId &&
+            minionHasTriggerableDeathrattle(candidate),
+        );
+        if (target) {
+          const repetitions =
+            minion.golden && effect.goldenMode === "repeat" ? 2 : 1;
+          score +=
+            (6 + (target.attack + target.health) * 0.08) *
+            repetitions;
+        }
+      }
+    }
     if (
       definition.endOfTurn?.kind ===
       "periodicGainRandomMinion"
@@ -7348,6 +7418,7 @@ function arrangeAiBoard(
         definition.afterFriendlyPlayed !== undefined ||
         definition.afterFriendlySummoned !== undefined ||
         definition.afterFriendlyDied !== undefined ||
+        definition.afterFriendlyAttacks !== undefined ||
         definition.combatEnchantmentRetention?.target ===
           "adjacentFriendlyTribe"
       );
@@ -7614,6 +7685,47 @@ function arrangeAiBoard(
       ),
       ...chain,
     ];
+  }
+
+  const macaws = player.board
+    .filter((minion) =>
+      getMinionDefinition(minion.definitionId).rally?.some(
+        (effect) => effect.kind === "triggerLeftmostDeathrattle",
+      ),
+    )
+    .sort(
+      (left, right) =>
+        Number(right.golden) - Number(left.golden) ||
+        right.attack - left.attack ||
+        left.instanceId.localeCompare(right.instanceId),
+    );
+  if (macaws.length > 0) {
+    const macawIds = new Set(
+      macaws.map((minion) => minion.instanceId),
+    );
+    const deathrattleTarget = player.board
+      .filter(
+        (minion) =>
+          !macawIds.has(minion.instanceId) &&
+          minionHasTriggerableDeathrattle(minion),
+      )
+      .sort(
+        (left, right) =>
+          minionScore(player, right) - minionScore(player, left) ||
+          right.attack + right.health - (left.attack + left.health) ||
+          left.instanceId.localeCompare(right.instanceId),
+      )[0];
+    if (deathrattleTarget) {
+      player.board = [
+        ...macaws,
+        deathrattleTarget,
+        ...player.board.filter(
+          (minion) =>
+            !macawIds.has(minion.instanceId) &&
+            minion.instanceId !== deathrattleTarget.instanceId,
+        ),
+      ];
+    }
   }
 }
 
@@ -8062,6 +8174,8 @@ interface CombatContext {
   eternalKnightsDied: Record<PlayerId, number>;
   /** Combat-only counters keyed by the exact minion or Magnetic component. */
   avengeProgress: Record<PlayerId, Record<string, number>>;
+  /** Maximum Health is tracked separately from damage for Charmwing. */
+  maximumHealths: Record<PlayerId, Record<string, number>>;
   /** Only the original Recruit-board entities may receive permanent combat gains. */
   originalCombatMinionIds: Record<PlayerId, Set<string>>;
   /** Event-time combat enchantments flushed to Recruit entities after combat. */
@@ -8080,6 +8194,30 @@ function opponentId(context: CombatContext, ownerId: PlayerId): PlayerId {
   return context.playerIds[0] === ownerId
     ? context.playerIds[1]
     : context.playerIds[0];
+}
+
+function combatMaximumHealth(
+  context: CombatContext,
+  ownerId: PlayerId,
+  minion: MinionInstance,
+): number {
+  return (
+    context.maximumHealths[ownerId][minion.instanceId] ??
+    Math.max(1, minion.health)
+  );
+}
+
+function adjustCombatMaximumHealth(
+  context: CombatContext,
+  ownerId: PlayerId,
+  minion: MinionInstance,
+  healthDelta: number,
+): void {
+  const maximumHealth = combatMaximumHealth(context, ownerId, minion);
+  context.maximumHealths[ownerId][minion.instanceId] = Math.max(
+    1,
+    maximumHealth + healthDelta,
+  );
 }
 
 function persistentCombatOwner(
@@ -8214,6 +8352,9 @@ function applyCombatEnchantingGain(
     ownerId,
     target,
   );
+  if (health !== 0) {
+    adjustCombatMaximumHealth(context, ownerId, target, health);
+  }
   target.attack = Math.max(0, target.attack + attack);
   target.health = Math.max(1, target.health + health);
   const gainedKeywords = gainCombatBonusKeywords(
@@ -8778,10 +8919,11 @@ function applyExistingAurasToSummoned(
 }
 
 function applyNewAuraSource(
-  board: readonly MinionInstance[],
+  context: CombatContext,
   source: MinionInstance,
   ownerId: PlayerId,
 ): Omit<BattleEvent, "index">[] {
+  const board = context.boards[ownerId];
   const events: Omit<BattleEvent, "index">[] = [];
   for (const component of minionEffectSources(source)) {
     const aura = getMinionDefinition(component.definitionId).aura;
@@ -8800,6 +8942,12 @@ function applyNewAuraSource(
       const healthDelta = aura.health * scale;
       target.attack += attackDelta;
       target.health += healthDelta;
+      adjustCombatMaximumHealth(
+        context,
+        ownerId,
+        target,
+        healthDelta,
+      );
       reconcileConditionalMinion(target);
       events.push({
         type: "buff",
@@ -8835,6 +8983,12 @@ function removeCombatAuraSource(
       const healthDelta = -aura.health * scale;
       target.attack += attackDelta;
       target.health += healthDelta;
+      adjustCombatMaximumHealth(
+        context,
+        death.ownerId,
+        target,
+        healthDelta,
+      );
       const targetSnapshot = cloneMinion(target);
       targetSnapshot.health = Math.max(0, targetSnapshot.health);
       pushBattleEvent(context.events, {
@@ -9024,11 +9178,13 @@ function insertCombatMinion(
   source: MinionInstance,
   message: string,
   summonReason?: BattleEvent["summonReason"],
+  maximumHealthBeforeSummonBonuses?: number,
 ): MinionInstance | null {
   const board = context.boards[ownerId];
   if (board.length >= MAX_BOARD_SIZE) {
     return null;
   }
+  const healthBeforeSummonBonuses = summoned.health;
   reconcileWhereverMinion(
     summoned,
     context.astralAutomatonsSummoned[ownerId],
@@ -9042,9 +9198,15 @@ function insertCombatMinion(
   }
   applyCombatSummonHeroPower(context, ownerId, summoned);
   applyExistingAurasToSummoned(board, summoned);
+  context.maximumHealths[ownerId][summoned.instanceId] ??= Math.max(
+    1,
+    (maximumHealthBeforeSummonBonuses ??
+      healthBeforeSummonBonuses) +
+      (summoned.health - healthBeforeSummonBonuses),
+  );
   const boardIndex = Math.min(Math.max(0, insertAt), board.length);
   board.splice(boardIndex, 0, summoned);
-  const auraEvents = applyNewAuraSource(board, summoned, ownerId);
+  const auraEvents = applyNewAuraSource(context, summoned, ownerId);
   const afterSummonEvents = triggerAfterFriendlySummoned(
     context,
     ownerId,
@@ -9830,6 +9992,14 @@ function resolveCombatImproveUndeadArmy(
     }
     target.attack += attackDelta;
     target.health += healthDelta;
+    if (healthDelta !== 0) {
+      adjustCombatMaximumHealth(
+        context,
+        ownerId,
+        target,
+        healthDelta,
+      );
+    }
     reconcileConditionalMinion(target);
     pushBattleEvent(context.events, {
       type: "buff",
@@ -10016,6 +10186,124 @@ function resolveRallyGrantSourceAttack(
         message: `${rallySourceLabel(component)}的进击使${target.name}获得+${attackDelta}攻击力。`,
       });
     }
+  }
+}
+
+function resolveRallyGrantSourceMaxHealth(
+  context: CombatContext,
+  ownerId: PlayerId,
+  attacker: MinionInstance,
+  component: MinionEffectSource,
+  effect: RallyGrantSourceMaxHealthEffect,
+): void {
+  const repetitions =
+    component.golden && effect.goldenMode === "repeat" ? 2 : 1;
+  for (let repetition = 0; repetition < repetitions; repetition += 1) {
+    const candidates = context.boards[ownerId].filter(
+      (minion) =>
+        minion.instanceId !== attacker.instanceId &&
+        minion.definitionId !== component.definitionId &&
+        minion.health > 0 &&
+        minionHasTribe(minion, effect.tribe),
+    );
+    for (const target of randomBoardSubset(
+      context.state,
+      candidates,
+      effect.count,
+    )) {
+      const healthDelta = combatMaximumHealth(
+        context,
+        ownerId,
+        attacker,
+      );
+      const gain = applyCombatEnchantingGain(
+        context,
+        ownerId,
+        target,
+        { health: healthDelta },
+      );
+      pushBattleEvent(context.events, {
+        type: "buff",
+        actorPlayerId: ownerId,
+        actorInstanceId: attacker.instanceId,
+        targetPlayerId: ownerId,
+        targetInstanceId: target.instanceId,
+        attackDelta: 0,
+        healthDelta,
+        minion: cloneMinion(target),
+        retained: gain.retentionMultiplier > 0,
+        ...(gain.retentionMultiplier > 0
+          ? { retentionMultiplier: gain.retentionMultiplier }
+          : {}),
+        message: `${rallySourceLabel(component)}的进击使${target.name}获得+${healthDelta}生命值${
+          repetitions > 1 ? `（第${repetition + 1}次）` : ""
+        }。`,
+      });
+    }
+  }
+}
+
+function minionHasTriggerableDeathrattle(
+  minion: MinionInstance,
+): boolean {
+  return (
+    minion.temporaryCrabDeathrattles > 0 ||
+    (minion.temporaryGoldenCrabDeathrattles ?? 0) > 0 ||
+    minionEffectSources(minion).some(
+      (component) =>
+        (getMinionDefinition(component.definitionId).deathrattle
+          ?.length ?? 0) > 0,
+    )
+  );
+}
+
+function resolveRallyTriggerLeftmostDeathrattle(
+  context: CombatContext,
+  ownerId: PlayerId,
+  attacker: MinionInstance,
+  component: MinionEffectSource,
+  effect: RallyTriggerLeftmostDeathrattleEffect,
+): void {
+  const board = context.boards[ownerId];
+  const source = board.find(
+    (minion) =>
+      minion.instanceId !== attacker.instanceId &&
+      minion.health > 0 &&
+      minionHasTriggerableDeathrattle(minion),
+  );
+  if (!source) {
+    return;
+  }
+  const originalSourceIndex = board.findIndex(
+    (minion) => minion.instanceId === source.instanceId,
+  );
+  const repetitions =
+    component.golden && effect.goldenMode === "repeat" ? 2 : 1;
+  for (let repetition = 0; repetition < repetitions; repetition += 1) {
+    pushBattleEvent(context.events, {
+      type: "trigger",
+      actorPlayerId: ownerId,
+      actorInstanceId: attacker.instanceId,
+      targetPlayerId: ownerId,
+      targetInstanceId: source.instanceId,
+      minion: cloneMinion(source),
+      message: `${rallySourceLabel(component)}的进击触发了${source.name}的亡语${
+        repetitions > 1 ? `（第${repetition + 1}次）` : ""
+      }。`,
+    });
+    resolveOneDeathrattle(context, {
+      minion: source,
+      index: (() => {
+        const liveSourceIndex = board.findIndex(
+          (minion) => minion.instanceId === source.instanceId,
+        );
+        return liveSourceIndex >= 0
+          ? liveSourceIndex + 1
+          : Math.min(originalSourceIndex, board.length);
+      })(),
+      ownerId,
+    });
+    resolveCombatDeaths(context);
   }
 }
 
@@ -10403,6 +10691,82 @@ function resolveRallyKeywordRemoval(
   });
 }
 
+function triggerAfterFriendlyAttacks(
+  context: CombatContext,
+  ownerId: PlayerId,
+  attacker: MinionInstance,
+): void {
+  for (const watcher of [...context.boards[ownerId]]) {
+    if (watcher.health <= 0) {
+      continue;
+    }
+    for (const component of minionEffectSources(watcher)) {
+      const effects =
+        getMinionDefinition(component.definitionId)
+          .afterFriendlyAttacks ?? [];
+      for (const effect of effects) {
+        if (effect.kind === "castTavernSpell") {
+          resolveCombatCastTavernSpell(
+            context,
+            ownerId,
+            watcher,
+            component,
+            effect,
+            "友方随从攻击触发效果",
+          );
+          continue;
+        }
+        if (
+          (effect.otherOnly &&
+            watcher.instanceId === attacker.instanceId) ||
+          (effect.tribe &&
+            !minionHasTribe(attacker, effect.tribe)) ||
+          attacker.health <= 0
+        ) {
+          continue;
+        }
+        const scale =
+          component.golden &&
+          effect.goldenMode === "doubleStats"
+            ? 2
+            : 1;
+        const attackDelta = effect.attack * scale;
+        const healthDelta = effect.health * scale;
+        pushBattleEvent(context.events, {
+          type: "trigger",
+          actorPlayerId: ownerId,
+          actorInstanceId: watcher.instanceId,
+          targetPlayerId: ownerId,
+          targetInstanceId: attacker.instanceId,
+          minion: cloneMinion(attacker),
+          message: `${rallySourceLabel(component)}响应${attacker.name}的攻击并触发了增益。`,
+        });
+        const gain = applyCombatEnchantingGain(
+          context,
+          ownerId,
+          attacker,
+          { attack: attackDelta, health: healthDelta },
+        );
+        pushBattleEvent(context.events, {
+          type: "buff",
+          actorPlayerId: ownerId,
+          actorInstanceId: watcher.instanceId,
+          targetPlayerId: ownerId,
+          targetInstanceId: attacker.instanceId,
+          attackDelta,
+          healthDelta,
+          minion: cloneMinion(attacker),
+          retained: gain.retentionMultiplier > 0,
+          ...(gain.retentionMultiplier > 0
+            ? { retentionMultiplier: gain.retentionMultiplier }
+            : {}),
+          message: `${rallySourceLabel(component)}使正在攻击的${attacker.name}获得+${attackDelta}/+${healthDelta}。`,
+        });
+      }
+    }
+  }
+}
+
 function triggerRally(
   context: CombatContext,
   ownerId: PlayerId,
@@ -10516,6 +10880,28 @@ function triggerRally(
         continue;
       }
 
+      if (effect.kind === "grantSourceMaxHealth") {
+        resolveRallyGrantSourceMaxHealth(
+          context,
+          ownerId,
+          attacker,
+          component,
+          effect,
+        );
+        continue;
+      }
+
+      if (effect.kind === "triggerLeftmostDeathrattle") {
+        resolveRallyTriggerLeftmostDeathrattle(
+          context,
+          ownerId,
+          attacker,
+          component,
+          effect,
+        );
+        continue;
+      }
+
       if (effect.kind === "improveUndeadArmy") {
         resolveCombatImproveUndeadArmy(
           context,
@@ -10588,6 +10974,72 @@ interface AttackStrikeOptions {
   windfuryStrike?: boolean;
 }
 
+function triggerAfterAttackKills(
+  context: CombatContext,
+  ownerId: PlayerId,
+  attacker: MinionInstance,
+  targetOwnerId: PlayerId,
+  target: MinionInstance,
+  targetIndex: number,
+  targetHealthBefore: number,
+  attackDamage: number,
+): void {
+  if (
+    targetHealthBefore <= 0 ||
+    target.health > 0 ||
+    attackDamage <= targetHealthBefore
+  ) {
+    return;
+  }
+  const excessDamage = attackDamage - targetHealthBefore;
+  const enemyBoard = context.boards[targetOwnerId];
+  const adjacent = [
+    enemyBoard[targetIndex - 1],
+    enemyBoard[targetIndex + 1],
+  ].filter(
+    (minion): minion is MinionInstance =>
+      minion !== undefined &&
+      minion.instanceId !== target.instanceId &&
+      minion.health > 0,
+  );
+  if (adjacent.length === 0) {
+    return;
+  }
+
+  for (const component of minionEffectSources(attacker)) {
+    const effect = getMinionDefinition(
+      component.definitionId,
+    ).afterAttackKills;
+    if (effect?.kind !== "excessDamageToAdjacent") {
+      continue;
+    }
+    const targets =
+      component.golden && effect.goldenMode === "bothAdjacent"
+        ? adjacent
+        : randomBoardSubset(context.state, adjacent, 1);
+    for (const adjacentTarget of targets) {
+      pushBattleEvent(context.events, {
+        type: "trigger",
+        actorPlayerId: ownerId,
+        actorInstanceId: attacker.instanceId,
+        targetPlayerId: targetOwnerId,
+        targetInstanceId: adjacentTarget.instanceId,
+        minion: cloneMinion(adjacentTarget),
+        message: `${rallySourceLabel(component)}将${excessDamage}点过量伤害溅射给${adjacentTarget.name}。`,
+      });
+      dealCombatDamage(
+        context,
+        ownerId,
+        attacker,
+        targetOwnerId,
+        adjacentTarget,
+        excessDamage,
+        false,
+      );
+    }
+  }
+}
+
 function performAttackStrike(
   context: CombatContext,
   ownerId: PlayerId,
@@ -10639,11 +11091,28 @@ function performAttackStrike(
       message: `${attacker.name}发动攻击后失去了潜行。`,
     });
   }
+  triggerAfterFriendlyAttacks(context, ownerId, attacker);
   triggerRally(context, ownerId, attacker, target);
   if (context.deathResolutionDepth === 0) {
     summonPendingStartOfCombatHandMinions(context, ownerId);
   }
 
+  if (
+    attacker.health <= 0 ||
+    target.health <= 0 ||
+    !context.boards[ownerId].some(
+      (minion) => minion.instanceId === attacker.instanceId,
+    ) ||
+    !enemyBoard.some(
+      (minion) => minion.instanceId === target.instanceId,
+    )
+  ) {
+    resolveCombatDeaths(context);
+    return true;
+  }
+
+  const targetHealthBefore = target.health;
+  const attackDamage = attacker.attack;
   dealCombatDamage(
     context,
     ownerId,
@@ -10673,6 +11142,16 @@ function performAttackStrike(
       attacker.poisonous,
     );
   }
+  triggerAfterAttackKills(
+    context,
+    ownerId,
+    attacker,
+    enemyId,
+    target,
+    targetIndex,
+    targetHealthBefore,
+    attackDamage,
+  );
   resolveCombatDeaths(context);
   return true;
 }
@@ -11433,6 +11912,7 @@ function resolveCombatDeaths(context: CombatContext): void {
         if (death.minion.golden) {
           makeGoldenToken(reborn);
         }
+        const rebornMaximumHealth = reborn.health;
         reborn.health = 1;
         reborn.reborn = false;
         insertCombatMinion(
@@ -11443,6 +11923,7 @@ function resolveCombatDeaths(context: CombatContext): void {
           death.minion,
           `${death.minion.name}复生了。`,
           "reborn",
+          rebornMaximumHealth,
         );
       }
       for (const ownerId of context.playerIds) {
@@ -11767,6 +12248,7 @@ function applyQueuedStartOfCombatSpells(
     const target = enemyBoard[randomIndex(context.state, enemyBoard.length)];
     const healthDelta = 1 - target.health;
     target.health = 1;
+    context.maximumHealths[enemy.id][target.instanceId] = 1;
     pushBattleEvent(context.events, {
       type: "buff",
       actorPlayerId: owner.id,
@@ -11905,6 +12387,14 @@ function simulateBattle(
     avengeProgress: {
       [playerA.id]: {},
       [playerB.id]: {},
+    },
+    maximumHealths: {
+      [playerA.id]: Object.fromEntries(
+        boardA.map((minion) => [minion.instanceId, minion.health]),
+      ),
+      [playerB.id]: Object.fromEntries(
+        boardB.map((minion) => [minion.instanceId, minion.health]),
+      ),
     },
     originalCombatMinionIds: {
       [playerA.id]: new Set(

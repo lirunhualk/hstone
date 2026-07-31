@@ -1237,7 +1237,7 @@ test("AI keeps useful hand minions for Choral once its target board size is met"
   );
 });
 
-test("v26 saves migrate through v29 with refreshed Golden Start-of-Combat metadata and no combat state", () => {
+test("v26 saves migrate through v30 with refreshed Golden Start-of-Combat metadata and no combat state", () => {
   const legacy = structuredClone(createGame(0x5c050));
   legacy.contentVersion = LEGACY_SCHEMA_11_CONTENT_VERSION_V26;
   for (const legacyPlayer of legacy.players) {
@@ -1300,7 +1300,7 @@ test("v26 saves migrate through v29 with refreshed Golden Start-of-Combat metada
   );
   assert.equal(
     CURRENT_ROSTER_VERSION,
-    "battlegrounds-36.0.3-247416-v29",
+    "battlegrounds-36.0.3-247416-v30",
   );
   const nextPlayer = humanPlayer(migratedState);
   assert.deepEqual(nextPlayer.ghostHand, []);
@@ -1351,7 +1351,7 @@ test("v26 saves migrate through v29 with refreshed Golden Start-of-Combat metada
   }
 });
 
-test("current v29 saves repair a missing ghost snapshot and reject pool ownership inside one", () => {
+test("current v30 saves repair a missing ghost snapshot and reject pool ownership inside one", () => {
   const missingSnapshot = structuredClone(createGame(0x5c051));
   for (const player of missingSnapshot.players) {
     delete (

@@ -343,7 +343,7 @@ test("Persistent Poet protects only its current adjacent Dragons and Golden sour
       `poet-evoker-${caseIndex}`,
     );
     const target = definitionMinion(
-      "BG29_816",
+      "BG34_636t",
       `poet-target-${caseIndex}`,
     );
     const nonDragon = definitionMinion(
@@ -383,7 +383,7 @@ test("Persistent Poet protects only its current adjacent Dragons and Golden sour
   const state = createGame(0x8212);
   const human = humanPlayer(state);
   const leftPoet = goldenMinion("BG29_813", "left-golden-poet");
-  const target = definitionMinion("BG29_816", "double-poet-target");
+  const target = definitionMinion("BG34_636t", "double-poet-target");
   const rightPoet = goldenMinion("BG29_813", "right-golden-poet");
   const evoker = definitionMinion("BG32_822", "double-poet-evoker");
   human.board = [leftPoet, target, rightPoet, evoker];
@@ -413,7 +413,7 @@ test("Persistent Poet re-evaluates adjacency at each gain and stops protecting a
       { attack: 1, health: 1 },
     );
     const target = definitionMinion(
-      "BG29_816",
+      "BG34_636t",
       "moving-adjacency-target",
       {
         attack: 0,
@@ -457,7 +457,7 @@ test("Persistent Poet re-evaluates adjacency at each gain and stops protecting a
       },
     );
     const target = definitionMinion(
-      "BG29_816",
+      "BG34_636t",
       "dead-poet-target",
       {
         attack: 0,
@@ -492,7 +492,7 @@ test("combat auras are not retained by Tarecgosa or Persistent Poet", () => {
     "murloc-warleader",
     "retention-aura-source",
   );
-  const target = definitionMinion("BG29_816", "retention-aura-target", {
+  const target = definitionMinion("BG34_636t", "retention-aura-target", {
     tribes: ["all"],
   });
   const poet = definitionMinion("BG29_813", "retention-aura-poet");
@@ -523,7 +523,7 @@ test("Fire-forged Evoker improves by its full base vector for each Recruit Taver
       ? goldenMinion("BG32_822", `spell-evoker-${caseIndex}`)
       : definitionMinion("BG32_822", `spell-evoker-${caseIndex}`);
     const target = definitionMinion(
-      "BG29_816",
+      "BG34_636t",
       `spell-evoker-target-${caseIndex}`,
     );
     human.board = [evoker, target];
@@ -590,7 +590,7 @@ test("combat-cast Tavern Spells improve Fire-forged Evoker permanently and Poet 
     "combat-spell-evoker",
   );
   const target = definitionMinion(
-    "BG29_816",
+    "BG34_636t",
     "combat-spell-poet-target",
   );
   const poet = definitionMinion(
@@ -836,7 +836,7 @@ test("AI values accumulated Fire-forged growth and places Poet between its best 
   const player = state.players[1];
   const poet = definitionMinion("BG29_813", "ai-poet");
   const strongestDragon = definitionMinion(
-    "BG29_816",
+    "BG34_636t",
     "ai-poet-strongest",
     { attack: 30, health: 30 },
   );
@@ -890,7 +890,7 @@ test("AI keeps multiple Persistent Poets in one Dragon protection chain", () => 
     );
     const dragons = [
       definitionMinion(
-        "BG29_816",
+        "BG34_636t",
         `ai-chain-dragon-a-${dragonCount}`,
         { attack: 30, health: 30 },
       ),
@@ -957,7 +957,7 @@ test("AI assigns its Golden Persistent Poet to the highest-value Dragon", () => 
     "ai-mixed-poet-golden",
   );
   const strongestDragon = definitionMinion(
-    "BG29_816",
+    "BG34_636t",
     "ai-mixed-dragon-strongest",
     { attack: 100, health: 100 },
   );
@@ -1057,7 +1057,7 @@ test("a ghost can animate retention cards without mutating its eliminated owner"
   );
 });
 
-test("v28 saves migrate to v29 while preserving Fire-forged counters and excluding combat ledgers", () => {
+test("v28 saves migrate through v30 while preserving Fire-forged counters and excluding combat ledgers", () => {
   const legacy = createGame(0x8270);
   legacy.contentVersion = LEGACY_SCHEMA_11_CONTENT_VERSION_V28;
   const human = humanPlayer(legacy);
@@ -1081,7 +1081,7 @@ test("v28 saves migrate to v29 while preserving Fire-forged counters and excludi
   assert.equal(migrated.contentVersion, CURRENT_ROSTER_VERSION);
   assert.equal(
     CURRENT_ROSTER_VERSION,
-    "battlegrounds-36.0.3-247416-v29",
+    "battlegrounds-36.0.3-247416-v30",
   );
   const saved = humanPlayer(migrated).board[0];
   assert.deepEqual(saved.effectCounters, evoker.effectCounters);

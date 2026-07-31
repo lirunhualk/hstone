@@ -218,6 +218,19 @@ export interface RallyGrantSourceAttackEffect {
   goldenMode?: "repeat";
 }
 
+export interface RallyGrantSourceMaxHealthEffect {
+  kind: "grantSourceMaxHealth";
+  target: "otherFriendlyTribe";
+  tribe: Tribe;
+  count: number;
+  goldenMode?: "repeat";
+}
+
+export interface RallyTriggerLeftmostDeathrattleEffect {
+  kind: "triggerLeftmostDeathrattle";
+  goldenMode?: "repeat";
+}
+
 export type RallyEffect =
   | GetRandomMinionEffect
   | GainRandomTavernSpellEffect
@@ -229,8 +242,28 @@ export type RallyEffect =
   | RallyCastChefsChoiceEffect
   | RallyGrantVenomousEffect
   | RallyGrantSourceAttackEffect
+  | RallyGrantSourceMaxHealthEffect
+  | RallyTriggerLeftmostDeathrattleEffect
   | ImproveUndeadArmyEffect
   | ImproveBloodGemsEffect;
+
+export interface BuffFriendlyAttackerEffect {
+  kind: "buffAttacker";
+  tribe?: Tribe;
+  otherOnly?: boolean;
+  attack: number;
+  health: number;
+  goldenMode?: "doubleStats";
+}
+
+export type FriendlyAttackTriggerEffect =
+  | BuffFriendlyAttackerEffect
+  | CastTavernSpellEffect;
+
+export interface ExcessDamageToAdjacentEffect {
+  kind: "excessDamageToAdjacent";
+  goldenMode?: "bothAdjacent";
+}
 
 export interface DamageAllMinionsEffect {
   kind: "damageAllMinions";
@@ -652,6 +685,8 @@ export interface MinionDefinition {
   afterFriendlySummoned?: FriendlyTribeTrigger;
   afterFriendlyDied?: FriendlyTribeTrigger;
   afterFriendlyCombatDied?: FriendlyCombatDeathTrigger;
+  afterFriendlyAttacks?: readonly FriendlyAttackTriggerEffect[];
+  afterAttackKills?: ExcessDamageToAdjacentEffect;
   avenge?: AvengeTrigger;
   afterSelfDamaged?: readonly MinionEffect[];
   afterTavernSpellCast?: readonly AfterTavernSpellCastEffect[];
@@ -1129,6 +1164,7 @@ export type BattleEventType =
   | "startOfCombat"
   | "attack"
   | "avenge"
+  | "trigger"
   | "tavernSpellCast"
   | "damage"
   | "buff"

@@ -189,6 +189,9 @@ export const TAVERN_SPELL_RULES = [
     cardId: "BG30_804",
     effect: "carefulMutation",
     target: "anyMinion",
+    effectSupport: "partial",
+    implementationNote:
+      "1至5星目标会严格变为高一星随从；本地普通池尚未接入7星结果，6星目标暂以另一张6星随从近似结算。",
   },
   {
     id: "tavern-spell-time-management",
