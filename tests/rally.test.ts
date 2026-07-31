@@ -6,6 +6,7 @@ import {
   createGame,
   gameReducer,
   getScheduledPairings,
+  scoreMinionForAi,
   type BattleEvent,
   type BloodGemSpellInstance,
   type BoardMinionInstance,
@@ -1839,4 +1840,224 @@ test("ghost Rally effects animate in combat without mutating the eliminated owne
     ),
     false,
   );
+});
+
+test("Maelstrom Emergent multiplies every printed combat Tavern Spell cast", () => {
+  const cases = [
+    {
+      ringGolden: false,
+      auraGoldens: [false],
+      expectedCasts: 2,
+    },
+    {
+      ringGolden: false,
+      auraGoldens: [true],
+      expectedCasts: 3,
+    },
+    {
+      ringGolden: false,
+      auraGoldens: [false, true],
+      expectedCasts: 4,
+    },
+    {
+      ringGolden: true,
+      auraGoldens: [false],
+      expectedCasts: 4,
+    },
+  ] as const;
+
+  for (const [caseIndex, scenario] of cases.entries()) {
+    const state = createGame(0xd34b0 + caseIndex);
+    const human = humanPlayer(state);
+    const attacker = definitionMinion(
+      "BG29_611",
+      `maelstrom-attacker-${caseIndex}`,
+      { attack: 1000, health: 1000 },
+    );
+    const ringWarden = definitionMinion(
+      "BG34_921",
+      `maelstrom-ring-${caseIndex}`,
+      {
+        golden: scenario.ringGolden,
+        attack: 0,
+        health: 1000,
+      },
+    );
+    const auras = scenario.auraGoldens.map((golden, auraIndex) =>
+      definitionMinion(
+        "BG34_922",
+        `maelstrom-aura-${caseIndex}-${auraIndex}`,
+        { golden, attack: 0, health: 1000 },
+      ),
+    );
+    human.board = [attacker, ringWarden, ...auras];
+    keepOnlyOneOpponent(state, [
+      definitionMinion(
+        "BG24_018",
+        `maelstrom-target-${caseIndex}`,
+        {
+          attack: 0,
+          health: 1,
+          taunt: true,
+          reborn: false,
+        },
+      ),
+    ]);
+
+    const combat = gameReducer(state, { type: "END_TURN" });
+    const casts =
+      combat.lastBattle?.events.filter(
+        (event) =>
+          event.type === "tavernSpellCast" &&
+          event.actorInstanceId === ringWarden.instanceId,
+      ) ?? [];
+    assert.equal(casts.length, scenario.expectedCasts);
+    assert.ok(
+      casts.every((event) => event.cardName === "闪亮的戒指"),
+    );
+  }
+});
+
+test("Maelstrom Emergent repeats each Chef's Choice with independent events and gains", () => {
+  const state = createGame(0xd34c0);
+  enableMurlocLobby(state);
+  const human = humanPlayer(state);
+  human.tavernTier = 6;
+  const recruiter = definitionMinion(
+    "BG34_925",
+    "maelstrom-seabed-recruiter",
+    { attack: 1000, health: 1000 },
+  );
+  const rightMurloc = definitionMinion(
+    "BG32_330",
+    "maelstrom-seabed-right",
+    { attack: 0, health: 1000 },
+  );
+  const aura = definitionMinion(
+    "BG34_922",
+    "maelstrom-seabed-aura",
+    { attack: 0, health: 1000 },
+  );
+  human.board = [recruiter, rightMurloc, aura];
+  human.hand = [];
+  keepOnlyOneOpponent(state, [
+    definitionMinion("BG24_018", "maelstrom-seabed-target", {
+      attack: 0,
+      health: 1,
+      taunt: true,
+      reborn: false,
+    }),
+  ]);
+  const candidateId = "BG33_140";
+  keepOnlyPoolDefinition(state, candidateId, 2);
+
+  const combat = gameReducer(state, { type: "END_TURN" });
+  const casts =
+    combat.lastBattle?.events.filter(
+      (event) =>
+        event.type === "tavernSpellCast" &&
+        event.actorInstanceId === recruiter.instanceId,
+    ) ?? [];
+  const gains =
+    combat.lastBattle?.events.filter(
+      (event) =>
+        event.type === "cardGain" &&
+        event.actorInstanceId === recruiter.instanceId &&
+        event.cardGainResult === "added",
+    ) ?? [];
+  assert.equal(casts.length, 2);
+  assert.equal(gains.length, 2);
+  assert.equal(casts[0]?.cardName, "主厨甄选");
+  assert.ok(casts[0].index < gains[0].index);
+  assert.ok(gains[0].index < casts[1].index);
+  assert.ok(casts[1].index < gains[1].index);
+  assert.equal(
+    humanPlayer(combat).hand.filter(
+      (card) =>
+        card.kind === "minion" &&
+        card.definitionId === candidateId,
+    ).length,
+    2,
+  );
+});
+
+test("a same-wave dead Maelstrom no longer repeats Queen's Guard Deathrattle", () => {
+  const cases = [
+    { auraHealth: 1, expectedCasts: 1 },
+    { auraHealth: 1000, expectedCasts: 2 },
+  ] as const;
+
+  for (const [caseIndex, scenario] of cases.entries()) {
+    const state = createGame(0xd34d0 + caseIndex);
+    const human = humanPlayer(state);
+    const aura = definitionMinion(
+      "BG34_922",
+      `death-wave-maelstrom-${caseIndex}`,
+      { attack: 0, health: scenario.auraHealth },
+    );
+    const guard = definitionMinion(
+      "BG34_926",
+      `death-wave-guard-${caseIndex}`,
+      {
+        attack: 0,
+        health: 1,
+        taunt: true,
+        reborn: false,
+      },
+    );
+    human.board = [aura, guard];
+    keepOnlyOneOpponent(state, [
+      definitionMinion(
+        "BG29_611",
+        `death-wave-cleave-${caseIndex}`,
+        {
+          attack: 100,
+          health: 1000,
+          cleave: true,
+          reborn: false,
+        },
+      ),
+      definitionMinion(
+        "BG29_611",
+        `death-wave-filler-a-${caseIndex}`,
+        { attack: 0, health: 1000, reborn: false },
+      ),
+      definitionMinion(
+        "BG29_611",
+        `death-wave-filler-b-${caseIndex}`,
+        { attack: 0, health: 1000, reborn: false },
+      ),
+    ]);
+
+    const combat = gameReducer(state, { type: "END_TURN" });
+    const deathrattleCasts =
+      combat.lastBattle?.events.filter(
+        (event) =>
+          event.type === "tavernSpellCast" &&
+          event.actorInstanceId === guard.instanceId &&
+          event.message.includes("亡语"),
+      ) ?? [];
+    assert.equal(
+      deathrattleCasts.length,
+      scenario.expectedCasts,
+    );
+  }
+});
+
+test("AI values Maelstrom only when a combat Tavern Spell source is present", () => {
+  const state = createGame(0xd34e0);
+  const player = state.players[1];
+  const aura = definitionMinion(
+    "BG34_922",
+    "scored-maelstrom",
+  );
+  player.board = [
+    definitionMinion("BG23_008", "non-casting-naga"),
+  ];
+  const scoreWithoutCaster = scoreMinionForAi(player, aura);
+  player.board = [
+    definitionMinion("BG34_921", "casting-ring-warden"),
+  ];
+  const scoreWithCaster = scoreMinionForAi(player, aura);
+  assert.ok(scoreWithCaster > scoreWithoutCaster);
 });

@@ -1530,12 +1530,24 @@ function applyPersistentTavernBonuses(
       (minion.tribes.includes("all") ||
         buff.tribes.some((tribe) => minionHasTribe(minion, tribe))),
   );
-  minion.attack +=
+  const matchingTierBuffs = player.tavernTierBuffs.filter(
+    (buff) => minion.tier <= buff.maximumTier,
+  );
+  buffMinions(
+    [minion],
     player.tavernMinionAttackBonus +
-    matchingBuffs.reduce((total, buff) => total + buff.attack, 0);
-  minion.health +=
+      matchingBuffs.reduce((total, buff) => total + buff.attack, 0) +
+      matchingTierBuffs.reduce(
+        (total, buff) => total + buff.attack,
+        0,
+      ),
     player.tavernMinionHealthBonus +
-    matchingBuffs.reduce((total, buff) => total + buff.health, 0);
+      matchingBuffs.reduce((total, buff) => total + buff.health, 0) +
+      matchingTierBuffs.reduce(
+        (total, buff) => total + buff.health,
+        0,
+      ),
+  );
 }
 
 function applyOwnedUndeadArmyBonus(
@@ -2444,6 +2456,32 @@ function applyPersistentTavernTypeBuff(
   );
 }
 
+function applyPersistentTavernTierBuff(
+  player: PlayerState,
+  maximumTier: TavernTier,
+  attack: number,
+  health: number,
+): void {
+  const existing = player.tavernTierBuffs.find(
+    (buff) => buff.maximumTier === maximumTier,
+  );
+  if (existing) {
+    existing.attack += attack;
+    existing.health += health;
+  } else {
+    player.tavernTierBuffs.push({
+      maximumTier,
+      attack,
+      health,
+    });
+  }
+  buffMinions(
+    player.shop.filter((minion) => minion.tier <= maximumTier),
+    attack,
+    health,
+  );
+}
+
 function grantRecruitKeyword(
   state: GameState,
   player: PlayerState,
@@ -2550,6 +2588,13 @@ function applyRecruitEffects(
           health: effect.health,
         });
       }
+    } else if (effect.kind === "buffTavernTier") {
+      applyPersistentTavernTierBuff(
+        player,
+        effect.maximumTier,
+        effect.attack * scale,
+        effect.health * scale,
+      );
     } else if (effect.kind === "gainGold") {
       player.gold += effect.amount * scale;
     } else if (effect.kind === "gainNextTurnGold") {
@@ -3864,6 +3909,36 @@ function buyTavernSpell(
   return true;
 }
 
+export function getMinionSellValue(
+  state: GameState,
+  playerId: PlayerId,
+  minion: Pick<
+    MinionInstance,
+    "definitionId" | "sellValue" | "golden"
+  >,
+): number {
+  const definition = getMinionDefinition(minion.definitionId);
+  if (definition.sellValueAfterLoss === undefined) {
+    return minion.sellValue;
+  }
+  const previousBattle = state.lastRoundBattles.find(
+    (battle) =>
+      battle.playerAId === playerId ||
+      (!battle.isGhost && battle.playerBId === playerId),
+  );
+  if (
+    !previousBattle ||
+    previousBattle.winnerId === null ||
+    previousBattle.winnerId === playerId
+  ) {
+    return minion.sellValue;
+  }
+  return minion.golden
+    ? definition.goldenSellValueAfterLoss ??
+        definition.sellValueAfterLoss
+    : definition.sellValueAfterLoss;
+}
+
 function sellMinionTransaction(
   state: GameState,
   player: PlayerState,
@@ -3873,8 +3948,9 @@ function sellMinionTransaction(
     return null;
   }
   const [minion] = player.board.splice(boardIndex, 1);
+  const sellValue = getMinionSellValue(state, player.id, minion);
   returnMinionToPool(state, minion);
-  player.gold += minion.sellValue;
+  player.gold += sellValue;
   applyRecruitEffects(
     state,
     player,
@@ -6747,7 +6823,33 @@ const AI_ECONOMY_EFFECT_KINDS = new Set<MinionEffect["kind"]>([
   "gainBloodGems",
   "discountNextTavernSpell",
   "installTavernRefreshBuff",
+  "buffTavernTier",
 ]);
+
+function combatTavernSpellSourceWeight(
+  minion: BoardMinionInstance,
+): number {
+  let weight = 0;
+  for (const component of minionEffectSources(minion)) {
+    const definition = getMinionDefinition(component.definitionId);
+    const scale = component.golden ? 2 : 1;
+    weight +=
+      (definition.deathrattle ?? []).filter(
+        (effect) => effect.kind === "castTavernSpell",
+      ).length * scale;
+    weight +=
+      (definition.rally ?? []).filter(
+        (effect) =>
+          effect.kind === "castTavernSpell" ||
+          effect.kind === "castChefsChoice",
+      ).length * scale;
+    weight +=
+      (definition.afterFriendlyAttacks ?? []).filter(
+        (effect) => effect.kind === "castTavernSpell",
+      ).length * scale;
+  }
+  return weight;
+}
 
 function minionScore(
   player: PlayerState,
@@ -6837,6 +6939,21 @@ function minionScore(
     }
     if (definition.spellcraft) {
       score += 3;
+    }
+    const combatTavernSpellExtraCasts =
+      definition.combatTavernSpellExtraCasts ?? 0;
+    if (combatTavernSpellExtraCasts > 0) {
+      const extraCasts =
+        combatTavernSpellExtraCasts *
+        (minion.golden ? 2 : 1);
+      score +=
+        player.board.reduce(
+          (total, candidate) =>
+            total + combatTavernSpellSourceWeight(candidate),
+          0,
+        ) *
+        extraCasts *
+        2.5;
     }
     if (
       definition.onPlayChoice?.kind === "bloodGemImproveOrGain" &&
@@ -7026,7 +7143,9 @@ function minionScore(
         (definition.afterSold ?? []).some((effect) =>
           AI_ECONOMY_EFFECT_KINDS.has(effect.kind),
         ) ||
-        (definition.sellValue ?? 1) > 1,
+        (definition.sellValueAfterLoss ??
+          definition.sellValue ??
+          1) > 1,
     )
   ) {
     score += profile.economyBonus;
@@ -8326,6 +8445,7 @@ function arrangeAiBoard(
         definition.afterFriendlySummoned !== undefined ||
         definition.afterFriendlyDied !== undefined ||
         definition.afterFriendlyAttacks !== undefined ||
+        (definition.combatTavernSpellExtraCasts ?? 0) > 0 ||
         definition.combatEnchantmentRetention?.target ===
           "adjacentFriendlyTribe"
       );
@@ -8768,11 +8888,31 @@ function aiSpellPreservesTempo(
   );
 }
 
+function sellAiLossBonusMinions(
+  state: GameState,
+  player: PlayerState,
+): number {
+  let sold = 0;
+  for (let index = player.board.length - 1; index >= 0; index -= 1) {
+    const minion = player.board[index];
+    if (
+      getMinionSellValue(state, player.id, minion) <= minion.sellValue
+    ) {
+      continue;
+    }
+    if (sellMinion(state, player, index)) {
+      sold += 1;
+    }
+  }
+  return sold;
+}
+
 function runAiRecruit(state: GameState, player: PlayerState): void {
   const profile = getAiStrategyProfile(player.id);
   let actions = 0;
   let upgradedThisTurn = false;
   playAiHand(state, player);
+  actions += sellAiLossBonusMinions(state, player);
 
   if (
     shouldUpgradeAiTavern(state, player) &&
@@ -8785,6 +8925,10 @@ function runAiRecruit(state: GameState, player: PlayerState): void {
   let refreshes = 0;
   while (actions < 50) {
     playAiHand(state, player);
+    actions += sellAiLossBonusMinions(state, player);
+    if (actions >= 50) {
+      break;
+    }
     if (
       !upgradedThisTurn &&
       shouldUpgradeAiTavern(state, player) &&
@@ -8946,6 +9090,7 @@ function runAiRecruit(state: GameState, player: PlayerState): void {
   }
 
   playAiHand(state, player);
+  sellAiLossBonusMinions(state, player);
   const bestRemaining =
     player.shop.length > 0 ? player.shop[bestShopIndex(player)] : undefined;
   const bestRemainingSpell = [...tavernSpellShopOffers(player)].sort(
@@ -11571,6 +11716,25 @@ function pushCombatSpellBuff(
   });
 }
 
+function combatTavernSpellCastMultiplier(
+  context: CombatContext,
+  ownerId: PlayerId,
+): number {
+  let extraCasts = 0;
+  for (const source of context.boards[ownerId]) {
+    if (source.health <= 0) {
+      continue;
+    }
+    for (const component of minionEffectSources(source)) {
+      const amount =
+        getMinionDefinition(component.definitionId)
+          .combatTavernSpellExtraCasts ?? 0;
+      extraCasts += amount * (component.golden ? 2 : 1);
+    }
+  }
+  return 1 + extraCasts;
+}
+
 function resolveCombatCastTavernSpell(
   context: CombatContext,
   ownerId: PlayerId,
@@ -11580,8 +11744,11 @@ function resolveCombatCastTavernSpell(
   triggerLabel: string,
 ): void {
   const definition = getTavernSpellDefinition(effect.definitionId);
-  const repetitions =
+  const printedRepetitions =
     component.golden && effect.goldenMode === "repeat" ? 2 : 1;
+  const repetitions =
+    printedRepetitions *
+    combatTavernSpellCastMultiplier(context, ownerId);
   const owner = findPlayer(context.state, ownerId);
 
   for (let repetition = 0; repetition < repetitions; repetition += 1) {
@@ -11804,9 +11971,25 @@ function resolveRallyCastChefsChoice(
   if (!target || target.health <= 0 || !owner) {
     return;
   }
-  const repetitions =
+  const definition = getTavernSpellDefinition(
+    "tavern-spell-chefs-choice",
+  );
+  const printedRepetitions =
     component.golden && effect.goldenMode === "repeat" ? 2 : 1;
+  const repetitions =
+    printedRepetitions *
+    combatTavernSpellCastMultiplier(context, ownerId);
   for (let repetition = 0; repetition < repetitions; repetition += 1) {
+    pushBattleEvent(context.events, {
+      type: "tavernSpellCast",
+      actorPlayerId: ownerId,
+      actorInstanceId: attacker.instanceId,
+      cardName: definition.name,
+      cardKind: "tavernSpell",
+      message: `${rallySourceLabel(component)}的进击施放了「${definition.name}」${
+        repetitions > 1 ? `（第${repetition + 1}次）` : ""
+      }。`,
+    });
     if (owner.hand.length >= MAX_HAND_SIZE) {
       pushBattleEvent(context.events, {
         type: "cardGain",
@@ -14377,6 +14560,7 @@ export function createGame(seed?: number): GameState {
     tavernSpellAttackBonus: 0,
     tavernSpellHealthBonus: 0,
     tavernTypeBuffs: [],
+    tavernTierBuffs: [],
     rideTheWindBuffs: [],
     elementalsPlayedThisTurn: 0,
     nextCombatBeetles: 0,

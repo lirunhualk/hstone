@@ -1013,7 +1013,7 @@ test("v29 saves migrate through v31 while preserving current fields and excludin
   assert.equal(migrated.contentVersion, CURRENT_ROSTER_VERSION);
   assert.equal(
     CURRENT_ROSTER_VERSION,
-    "battlegrounds-36.0.3-247416-v34",
+    "battlegrounds-36.0.3-247416-v35",
   );
   const saved = humanPlayer(migrated).board[0];
   assert.equal(saved.effectSupport, "complete");

@@ -8,6 +8,8 @@ import {
 import {
   createGame,
   gameReducer,
+  getMinionSellValue,
+  type BattleSummary,
   type BoardMinionInstance,
   type GameState,
   type PlayerState,
@@ -15,8 +17,10 @@ import {
 } from "../lib/game/engine.ts";
 import {
   LEGACY_SCHEMA_11_CONTENT_VERSION_V33,
+  LEGACY_SCHEMA_11_CONTENT_VERSION_V34,
   normalizePersistedGameState,
 } from "../lib/game/save.ts";
+import { deriveRecruitPresentation } from "../lib/game/recruit-presentation.ts";
 
 const PRIMALFIN_DISCOVER_IDS = [
   "BG32_330",
@@ -132,6 +136,53 @@ function minionCardsInHand(
   return player.hand.filter(
     (card): card is BoardMinionInstance => card.kind === "minion",
   );
+}
+
+function setLastRoundBattle(
+  state: GameState,
+  player: PlayerState,
+  winnerId: string | null,
+  options: {
+    isGhost?: boolean;
+    playerIsGhostSide?: boolean;
+  } = {},
+): BattleSummary {
+  const opponent = state.players.find(
+    (candidate) => candidate.id !== player.id,
+  );
+  assert.ok(opponent);
+  const playerA = options.playerIsGhostSide ? opponent : player;
+  const playerB = options.playerIsGhostSide ? player : opponent;
+  const battle: BattleSummary = {
+    round: Math.max(1, state.round - 1),
+    playerAId: playerA.id,
+    playerBId: playerB.id,
+    playerAName: playerA.name,
+    playerBName: playerB.name,
+    isGhost: options.isGhost ?? false,
+    winnerId,
+    damageToPlayerA: 0,
+    damageToPlayerB: 0,
+    playerAHealthBefore: playerA.health,
+    playerBHealthBefore: playerB.health,
+    playerAHealthAfter: playerA.health,
+    playerBHealthAfter: playerB.health,
+    playerAArmorBefore: playerA.armor,
+    playerBArmorBefore: playerB.armor,
+    playerAArmorAfter: playerA.armor,
+    playerBArmorAfter: playerB.armor,
+    initialBoards: {
+      [playerA.id]: [],
+      [playerB.id]: [],
+    },
+    finalBoards: {
+      [playerA.id]: [],
+      [playerB.id]: [],
+    },
+    events: [],
+  };
+  state.lastRoundBattles = [battle];
+  return battle;
 }
 
 test("the five Tavern-utility minions expose exact fixed-build normal and Golden rules", () => {
@@ -498,7 +549,7 @@ test("Primalfin Lookout requires another Murloc and chains Golden Brann discover
   }
 });
 
-test("v33 saves migrate to v34 and refresh all five newly complete definitions", () => {
+test("v33 saves migrate through v35 and refresh the v34 definitions", () => {
   const legacy = structuredClone(createGame(0xd3450));
   legacy.contentVersion = LEGACY_SCHEMA_11_CONTENT_VERSION_V33;
   const player = humanPlayer(legacy);
@@ -523,6 +574,10 @@ test("v33 saves migrate to v34 and refresh all five newly complete definitions",
     humanPlayer(migratedState).rideTheWindBuffs,
     [{ attack: 7, health: 7 }],
   );
+  assert.deepEqual(
+    humanPlayer(migratedState).tavernTierBuffs,
+    [],
+  );
   assert.equal(
     humanPlayer(migratedState).board.every(
       (minion) => minion.effectSupport === "complete",
@@ -541,4 +596,374 @@ test("v33 saves migrate to v34 and refresh all five newly complete definitions",
       "complete",
     );
   }
+});
+
+test("the v35 Tavern-persistence minions expose exact fixed-build rules", () => {
+  const blueShell = getMinionDefinition("BG24_018");
+  assert.equal(blueShell.goldenCardId, "BG24_018_G");
+  assert.equal(
+    blueShell.goldenDescription,
+    "如果你输掉了上一场战斗，出售本随从可以获得10枚铸币。",
+  );
+  assert.equal(blueShell.sellValueAfterLoss, 5);
+  assert.equal(blueShell.goldenSellValueAfterLoss, 10);
+
+  const maelstrom = getMinionDefinition("BG34_922");
+  assert.equal(maelstrom.goldenCardId, "BG34_922_G");
+  assert.equal(
+    maelstrom.goldenDescription,
+    "在战斗中，你的酒馆法术会额外施放2次。",
+  );
+  assert.equal(maelstrom.combatTavernSpellExtraCasts, 1);
+
+  const trainer = getMinionDefinition("BG35_152");
+  assert.equal(trainer.goldenCardId, "BG35_152_G");
+  assert.equal(
+    trainer.goldenDescription,
+    "战吼：在本局对战中，使酒馆中等级3或以下的随从获得+6/+6。",
+  );
+  assert.deepEqual(trainer.battlecry, [
+    {
+      kind: "buffTavernTier",
+      maximumTier: 3,
+      attack: 3,
+      health: 3,
+    },
+  ]);
+
+  for (const definitionId of [
+    "BG24_018",
+    "BG34_922",
+    "BG35_152",
+  ]) {
+    assert.equal(
+      getMinionDefinition(definitionId).effectSupport,
+      "complete",
+    );
+  }
+});
+
+test("Tortollan Blue Shell sells for its exact loss-only total and presents the same value", () => {
+  for (const [caseIndex, result] of [
+    "none",
+    "win",
+    "tie",
+    "loss",
+  ].entries()) {
+    const state = createGame(0xd3460 + caseIndex);
+    const player = humanPlayer(state);
+    const source = definitionMinion(
+      "BG24_018",
+      `blue-shell-quote-${result}`,
+    );
+    player.board = [source];
+    if (result !== "none") {
+      const opponent = state.players[1];
+      setLastRoundBattle(
+        state,
+        player,
+        result === "win"
+          ? player.id
+          : result === "tie"
+            ? null
+            : opponent.id,
+      );
+    }
+    assert.equal(
+      getMinionSellValue(state, player.id, source),
+      result === "loss" ? 5 : 1,
+    );
+  }
+
+  for (const golden of [false, true]) {
+    const state = createGame(0xd3470 + Number(golden));
+    const player = humanPlayer(state);
+    const source = golden
+      ? goldenMinion("BG24_018", `blue-shell-sale-${golden}`, {
+          poolCopies: 3,
+        })
+      : definitionMinion("BG24_018", `blue-shell-sale-${golden}`, {
+          poolCopies: 1,
+        });
+    player.board = [source];
+    player.gold = 0;
+    const opponent = state.players[1];
+    setLastRoundBattle(state, player, opponent.id);
+    const poolBefore = state.pool[source.definitionId];
+    const action = {
+      type: "SELL_MINION" as const,
+      boardIndex: 0,
+    };
+
+    const sold = gameReducer(state, action);
+    const expectedValue = golden ? 10 : 5;
+    assert.equal(humanPlayer(sold).gold, expectedValue);
+    assert.equal(humanPlayer(sold).board.length, 0);
+    assert.equal(
+      sold.pool[source.definitionId],
+      poolBefore + source.poolCopies,
+    );
+    assert.deepEqual(
+      deriveRecruitPresentation(state, sold, action).find(
+        (event) =>
+          event.kind === "currency" && event.reason === "sell",
+      ),
+      {
+        kind: "currency",
+        currency: "gold",
+        delta: expectedValue,
+        reason: "sell",
+      },
+    );
+  }
+
+  const ghostState = createGame(0xd3472);
+  const ghost = ghostState.players[1];
+  const ghostShell = definitionMinion(
+    "BG24_018",
+    "ghost-side-blue-shell",
+  );
+  const livePlayer = humanPlayer(ghostState);
+  setLastRoundBattle(ghostState, ghost, livePlayer.id, {
+    isGhost: true,
+    playerIsGhostSide: true,
+  });
+  assert.equal(
+    getMinionSellValue(ghostState, ghost.id, ghostShell),
+    1,
+  );
+});
+
+test("AI cashes its own loss-activated Blue Shell without reading another player's result", () => {
+  const state = createGame(0xd3480);
+  for (const player of state.players) {
+    player.gold = 0;
+    player.hand = [];
+    player.shop = [];
+    player.spellShop = null;
+    player.additionalSpellShop = [];
+  }
+  const ai = state.players[1];
+  const unrelatedAi = state.players[2];
+  ai.board = [
+    definitionMinion("BG24_018", "ai-loss-blue-shell"),
+  ];
+  unrelatedAi.board = [
+    definitionMinion("BG24_018", "ai-no-result-blue-shell"),
+  ];
+  setLastRoundBattle(state, ai, unrelatedAi.id);
+
+  const combat = gameReducer(state, { type: "END_TURN" });
+  const nextAi = combat.players.find(
+    (player) => player.id === ai.id,
+  );
+  const nextUnrelated = combat.players.find(
+    (player) => player.id === unrelatedAi.id,
+  );
+  assert.ok(nextAi);
+  assert.ok(nextUnrelated);
+  assert.equal(
+    nextAi.board.some(
+      (minion) => minion.definitionId === "BG24_018",
+    ),
+    false,
+  );
+  assert.equal(
+    nextUnrelated.board.some(
+      (minion) => minion.definitionId === "BG24_018",
+    ),
+    true,
+  );
+});
+
+test("Golden Void Pup Trainer with Brann buffs current and future Tier-3-or-lower offers", () => {
+  let state = createGame(0xd3490);
+  let player = humanPlayer(state);
+  state.activeTribes = [
+    "dragon",
+    "beast",
+    "mech",
+    "murloc",
+    "undead",
+  ];
+  player.tavernTier = 5;
+  player.gold = 1;
+  const brann = definitionMinion("BG_LOE_077", "trainer-brann");
+  const trainer = goldenMinion("BG35_152", "golden-trainer");
+  const conditionalLowTier = definitionMinion(
+    "BG35_814",
+    "trainer-conditional-low",
+  );
+  const tierThree = definitionMinion(
+    "BG25_010",
+    "trainer-tier-three",
+  );
+  const tierFour = definitionMinion(
+    "BG25_009",
+    "trainer-tier-four",
+    { tier: 4 },
+  );
+  const before = new Map(
+    [conditionalLowTier, tierThree, tierFour].map((minion) => [
+      minion.instanceId,
+      [minion.attack, minion.health] as const,
+    ]),
+  );
+  player.board = [brann];
+  player.hand = [trainer];
+  player.shop = [conditionalLowTier, tierThree, tierFour];
+  keepOnlyPoolDefinitions(state, ["BG35_814"], 10);
+
+  state = playHandMinion(state, trainer.instanceId);
+  player = humanPlayer(state);
+  assert.deepEqual(player.tavernTierBuffs, [
+    { maximumTier: 3, attack: 12, health: 12 },
+  ]);
+  for (const instanceId of [
+    conditionalLowTier.instanceId,
+    tierThree.instanceId,
+  ]) {
+    const target = player.shop.find(
+      (minion) => minion.instanceId === instanceId,
+    );
+    assert.ok(target);
+    assert.deepEqual(
+      [target.attack, target.health],
+      [
+        (before.get(instanceId)?.[0] ?? 0) + 12,
+        (before.get(instanceId)?.[1] ?? 0) + 12,
+      ],
+    );
+  }
+  const unchangedTierFour = player.shop.find(
+    (minion) => minion.instanceId === tierFour.instanceId,
+  );
+  assert.ok(unchangedTierFour);
+  assert.deepEqual(
+    [unchangedTierFour.attack, unchangedTierFour.health],
+    before.get(tierFour.instanceId),
+  );
+  const shielded = player.shop.find(
+    (minion) =>
+      minion.instanceId === conditionalLowTier.instanceId,
+  );
+  assert.equal(shielded?.divineShield, true);
+
+  state = gameReducer(state, { type: "REFRESH_SHOP" });
+  player = humanPlayer(state);
+  assert.ok(player.shop.length > 0);
+  assert.ok(
+    player.shop.every(
+      (minion) =>
+        minion.definitionId === "BG35_814" &&
+        minion.attack ===
+          getMinionDefinition("BG35_814").attack + 12 &&
+        minion.health ===
+          getMinionDefinition("BG35_814").health + 12 &&
+        minion.divineShield,
+    ),
+  );
+});
+
+test("AI plays Void Pup Trainer through the shared persistent Tavern path", () => {
+  const state = createGame(0xd3491);
+  for (const player of state.players) {
+    player.gold = 0;
+    player.hand = [];
+    player.shop = [];
+    player.spellShop = null;
+    player.additionalSpellShop = [];
+  }
+  const ai = state.players[1];
+  const offer = definitionMinion(
+    "BG35_814",
+    "ai-trainer-offer",
+  );
+  ai.hand = [definitionMinion("BG35_152", "ai-trainer")];
+  ai.shop = [offer];
+
+  const combat = gameReducer(state, { type: "END_TURN" });
+  const nextAi = combat.players.find(
+    (player) => player.id === ai.id,
+  );
+  assert.ok(nextAi);
+  assert.deepEqual(nextAi.tavernTierBuffs, [
+    { maximumTier: 3, attack: 3, health: 3 },
+  ]);
+  assert.deepEqual(
+    [nextAi.shop[0]?.attack, nextAi.shop[0]?.health],
+    [offer.attack + 3, offer.health + 3],
+  );
+  assert.equal(nextAi.shop[0]?.divineShield, true);
+});
+
+test("v34 saves migrate to v35 with an empty Tier ledger and preserved prior state", () => {
+  const legacy = structuredClone(createGame(0xd34a0));
+  legacy.contentVersion = LEGACY_SCHEMA_11_CONTENT_VERSION_V34;
+  const player = humanPlayer(legacy);
+  player.tavernTypeBuffs = [
+    { tribes: ["elemental"], attack: 2, health: 3 },
+  ];
+  player.rideTheWindBuffs = [{ attack: 7, health: 7 }];
+  const opponent = legacy.players[1];
+  const previousBattle = setLastRoundBattle(
+    legacy,
+    player,
+    opponent.id,
+  );
+  player.board = [
+    goldenMinion("BG24_018", "legacy-blue-shell", {
+      effectSupport: "partial",
+    }),
+    goldenMinion("BG34_922", "legacy-maelstrom", {
+      effectSupport: "partial",
+    }),
+    goldenMinion("BG35_152", "legacy-trainer", {
+      effectSupport: "partial",
+    }),
+  ];
+  for (const legacyPlayer of legacy.players) {
+    delete (
+      legacyPlayer as unknown as Record<string, unknown>
+    ).tavernTierBuffs;
+  }
+
+  const migrated = normalizePersistedGameState(legacy);
+  assert.ok(migrated);
+  const migratedState = migrated as GameState;
+  assert.equal(
+    migratedState.contentVersion,
+    CURRENT_ROSTER_VERSION,
+  );
+  assert.ok(
+    migratedState.players.every(
+      (candidate) =>
+        Array.isArray(candidate.tavernTierBuffs) &&
+        candidate.tavernTierBuffs.length === 0,
+    ),
+  );
+  assert.deepEqual(
+    humanPlayer(migratedState).tavernTypeBuffs,
+    [{ tribes: ["elemental"], attack: 2, health: 3 }],
+  );
+  assert.deepEqual(
+    humanPlayer(migratedState).rideTheWindBuffs,
+    [{ attack: 7, health: 7 }],
+  );
+  assert.equal(
+    migratedState.lastRoundBattles[0]?.winnerId,
+    previousBattle.winnerId,
+  );
+  assert.deepEqual(
+    humanPlayer(migratedState).board.map((minion) => [
+      minion.definitionId,
+      minion.cardId,
+      minion.effectSupport,
+    ]),
+    [
+      ["BG24_018", "BG24_018_G", "complete"],
+      ["BG34_922", "BG34_922_G", "complete"],
+      ["BG35_152", "BG35_152_G", "complete"],
+    ],
+  );
 });

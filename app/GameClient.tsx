@@ -24,6 +24,7 @@ import {
   getLegalTavernSpellTargetIds,
   getAiStrategyProfile,
   getScheduledOpponent,
+  getMinionSellValue,
   getRefreshCost,
   getHeroPowerDefinition,
   getTavernSpellPurchaseQuote,
@@ -992,6 +993,15 @@ function isGameState(value: unknown): value is GameState {
           (buff) =>
             Array.isArray(buff.tribes) &&
             buff.tribes.every((tribe) => typeof tribe === "string") &&
+            typeof buff.attack === "number" &&
+            typeof buff.health === "number",
+        ) &&
+        Array.isArray(player.tavernTierBuffs) &&
+        player.tavernTierBuffs.every(
+          (buff) =>
+            Number.isInteger(buff.maximumTier) &&
+            buff.maximumTier >= 1 &&
+            buff.maximumTier <= 6 &&
             typeof buff.attack === "number" &&
             typeof buff.health === "number",
         ) &&
@@ -5272,7 +5282,11 @@ export default function GameClient() {
       : dragSession.target?.kind === "sell"
         ? `松手出售${dragSession.card.name}，获得 ${
             dragSession.card.kind === "minion"
-              ? dragSession.card.sellValue
+              ? getMinionSellValue(
+                  game,
+                  human.id,
+                  dragSession.card,
+                )
               : 0
           } 枚金币`
         : dragSession.target?.kind === "hand"
@@ -5759,7 +5773,11 @@ export default function GameClient() {
               <span>
                 松手获得{" "}
                 {dragSession?.card.kind === "minion"
-                  ? dragSession.card.sellValue
+                  ? getMinionSellValue(
+                      game,
+                      human.id,
+                      dragSession.card,
+                    )
                   : 1}{" "}
                 枚金币
               </span>
@@ -7214,7 +7232,13 @@ export default function GameClient() {
                               })
                             }
                           >
-                            出售 +{selectedUnit.sellValue}
+                            出售 +{
+                              getMinionSellValue(
+                                game,
+                                human.id,
+                                selectedUnit,
+                              )
+                            }
                           </button>
                         </>
                       )}

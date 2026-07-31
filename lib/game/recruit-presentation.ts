@@ -1,4 +1,5 @@
 import {
+  getMinionSellValue,
   getRefreshCost,
   getTavernSpellPurchaseQuote,
   getUpgradeCost,
@@ -311,7 +312,7 @@ export function deriveRecruitPresentation(
         {
           kind: "currency",
           currency: "gold",
-          delta: sold.sellValue,
+          delta: getMinionSellValue(before, beforePlayer.id, sold),
           reason: "sell",
         },
       );

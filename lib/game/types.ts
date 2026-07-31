@@ -132,6 +132,13 @@ export interface InstallTavernRefreshBuffEffect {
   goldenMode?: "repeat";
 }
 
+export interface BuffTavernTierEffect {
+  kind: "buffTavernTier";
+  maximumTier: TavernTier;
+  attack: number;
+  health: number;
+}
+
 export interface GainMinionEffect {
   kind: "gainMinion";
   definitionId: string;
@@ -388,6 +395,7 @@ export type MinionEffect =
   | BuffRandomHandMinionEffect
   | BuffOwnedTribeEffect
   | InstallTavernRefreshBuffEffect
+  | BuffTavernTierEffect
   | GainMinionEffect
   | GainRandomGeneratedMinionEffect
   | DamageHeroEffect
@@ -777,11 +785,16 @@ export interface MinionDefinition {
   bloodGemFromHandAura?: BloodGemFromHandAura;
   /** Observer invoked after each real Blood Gem pulse lands on this minion. */
   afterBloodGemCastOnSelf?: AfterBloodGemCastOnSelfEffect;
+  /** Additional times each Tavern Spell is cast while this source is alive in combat. */
+  combatTavernSpellExtraCasts?: number;
   extraBattlecries?: number;
   extraDeathrattles?: number;
   extraEndOfTurnTriggers?: number;
   sellValue?: number;
   goldenSellValue?: number;
+  /** Total sell value after this player lost their previous combat. */
+  sellValueAfterLoss?: number;
+  goldenSellValueAfterLoss?: number;
   /** A generated Fodder feeds itself while offered instead of entering the pool. */
   shopFodder?: boolean;
   collectible?: boolean;
@@ -1102,6 +1115,10 @@ export interface TavernTypeBuff extends TavernRefreshBuff {
   tribes: Tribe[];
 }
 
+export interface TavernTierBuff extends TavernRefreshBuff {
+  maximumTier: TavernTier;
+}
+
 export type HelpfulRefreshKind =
   | "warbandCopies"
   | "legendary"
@@ -1212,6 +1229,7 @@ export interface PlayerState {
   tavernSpellAttackBonus: number;
   tavernSpellHealthBonus: number;
   tavernTypeBuffs: TavernTypeBuff[];
+  tavernTierBuffs: TavernTierBuff[];
   rideTheWindBuffs: TavernRefreshBuff[];
   elementalsPlayedThisTurn: number;
   nextCombatBeetles: number;

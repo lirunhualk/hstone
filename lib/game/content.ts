@@ -3,7 +3,7 @@ import liveRosterSnapshot from "./generated/battlegrounds-36.0.3-247416.zhCN.jso
 };
 import type { MinionDefinition, Tribe } from "./types.ts";
 
-export const CURRENT_ROSTER_VERSION = "battlegrounds-36.0.3-247416-v34";
+export const CURRENT_ROSTER_VERSION = "battlegrounds-36.0.3-247416-v35";
 /** Compatibility alias for existing save and engine imports. */
 export const CLASSIC_ROSTER_VERSION = CURRENT_ROSTER_VERSION;
 
@@ -1565,6 +1565,32 @@ const LIVE_RULE_OVERRIDES: Readonly<
       },
     ],
   },
+  BG24_018: {
+    goldenCardId: "BG24_018_G",
+    goldenDescription:
+      "如果你输掉了上一场战斗，出售本随从可以获得10枚铸币。",
+    sellValueAfterLoss: 5,
+    goldenSellValueAfterLoss: 10,
+  },
+  BG34_922: {
+    goldenCardId: "BG34_922_G",
+    goldenDescription:
+      "在战斗中，你的酒馆法术会额外施放2次。",
+    combatTavernSpellExtraCasts: 1,
+  },
+  BG35_152: {
+    goldenCardId: "BG35_152_G",
+    goldenDescription:
+      "战吼：在本局对战中，使酒馆中等级3或以下的随从获得+6/+6。",
+    battlecry: [
+      {
+        kind: "buffTavernTier",
+        maximumTier: 3,
+        attack: 3,
+        health: 3,
+      },
+    ],
+  },
   BGS_030: {
     goldenCardId: "TB_BaconUps_100",
     goldenDescription:
@@ -2822,6 +2848,7 @@ const FULLY_SUPPORTED_LIVE_CARD_IDS = new Set([
   "BG20_100",
   "BG20_203",
   "BG20_301",
+  "BG24_018",
   "BG24_009",
   "BG24_500",
   "BG22_202",
@@ -2953,6 +2980,7 @@ const FULLY_SUPPORTED_LIVE_CARD_IDS = new Set([
   "BG34_858",
   "BG34_865",
   "BG34_921",
+  "BG34_922",
   "BG34_925",
   "BG34_926",
   "BG35_143",
@@ -2960,6 +2988,7 @@ const FULLY_SUPPORTED_LIVE_CARD_IDS = new Set([
   "BG35_142",
   "BG35_150",
   "BG35_151",
+  "BG35_152",
   "BG35_155",
   "BG35_334",
   "BG35_340",
