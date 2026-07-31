@@ -61,6 +61,7 @@ import {
 } from "../lib/game/content";
 import {
   COMBAT_START_INTRO_DURATION_MS,
+  combatBuffLabel,
   combatIntroOpponent,
   initialCombatPlayback,
   isCombatPlaybackEvent,
@@ -3450,14 +3451,7 @@ export default function GameClient() {
           { flushPendingDeaths: battlePlaybackComplete },
         )
       : human.board;
-  const currentBuffLabel =
-    currentBattleEvent?.type === "buff" &&
-    currentBattleEvent.attackDelta !== undefined &&
-    currentBattleEvent.healthDelta !== undefined
-      ? `${formatSignedStat(
-          currentBattleEvent.attackDelta,
-        )}/${formatSignedStat(currentBattleEvent.healthDelta)}`
-      : undefined;
+  const currentBuffLabel = combatBuffLabel(currentBattleEvent);
   const currentHitLabel =
     currentBattleEvent?.type === "damage"
       ? `-${currentBattleEvent.amount ?? 0} · 剩余 ${

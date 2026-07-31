@@ -692,8 +692,17 @@ test("Crimson Survivor also completes from a combat-only Attack buff", () => {
     state.humanPlayerId
   ]?.find((minion) => minion.instanceId === "combat-survivor");
   assert.ok(combatSurvivor);
-  assert.equal(combatSurvivor.attack, 6);
-  assert.equal(combatSurvivor.divineShield, true);
+  assert.equal(combatSurvivor.attack, 5);
+  assert.equal(combatSurvivor.divineShield, false);
+  const combatOnlyBuff = state.lastBattle?.events.find(
+    (event) =>
+      event.type === "buff" &&
+      event.targetInstanceId === "combat-survivor" &&
+      event.message.includes("转瞬活力"),
+  );
+  assert.ok(combatOnlyBuff?.minion);
+  assert.equal(combatOnlyBuff.minion.attack, 6);
+  assert.equal(combatOnlyBuff.minion.divineShield, true);
 });
 
 test("v18 saves migrate Tier 1 counters and discounts without losing persistent history", () => {

@@ -7,6 +7,43 @@ export interface CombatIntroOpponent {
   opponentIsGhost: boolean;
 }
 
+function formatSignedCombatStat(value: number): string {
+  return value > 0 ? `+${value}` : `${value}`;
+}
+
+export function combatBuffLabel(
+  event: BattleEvent | undefined,
+): string | undefined {
+  if (event?.type !== "buff") {
+    return undefined;
+  }
+  if (event.permanentEffectImprovement) {
+    return "效果永久提升";
+  }
+  if (
+    event.retained &&
+    (event.attackDelta === undefined ||
+      event.healthDelta === undefined ||
+      (event.attackDelta === 0 && event.healthDelta === 0))
+  ) {
+    return "关键词永久保留";
+  }
+  if (
+    event.attackDelta === undefined ||
+    event.healthDelta === undefined ||
+    (event.attackDelta === 0 && event.healthDelta === 0)
+  ) {
+    return undefined;
+  }
+  return `${formatSignedCombatStat(event.attackDelta)}/${formatSignedCombatStat(
+    event.healthDelta,
+  )}${
+    event.retained
+      ? ` · 永久${event.retentionMultiplier === 2 ? "×2" : ""}`
+      : ""
+  }`;
+}
+
 export function isCombatPlaybackEvent(event: BattleEvent): boolean {
   return event.type !== "battleStart" && event.type !== "battleEnd";
 }

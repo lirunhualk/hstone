@@ -423,11 +423,18 @@ export interface MenagerieEndOfTurnEffect {
   health: number;
 }
 
+export interface ImproveStartOfCombatBuffEffect {
+  kind: "improveStartOfCombatBuff";
+  attack: number;
+  health: number;
+}
+
 export type AfterTavernSpellCastEffect =
   | BuffEffect
   | MenagerieEndOfTurnEffect
   | BuffKeywordEffect
-  | ImproveUndeadArmyEffect;
+  | ImproveUndeadArmyEffect
+  | ImproveStartOfCombatBuffEffect;
 
 export interface BuffEndOfTurnEffect {
   kind: "buff";
@@ -558,13 +565,28 @@ export interface StartOfCombatSummonHighestAttackHandTribeEffect {
   goldenMode?: "doubleCount";
 }
 
+export interface StartOfCombatGrowingTribeBuffEffect {
+  kind: "growingTribeBuff";
+  tribe: Tribe;
+  attack: number;
+  health: number;
+  goldenMode?: "doubleStats";
+}
+
 export type StartOfCombatEffect =
   | BuffEffect
   | GrantShieldEffect
   | StartOfCombatBuffRandomOtherTribeEffect
   | StartOfCombatGainHighestHandAttackEffect
   | StartOfCombatGainAllHandMinionStatsEffect
-  | StartOfCombatSummonHighestAttackHandTribeEffect;
+  | StartOfCombatSummonHighestAttackHandTribeEffect
+  | StartOfCombatGrowingTribeBuffEffect;
+
+export interface CombatEnchantmentRetentionEffect {
+  target: "self" | "adjacentFriendlyTribe";
+  tribe?: Tribe;
+  goldenMode?: "doubleStats";
+}
 
 export interface ConditionalKeywordEffect {
   attackAtLeast: number;
@@ -635,6 +657,7 @@ export interface MinionDefinition {
   afterTavernSpellCast?: readonly AfterTavernSpellCastEffect[];
   startOfTurn?: readonly MinionEffect[];
   startOfCombat?: readonly StartOfCombatEffect[];
+  combatEnchantmentRetention?: CombatEnchantmentRetentionEffect;
   inHandStartOfCombat?: InHandStartOfCombatEffect;
   rally?: readonly RallyEffect[];
   endOfTurn?: EndOfTurnEffect;
@@ -1155,6 +1178,12 @@ export interface BattleEvent {
     | "spellcraft";
   removedKeywords?: RallyRemovedKeyword[];
   cardGainResult?: CardGainResult;
+  /** This combat enchantment will be written back to the Recruit minion. */
+  retained?: boolean;
+  /** Golden Tarecgosa/Poet retain twice the gained Attack and Health. */
+  retentionMultiplier?: 0 | 1 | 2;
+  /** A zero-stat event permanently improved a persistent card effect. */
+  permanentEffectImprovement?: boolean;
 }
 
 interface PendingInteractionBase {

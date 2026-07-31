@@ -3,7 +3,7 @@ import liveRosterSnapshot from "./generated/battlegrounds-36.0.3-247416.zhCN.jso
 };
 import type { MinionDefinition, Tribe } from "./types.ts";
 
-export const CURRENT_ROSTER_VERSION = "battlegrounds-36.0.3-247416-v28";
+export const CURRENT_ROSTER_VERSION = "battlegrounds-36.0.3-247416-v29";
 /** Compatibility alias for existing save and engine imports. */
 export const CLASSIC_ROSTER_VERSION = CURRENT_ROSTER_VERSION;
 
@@ -904,6 +904,46 @@ const BOUNTY_TAVERN_SPELL_DEFINITION_IDS = [
 const LIVE_RULE_OVERRIDES: Readonly<
   Record<string, Partial<MinionDefinition>>
 > = {
+  BG21_015: {
+    goldenCardId: "BG21_015_G",
+    goldenDescription:
+      "本随从可永久保留战斗阶段获得的额外关键词和双倍属性值。",
+    combatEnchantmentRetention: {
+      target: "self",
+      goldenMode: "doubleStats",
+    },
+  },
+  BG29_813: {
+    goldenCardId: "BG29_813_G",
+    goldenDescription:
+      "圣盾。相邻的龙可永久保留战斗阶段获得的额外关键词和双倍属性值。",
+    combatEnchantmentRetention: {
+      target: "adjacentFriendlyTribe",
+      tribe: "dragon",
+      goldenMode: "doubleStats",
+    },
+  },
+  BG32_822: {
+    goldenCardId: "BG32_822_G",
+    goldenDescription:
+      "战斗开始时：使你的龙获得+4/+2。在你施放一个酒馆法术后永久提升此效果。",
+    startOfCombat: [
+      {
+        kind: "growingTribeBuff",
+        tribe: "dragon",
+        attack: 2,
+        health: 1,
+        goldenMode: "doubleStats",
+      },
+    ],
+    afterTavernSpellCast: [
+      {
+        kind: "improveStartOfCombatBuff",
+        attack: 2,
+        health: 1,
+      },
+    ],
+  },
   BG24_009: {
     goldenCardId: "BG24_009_G",
     goldenDescription:
@@ -2468,6 +2508,7 @@ const FULLY_SUPPORTED_LIVE_CARD_IDS = new Set([
   "BG22_202",
   "BG21_014",
   "BG21_005",
+  "BG21_015",
   "BG23_002",
   "BG23_004",
   "BG23_018",
@@ -2510,6 +2551,7 @@ const FULLY_SUPPORTED_LIVE_CARD_IDS = new Set([
   "BG28_308",
   "BG29_503",
   "BG29_611",
+  "BG29_813",
   "BG29_840",
   "BG29_841",
   "BG29_300",
@@ -2530,6 +2572,7 @@ const FULLY_SUPPORTED_LIVE_CARD_IDS = new Set([
   "BG32_324",
   "BG32_330",
   "BG32_821",
+  "BG32_822",
   "BG32_835",
   "BG32_846",
   "BG32_880",

@@ -52,6 +52,8 @@ export const LEGACY_SCHEMA_11_CONTENT_VERSION_V26 =
   "battlegrounds-36.0.3-247416-v26";
 export const LEGACY_SCHEMA_11_CONTENT_VERSION_V27 =
   "battlegrounds-36.0.3-247416-v27";
+export const LEGACY_SCHEMA_11_CONTENT_VERSION_V28 =
+  "battlegrounds-36.0.3-247416-v28";
 
 const SPELL_POOL_COPIES_BY_TIER = [0, 5, 7, 9, 11, 7, 5] as const;
 
@@ -327,6 +329,32 @@ function refreshMinionSupport(
     value.cardId = definition.goldenCardId ?? value.cardId;
     value.description =
       definition.goldenDescription ?? value.description;
+  }
+  const growingStartOfCombat = definition.startOfCombat?.find(
+    (effect) => effect.kind === "growingTribeBuff",
+  );
+  if (growingStartOfCombat?.kind === "growingTribeBuff") {
+    const counters = isRecord(value.effectCounters)
+      ? value.effectCounters
+      : {};
+    const attackBonus =
+      typeof counters.startOfCombatAttackBonus === "number"
+        ? counters.startOfCombatAttackBonus
+        : 0;
+    const healthBonus =
+      typeof counters.startOfCombatHealthBonus === "number"
+        ? counters.startOfCombatHealthBonus
+        : 0;
+    const scale =
+      value.golden === true &&
+      growingStartOfCombat.goldenMode === "doubleStats"
+        ? 2
+        : 1;
+    value.description =
+      `战斗开始时：使你的龙获得+` +
+      `${growingStartOfCombat.attack * scale + attackBonus}/+` +
+      `${growingStartOfCombat.health * scale + healthBonus}。` +
+      "在你施放一个酒馆法术后永久提升此效果。";
   }
 }
 
@@ -1015,7 +1043,8 @@ export function migrateSchema11GameState(value: unknown): unknown {
       value.contentVersion !== LEGACY_SCHEMA_11_CONTENT_VERSION_V24 &&
       value.contentVersion !== LEGACY_SCHEMA_11_CONTENT_VERSION_V25 &&
       value.contentVersion !== LEGACY_SCHEMA_11_CONTENT_VERSION_V26 &&
-      value.contentVersion !== LEGACY_SCHEMA_11_CONTENT_VERSION_V27) ||
+      value.contentVersion !== LEGACY_SCHEMA_11_CONTENT_VERSION_V27 &&
+      value.contentVersion !== LEGACY_SCHEMA_11_CONTENT_VERSION_V28) ||
     !Array.isArray(value.players)
   ) {
     return null;
@@ -1032,6 +1061,7 @@ export function migrateSchema11GameState(value: unknown): unknown {
       LEGACY_SCHEMA_11_CONTENT_VERSION_V25,
       LEGACY_SCHEMA_11_CONTENT_VERSION_V26,
       LEGACY_SCHEMA_11_CONTENT_VERSION_V27,
+      LEGACY_SCHEMA_11_CONTENT_VERSION_V28,
     ].includes(value.contentVersion as string);
     const preserveCurrentFields = [
       LEGACY_SCHEMA_11_CONTENT_VERSION_V19,
@@ -1043,6 +1073,7 @@ export function migrateSchema11GameState(value: unknown): unknown {
       LEGACY_SCHEMA_11_CONTENT_VERSION_V25,
       LEGACY_SCHEMA_11_CONTENT_VERSION_V26,
       LEGACY_SCHEMA_11_CONTENT_VERSION_V27,
+      LEGACY_SCHEMA_11_CONTENT_VERSION_V28,
     ].includes(value.contentVersion as string);
     const preservePendingSpellcraft =
       value.contentVersion === LEGACY_SCHEMA_11_CONTENT_VERSION_V17 ||

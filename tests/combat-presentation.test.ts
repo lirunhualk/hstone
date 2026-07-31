@@ -3,6 +3,7 @@ import test from "node:test";
 
 import {
   COMBAT_START_INTRO_DURATION_MS,
+  combatBuffLabel,
   combatIntroOpponent,
   initialCombatPlayback,
   isCombatPlaybackEvent,
@@ -60,6 +61,57 @@ test("combat playback omits framing events represented by the intro and result s
   assert.deepEqual(
     events.filter(isCombatPlaybackEvent).map(({ type }) => type),
     ["startOfCombat", "attack", "damage", "heroDamage"],
+  );
+});
+
+test("combat buff labels distinguish permanent changes from ordinary zero-stat keywords", () => {
+  assert.equal(
+    combatBuffLabel({
+      ...event("buff", 0),
+      attackDelta: 0,
+      healthDelta: 0,
+      message: "获得烈毒。",
+    }),
+    undefined,
+  );
+  assert.equal(
+    combatBuffLabel({
+      ...event("buff", 1),
+      retained: true,
+      message: "获得并永久保留圣盾。",
+    }),
+    "关键词永久保留",
+  );
+  assert.equal(
+    combatBuffLabel({
+      ...event("buff", 2),
+      attackDelta: 0,
+      healthDelta: 0,
+      retained: true,
+      message: "获得并永久保留烈毒。",
+    }),
+    "关键词永久保留",
+  );
+  assert.equal(
+    combatBuffLabel({
+      ...event("buff", 3),
+      attackDelta: 0,
+      healthDelta: 0,
+      permanentEffectImprovement: true,
+      message: "效果永久提升。",
+    }),
+    "效果永久提升",
+  );
+  assert.equal(
+    combatBuffLabel({
+      ...event("buff", 4),
+      attackDelta: 2,
+      healthDelta: 1,
+      retained: true,
+      retentionMultiplier: 2,
+      message: "属性永久保留。",
+    }),
+    "+2/+1 · 永久×2",
   );
 });
 

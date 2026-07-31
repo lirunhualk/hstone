@@ -1604,6 +1604,7 @@ test("Skeleton Sharpshooter persists both combat and Recruit Avenge improvements
     state.lastBattle?.events.some(
       (event) =>
         event.actorInstanceId === source.instanceId &&
+        event.permanentEffectImprovement === true &&
         event.message.includes("复仇永久提升"),
     ),
   );
@@ -1813,12 +1814,15 @@ test("ghost Skeleton Sharpshooter Avenge cannot mutate its eliminated owner", ()
         battle.playerBId === ghost.id),
   );
   assert.ok(ghostBattle);
-  assert.ok(
-    ghostBattle.events.some(
-      (event) =>
-        event.actorInstanceId === ghostSource.instanceId &&
-        event.message.includes("复仇永久提升"),
-    ),
+  const ghostGrowth = ghostBattle.events.find(
+    (event) =>
+      event.actorInstanceId === ghostSource.instanceId &&
+      event.message.includes("本场战斗"),
+  );
+  assert.ok(ghostGrowth);
+  assert.notEqual(
+    ghostGrowth.permanentEffectImprovement,
+    true,
   );
 });
 

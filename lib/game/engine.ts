@@ -54,6 +54,7 @@ import type {
   HeroPowerDefinition,
   HumanScoutingReport,
   ImproveBloodGemsEffect,
+  ImproveStartOfCombatBuffEffect,
   ImproveUndeadArmyEffect,
   MagneticAttachment,
   MinionEffect,
@@ -73,6 +74,7 @@ import type {
   ScheduledPairing,
   SpellcraftDefinition,
   SpellcraftSpellInstance,
+  StartOfCombatGrowingTribeBuffEffect,
   SummonEffect,
   TavernSpellDefinition,
   TavernSpellEffect,
@@ -218,6 +220,8 @@ const GOLD_SPEND_PROGRESS_COUNTER = "goldSpendProgress";
 const DYNAMIC_END_OF_TURN_ATTACK_COUNTER = "dynamicEndOfTurnAttack";
 const DYNAMIC_END_OF_TURN_HEALTH_COUNTER = "dynamicEndOfTurnHealth";
 const DYNAMIC_AVENGE_PROGRESS_COUNTER = "dynamicAvengeProgress";
+const START_OF_COMBAT_ATTACK_BONUS_COUNTER = "startOfCombatAttackBonus";
+const START_OF_COMBAT_HEALTH_BONUS_COUNTER = "startOfCombatHealthBonus";
 const LOBBY_TRIBES: readonly Tribe[] = [
   "beast",
   "mech",
@@ -559,6 +563,34 @@ function refreshDynamicMinionDescription(
     minion.description = /（还剩\d+枚！）/.test(printedDescription)
       ? printedDescription.replace(/（还剩\d+枚！）/, status)
       : `${printedDescription}${status}`;
+    return;
+  }
+  const growingStartOfCombat = definition.startOfCombat?.find(
+    (effect) => effect.kind === "growingTribeBuff",
+  );
+  if (growingStartOfCombat?.kind === "growingTribeBuff") {
+    const scale =
+      minion.golden &&
+      growingStartOfCombat.goldenMode === "doubleStats"
+        ? 2
+        : 1;
+    const attack =
+      growingStartOfCombat.attack * scale +
+      effectCounter(
+        minion,
+        START_OF_COMBAT_ATTACK_BONUS_COUNTER,
+        0,
+      );
+    const health =
+      growingStartOfCombat.health * scale +
+      effectCounter(
+        minion,
+        START_OF_COMBAT_HEALTH_BONUS_COUNTER,
+        0,
+      );
+    minion.description =
+      `战斗开始时：使你的龙获得+${attack}/+${health}。` +
+      "在你施放一个酒馆法术后永久提升此效果。";
     return;
   }
   const dynamicEndOfTurn = definition.endOfTurn;
@@ -3105,7 +3137,11 @@ function applyAfterMagnetizedEffects(
   }
 }
 
-function resolveTriples(state: GameState, player: PlayerState): void {
+function resolveTriples(
+  state: GameState,
+  player: PlayerState,
+  combatContext?: CombatContext,
+): void {
   let combined = true;
   while (combined) {
     combined = false;
@@ -3293,6 +3329,39 @@ function resolveTriples(state: GameState, player: PlayerState): void {
           ),
         );
         setEffectCounter(golden, DYNAMIC_AVENGE_PROGRESS_COUNTER, 0);
+      } else if (
+        definition.startOfCombat?.some(
+          (effect) => effect.kind === "growingTribeBuff",
+        )
+      ) {
+        setEffectCounter(
+          golden,
+          START_OF_COMBAT_ATTACK_BONUS_COUNTER,
+          consumed.reduce(
+            (total, minion) =>
+              total +
+              effectCounter(
+                minion,
+                START_OF_COMBAT_ATTACK_BONUS_COUNTER,
+                0,
+              ),
+            0,
+          ),
+        );
+        setEffectCounter(
+          golden,
+          START_OF_COMBAT_HEALTH_BONUS_COUNTER,
+          consumed.reduce(
+            (total, minion) =>
+              total +
+              effectCounter(
+                minion,
+                START_OF_COMBAT_HEALTH_BONUS_COUNTER,
+                0,
+              ),
+            0,
+          ),
+        );
       }
       const playableFromRound = Math.max(
         0,
@@ -3370,6 +3439,17 @@ function resolveTriples(state: GameState, player: PlayerState): void {
         player.eternalKnightsDied ?? 0,
       );
       refreshDynamicMinionDescription(golden);
+      const writebackTargets =
+        combatContext?.retentionWritebackTargets[player.id];
+      if (writebackTargets) {
+        for (const [originInstanceId, targetInstanceId] of Object.entries(
+          writebackTargets,
+        )) {
+          if (consumedIds.has(targetInstanceId)) {
+            writebackTargets[originInstanceId] = golden.instanceId;
+          }
+        }
+      }
       player.hand.push(golden);
       combined = true;
       break;
@@ -4259,6 +4339,59 @@ function addRandomStatTavernSpell(
   return true;
 }
 
+function growingStartOfCombatBuffAmount(
+  minion: MinionInstance,
+  effect: StartOfCombatGrowingTribeBuffEffect,
+): { attack: number; health: number } {
+  const scale =
+    minion.golden && effect.goldenMode === "doubleStats" ? 2 : 1;
+  return {
+    attack:
+      effect.attack * scale +
+      effectCounter(
+        minion,
+        START_OF_COMBAT_ATTACK_BONUS_COUNTER,
+        0,
+      ),
+    health:
+      effect.health * scale +
+      effectCounter(
+        minion,
+        START_OF_COMBAT_HEALTH_BONUS_COUNTER,
+        0,
+      ),
+  };
+}
+
+function improveStartOfCombatBuff(
+  minion: MinionInstance,
+  effect: ImproveStartOfCombatBuffEffect,
+  scale: number,
+): { attackIncrease: number; healthIncrease: number } {
+  const attackIncrease = effect.attack * scale;
+  const healthIncrease = effect.health * scale;
+  setEffectCounter(
+    minion,
+    START_OF_COMBAT_ATTACK_BONUS_COUNTER,
+    effectCounter(
+      minion,
+      START_OF_COMBAT_ATTACK_BONUS_COUNTER,
+      0,
+    ) + attackIncrease,
+  );
+  setEffectCounter(
+    minion,
+    START_OF_COMBAT_HEALTH_BONUS_COUNTER,
+    effectCounter(
+      minion,
+      START_OF_COMBAT_HEALTH_BONUS_COUNTER,
+      0,
+    ) + healthIncrease,
+  );
+  refreshDynamicMinionDescription(minion);
+  return { attackIncrease, healthIncrease };
+}
+
 function applyAfterTavernSpellCastTriggers(
   state: GameState,
   player: PlayerState,
@@ -4270,6 +4403,10 @@ function applyAfterTavernSpellCastTriggers(
           .afterTavernSpellCast ?? [];
       const scale = component.golden ? 2 : 1;
       for (const effect of effects) {
+        if (effect.kind === "improveStartOfCombatBuff") {
+          improveStartOfCombatBuff(source, effect, scale);
+          continue;
+        }
         if (
           effect.kind === "buff" ||
           effect.kind === "improveUndeadArmy"
@@ -5943,6 +6080,35 @@ function minionScore(
     if (definition.conditionalKeyword) {
       score += 2;
     }
+    const retention = definition.combatEnchantmentRetention;
+    if (retention?.target === "self") {
+      score += minion.golden ? 5 : 3;
+    } else if (retention?.target === "adjacentFriendlyTribe") {
+      const eligibleNeighbors = player.board.filter(
+        (target) =>
+          target.instanceId !== minion.instanceId &&
+          (!retention.tribe ||
+            minionHasTribe(target, retention.tribe)),
+      ).length;
+      score +=
+        Math.min(2, eligibleNeighbors) * (minion.golden ? 4 : 2);
+    }
+    const growingStartOfCombat = definition.startOfCombat?.find(
+      (effect) => effect.kind === "growingTribeBuff",
+    );
+    if (growingStartOfCombat?.kind === "growingTribeBuff") {
+      const amount = growingStartOfCombatBuffAmount(
+        minion,
+        growingStartOfCombat,
+      );
+      const eligibleTargets = player.board.filter((target) =>
+        minionHasTribe(target, growingStartOfCombat.tribe),
+      ).length;
+      score +=
+        Math.max(1, eligibleTargets) *
+        (amount.attack + amount.health) *
+        0.45;
+    }
     if (
       definition.endOfTurn?.kind ===
       "periodicGainRandomMinion"
@@ -7073,10 +7239,34 @@ function tavernSpellAiScore(
   const economyBonus = AI_ECONOMY_TAVERN_SPELL_EFFECTS.has(effect)
     ? profile.economyBonus * 0.75
     : 0;
+  const permanentGrowingBuffBonus = player.board.reduce(
+    (total, minion) =>
+      total +
+      minionEffectSources(minion).reduce(
+        (componentTotal, component) => {
+          const improvement = getMinionDefinition(
+            component.definitionId,
+          ).afterTavernSpellCast?.find(
+            (candidate) =>
+              candidate.kind === "improveStartOfCombatBuff",
+          );
+          return improvement?.kind ===
+            "improveStartOfCombatBuff"
+            ? componentTotal +
+                (improvement.attack + improvement.health) *
+                  (component.golden ? 2 : 1) *
+                  0.9
+            : componentTotal;
+        },
+        0,
+      ),
+    0,
+  );
   return (
     baseTavernSpellAiScore(player, spell) *
       profile.spellValueMultiplier +
-    economyBonus
+    economyBonus +
+    permanentGrowingBuffBonus
   );
 }
 
@@ -7157,7 +7347,9 @@ function arrangeAiBoard(
         definition.aura !== undefined ||
         definition.afterFriendlyPlayed !== undefined ||
         definition.afterFriendlySummoned !== undefined ||
-        definition.afterFriendlyDied !== undefined
+        definition.afterFriendlyDied !== undefined ||
+        definition.combatEnchantmentRetention?.target ===
+          "adjacentFriendlyTribe"
       );
     });
 
@@ -7259,6 +7451,169 @@ function arrangeAiBoard(
         player.board.splice(nextTauntIndex, 0, buffer);
       }
     }
+  }
+
+  const poets = player.board
+    .filter(
+      (minion) =>
+        getMinionDefinition(minion.definitionId)
+          .combatEnchantmentRetention?.target ===
+        "adjacentFriendlyTribe",
+    )
+    .sort((left, right) => {
+      if (left.golden !== right.golden) {
+        return left.golden ? -1 : 1;
+      }
+      return (
+        minionScore(player, right) - minionScore(player, left) ||
+        left.instanceId.localeCompare(right.instanceId)
+      );
+    });
+  const poetIds = new Set(poets.map((poet) => poet.instanceId));
+  const poetMultipliers = new Map(
+    poets.map((poet) => {
+      const effect = getMinionDefinition(
+        poet.definitionId,
+      ).combatEnchantmentRetention;
+      return [
+        poet.instanceId,
+        poet.golden && effect?.goldenMode === "doubleStats"
+          ? 2
+          : 1,
+      ];
+    }),
+  );
+  const dragonChainCandidates = player.board.filter((minion) =>
+    minionHasTribe(minion, "dragon"),
+  );
+  const hasProtectableDragon =
+    dragonChainCandidates.some(
+      (minion) => !poetIds.has(minion.instanceId),
+    ) || poets.length > 1;
+  if (
+    poets.length > 0 &&
+    dragonChainCandidates.length > 1 &&
+    hasProtectableDragon
+  ) {
+    const baseIndices = new Map(
+      dragonChainCandidates.map((minion, index) => [
+        minion.instanceId,
+        index,
+      ]),
+    );
+    const values = new Map(
+      dragonChainCandidates.map((minion) => [
+        minion.instanceId,
+        Math.max(0, minionScore(player, minion)),
+      ]),
+    );
+    const selfRetentionMultipliers = new Map(
+      dragonChainCandidates.map((minion) => {
+        const effect = getMinionDefinition(
+          minion.definitionId,
+        ).combatEnchantmentRetention;
+        const multiplier =
+          effect?.target === "self"
+            ? minion.golden &&
+              effect.goldenMode === "doubleStats"
+              ? 2
+              : 1
+            : 0;
+        return [minion.instanceId, multiplier];
+      }),
+    );
+    let chain = [...dragonChainCandidates];
+    let bestScore = Number.NEGATIVE_INFINITY;
+    let bestProtectedCount = -1;
+    let bestMovement = Number.POSITIVE_INFINITY;
+    let bestKey = "";
+    const working = [...dragonChainCandidates];
+    const considerWorkingOrder = () => {
+      let score = 0;
+      let protectedCount = 0;
+      for (let index = 0; index < working.length; index += 1) {
+        const adjacentPoetMultiplier = Math.max(
+          index > 0
+            ? (poetMultipliers.get(
+                working[index - 1].instanceId,
+              ) ?? 0)
+            : 0,
+          index + 1 < working.length
+            ? (poetMultipliers.get(
+                working[index + 1].instanceId,
+              ) ?? 0)
+            : 0,
+        );
+        const selfMultiplier =
+          selfRetentionMultipliers.get(
+            working[index].instanceId,
+          ) ?? 0;
+        const incrementalMultiplier = Math.max(
+          0,
+          adjacentPoetMultiplier - selfMultiplier,
+        );
+        if (incrementalMultiplier === 0) {
+          continue;
+        }
+        protectedCount += 1;
+        score +=
+          (values.get(working[index].instanceId) ?? 0) *
+          incrementalMultiplier;
+      }
+      const movement = working.reduce(
+        (total, minion, index) =>
+          total +
+          Math.abs((baseIndices.get(minion.instanceId) ?? index) - index),
+        0,
+      );
+      const key = working.map((minion) => minion.instanceId).join("\0");
+      if (
+        score > bestScore ||
+        (score === bestScore &&
+          (protectedCount > bestProtectedCount ||
+            (protectedCount === bestProtectedCount &&
+              (movement < bestMovement ||
+                (movement === bestMovement &&
+                  (bestKey === "" || key < bestKey))))))
+      ) {
+        chain = [...working];
+        bestScore = score;
+        bestProtectedCount = protectedCount;
+        bestMovement = movement;
+        bestKey = key;
+      }
+    };
+    const permute = (startIndex: number): void => {
+      if (startIndex >= working.length - 1) {
+        considerWorkingOrder();
+        return;
+      }
+      for (
+        let swapIndex = startIndex;
+        swapIndex < working.length;
+        swapIndex += 1
+      ) {
+        [working[startIndex], working[swapIndex]] = [
+          working[swapIndex],
+          working[startIndex],
+        ];
+        permute(startIndex + 1);
+        [working[startIndex], working[swapIndex]] = [
+          working[swapIndex],
+          working[startIndex],
+        ];
+      }
+    };
+    permute(0);
+    const chainIds = new Set(
+      chain.map((minion) => minion.instanceId),
+    );
+    player.board = [
+      ...player.board.filter(
+        (minion) => !chainIds.has(minion.instanceId),
+      ),
+      ...chain,
+    ];
   }
 }
 
@@ -7656,6 +8011,37 @@ interface PendingStartOfCombatHandSummon {
   usedHandInstanceIds: Set<string>;
 }
 
+type CombatBonusKeyword =
+  | "divineShield"
+  | "reborn"
+  | "stealth"
+  | "taunt"
+  | "venomous"
+  | "windfury";
+
+type CombatRetentionMultiplier = 0 | 1 | 2;
+
+interface RetainedCombatEnchantment {
+  attack: number;
+  health: number;
+  bloodGemAttack: number;
+  bloodGemHealth: number;
+  keywords: Set<CombatBonusKeyword>;
+}
+
+interface CombatEnchantingGain {
+  attack?: number;
+  health?: number;
+  bloodGemAttack?: number;
+  bloodGemHealth?: number;
+  keywords?: readonly CombatBonusKeyword[];
+}
+
+interface CombatEnchantingGainResult {
+  gainedKeywords: readonly CombatBonusKeyword[];
+  retentionMultiplier: CombatRetentionMultiplier;
+}
+
 interface CombatContext {
   state: GameState;
   events: BattleEvent[];
@@ -7676,6 +8062,18 @@ interface CombatContext {
   eternalKnightsDied: Record<PlayerId, number>;
   /** Combat-only counters keyed by the exact minion or Magnetic component. */
   avengeProgress: Record<PlayerId, Record<string, number>>;
+  /** Only the original Recruit-board entities may receive permanent combat gains. */
+  originalCombatMinionIds: Record<PlayerId, Set<string>>;
+  /** Event-time combat enchantments flushed to Recruit entities after combat. */
+  retainedCombatEnchantments: Record<
+    PlayerId,
+    Record<string, RetainedCombatEnchantment>
+  >;
+  /** Tracks an original combat entity through a Recruit-side combat triple. */
+  retentionWritebackTargets: Record<
+    PlayerId,
+    Record<string, string>
+  >;
 }
 
 function opponentId(context: CombatContext, ownerId: PlayerId): PlayerId {
@@ -7693,6 +8091,209 @@ function persistentCombatOwner(
   }
   const owner = findPlayer(context.state, ownerId);
   return owner?.alive ? owner : undefined;
+}
+
+function findCombatWritebackMinion(
+  context: CombatContext,
+  owner: PlayerState,
+  ownerId: PlayerId,
+  originalInstanceId: string,
+): BoardMinionInstance | undefined {
+  const writebackInstanceId =
+    context.retentionWritebackTargets[ownerId][originalInstanceId] ??
+    originalInstanceId;
+  return (
+    owner.board.find(
+      (minion) => minion.instanceId === writebackInstanceId,
+    ) ??
+    owner.hand.find(
+      (card): card is BoardMinionInstance =>
+        card.kind === "minion" &&
+        card.instanceId === writebackInstanceId,
+    )
+  );
+}
+
+function combatRetentionMultiplier(
+  context: CombatContext,
+  ownerId: PlayerId,
+  target: MinionInstance,
+): CombatRetentionMultiplier {
+  if (context.ghostOwnerId === ownerId) {
+    return 0;
+  }
+  if (!context.originalCombatMinionIds[ownerId].has(target.instanceId)) {
+    return 0;
+  }
+
+  let multiplier: CombatRetentionMultiplier = 0;
+  const selfEffect =
+    getMinionDefinition(target.definitionId)
+      .combatEnchantmentRetention;
+  if (selfEffect?.target === "self") {
+    multiplier =
+      target.golden && selfEffect.goldenMode === "doubleStats" ? 2 : 1;
+  }
+
+  const board = context.boards[ownerId];
+  const targetIndex = board.findIndex(
+    (minion) => minion.instanceId === target.instanceId,
+  );
+  if (targetIndex < 0) {
+    return multiplier;
+  }
+  for (const sourceIndex of [targetIndex - 1, targetIndex + 1]) {
+    const source = board[sourceIndex];
+    if (!source || source.health <= 0) {
+      continue;
+    }
+    const adjacentEffect =
+      getMinionDefinition(source.definitionId)
+        .combatEnchantmentRetention;
+    if (
+      adjacentEffect?.target !== "adjacentFriendlyTribe" ||
+      (adjacentEffect.tribe &&
+        !minionHasTribe(target, adjacentEffect.tribe))
+    ) {
+      continue;
+    }
+    const sourceMultiplier: 1 | 2 =
+      source.golden &&
+      adjacentEffect.goldenMode === "doubleStats"
+        ? 2
+        : 1;
+    multiplier = Math.max(multiplier, sourceMultiplier) as 1 | 2;
+  }
+  return multiplier;
+}
+
+function gainCombatBonusKeywords(
+  target: MinionInstance,
+  keywords: readonly CombatBonusKeyword[],
+): CombatBonusKeyword[] {
+  const gained: CombatBonusKeyword[] = [];
+  for (const keyword of keywords) {
+    if (target[keyword] === true) {
+      continue;
+    }
+    target[keyword] = true;
+    if (keyword === "taunt") {
+      target.temporaryTaunt = false;
+    } else if (keyword === "divineShield") {
+      target.temporaryDivineShield = false;
+    }
+    gained.push(keyword);
+  }
+  return gained;
+}
+
+function makeCombatBonusKeywordsPermanent(
+  target: MinionInstance,
+  keywords: Iterable<CombatBonusKeyword>,
+): void {
+  for (const keyword of keywords) {
+    target[keyword] = true;
+    if (keyword === "taunt") {
+      target.temporaryTaunt = false;
+    } else if (keyword === "divineShield") {
+      target.temporaryDivineShield = false;
+    }
+  }
+}
+
+function applyCombatEnchantingGain(
+  context: CombatContext,
+  ownerId: PlayerId,
+  target: MinionInstance,
+  gain: CombatEnchantingGain,
+): CombatEnchantingGainResult {
+  const attack = gain.attack ?? 0;
+  const health = gain.health ?? 0;
+  const retentionMultiplier = combatRetentionMultiplier(
+    context,
+    ownerId,
+    target,
+  );
+  target.attack = Math.max(0, target.attack + attack);
+  target.health = Math.max(1, target.health + health);
+  const gainedKeywords = gainCombatBonusKeywords(
+    target,
+    gain.keywords ?? [],
+  );
+  if (
+    reconcileConditionalMinion(target) &&
+    !gainedKeywords.includes("divineShield")
+  ) {
+    gainedKeywords.push("divineShield");
+  }
+
+  const retainableAttack = Math.max(0, attack);
+  const retainableHealth = Math.max(0, health);
+  if (
+    retentionMultiplier === 0 ||
+    (retainableAttack === 0 &&
+      retainableHealth === 0 &&
+      gainedKeywords.length === 0)
+  ) {
+    return { gainedKeywords, retentionMultiplier: 0 };
+  }
+
+  const ledger = context.retainedCombatEnchantments[ownerId];
+  const retained = (ledger[target.instanceId] ??= {
+    attack: 0,
+    health: 0,
+    bloodGemAttack: 0,
+    bloodGemHealth: 0,
+    keywords: new Set(),
+  });
+  retained.attack += retainableAttack * retentionMultiplier;
+  retained.health += retainableHealth * retentionMultiplier;
+  retained.bloodGemAttack +=
+    Math.max(0, gain.bloodGemAttack ?? 0) * retentionMultiplier;
+  retained.bloodGemHealth +=
+    Math.max(0, gain.bloodGemHealth ?? 0) * retentionMultiplier;
+  for (const keyword of gainedKeywords) {
+    retained.keywords.add(keyword);
+  }
+  return { gainedKeywords, retentionMultiplier };
+}
+
+function flushRetainedCombatEnchantments(
+  context: CombatContext,
+): void {
+  for (const ownerId of context.playerIds) {
+    if (context.ghostOwnerId === ownerId) {
+      continue;
+    }
+    const owner = findPlayer(context.state, ownerId);
+    if (!owner) {
+      continue;
+    }
+    for (const [instanceId, retained] of Object.entries(
+      context.retainedCombatEnchantments[ownerId],
+    )) {
+      const target = findCombatWritebackMinion(
+        context,
+        owner,
+        ownerId,
+        instanceId,
+      );
+      if (!target) {
+        continue;
+      }
+      target.attack += retained.attack;
+      target.health += retained.health;
+      target.bloodGemAttack += retained.bloodGemAttack;
+      target.bloodGemHealth += retained.bloodGemHealth;
+      makeCombatBonusKeywordsPermanent(
+        target,
+        retained.keywords,
+      );
+      reconcileConditionalMinion(target);
+      refreshDynamicMinionDescription(target, owner);
+    }
+    context.retainedCombatEnchantments[ownerId] = {};
+  }
 }
 
 function combatHandMinions(
@@ -7856,13 +8457,21 @@ function pushStartOfCombatBuff(
   healthDelta: number,
   divineShield: boolean,
   message: string,
+  taunt = false,
 ): void {
-  target.attack = Math.max(0, target.attack + attackDelta);
-  target.health = Math.max(1, target.health + healthDelta);
-  if (divineShield) {
-    target.divineShield = true;
-  }
-  reconcileConditionalMinion(target);
+  const gain = applyCombatEnchantingGain(
+    context,
+    ownerId,
+    target,
+    {
+      attack: attackDelta,
+      health: healthDelta,
+      keywords: [
+        ...(divineShield ? (["divineShield"] as const) : []),
+        ...(taunt ? (["taunt"] as const) : []),
+      ],
+    },
+  );
   pushBattleEvent(context.events, {
     type: "buff",
     actorPlayerId: ownerId,
@@ -7872,6 +8481,10 @@ function pushStartOfCombatBuff(
     attackDelta,
     healthDelta,
     minion: cloneMinion(target),
+    retained: gain.retentionMultiplier > 0,
+    ...(gain.retentionMultiplier > 0
+      ? { retentionMultiplier: gain.retentionMultiplier }
+      : {}),
     message: `${rallySourceLabel(component)}${message}`,
   });
 }
@@ -7910,10 +8523,6 @@ function applyStartOfCombatEffects(
           for (const target of targets) {
             const attackDelta = effect.attack * scale;
             const healthDelta = effect.health * scale;
-            if (effect.taunt) {
-              target.taunt = true;
-              target.temporaryTaunt = false;
-            }
             pushStartOfCombatBuff(
               context,
               ownerId,
@@ -7924,6 +8533,7 @@ function applyStartOfCombatEffects(
               healthDelta,
               false,
               `使${target.name}获得+${attackDelta}/+${healthDelta}。`,
+              effect.taunt === true,
             );
           }
           continue;
@@ -8009,6 +8619,29 @@ function applyStartOfCombatEffects(
               }。`,
             );
             candidates.splice(targetIndex, 1);
+          }
+          continue;
+        }
+
+        if (effect.kind === "growingTribeBuff") {
+          const amount = growingStartOfCombatBuffAmount(
+            source,
+            effect,
+          );
+          for (const target of board.filter((minion) =>
+            minionHasTribe(minion, effect.tribe),
+          )) {
+            pushStartOfCombatBuff(
+              context,
+              ownerId,
+              source,
+              component,
+              target,
+              amount.attack,
+              amount.health,
+              false,
+              `使${target.name}获得+${amount.attack}/+${amount.health}。`,
+            );
           }
           continue;
         }
@@ -8284,10 +8917,16 @@ function triggerAfterFriendlySummoned(
       if (trigger.grantShield) {
         const attackDelta = (trigger.attack ?? 0) * scale;
         const healthDelta = (trigger.health ?? 0) * scale;
-        watcher.attack += attackDelta;
-        watcher.health += healthDelta;
-        watcher.divineShield = true;
-        reconcileConditionalMinion(watcher);
+        const gain = applyCombatEnchantingGain(
+          context,
+          ownerId,
+          watcher,
+          {
+            attack: attackDelta,
+            health: healthDelta,
+            keywords: ["divineShield"],
+          },
+        );
         events.push({
           type: "buff",
           actorPlayerId: ownerId,
@@ -8297,12 +8936,17 @@ function triggerAfterFriendlySummoned(
           attackDelta,
           healthDelta,
           minion: cloneMinion(watcher),
+          retained: gain.retentionMultiplier > 0,
+          ...(gain.retentionMultiplier > 0
+            ? { retentionMultiplier: gain.retentionMultiplier }
+            : {}),
           message: `${summoned.name}被召唤后，${watcher.name}获得+${attackDelta}/+${healthDelta}和圣盾。`,
         });
       } else {
-        summoned.attack += (trigger.attack ?? 0) * scale;
-        summoned.health += (trigger.health ?? 0) * scale;
-        reconcileConditionalMinion(summoned);
+        applyCombatEnchantingGain(context, ownerId, summoned, {
+          attack: (trigger.attack ?? 0) * scale,
+          health: (trigger.health ?? 0) * scale,
+        });
       }
     }
   }
@@ -8662,7 +9306,13 @@ function dealCombatDamage(
   if (amount <= 0 || target.health <= 0) {
     return;
   }
-  if (reconcileConditionalMinion(target)) {
+  const conditionalGain = applyCombatEnchantingGain(
+    context,
+    targetOwnerId,
+    target,
+    {},
+  );
+  if (conditionalGain.gainedKeywords.includes("divineShield")) {
     const threshold =
       getMinionDefinition(target.definitionId).conditionalKeyword
         ?.attackAtLeast ?? target.attack;
@@ -8673,6 +9323,13 @@ function dealCombatDamage(
       targetPlayerId: targetOwnerId,
       targetInstanceId: target.instanceId,
       minion: cloneMinion(target),
+      retained: conditionalGain.retentionMultiplier > 0,
+      ...(conditionalGain.retentionMultiplier > 0
+        ? {
+            retentionMultiplier:
+              conditionalGain.retentionMultiplier,
+          }
+        : {}),
       message: `${target.name}达到${threshold}点攻击力，获得圣盾。`,
     });
   }
@@ -8812,7 +9469,7 @@ function resolveCombatGetRandomMinion(
     );
     const gainedSnapshot = cloneMinion(gained);
     owner.hand.push(gained);
-    resolveTriples(context.state, owner);
+    resolveTriples(context.state, owner, context);
     pushBattleEvent(context.events, {
       type: "cardGain",
       actorPlayerId: ownerId,
@@ -8893,7 +9550,7 @@ function resolveCombatGainRandomGeneratedMinion(
     );
     const gainedSnapshot = cloneMinion(gained);
     owner.hand.push(gained);
-    resolveTriples(context.state, owner);
+    resolveTriples(context.state, owner, context);
     pushBattleEvent(context.events, {
       type: "cardGain",
       actorPlayerId: ownerId,
@@ -9233,6 +9890,7 @@ function resolveCombatImproveBloodGems(
     targetInstanceId: source.instanceId,
     attackDelta: 0,
     healthDelta: 0,
+    permanentEffectImprovement: true,
     minion: cloneMinion(source),
     message: `${rallySourceLabel(component)}的${triggerLabel}使鲜血宝石永久获得+${attackDelta}/+${healthDelta}。`,
   });
@@ -9247,8 +9905,12 @@ function resolveRallyGainTargetAttack(
 ): void {
   const attackDelta =
     attackTarget.attack * (component.golden ? 2 : 1);
-  attacker.attack += attackDelta;
-  reconcileConditionalMinion(attacker);
+  const gain = applyCombatEnchantingGain(
+    context,
+    ownerId,
+    attacker,
+    { attack: attackDelta },
+  );
   pushBattleEvent(context.events, {
     type: "buff",
     actorPlayerId: ownerId,
@@ -9258,6 +9920,10 @@ function resolveRallyGainTargetAttack(
     attackDelta,
     healthDelta: 0,
     minion: cloneMinion(attacker),
+    retained: gain.retentionMultiplier > 0,
+    ...(gain.retentionMultiplier > 0
+      ? { retentionMultiplier: gain.retentionMultiplier }
+      : {}),
     message: `${rallySourceLabel(component)}的进击获得了${attackTarget.name}的${attackDelta}点攻击力。`,
   });
 }
@@ -9283,7 +9949,12 @@ function resolveRallyGrantVenomous(
     candidates,
     count,
   )) {
-    target.venomous = true;
+    const gain = applyCombatEnchantingGain(
+      context,
+      ownerId,
+      target,
+      { keywords: ["venomous"] },
+    );
     pushBattleEvent(context.events, {
       type: "buff",
       actorPlayerId: ownerId,
@@ -9293,6 +9964,10 @@ function resolveRallyGrantVenomous(
       attackDelta: 0,
       healthDelta: 0,
       minion: cloneMinion(target),
+      retained: gain.retentionMultiplier > 0,
+      ...(gain.retentionMultiplier > 0
+        ? { retentionMultiplier: gain.retentionMultiplier }
+        : {}),
       message: `${rallySourceLabel(component)}的进击使${target.name}获得烈毒。`,
     });
   }
@@ -9319,8 +9994,12 @@ function resolveRallyGrantSourceAttack(
       effect.count,
     )) {
       const attackDelta = attacker.attack;
-      target.attack += attackDelta;
-      reconcileConditionalMinion(target);
+      const gain = applyCombatEnchantingGain(
+        context,
+        ownerId,
+        target,
+        { attack: attackDelta },
+      );
       pushBattleEvent(context.events, {
         type: "buff",
         actorPlayerId: ownerId,
@@ -9330,6 +10009,10 @@ function resolveRallyGrantSourceAttack(
         attackDelta,
         healthDelta: 0,
         minion: cloneMinion(target),
+        retained: gain.retentionMultiplier > 0,
+        ...(gain.retentionMultiplier > 0
+          ? { retentionMultiplier: gain.retentionMultiplier }
+          : {}),
         message: `${rallySourceLabel(component)}的进击使${target.name}获得+${attackDelta}攻击力。`,
       });
     }
@@ -9345,9 +10028,12 @@ function pushCombatSpellBuff(
   healthDelta: number,
   message: string,
 ): void {
-  target.attack += attackDelta;
-  target.health += healthDelta;
-  reconcileConditionalMinion(target);
+  const gain = applyCombatEnchantingGain(
+    context,
+    ownerId,
+    target,
+    { attack: attackDelta, health: healthDelta },
+  );
   pushBattleEvent(context.events, {
     type: "buff",
     actorPlayerId: ownerId,
@@ -9357,6 +10043,10 @@ function pushCombatSpellBuff(
     attackDelta,
     healthDelta,
     minion: cloneMinion(target),
+    retained: gain.retentionMultiplier > 0,
+    ...(gain.retentionMultiplier > 0
+      ? { retentionMultiplier: gain.retentionMultiplier }
+      : {}),
     message,
   });
 }
@@ -9422,6 +10112,68 @@ function resolveCombatCastTavernSpell(
   }
 }
 
+function resolveCombatImproveStartOfCombatBuff(
+  context: CombatContext,
+  ownerId: PlayerId,
+  source: MinionInstance,
+  component: MinionEffectSource,
+  effect: ImproveStartOfCombatBuffEffect,
+): void {
+  const scale = component.golden ? 2 : 1;
+  improveStartOfCombatBuff(source, effect, scale);
+
+  let persistentImproved = false;
+  if (
+    component.sourceInstanceId === source.instanceId &&
+    context.originalCombatMinionIds[ownerId].has(source.instanceId)
+  ) {
+    const owner = persistentCombatOwner(context, ownerId);
+    const persistent = owner
+      ? findCombatWritebackMinion(
+          context,
+          owner,
+          ownerId,
+          source.instanceId,
+        )
+      : undefined;
+    if (persistent) {
+      improveStartOfCombatBuff(persistent, effect, scale);
+      refreshDynamicMinionDescription(persistent, owner);
+      persistentImproved = true;
+    }
+  }
+
+  const growingEffect = getMinionDefinition(
+    component.definitionId,
+  ).startOfCombat?.find(
+    (candidate) => candidate.kind === "growingTribeBuff",
+  );
+  const amount =
+    growingEffect?.kind === "growingTribeBuff"
+      ? growingStartOfCombatBuffAmount(source, growingEffect)
+      : undefined;
+  pushBattleEvent(context.events, {
+    type: "buff",
+    actorPlayerId: ownerId,
+    actorInstanceId: source.instanceId,
+    targetPlayerId: ownerId,
+    targetInstanceId: source.instanceId,
+    attackDelta: 0,
+    healthDelta: 0,
+    ...(persistentImproved
+      ? { permanentEffectImprovement: true }
+      : {}),
+    minion: cloneMinion(source),
+    message: persistentImproved
+      ? amount
+        ? `${source.name}响应酒馆法术，将战斗开始效果永久提升至+${amount.attack}/+${amount.health}。`
+        : `${source.name}响应酒馆法术，永久提升了战斗开始效果。`
+      : amount
+        ? `${source.name}响应酒馆法术，将本场战斗中的战斗开始效果提升至+${amount.attack}/+${amount.health}。`
+        : `${source.name}响应酒馆法术，提升了本场战斗中的战斗开始效果。`,
+  });
+}
+
 function triggerCombatAfterTavernSpellCast(
   context: CombatContext,
   ownerId: PlayerId,
@@ -9434,6 +10186,16 @@ function triggerCombatAfterTavernSpellCast(
           .afterTavernSpellCast ?? [];
       const scale = component.golden ? 2 : 1;
       for (const effect of effects) {
+        if (effect.kind === "improveStartOfCombatBuff") {
+          resolveCombatImproveStartOfCombatBuff(
+            context,
+            ownerId,
+            source,
+            component,
+            effect,
+          );
+          continue;
+        }
         if (effect.kind === "improveUndeadArmy") {
           resolveCombatImproveUndeadArmy(
             context,
@@ -9570,7 +10332,7 @@ function resolveRallyCastChefsChoice(
     );
     const gainedSnapshot = cloneMinion(gained);
     owner.hand.push(gained);
-    resolveTriples(context.state, owner);
+    resolveTriples(context.state, owner, context);
     pushBattleEvent(context.events, {
       type: "cardGain",
       actorPlayerId: ownerId,
@@ -9796,9 +10558,12 @@ function triggerRally(
         component.golden && effect.goldenMode === "doubleStats" ? 2 : 1;
       const attackDelta = effect.attack * scale;
       const healthDelta = effect.health * scale;
-      target.attack = Math.max(0, target.attack + attackDelta);
-      target.health = Math.max(1, target.health + healthDelta);
-      reconcileConditionalMinion(target);
+      const gain = applyCombatEnchantingGain(
+        context,
+        ownerId,
+        target,
+        { attack: attackDelta, health: healthDelta },
+      );
       pushBattleEvent(context.events, {
         type: "buff",
         actorPlayerId: ownerId,
@@ -9808,6 +10573,10 @@ function triggerRally(
         attackDelta,
         healthDelta,
         minion: cloneMinion(target),
+        retained: gain.retentionMultiplier > 0,
+        ...(gain.retentionMultiplier > 0
+          ? { retentionMultiplier: gain.retentionMultiplier }
+          : {}),
         message: `${definition.name}的进击使右侧的${target.name}获得+${attackDelta}/+${healthDelta}。`,
       });
     }
@@ -9980,11 +10749,19 @@ function resolveCombatAvengeEffect(
       application < applicationCount;
       application += 1
     ) {
-      applyBloodGemStats(
+      const gain = applyCombatEnchantingGain(
+        context,
+        ownerId,
         target,
-        owner.bloodGemAttack,
-        owner.bloodGemHealth,
+        {
+          attack: owner.bloodGemAttack,
+          health: owner.bloodGemHealth,
+          bloodGemAttack: owner.bloodGemAttack,
+          bloodGemHealth: owner.bloodGemHealth,
+        },
       );
+      target.bloodGemAttack += owner.bloodGemAttack;
+      target.bloodGemHealth += owner.bloodGemHealth;
       pushBattleEvent(context.events, {
         type: "buff",
         actorPlayerId: ownerId,
@@ -9994,6 +10771,10 @@ function resolveCombatAvengeEffect(
         attackDelta: owner.bloodGemAttack,
         healthDelta: owner.bloodGemHealth,
         minion: cloneMinion(target),
+        retained: gain.retentionMultiplier > 0,
+        ...(gain.retentionMultiplier > 0
+          ? { retentionMultiplier: gain.retentionMultiplier }
+          : {}),
         message: `${rallySourceLabel(component)}对${target.name}使用了一张鲜血宝石${
           applicationCount > 1
             ? `（第${application + 1}张）`
@@ -10091,9 +10872,14 @@ function advanceDynamicEndOfTurnAvenge(
   refreshDynamicMinionDescription(watcher);
 
   const owner = persistentCombatOwner(context, ownerId);
-  const persistent = owner?.board.find(
-    (minion) => minion.instanceId === watcher.instanceId,
-  );
+  const persistent = owner
+    ? findCombatWritebackMinion(
+        context,
+        owner,
+        ownerId,
+        watcher.instanceId,
+      )
+    : undefined;
   if (persistent) {
     setEffectCounter(persistent, DYNAMIC_AVENGE_PROGRESS_COUNTER, 0);
     setEffectCounter(
@@ -10124,8 +10910,11 @@ function advanceDynamicEndOfTurnAvenge(
     targetInstanceId: watcher.instanceId,
     attackDelta: 0,
     healthDelta: 0,
+    ...(persistent ? { permanentEffectImprovement: true } : {}),
     minion: cloneMinion(watcher),
-    message: `${watcher.name}的复仇永久提升了回合结束效果。`,
+    message: persistent
+      ? `${watcher.name}的复仇永久提升了回合结束效果。`
+      : `${watcher.name}的复仇提升了本场战斗中的回合结束效果。`,
   });
 }
 
@@ -10164,9 +10953,12 @@ function triggerAfterFriendlyDied(
       if (trigger && minionHasTribe(death.minion, trigger.tribe)) {
         const attackDelta = (trigger.attack ?? 0) * scale;
         const healthDelta = (trigger.health ?? 0) * scale;
-        watcher.attack += attackDelta;
-        watcher.health += healthDelta;
-        reconcileConditionalMinion(watcher);
+        const gain = applyCombatEnchantingGain(
+          context,
+          ownerId,
+          watcher,
+          { attack: attackDelta, health: healthDelta },
+        );
         if (attackDelta !== 0 || healthDelta !== 0) {
           pushBattleEvent(context.events, {
             type: "buff",
@@ -10177,6 +10969,10 @@ function triggerAfterFriendlyDied(
             attackDelta,
             healthDelta,
             minion: cloneMinion(watcher),
+            retained: gain.retentionMultiplier > 0,
+            ...(gain.retentionMultiplier > 0
+              ? { retentionMultiplier: gain.retentionMultiplier }
+              : {}),
             message: `${watcher.name}因友方随从死亡获得+${
               attackDelta
             }/+${healthDelta}。`,
@@ -10210,9 +11006,12 @@ function triggerAfterFriendlyDied(
       if (combatDeathTrigger) {
         const attackDelta = combatDeathTrigger.attack * scale;
         const healthDelta = combatDeathTrigger.health * scale;
-        watcher.attack += attackDelta;
-        watcher.health += healthDelta;
-        reconcileConditionalMinion(watcher);
+        const gain = applyCombatEnchantingGain(
+          context,
+          ownerId,
+          watcher,
+          { attack: attackDelta, health: healthDelta },
+        );
         pushBattleEvent(context.events, {
           type: "buff",
           actorPlayerId: ownerId,
@@ -10222,6 +11021,10 @@ function triggerAfterFriendlyDied(
           attackDelta,
           healthDelta,
           minion: cloneMinion(watcher),
+          retained: gain.retentionMultiplier > 0,
+          ...(gain.retentionMultiplier > 0
+            ? { retentionMultiplier: gain.retentionMultiplier }
+            : {}),
           message: `${watcher.name}因友方随从死亡获得+${
             attackDelta
           }攻击力${
@@ -10298,7 +11101,16 @@ function resolveOneDeathrattle(
             source,
             effect,
           )) {
-            applyBuff(target, effect, scale);
+            const gain = applyCombatEnchantingGain(
+              context,
+              ownerId,
+              target,
+              {
+                attack: effect.attack * scale,
+                health: effect.health * scale,
+                keywords: effect.taunt ? ["taunt"] : [],
+              },
+            );
             pushBattleEvent(context.events, {
               type: "buff",
               actorPlayerId: ownerId,
@@ -10308,6 +11120,13 @@ function resolveOneDeathrattle(
               attackDelta: effect.attack * scale,
               healthDelta: effect.health * scale,
               minion: cloneMinion(target),
+              retained: gain.retentionMultiplier > 0,
+              ...(gain.retentionMultiplier > 0
+                ? {
+                    retentionMultiplier:
+                      gain.retentionMultiplier,
+                  }
+                : {}),
               message: `${source.name}的亡语使${target.name}获得+${
                 effect.attack * scale
               }/+${effect.health * scale}。`,
@@ -10322,7 +11141,12 @@ function resolveOneDeathrattle(
           ) {
             const targetIndex = randomIndex(context.state, candidates.length);
             const target = candidates[targetIndex];
-            target.divineShield = true;
+            const gain = applyCombatEnchantingGain(
+              context,
+              ownerId,
+              target,
+              { keywords: ["divineShield"] },
+            );
             candidates.splice(targetIndex, 1);
             pushBattleEvent(context.events, {
               type: "buff",
@@ -10331,6 +11155,13 @@ function resolveOneDeathrattle(
               targetPlayerId: ownerId,
               targetInstanceId: target.instanceId,
               minion: cloneMinion(target),
+              retained: gain.retentionMultiplier > 0,
+              ...(gain.retentionMultiplier > 0
+                ? {
+                    retentionMultiplier:
+                      gain.retentionMultiplier,
+                  }
+                : {}),
               message: `${source.name}的亡语使${target.name}获得圣盾。`,
             });
           }
@@ -10853,6 +11684,39 @@ function settleNextCombatGold(
   });
 }
 
+function applyQueuedWarbandStatBuff(
+  context: CombatContext,
+  ownerId: PlayerId,
+  attackDelta: number,
+  healthDelta: number,
+): void {
+  if (attackDelta === 0 && healthDelta === 0) {
+    return;
+  }
+  for (const target of context.boards[ownerId]) {
+    const gain = applyCombatEnchantingGain(
+      context,
+      ownerId,
+      target,
+      { attack: attackDelta, health: healthDelta },
+    );
+    pushBattleEvent(context.events, {
+      type: "buff",
+      actorPlayerId: ownerId,
+      targetPlayerId: ownerId,
+      targetInstanceId: target.instanceId,
+      attackDelta,
+      healthDelta,
+      minion: cloneMinion(target),
+      retained: gain.retentionMultiplier > 0,
+      ...(gain.retentionMultiplier > 0
+        ? { retentionMultiplier: gain.retentionMultiplier }
+        : {}),
+      message: `转瞬活力使${target.name}在本场战斗中获得+${attackDelta}/+${healthDelta}。`,
+    });
+  }
+}
+
 function applyQueuedStartOfCombatSpells(
   context: CombatContext,
   owner: PlayerState,
@@ -10870,9 +11734,12 @@ function applyQueuedStartOfCombatSpells(
     }
     const attackDelta = target.attack + buff.attack;
     const healthDelta = buff.health;
-    target.attack += attackDelta;
-    target.health += healthDelta;
-    reconcileConditionalMinion(target);
+    const gain = applyCombatEnchantingGain(
+      context,
+      owner.id,
+      target,
+      { attack: attackDelta, health: healthDelta },
+    );
     pushBattleEvent(context.events, {
       type: "buff",
       actorPlayerId: owner.id,
@@ -10881,6 +11748,10 @@ function applyQueuedStartOfCombatSpells(
       attackDelta,
       healthDelta,
       minion: cloneMinion(target),
+      retained: gain.retentionMultiplier > 0,
+      ...(gain.retentionMultiplier > 0
+        ? { retentionMultiplier: gain.retentionMultiplier }
+        : {}),
       message: `诺兹多姆的子嗣使${target.name}的攻击力翻倍。`,
     });
   }
@@ -10975,16 +11846,14 @@ function simulateBattle(
       eternalKnightsDied[playerB.id],
     );
   }
-  buffMinions(
-    boardA,
-    playerA.nextCombatAttackBonus,
-    playerA.nextCombatHealthBonus,
-  );
-  buffMinions(
-    boardB,
-    playerB.nextCombatAttackBonus,
-    playerB.nextCombatHealthBonus,
-  );
+  const queuedWarbandBuffA = {
+    attack: playerA.nextCombatAttackBonus,
+    health: playerA.nextCombatHealthBonus,
+  };
+  const queuedWarbandBuffB = {
+    attack: playerB.nextCombatAttackBonus,
+    health: playerB.nextCombatHealthBonus,
+  };
   playerA.nextCombatAttackBonus = 0;
   playerA.nextCombatHealthBonus = 0;
   playerB.nextCombatAttackBonus = 0;
@@ -11037,6 +11906,32 @@ function simulateBattle(
       [playerA.id]: {},
       [playerB.id]: {},
     },
+    originalCombatMinionIds: {
+      [playerA.id]: new Set(
+        boardA.map((minion) => minion.instanceId),
+      ),
+      [playerB.id]: new Set(
+        boardB.map((minion) => minion.instanceId),
+      ),
+    },
+    retainedCombatEnchantments: {
+      [playerA.id]: {},
+      [playerB.id]: {},
+    },
+    retentionWritebackTargets: {
+      [playerA.id]: Object.fromEntries(
+        boardA.map((minion) => [
+          minion.instanceId,
+          minion.instanceId,
+        ]),
+      ),
+      [playerB.id]: Object.fromEntries(
+        boardB.map((minion) => [
+          minion.instanceId,
+          minion.instanceId,
+        ]),
+      ),
+    },
   };
   const healthABefore = playerA.health;
   const healthBBefore = playerB.health;
@@ -11048,6 +11943,20 @@ function simulateBattle(
     targetPlayerId: playerB.id,
     message: `${playerA.name}对阵${isGhost ? "幽灵·" : ""}${playerB.name}。`,
   });
+  applyQueuedWarbandStatBuff(
+    context,
+    playerA.id,
+    queuedWarbandBuffA.attack,
+    queuedWarbandBuffA.health,
+  );
+  if (!isGhost) {
+    applyQueuedWarbandStatBuff(
+      context,
+      playerB.id,
+      queuedWarbandBuffB.attack,
+      queuedWarbandBuffB.health,
+    );
+  }
   applyQueuedStartOfCombatSpells(
     context,
     playerA,
@@ -11232,6 +12141,7 @@ function simulateBattle(
     actorPlayerId: winnerId ?? undefined,
     message: resultText,
   });
+  flushRetainedCombatEnchantments(context);
 
   const humanInBattle =
     playerA.id === state.humanPlayerId || playerB.id === state.humanPlayerId;
