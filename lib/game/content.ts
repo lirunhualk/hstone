@@ -3,7 +3,7 @@ import liveRosterSnapshot from "./generated/battlegrounds-36.0.3-247416.zhCN.jso
 };
 import type { MinionDefinition, Tribe } from "./types.ts";
 
-export const CURRENT_ROSTER_VERSION = "battlegrounds-36.0.3-247416-v36";
+export const CURRENT_ROSTER_VERSION = "battlegrounds-36.0.3-247416-v37";
 /** Compatibility alias for existing save and engine imports. */
 export const CLASSIC_ROSTER_VERSION = CURRENT_ROSTER_VERSION;
 
@@ -2242,6 +2242,55 @@ const LIVE_RULE_OVERRIDES: Readonly<
       },
     ],
   },
+  BG26_802: {
+    goldenCardId: "BG26_802_G",
+    goldenDescription:
+      "在战斗中，在你召唤一只野兽后，使其攻击力变为三倍。",
+    afterFriendlySummoned: {
+      tribe: "beast",
+      combatOnly: true,
+      attackMultiplier: 2,
+      goldenAttackMultiplier: 3,
+    },
+  },
+  BG29_807: {
+    goldenCardId: "BG29_807_G",
+    goldenDescription:
+      "每当另一只友方野兽受到伤害时，永久获得+4生命值。",
+    afterFriendlyDamaged: {
+      tribe: "beast",
+      otherOnly: true,
+      target: "self",
+      attack: 0,
+      health: 2,
+      permanent: true,
+    },
+  },
+  BG35_601: {
+    goldenCardId: "BG35_601_G",
+    goldenDescription:
+      "每当本随从受到伤害，获得两次免费的刷新。（每回合限3次。）",
+    afterSelfDamaged: [
+      {
+        kind: "gainFreeRefreshes",
+        count: 1,
+        maxTriggersPerTurn: 3,
+      },
+    ],
+  },
+  BG29_806: {
+    goldenCardId: "BG29_806_G",
+    goldenDescription:
+      "每当一只友方野兽受到伤害时，使该受伤野兽之外的一只友方野兽永久获得+6/+4。",
+    afterFriendlyDamaged: {
+      tribe: "beast",
+      target: "randomOtherFriendlyTribe",
+      targetTribe: "beast",
+      attack: 3,
+      health: 2,
+      permanent: true,
+    },
+  },
   BG32_170: {
     deathrattle: [
       {
@@ -2974,6 +3023,7 @@ const FULLY_SUPPORTED_LIVE_CARD_IDS = new Set([
   "BG26_810",
   "BG26_814",
   "BG26_817",
+  "BG26_802",
   "BG27_004",
   "BG27_005",
   "BG27_556",
@@ -2992,6 +3042,8 @@ const FULLY_SUPPORTED_LIVE_CARD_IDS = new Set([
   "BG29_841",
   "BG29_862",
   "BG29_300",
+  "BG29_806",
+  "BG29_807",
   "BG30_117",
   "BG30_121",
   "BG30_122",
@@ -3082,6 +3134,7 @@ const FULLY_SUPPORTED_LIVE_CARD_IDS = new Set([
   "BG35_340",
   "BG35_431",
   "BG35_437",
+  "BG35_601",
   "BG35_701",
   "BG35_702",
   "BG35_801",

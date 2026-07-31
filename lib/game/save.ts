@@ -68,6 +68,8 @@ export const LEGACY_SCHEMA_11_CONTENT_VERSION_V34 =
   "battlegrounds-36.0.3-247416-v34";
 export const LEGACY_SCHEMA_11_CONTENT_VERSION_V35 =
   "battlegrounds-36.0.3-247416-v35";
+export const LEGACY_SCHEMA_11_CONTENT_VERSION_V36 =
+  "battlegrounds-36.0.3-247416-v36";
 
 const SPELL_POOL_COPIES_BY_TIER = [0, 5, 7, 9, 11, 7, 5] as const;
 
@@ -1080,7 +1082,8 @@ export function migrateSchema11GameState(value: unknown): unknown {
       value.contentVersion !== LEGACY_SCHEMA_11_CONTENT_VERSION_V32 &&
       value.contentVersion !== LEGACY_SCHEMA_11_CONTENT_VERSION_V33 &&
       value.contentVersion !== LEGACY_SCHEMA_11_CONTENT_VERSION_V34 &&
-      value.contentVersion !== LEGACY_SCHEMA_11_CONTENT_VERSION_V35) ||
+      value.contentVersion !== LEGACY_SCHEMA_11_CONTENT_VERSION_V35 &&
+      value.contentVersion !== LEGACY_SCHEMA_11_CONTENT_VERSION_V36) ||
     !Array.isArray(value.players)
   ) {
     return null;
@@ -1105,6 +1108,7 @@ export function migrateSchema11GameState(value: unknown): unknown {
       LEGACY_SCHEMA_11_CONTENT_VERSION_V33,
       LEGACY_SCHEMA_11_CONTENT_VERSION_V34,
       LEGACY_SCHEMA_11_CONTENT_VERSION_V35,
+      LEGACY_SCHEMA_11_CONTENT_VERSION_V36,
     ].includes(value.contentVersion as string);
     const preserveCurrentFields = [
       LEGACY_SCHEMA_11_CONTENT_VERSION_V19,
@@ -1124,10 +1128,11 @@ export function migrateSchema11GameState(value: unknown): unknown {
       LEGACY_SCHEMA_11_CONTENT_VERSION_V33,
       LEGACY_SCHEMA_11_CONTENT_VERSION_V34,
       LEGACY_SCHEMA_11_CONTENT_VERSION_V35,
+      LEGACY_SCHEMA_11_CONTENT_VERSION_V36,
     ].includes(value.contentVersion as string);
     const preserveTavernTierBuffs =
-      value.contentVersion ===
-      LEGACY_SCHEMA_11_CONTENT_VERSION_V35;
+      value.contentVersion === LEGACY_SCHEMA_11_CONTENT_VERSION_V35 ||
+      value.contentVersion === LEGACY_SCHEMA_11_CONTENT_VERSION_V36;
     const preservePendingSpellcraft =
       value.contentVersion === LEGACY_SCHEMA_11_CONTENT_VERSION_V17 ||
       preservePersistentFields;

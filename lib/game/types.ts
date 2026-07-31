@@ -89,6 +89,8 @@ export interface GainNextTurnGoldEffect {
 export interface GainFreeRefreshesEffect {
   kind: "gainFreeRefreshes";
   count: number;
+  /** Limits trigger occurrences, not the number of free refreshes granted. */
+  maxTriggersPerTurn?: number;
 }
 
 export interface GainTavernSpellEffect {
@@ -462,11 +464,31 @@ export interface FriendlyTribeTrigger {
   tribe: Tribe;
   attack?: number;
   health?: number;
+  /** This summon observer is inactive during the Recruit phase. */
+  combatOnly?: boolean;
+  /** Multiplies the summoned minion's current Attack in observer order. */
+  attackMultiplier?: number;
+  /** Golden multipliers are card-specific rather than ordinary x2 scaling. */
+  goldenAttackMultiplier?: number;
   heroDamage?: number;
   gainBloodGems?: number;
   damageEnemy?: number;
   damageTarget?: "random" | "highestHealth";
   grantShield?: boolean;
+}
+
+export interface FriendlyDamagedTrigger {
+  /** Only damage to friendly minions of this type is observed. */
+  tribe: Tribe;
+  /** The damaged minion must not be the observer itself. */
+  otherOnly?: boolean;
+  target: "self" | "randomOtherFriendlyTribe";
+  /** Required by randomOtherFriendlyTribe; the damaged minion is excluded. */
+  targetTribe?: Tribe;
+  attack: number;
+  health: number;
+  /** Printed permanent gains write directly to the original Recruit entity. */
+  permanent?: boolean;
 }
 
 export interface FriendlyDeathTrigger {
@@ -764,6 +786,7 @@ export interface MinionDefinition {
   inHandAfterCardPlayed?: CardPlayedTrigger;
   afterGoldSpent?: GoldSpentThresholdTrigger;
   afterFriendlySummoned?: FriendlyTribeTrigger;
+  afterFriendlyDamaged?: FriendlyDamagedTrigger;
   afterFriendlyDied?: FriendlyDeathTrigger;
   afterFriendlyCombatDied?: FriendlyCombatDeathTrigger;
   afterFriendlyAttacks?: readonly FriendlyAttackTriggerEffect[];

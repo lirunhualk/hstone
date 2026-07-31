@@ -55,6 +55,7 @@ import type {
   GainTavernSpellEffect,
   GetRandomMinionEffect,
   GrantKeywordEffect,
+  FriendlyDamagedTrigger,
   FriendlyDeathTrigger,
   HelpfulRefreshKind,
   HeroPowerDefinition,
@@ -2896,6 +2897,7 @@ function applyRecruitSummonTriggers(
       ).afterFriendlySummoned;
       if (
         !trigger ||
+        trigger.combatOnly ||
         trigger.grantShield ||
         !minionHasTribe(summoned, trigger.tribe) ||
         watcher.instanceId === summoned.instanceId
@@ -6852,6 +6854,7 @@ function tribeCount(player: PlayerState, tribe: Tribe): number {
 const AI_ECONOMY_EFFECT_KINDS = new Set<MinionEffect["kind"]>([
   "gainGold",
   "gainNextTurnGold",
+  "gainFreeRefreshes",
   "gainTavernSpell",
   "gainRandomTavernSpell",
   "gainMinion",
@@ -6886,6 +6889,44 @@ function combatTavernSpellSourceWeight(
       ).length * scale;
   }
   return weight;
+}
+
+function estimatedCombatSummonsOfTribe(
+  board: readonly BoardMinionInstance[],
+  tribe: Tribe,
+): number {
+  let summons = board.filter(
+    (minion) => minion.reborn && minionHasTribe(minion, tribe),
+  ).length;
+  for (const minion of board) {
+    for (const component of minionEffectSources(minion)) {
+      const definition = getMinionDefinition(component.definitionId);
+      for (const effect of [
+        ...(definition.deathrattle ?? []),
+        ...(definition.afterSelfDamaged ?? []),
+      ]) {
+        if (
+          effect.kind !== "summon" ||
+          !definitionHasTribe(
+            getMinionDefinition(effect.definitionId),
+            tribe,
+          )
+        ) {
+          continue;
+        }
+        const baseCount =
+          typeof effect.count === "number"
+            ? effect.count
+            : Math.min(3, Math.max(0, minion.attack));
+        summons +=
+          baseCount *
+          (component.golden && effect.goldenMode === "doubleCount"
+            ? 2
+            : 1);
+      }
+    }
+  }
+  return Math.min(MAX_BOARD_SIZE - 1, summons);
 }
 
 function minionScore(
@@ -7048,18 +7089,66 @@ function minionScore(
       }
     }
     for (const effect of definition.afterSelfDamaged ?? []) {
-      if (effect.kind !== "buff") {
-        continue;
+      if (effect.kind === "gainFreeRefreshes") {
+        const expectedTriggers = Math.min(
+          effect.maxTriggersPerTurn ?? 2,
+          2,
+        );
+        score +=
+          effect.count *
+          (minion.golden ? 2 : 1) *
+          expectedTriggers *
+          (1.25 + profile.economyBonus * 0.15);
+      } else if (effect.kind === "buff") {
+        const eligibleTargets = projectedBoard.filter(
+          (target) => target.instanceId !== minion.instanceId,
+        ).length;
+        score +=
+          eligibleTargets *
+          (effect.attack + effect.health) *
+          (minion.golden ? 2 : 1) *
+          0.55;
       }
-      const eligibleTargets = projectedBoard.filter(
+    }
+    const summonTrigger = definition.afterFriendlySummoned;
+    if (summonTrigger) {
+      const observedCombatSummons = estimatedCombatSummonsOfTribe(
+        projectedBoard,
+        summonTrigger.tribe,
+      );
+      const estimatedSummons = summonTrigger.combatOnly
+        ? observedCombatSummons
+        : Math.max(1, observedCombatSummons);
+      const scale = minion.golden ? 2 : 1;
+      if (summonTrigger.attackMultiplier !== undefined) {
+        const multiplier = minion.golden
+          ? (summonTrigger.goldenAttackMultiplier ??
+            summonTrigger.attackMultiplier)
+          : summonTrigger.attackMultiplier;
+        score += estimatedSummons * (multiplier - 1) * 2.4;
+      } else if (!summonTrigger.grantShield) {
+        score +=
+          estimatedSummons *
+          ((summonTrigger.attack ?? 0) +
+            (summonTrigger.health ?? 0)) *
+          scale *
+          0.35;
+      }
+    }
+    const damagedTrigger = definition.afterFriendlyDamaged;
+    if (damagedTrigger) {
+      const observedMinions = projectedBoard.filter(
         (target) =>
-          target.instanceId !== minion.instanceId,
+          minionHasTribe(target, damagedTrigger.tribe) &&
+          (!damagedTrigger.otherOnly ||
+            target.instanceId !== minion.instanceId),
       ).length;
+      const expectedTriggers = Math.min(3, observedMinions);
       score +=
-        eligibleTargets *
-        (effect.attack + effect.health) *
+        expectedTriggers *
+        (damagedTrigger.attack + damagedTrigger.health) *
         (minion.golden ? 2 : 1) *
-        0.55;
+        (damagedTrigger.target === "self" ? 0.7 : 0.55);
     }
     if (definition.spellcraft) {
       score += 3;
@@ -7268,6 +7357,9 @@ function minionScore(
           AI_ECONOMY_EFFECT_KINDS.has(effect.kind),
         ) ||
         (definition.afterSold ?? []).some((effect) =>
+          AI_ECONOMY_EFFECT_KINDS.has(effect.kind),
+        ) ||
+        (definition.afterSelfDamaged ?? []).some((effect) =>
           AI_ECONOMY_EFFECT_KINDS.has(effect.kind),
         ) ||
         (definition.sellValueAfterLoss ??
@@ -8570,6 +8662,7 @@ function arrangeAiBoard(
         definition.aura !== undefined ||
         definition.afterFriendlyPlayed !== undefined ||
         definition.afterFriendlySummoned !== undefined ||
+        definition.afterFriendlyDamaged !== undefined ||
         definition.afterFriendlyDied !== undefined ||
         definition.afterFriendlyAttacks !== undefined ||
         (definition.combatTavernSpellExtraCasts ?? 0) > 0 ||
@@ -9355,6 +9448,10 @@ interface CombatContext {
   eternalKnightsDied: Record<PlayerId, number>;
   /** Combat-only counters keyed by the exact minion or Magnetic component. */
   avengeProgress: Record<PlayerId, Record<string, number>>;
+  /** Per-combat self-damage trigger counts keyed by the exact component. */
+  limitedSelfDamageTriggers: Record<PlayerId, Record<string, number>>;
+  /** Poisonous/Venomous damage remains lethal even if later triggers grant Health. */
+  poisonLethalMinionIds: Record<PlayerId, Set<string>>;
   /** Maximum Health is tracked separately from damage for Charmwing. */
   maximumHealths: Record<PlayerId, Record<string, number>>;
   /** Only the original Recruit-board entities may receive permanent combat gains. */
@@ -9537,7 +9634,11 @@ function applyCombatEnchantingGain(
     adjustCombatMaximumHealth(context, ownerId, target, health);
   }
   target.attack = Math.max(0, target.attack + attack);
-  target.health = Math.max(1, target.health + health);
+  target.health = context.poisonLethalMinionIds[ownerId].has(
+    target.instanceId,
+  )
+    ? Math.min(0, target.health + health)
+    : Math.max(1, target.health + health);
   const gainedKeywords = gainCombatBonusKeywords(
     target,
     gain.keywords ?? [],
@@ -9578,6 +9679,55 @@ function applyCombatEnchantingGain(
     retained.keywords.add(keyword);
   }
   return { gainedKeywords, retentionMultiplier };
+}
+
+interface ExplicitPermanentCombatGainResult {
+  persisted: boolean;
+}
+
+/**
+ * Printed permanent combat gains bypass the Tarecgosa/Poet retention ledger:
+ * they are written back exactly once, and only for an original combat entity.
+ */
+function applyExplicitPermanentCombatStatGain(
+  context: CombatContext,
+  ownerId: PlayerId,
+  target: MinionInstance,
+  gain: CombatStatBuff,
+): ExplicitPermanentCombatGainResult {
+  if (gain.health !== 0) {
+    adjustCombatMaximumHealth(context, ownerId, target, gain.health);
+  }
+  target.attack = Math.max(0, target.attack + gain.attack);
+  // Keep exact non-positive Health so a small gain cannot revive overkill.
+  target.health += gain.health;
+  if (
+    context.poisonLethalMinionIds[ownerId].has(target.instanceId)
+  ) {
+    target.health = Math.min(0, target.health);
+  }
+  reconcileConditionalMinion(target);
+
+  if (!context.originalCombatMinionIds[ownerId].has(target.instanceId)) {
+    return { persisted: false };
+  }
+  const owner = persistentCombatOwner(context, ownerId);
+  const persistent = owner
+    ? findCombatWritebackMinion(
+        context,
+        owner,
+        ownerId,
+        target.instanceId,
+      )
+    : undefined;
+  if (!persistent) {
+    return { persisted: false };
+  }
+  persistent.attack = Math.max(0, persistent.attack + gain.attack);
+  persistent.health += gain.health;
+  reconcileConditionalMinion(persistent);
+  refreshDynamicMinionDescription(persistent, owner);
+  return { persisted: true };
 }
 
 function applyCurrentBeetleBonus(
@@ -10472,12 +10622,19 @@ function applyCombatSummonHeroPower(
   minion.taunt = true;
 }
 
+interface FriendlySummonTriggerResult {
+  events: Omit<BattleEvent, "index">[];
+  /** Snapshot immediately before the first visible buff to the summoned unit. */
+  summonSnapshotBeforeBuff?: BoardMinionInstance;
+}
+
 function triggerAfterFriendlySummoned(
   context: CombatContext,
   ownerId: PlayerId,
   summoned: MinionInstance,
-): Omit<BattleEvent, "index">[] {
+): FriendlySummonTriggerResult {
   const events: Omit<BattleEvent, "index">[] = [];
+  let summonSnapshotBeforeBuff: BoardMinionInstance | undefined;
   for (const watcher of context.boards[ownerId]) {
     if (watcher.instanceId === summoned.instanceId) {
       continue;
@@ -10490,7 +10647,35 @@ function triggerAfterFriendlySummoned(
         continue;
       }
       const scale = component.golden ? 2 : 1;
-      if (trigger.grantShield) {
+      if (trigger.attackMultiplier !== undefined) {
+        summonSnapshotBeforeBuff ??= cloneMinion(summoned);
+        const multiplier = component.golden
+          ? (trigger.goldenAttackMultiplier ?? trigger.attackMultiplier)
+          : trigger.attackMultiplier;
+        const attackDelta = summoned.attack * (multiplier - 1);
+        const gain = applyCombatEnchantingGain(
+          context,
+          ownerId,
+          summoned,
+          { attack: attackDelta },
+        );
+        events.push({
+          type: "buff",
+          actorPlayerId: ownerId,
+          actorInstanceId: watcher.instanceId,
+          targetPlayerId: ownerId,
+          targetInstanceId: summoned.instanceId,
+          actorMinion: cloneMinion(watcher),
+          attackDelta,
+          healthDelta: 0,
+          minion: cloneMinion(summoned),
+          retained: gain.retentionMultiplier > 0,
+          ...(gain.retentionMultiplier > 0
+            ? { retentionMultiplier: gain.retentionMultiplier }
+            : {}),
+          message: `${rallySourceLabel(component)}使${summoned.name}的攻击力变为${multiplier}倍。`,
+        });
+      } else if (trigger.grantShield) {
         const attackDelta = (trigger.attack ?? 0) * scale;
         const healthDelta = (trigger.health ?? 0) * scale;
         const gain = applyCombatEnchantingGain(
@@ -10526,7 +10711,12 @@ function triggerAfterFriendlySummoned(
       }
     }
   }
-  return events;
+  return {
+    events,
+    ...(summonSnapshotBeforeBuff
+      ? { summonSnapshotBeforeBuff }
+      : {}),
+  };
 }
 
 function summonCombatMinion(
@@ -10664,7 +10854,7 @@ function insertCombatMinion(
   const boardIndex = Math.min(Math.max(0, insertAt), board.length);
   board.splice(boardIndex, 0, summoned);
   const auraEvents = applyNewAuraSource(context, summoned, ownerId);
-  const afterSummonEvents = triggerAfterFriendlySummoned(
+  const afterSummon = triggerAfterFriendlySummoned(
     context,
     ownerId,
     summoned,
@@ -10679,11 +10869,12 @@ function insertCombatMinion(
     targetPlayerId: ownerId,
     targetInstanceId: summoned.instanceId,
     boardIndex,
-    minion: cloneMinion(summoned),
+    minion:
+      afterSummon.summonSnapshotBeforeBuff ?? cloneMinion(summoned),
     summonReason,
     message,
   });
-  for (const event of [...auraEvents, ...afterSummonEvents]) {
+  for (const event of [...auraEvents, ...afterSummon.events]) {
     pushBattleEvent(context.events, event);
   }
   observeCombatAutomatonSummon(context, ownerId, summoned);
@@ -10838,6 +11029,44 @@ function triggerSelfDamaged(
       continue;
     }
     for (const effect of effects) {
+      if (effect.kind === "gainFreeRefreshes") {
+        const triggerKey = `${target.instanceId}:${component.sourceInstanceId}:${component.definitionId}:freeRefreshes`;
+        const triggerCounts =
+          context.limitedSelfDamageTriggers[ownerId];
+        const previousTriggers = triggerCounts[triggerKey] ?? 0;
+        if (
+          effect.maxTriggersPerTurn !== undefined &&
+          previousTriggers >= effect.maxTriggersPerTurn
+        ) {
+          continue;
+        }
+        triggerCounts[triggerKey] = previousTriggers + 1;
+        const refreshCount =
+          effect.count * (component.golden ? 2 : 1);
+        const owner = persistentCombatOwner(context, ownerId);
+        if (owner) {
+          owner.freeRefreshes += refreshCount;
+        }
+        const remaining =
+          effect.maxTriggersPerTurn === undefined
+            ? undefined
+            : Math.max(
+                0,
+                effect.maxTriggersPerTurn - previousTriggers - 1,
+              );
+        pushBattleEvent(context.events, {
+          type: "trigger",
+          actorPlayerId: ownerId,
+          actorInstanceId: target.instanceId,
+          targetPlayerId: ownerId,
+          amount: refreshCount,
+          actorMinion: cloneMinion(target),
+          message: owner
+            ? `${rallySourceLabel(component)}获得${refreshCount}次免费刷新${remaining === undefined ? "" : `（本场还可触发${remaining}次）`}。`
+            : `${rallySourceLabel(component)}触发了免费刷新效果，但幽灵不会保留奖励。`,
+        });
+        continue;
+      }
       if (effect.kind === "buff") {
         const attackDelta =
           effect.attack * (component.golden ? 2 : 1);
@@ -10935,6 +11164,144 @@ function triggerSelfDamaged(
   }
 }
 
+interface CapturedFriendlyDamagedObserver {
+  watcher: MinionInstance;
+  component: MinionEffectSource;
+  trigger: FriendlyDamagedTrigger;
+}
+
+interface CombatDamageObservation {
+  sourceOwnerId: PlayerId;
+  source: MinionInstance;
+  targetOwnerId: PlayerId;
+  target: MinionInstance;
+  friendlyDamagedObservers: readonly CapturedFriendlyDamagedObserver[];
+}
+
+function captureCombatDamageObservation(
+  context: CombatContext,
+  sourceOwnerId: PlayerId,
+  source: MinionInstance,
+  targetOwnerId: PlayerId,
+  target: MinionInstance,
+): CombatDamageObservation {
+  const friendlyDamagedObservers: CapturedFriendlyDamagedObserver[] = [];
+  for (const watcher of context.boards[targetOwnerId]) {
+    for (const component of minionEffectSources(watcher)) {
+      const trigger = getMinionDefinition(
+        component.definitionId,
+      ).afterFriendlyDamaged;
+      if (
+        !trigger ||
+        !minionHasTribe(target, trigger.tribe) ||
+        (trigger.otherOnly &&
+          watcher.instanceId === target.instanceId)
+      ) {
+        continue;
+      }
+      friendlyDamagedObservers.push({ watcher, component, trigger });
+    }
+  }
+  return {
+    sourceOwnerId,
+    source,
+    targetOwnerId,
+    target,
+    friendlyDamagedObservers,
+  };
+}
+
+function triggerFriendlyDamagedObservers(
+  context: CombatContext,
+  observation: CombatDamageObservation,
+): void {
+  const { targetOwnerId, target } = observation;
+  const board = context.boards[targetOwnerId];
+  for (const captured of observation.friendlyDamagedObservers) {
+    const { watcher, component, trigger } = captured;
+    if (
+      !board.some(
+        (candidate) => candidate.instanceId === watcher.instanceId,
+      )
+    ) {
+      continue;
+    }
+    const buffTarget =
+      trigger.target === "self"
+        ? watcher
+        : (() => {
+            const targetTribe = trigger.targetTribe ?? trigger.tribe;
+            const candidates = board.filter(
+              (candidate) =>
+                candidate.health > 0 &&
+                candidate.instanceId !== target.instanceId &&
+                minionHasTribe(candidate, targetTribe),
+            );
+            return candidates.length === 0
+              ? undefined
+              : candidates[
+                  randomIndex(context.state, candidates.length)
+                ];
+          })();
+    if (!buffTarget) {
+      continue;
+    }
+
+    const scale = component.golden ? 2 : 1;
+    const attackDelta = trigger.attack * scale;
+    const healthDelta = trigger.health * scale;
+    let retentionMultiplier: CombatRetentionMultiplier = 0;
+    if (trigger.permanent) {
+      const gain = applyExplicitPermanentCombatStatGain(
+        context,
+        targetOwnerId,
+        buffTarget,
+        { attack: attackDelta, health: healthDelta },
+      );
+      retentionMultiplier = gain.persisted ? 1 : 0;
+    } else {
+      retentionMultiplier = applyCombatEnchantingGain(
+        context,
+        targetOwnerId,
+        buffTarget,
+        { attack: attackDelta, health: healthDelta },
+      ).retentionMultiplier;
+    }
+
+    const buffSnapshot = cloneMinion(buffTarget);
+    buffSnapshot.health = Math.max(0, buffSnapshot.health);
+    pushBattleEvent(context.events, {
+      type: "buff",
+      actorPlayerId: targetOwnerId,
+      actorInstanceId: watcher.instanceId,
+      targetPlayerId: targetOwnerId,
+      targetInstanceId: buffTarget.instanceId,
+      actorMinion: cloneMinion(watcher),
+      attackDelta,
+      healthDelta,
+      minion: buffSnapshot,
+      retained: retentionMultiplier > 0,
+      ...(retentionMultiplier > 0 ? { retentionMultiplier } : {}),
+      message:
+        trigger.target === "self"
+          ? `${rallySourceLabel(component)}因${target.name}受到伤害而获得+${attackDelta}/+${healthDelta}。`
+          : `${rallySourceLabel(component)}因${target.name}受到伤害，使${buffTarget.name}获得+${attackDelta}/+${healthDelta}。`,
+    });
+  }
+}
+
+function triggerCombatDamageObservation(
+  context: CombatContext,
+  observation: CombatDamageObservation,
+): void {
+  triggerSelfDamaged(
+    context,
+    observation.targetOwnerId,
+    observation.target,
+  );
+  triggerFriendlyDamagedObservers(context, observation);
+}
+
 function resolveCombatHandBuff(
   context: CombatContext,
   ownerId: PlayerId,
@@ -10990,10 +11357,10 @@ function dealCombatDamage(
   target: MinionInstance,
   amount: number,
   poisonous: boolean,
-  deferSelfDamaged = false,
-): boolean {
+  deferDamageObservers = false,
+): CombatDamageObservation | null {
   if (amount <= 0 || target.health <= 0) {
-    return false;
+    return null;
   }
   const conditionalGain = applyCombatEnchantingGain(
     context,
@@ -11033,11 +11400,12 @@ function dealCombatDamage(
       minion: cloneMinion(target),
       message: `${target.name}的圣盾被击破。`,
     });
-    return false;
+    return null;
   }
   target.health -= amount;
   if (poisonous || source.venomous) {
     target.health = Math.min(0, target.health);
+    context.poisonLethalMinionIds[targetOwnerId].add(target.instanceId);
   }
   if (source.venomous) {
     source.venomous = false;
@@ -11055,23 +11423,25 @@ function dealCombatDamage(
     minion: targetSnapshot,
     message: `${target.name}受到${amount}点伤害，剩余${targetSnapshot.health}点生命。`,
   });
-  if (!deferSelfDamaged) {
-    triggerSelfDamaged(context, targetOwnerId, target);
+  const observation = captureCombatDamageObservation(
+    context,
+    sourceOwnerId,
+    source,
+    targetOwnerId,
+    target,
+  );
+  if (!deferDamageObservers) {
+    triggerCombatDamageObservation(context, observation);
   }
-  return true;
+  return observation;
 }
 
-interface DeferredSelfDamageTarget {
-  ownerId: PlayerId;
-  target: MinionInstance;
-}
-
-function triggerDeferredSelfDamage(
+function triggerDeferredDamageObservers(
   context: CombatContext,
-  damagedTargets: readonly DeferredSelfDamageTarget[],
+  observations: readonly CombatDamageObservation[],
 ): void {
-  for (const { ownerId, target } of damagedTargets) {
-    triggerSelfDamaged(context, ownerId, target);
+  for (const observation of observations) {
+    triggerCombatDamageObservation(context, observation);
   }
 }
 
@@ -12662,27 +13032,23 @@ function triggerAfterAttackKills(
         message: `${rallySourceLabel(component)}将${excessDamage}点过量伤害溅射给${adjacentTarget.name}。`,
       });
     }
-    const damagedTargets: DeferredSelfDamageTarget[] = [];
+    const damageObservations: CombatDamageObservation[] = [];
     for (const adjacentTarget of targets) {
-      if (
-        dealCombatDamage(
-          context,
-          ownerId,
-          attacker,
-          targetOwnerId,
-          adjacentTarget,
-          excessDamage,
-          false,
-          true,
-        )
-      ) {
-        damagedTargets.push({
-          ownerId: targetOwnerId,
-          target: adjacentTarget,
-        });
+      const observation = dealCombatDamage(
+        context,
+        ownerId,
+        attacker,
+        targetOwnerId,
+        adjacentTarget,
+        excessDamage,
+        false,
+        true,
+      );
+      if (observation) {
+        damageObservations.push(observation);
       }
     }
-    triggerDeferredSelfDamage(context, damagedTargets);
+    triggerDeferredDamageObservers(context, damageObservations);
   }
 }
 
@@ -12762,52 +13128,49 @@ function performAttackStrike(
   const retaliationDamage = target.attack;
   const attackerPoisonous = attacker.poisonous;
   const targetPoisonous = target.poisonous;
-  const damagedTargets: DeferredSelfDamageTarget[] = [];
-  if (
-    dealCombatDamage(
+  const damageObservations: CombatDamageObservation[] = [];
+  const targetObservation = dealCombatDamage(
+    context,
+    ownerId,
+    attacker,
+    enemyId,
+    target,
+    attackDamage,
+    attackerPoisonous,
+    true,
+  );
+  if (targetObservation) {
+    damageObservations.push(targetObservation);
+  }
+  const attackerObservation = dealCombatDamage(
+    context,
+    enemyId,
+    target,
+    ownerId,
+    attacker,
+    retaliationDamage,
+    targetPoisonous,
+    true,
+  );
+  if (attackerObservation) {
+    damageObservations.push(attackerObservation);
+  }
+  for (const adjacent of cleaveTargets) {
+    const observation = dealCombatDamage(
       context,
       ownerId,
       attacker,
       enemyId,
-      target,
+      adjacent,
       attackDamage,
       attackerPoisonous,
       true,
-    )
-  ) {
-    damagedTargets.push({ ownerId: enemyId, target });
-  }
-  if (
-    dealCombatDamage(
-      context,
-      enemyId,
-      target,
-      ownerId,
-      attacker,
-      retaliationDamage,
-      targetPoisonous,
-      true,
-    )
-  ) {
-    damagedTargets.push({ ownerId, target: attacker });
-  }
-  for (const adjacent of cleaveTargets) {
-    if (
-      dealCombatDamage(
-        context,
-        ownerId,
-        attacker,
-        enemyId,
-        adjacent,
-        attackDamage,
-        attackerPoisonous,
-        true,
-      )
-    ) {
-      damagedTargets.push({ ownerId: enemyId, target: adjacent });
+    );
+    if (observation) {
+      damageObservations.push(observation);
     }
   }
-  triggerDeferredSelfDamage(context, damagedTargets);
+  triggerDeferredDamageObservers(context, damageObservations);
   triggerAfterAttackKills(
     context,
     ownerId,
@@ -13431,7 +13794,7 @@ function resolveOneDeathrattle(
               ? effect.amount * 2
               : effect.amount;
           for (let hit = 0; hit < repeats; hit += 1) {
-            const damagedTargets: DeferredSelfDamageTarget[] = [];
+            const damageObservations: CombatDamageObservation[] = [];
             for (const targetOwnerId of context.playerIds) {
               for (const target of [...context.boards[targetOwnerId]]) {
                 if (
@@ -13441,26 +13804,25 @@ function resolveOneDeathrattle(
                 ) {
                   continue;
                 }
-                if (
-                  dealCombatDamage(
-                    context,
-                    ownerId,
-                    source,
-                    targetOwnerId,
-                    target,
-                    amount,
-                    false,
-                    true,
-                  )
-                ) {
-                  damagedTargets.push({
-                    ownerId: targetOwnerId,
-                    target,
-                  });
+                const observation = dealCombatDamage(
+                  context,
+                  ownerId,
+                  source,
+                  targetOwnerId,
+                  target,
+                  amount,
+                  false,
+                  true,
+                );
+                if (observation) {
+                  damageObservations.push(observation);
                 }
               }
             }
-            triggerDeferredSelfDamage(context, damagedTargets);
+            triggerDeferredDamageObservers(
+              context,
+              damageObservations,
+            );
           }
         } else if (effect.kind === "resummonMechs") {
           const history = context.deadMechs[ownerId];
@@ -14265,6 +14627,14 @@ function simulateBattle(
     avengeProgress: {
       [playerA.id]: {},
       [playerB.id]: {},
+    },
+    limitedSelfDamageTriggers: {
+      [playerA.id]: {},
+      [playerB.id]: {},
+    },
+    poisonLethalMinionIds: {
+      [playerA.id]: new Set(),
+      [playerB.id]: new Set(),
     },
     maximumHealths: {
       [playerA.id]: Object.fromEntries(

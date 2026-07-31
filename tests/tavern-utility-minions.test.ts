@@ -19,6 +19,7 @@ import {
   LEGACY_SCHEMA_11_CONTENT_VERSION_V33,
   LEGACY_SCHEMA_11_CONTENT_VERSION_V34,
   LEGACY_SCHEMA_11_CONTENT_VERSION_V35,
+  LEGACY_SCHEMA_11_CONTENT_VERSION_V36,
   normalizePersistedGameState,
 } from "../lib/game/save.ts";
 import { deriveRecruitPresentation } from "../lib/game/recruit-presentation.ts";
@@ -550,7 +551,7 @@ test("Primalfin Lookout requires another Murloc and chains Golden Brann discover
   }
 });
 
-test("v33 saves migrate through v36 and refresh the v34 definitions", () => {
+test("v33 saves migrate through v37 and refresh the v34 definitions", () => {
   const legacy = structuredClone(createGame(0xd3450));
   legacy.contentVersion = LEGACY_SCHEMA_11_CONTENT_VERSION_V33;
   const player = humanPlayer(legacy);
@@ -899,7 +900,7 @@ test("AI plays Void Pup Trainer through the shared persistent Tavern path", () =
   assert.equal(nextAi.shop[0]?.divineShield, true);
 });
 
-test("v34 saves migrate through v36 with an empty Tier ledger and preserved prior state", () => {
+test("v34 saves migrate through v37 with an empty Tier ledger and preserved prior state", () => {
   const legacy = structuredClone(createGame(0xd34a0));
   legacy.contentVersion = LEGACY_SCHEMA_11_CONTENT_VERSION_V34;
   const player = humanPlayer(legacy);
@@ -970,7 +971,7 @@ test("v34 saves migrate through v36 with an empty Tier ledger and preserved prio
   );
 });
 
-test("v35 saves migrate to v36 without losing the Tier ledger or persistent death rewards", () => {
+test("v35 saves migrate through v37 without losing the Tier ledger or persistent death rewards", () => {
   const legacy = structuredClone(createGame(0xd34b0));
   legacy.contentVersion = LEGACY_SCHEMA_11_CONTENT_VERSION_V35;
   const player = humanPlayer(legacy);
@@ -1052,6 +1053,69 @@ test("v35 saves migrate to v36 without losing the Tier ledger or persistent deat
       ["BG26_867", "BG26_867_G", "complete"],
       ["BG34_312", "BG34_312_G", "complete"],
       ["BG34_690", "BG34_690_G", "complete"],
+    ],
+  );
+});
+
+test("v36 saves migrate to v37 with complete damage observers and unchanged persistent state", () => {
+  const legacy = structuredClone(createGame(0xd34c0));
+  legacy.contentVersion = LEGACY_SCHEMA_11_CONTENT_VERSION_V36;
+  const player = humanPlayer(legacy);
+  player.freeRefreshes = 5;
+  player.tavernTierBuffs = [
+    { maximumTier: 4, attack: 2, health: 2 },
+  ];
+  player.rideTheWindBuffs = [{ attack: 3, health: 3 }];
+  player.undeadArmyAttackBonus = 7;
+  player.undeadArmyHealthBonus = 1;
+  player.board = [
+    goldenMinion("BG26_802", "legacy-slamma", {
+      cardId: "BG26_802",
+      effectSupport: "partial",
+    }),
+    goldenMinion("BG35_601", "legacy-wyvern", {
+      cardId: "BG35_601",
+      effectSupport: "partial",
+    }),
+    goldenMinion("BG29_807", "legacy-trigore", {
+      cardId: "BG29_807",
+      effectSupport: "partial",
+    }),
+    goldenMinion("BG29_806", "legacy-skyblazer", {
+      cardId: "BG29_806",
+      effectSupport: "partial",
+    }),
+  ];
+
+  const persisted = JSON.parse(JSON.stringify(legacy)) as unknown;
+  const migrated = normalizePersistedGameState(persisted);
+  assert.ok(migrated);
+  const migratedState = migrated as GameState;
+  const migratedPlayer = humanPlayer(migratedState);
+  assert.equal(
+    migratedState.contentVersion,
+    CURRENT_ROSTER_VERSION,
+  );
+  assert.equal(migratedPlayer.freeRefreshes, 5);
+  assert.deepEqual(migratedPlayer.tavernTierBuffs, [
+    { maximumTier: 4, attack: 2, health: 2 },
+  ]);
+  assert.deepEqual(migratedPlayer.rideTheWindBuffs, [
+    { attack: 3, health: 3 },
+  ]);
+  assert.equal(migratedPlayer.undeadArmyAttackBonus, 7);
+  assert.equal(migratedPlayer.undeadArmyHealthBonus, 1);
+  assert.deepEqual(
+    migratedPlayer.board.map((minion) => [
+      minion.definitionId,
+      minion.cardId,
+      minion.effectSupport,
+    ]),
+    [
+      ["BG26_802", "BG26_802_G", "complete"],
+      ["BG35_601", "BG35_601_G", "complete"],
+      ["BG29_807", "BG29_807_G", "complete"],
+      ["BG29_806", "BG29_806_G", "complete"],
     ],
   );
 });
