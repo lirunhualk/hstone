@@ -27,6 +27,12 @@ const CORE_SPELL_CARD_IDS = [
   "BG28_521t",
   "TB_BaconShop_Triples_01",
 ];
+const SUPPORTED_CHOICE_CARD_IDS = [
+  "BG30_123t",
+  "BG30_123t2",
+  "BG30_123_Gt",
+  "BG30_123_Gt2",
+];
 
 const allCardIds = [
   ...new Set([
@@ -41,6 +47,7 @@ const allCardIds = [
     ]),
     ...TAVERN_SPELL_DEFINITIONS.map((definition) => definition.cardId),
     ...CORE_SPELL_CARD_IDS,
+    ...SUPPORTED_CHOICE_CARD_IDS,
   ].filter((cardId) => typeof cardId === "string")),
 ].sort();
 const startupPlayer = STARTUP

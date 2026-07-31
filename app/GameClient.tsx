@@ -17,7 +17,7 @@ import {
 import {
   canMagnetize,
   createGame,
-  gameReducer,
+  gameTransition,
   HELPFUL_REFRESH_LABELS,
   TAVERN_SPELL_DEFINITIONS,
   getLegalSpellcraftTargetIds,
@@ -94,7 +94,6 @@ import {
 import {
   completeRecruitPresentation,
   deriveRecruitPresentation,
-  enqueueRecruitPresentation,
   recruitPresentationAnnouncement,
   recruitPresentationDuration,
   type RecruitPresentationEvent,
@@ -575,6 +574,24 @@ function isPendingInteraction(
       )
     );
   }
+  if (value.kind === "minionChoice") {
+    const normalOptions =
+      Array.isArray(value.optionIds) &&
+      value.optionIds.length === 2 &&
+      value.optionIds[0] === "BG30_123t" &&
+      value.optionIds[1] === "BG30_123t2" &&
+      value.effectMultiplier === 1;
+    const goldenOptions =
+      Array.isArray(value.optionIds) &&
+      value.optionIds.length === 2 &&
+      value.optionIds[0] === "BG30_123_Gt" &&
+      value.optionIds[1] === "BG30_123_Gt2" &&
+      value.effectMultiplier === 2;
+    return (
+      value.definitionId === "BG30_123" &&
+      (normalOptions || goldenOptions)
+    );
+  }
   if (value.kind !== "discover") {
     return false;
   }
@@ -644,6 +661,17 @@ function pendingInteractionMatchesPlayer(
         "tavern-spell-unmasked-identity" &&
       interaction.optionIds.length > 0 &&
       interaction.optionIds.every(isHeroPowerDefinitionId)
+    );
+  }
+  if (interaction.kind === "minionChoice") {
+    const source = player.board.find(
+      (minion) =>
+        minion.instanceId === interaction.sourceInstanceId,
+    );
+    return (
+      interaction.definitionId === "BG30_123" &&
+      source?.definitionId === interaction.definitionId &&
+      source.golden === (interaction.effectMultiplier === 2)
     );
   }
   return (
@@ -2841,8 +2869,6 @@ export default function GameClient() {
   const [cardInspection, setCardInspection] =
     useState<CardInspectionState | null>(null);
   const [magneticAnnouncement, setMagneticAnnouncement] = useState("");
-  const [bloodGemCastFeedback, setBloodGemCastFeedback] =
-    useState<BloodGemCastFeedback | null>(null);
   const [tavernSpellCastFeedback, setTavernSpellCastFeedback] =
     useState<TavernSpellCastFeedback | null>(null);
   const [recruitPresentationQueue, setRecruitPresentationQueue] =
@@ -2875,7 +2901,6 @@ export default function GameClient() {
   const suppressCardClickRef = useRef(false);
   const battlePlaybackTimerRef = useRef<number | null>(null);
   const combatIntroTimerRef = useRef<number | null>(null);
-  const bloodGemCastTimerRef = useRef<number | null>(null);
   const tavernSpellCastTimerRef = useRef<number | null>(null);
   const interactionReturnFocusRef = useRef<HTMLElement | null>(null);
   const previousInteractionIdRef = useRef<string | null>(null);
@@ -2884,6 +2909,13 @@ export default function GameClient() {
   const preCombatHandIdsRef = useRef<Set<string> | null>(null);
   const activeRecruitPresentation =
     recruitPresentationQueue[0] ?? null;
+  const activeRecruitBloodGemPulse =
+    activeRecruitPresentation?.events.find(
+      (event) => event.kind === "bloodGemPulse",
+    );
+  const queuedRecruitBloodGemPulse = recruitPresentationQueue
+    .flatMap((presentation) => presentation.events)
+    .find((event) => event.kind === "bloodGemPulse");
 
   useLayoutEffect(() => {
     gameRef.current = game;
@@ -2964,14 +2996,6 @@ export default function GameClient() {
     touchInspectionGestureRef.current = null;
     writeCardInspection(null);
   }, [clearCardInspectionTimer, writeCardInspection]);
-
-  const clearBloodGemCastFeedback = useCallback(() => {
-    if (bloodGemCastTimerRef.current !== null) {
-      window.clearTimeout(bloodGemCastTimerRef.current);
-      bloodGemCastTimerRef.current = null;
-    }
-    setBloodGemCastFeedback(null);
-  }, []);
 
   const clearTavernSpellCastFeedback = useCallback(() => {
     if (tavernSpellCastTimerRef.current !== null) {
@@ -3071,22 +3095,36 @@ export default function GameClient() {
       const current = gameRef.current;
       const motion = captureRecruitMotion(current, action);
       dismissCardInspection();
-      const next = gameReducer(current, action);
-      const events = deriveRecruitPresentation(current, next, action);
+      const transition = gameTransition(current, action);
+      const next = transition.state;
+      const events = deriveRecruitPresentation(
+        current,
+        next,
+        action,
+        transition.trace,
+      );
       gameRef.current = next;
       if (action.type === "END_TURN" || action.type === "CONTINUE") {
         setRecruitPresentationQueue([]);
       } else if (events.length > 0) {
-        recruitPresentationTokenRef.current += 1;
-        const presentation = {
-          token: recruitPresentationTokenRef.current,
-          events,
-          announcement: recruitPresentationAnnouncement(events),
-          motion,
-        };
-        setRecruitPresentationQueue((current) =>
-          enqueueRecruitPresentation(current, presentation),
-        );
+        const eventGroups = events.every(
+          (event) => event.kind === "bloodGemPulse",
+        )
+          ? events.map((event) => [event])
+          : [events];
+        const presentations = eventGroups.map((group, index) => {
+          recruitPresentationTokenRef.current += 1;
+          return {
+            token: recruitPresentationTokenRef.current,
+            events: group,
+            announcement: recruitPresentationAnnouncement(group),
+            motion: index === 0 ? motion : null,
+          };
+        });
+        setRecruitPresentationQueue((current) => [
+          ...current,
+          ...presentations,
+        ]);
       }
       if (started) {
         safeWriteLocalStorage(SAVE_KEY, JSON.stringify(next));
@@ -3164,7 +3202,13 @@ export default function GameClient() {
     humanInteraction?.kind === "heroPowerChoice"
       ? humanInteraction
       : null;
-  const interactionLocked = game.pendingInteraction !== null;
+  const minionChoiceInteraction =
+    humanInteraction?.kind === "minionChoice"
+      ? humanInteraction
+      : null;
+  const interactionLocked =
+    game.pendingInteraction !== null ||
+    queuedRecruitBloodGemPulse?.kind === "bloodGemPulse";
   const modalInteractionLocked = interactionRequiresModalBackdrop(
     game.pendingInteraction,
   );
@@ -3198,6 +3242,10 @@ export default function GameClient() {
             : humanInteraction.kind === "heroPowerChoice"
               ? document.querySelector<HTMLElement>(
                   '[data-testid="hero-power-choice-0"]',
+                )
+            : humanInteraction.kind === "minionChoice"
+              ? document.querySelector<HTMLElement>(
+                  '[data-testid="fearless-foodie-improve"]',
                 )
             : Array.from(
                 document.querySelectorAll<HTMLElement>(
@@ -3473,7 +3521,11 @@ export default function GameClient() {
           revealedPlaybackEvents,
           { flushPendingDeaths: battlePlaybackComplete },
         )
-      : human.board;
+      : activeRecruitBloodGemPulse?.kind === "bloodGemPulse"
+        ? activeRecruitBloodGemPulse.boardAfterPulse
+        : queuedRecruitBloodGemPulse?.kind === "bloodGemPulse"
+          ? queuedRecruitBloodGemPulse.boardBeforePulse
+          : human.board;
   const currentBuffLabel = combatBuffLabel(currentBattleEvent);
   const currentHitLabel =
     currentBattleEvent?.type === "damage"
@@ -4004,7 +4056,6 @@ export default function GameClient() {
   const startFreshGame = useCallback(() => {
     clearBattlePlaybackTimer();
     clearCombatIntroTimer();
-    clearBloodGemCastFeedback();
     clearTavernSpellCastFeedback();
     const next = createGame(newSeed());
     safeWriteLocalStorage(SAVE_KEY, JSON.stringify(next));
@@ -4029,7 +4080,6 @@ export default function GameClient() {
     preCombatHandIdsRef.current = null;
   }, [
     clearBattlePlaybackTimer,
-    clearBloodGemCastFeedback,
     clearTavernSpellCastFeedback,
     clearCombatIntroTimer,
     clearCombatRewardFeedback,
@@ -4099,23 +4149,14 @@ export default function GameClient() {
       if (!card || !target) {
         return;
       }
-      if (bloodGemCastTimerRef.current !== null) {
-        window.clearTimeout(bloodGemCastTimerRef.current);
-      }
-      const bonusKeyword = minionHasTribe(target, "quilboar")
-        ? bloodGemKeywordText(card)
-        : "";
-      setBloodGemCastFeedback({
-        targetInstanceId,
-        attack: human.bloodGemAttack,
-        health: human.bloodGemHealth,
-        bonusKeyword,
-        token: card.instanceId,
-      });
-      bloodGemCastTimerRef.current = window.setTimeout(() => {
-        bloodGemCastTimerRef.current = null;
-        setBloodGemCastFeedback(null);
-      }, 620);
+      const bonusKeyword =
+        minionHasTribe(target, "quilboar") &&
+        ((card.bonusKeyword === "rebornForQuilboar" &&
+          !target.reborn) ||
+          (card.bonusKeyword === "divineShieldForQuilboar" &&
+            !target.divineShield))
+          ? bloodGemKeywordText(card)
+          : "";
       setMagneticAnnouncement(
         `已对${target.name}使用鲜血宝石，获得 +${human.bloodGemAttack}/+${human.bloodGemHealth}${
           bonusKeyword
@@ -5389,6 +5430,26 @@ export default function GameClient() {
     activeRecruitPresentation?.events.filter(
       (event) => event.kind === "triple",
     ) ?? [];
+  const bloodGemCastFeedback: BloodGemCastFeedback | null =
+    activeRecruitBloodGemPulse?.kind === "bloodGemPulse"
+      ? {
+          targetInstanceId:
+            activeRecruitBloodGemPulse.targetInstanceId,
+          attack: activeRecruitBloodGemPulse.attack,
+          health: activeRecruitBloodGemPulse.health,
+          bonusKeyword:
+            activeRecruitBloodGemPulse.bonusKeyword ===
+            "rebornForQuilboar"
+              ? "复生"
+              : activeRecruitBloodGemPulse.bonusKeyword ===
+                  "divineShieldForQuilboar"
+                ? "圣盾"
+                : "",
+          token: `${activeRecruitPresentation?.token ?? 0}-${
+            activeRecruitBloodGemPulse.pulseIndex
+          }`,
+        }
+      : null;
   const activeRecruitMotion = activeRecruitPresentation?.motion ?? null;
   const activeRecruitAction =
     activeRecruitMove?.kind === "cardMove"
@@ -5399,6 +5460,8 @@ export default function GameClient() {
           ? "tavern-upgrade"
           : activeRecruitTriples.length > 0
             ? "triple-merge"
+            : activeRecruitBloodGemPulse
+              ? "blood-gem-pulse"
             : "none";
   const recruitFeedbackTitle =
     activeRecruitMove?.kind === "cardMove"
@@ -5413,6 +5476,10 @@ export default function GameClient() {
           ? `酒馆升至 ${activeRecruitUpgrade.toTier} 星`
           : activeRecruitTriples[0]?.kind === "triple"
             ? `三连 · ${activeRecruitTriples[0].golden.name}`
+            : activeRecruitBloodGemPulse?.kind === "bloodGemPulse"
+              ? activeRecruitBloodGemPulse.origin === "roogug"
+                ? "鲁古格 · 鲜血宝石转投"
+                : "鲜血宝石 · 逐颗结算"
             : "";
 
   return (
@@ -7621,6 +7688,97 @@ export default function GameClient() {
           ) : (
             <UnitCardFace unit={dragSession.card} />
           )}
+        </div>
+      )}
+
+      {minionChoiceInteraction && (
+        <div
+          className="overlay interaction-overlay"
+          role="dialog"
+          aria-modal="true"
+          aria-labelledby="minion-choice-title"
+          aria-describedby="minion-choice-description"
+          data-testid="fearless-foodie-dialog"
+          onKeyDown={trapDiscoverFocus}
+        >
+          <div className="modal minion-choice-modal">
+            <span className="discover-kicker">抉择 · 随从</span>
+            <h2 className="discover-title" id="minion-choice-title">
+              无畏的食客 · 选择鲜血宝石路线
+            </h2>
+            <p
+              className="discover-copy"
+              id="minion-choice-description"
+            >
+              没有倒计时。选择只结算一次，不会被布莱恩重复；完成前其他酒馆操作保持锁定。
+            </p>
+            <div className="minion-choice-options">
+              <button
+                type="button"
+                className="minion-choice"
+                data-testid="fearless-foodie-improve"
+                onClick={() =>
+                  send({
+                    type: "RESOLVE_INTERACTION",
+                    interactionId:
+                      minionChoiceInteraction.interactionId,
+                    optionInstanceId:
+                      minionChoiceInteraction.optionIds[0],
+                  })
+                }
+              >
+                <CardArtwork
+                  unit={{
+                    cardId: minionChoiceInteraction.optionIds[0],
+                    name: "大吃特吃",
+                  }}
+                  kind="portrait"
+                />
+                <strong>大吃特吃</strong>
+                <span>
+                  本局鲜血宝石额外获得 +
+                  {minionChoiceInteraction.effectMultiplier}/+
+                  {minionChoiceInteraction.effectMultiplier}。
+                </span>
+                <small>
+                  当前宝石将变为 +
+                  {human.bloodGemAttack +
+                    minionChoiceInteraction.effectMultiplier}
+                  /+
+                  {human.bloodGemHealth +
+                    minionChoiceInteraction.effectMultiplier}
+                </small>
+              </button>
+              <button
+                type="button"
+                className="minion-choice"
+                data-testid="fearless-foodie-gain"
+                onClick={() =>
+                  send({
+                    type: "RESOLVE_INTERACTION",
+                    interactionId:
+                      minionChoiceInteraction.interactionId,
+                    optionInstanceId:
+                      minionChoiceInteraction.optionIds[1],
+                  })
+                }
+              >
+                <CardArtwork
+                  unit={{
+                    cardId: minionChoiceInteraction.optionIds[1],
+                    name: "餐盘装满",
+                  }}
+                  kind="portrait"
+                />
+                <strong>餐盘装满</strong>
+                <span>
+                  获取 {4 * minionChoiceInteraction.effectMultiplier}{" "}
+                  张鲜血宝石。
+                </span>
+                <small>手牌已满时，超出上限的宝石不会进入手牌</small>
+              </button>
+            </div>
+          </div>
         </div>
       )}
 

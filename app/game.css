@@ -4560,6 +4560,92 @@
   line-height: 1.4;
 }
 
+.minion-choice-modal {
+  display: flex;
+  width: min(760px, 100%);
+  flex-direction: column;
+  align-items: center;
+  padding: 26px clamp(18px, 4vw, 36px) 32px;
+}
+
+.minion-choice-options {
+  display: grid;
+  width: 100%;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 16px;
+}
+
+.minion-choice {
+  position: relative;
+  display: grid;
+  min-width: 0;
+  min-height: 270px;
+  overflow: hidden;
+  padding: 146px 18px 18px;
+  border: 2px solid rgb(255 111 118 / 58%);
+  border-radius: 18px;
+  color: var(--text);
+  background:
+    radial-gradient(circle at 50% 2%, rgb(255 73 88 / 26%), transparent 50%),
+    linear-gradient(145deg, rgb(73 24 35 / 98%), rgb(29 17 29 / 98%));
+  box-shadow:
+    inset 0 1px 0 rgb(255 255 255 / 12%),
+    0 12px 26px rgb(0 0 0 / 32%),
+    0 0 24px rgb(255 64 78 / 14%);
+  cursor: pointer;
+  align-content: start;
+  gap: 8px;
+  text-align: center;
+  transition:
+    border-color 150ms ease,
+    box-shadow 150ms ease,
+    transform 150ms ease;
+}
+
+.minion-choice > .card-art {
+  position: absolute;
+  inset: 0 0 auto;
+  width: 100%;
+  height: 138px;
+  border-bottom: 1px solid rgb(255 224 180 / 24%);
+}
+
+.minion-choice > .card-art::after {
+  background:
+    linear-gradient(180deg, transparent 30%, rgb(50 14 25 / 90%));
+  transform: none;
+}
+
+.minion-choice:hover,
+.minion-choice:focus-visible {
+  border-color: #ffe08d;
+  outline: none;
+  box-shadow:
+    inset 0 1px 0 rgb(255 255 255 / 16%),
+    0 16px 34px rgb(0 0 0 / 38%),
+    0 0 0 3px rgb(255 190 72 / 24%),
+    0 0 34px rgb(255 80 82 / 28%);
+  transform: translateY(-5px);
+}
+
+.minion-choice > strong {
+  color: #fff2bf;
+  font-size: 20px;
+}
+
+.minion-choice > span {
+  color: #ffe9ed;
+  font-size: 14px;
+  font-weight: 750;
+  line-height: 1.5;
+}
+
+.minion-choice > small {
+  color: var(--text-soft);
+  font-size: 11px;
+  line-height: 1.4;
+}
+
 .hero-power-choice-modal {
   display: flex;
   width: min(900px, 100%);
@@ -4652,12 +4738,22 @@
 }
 
 @media (max-width: 620px) {
-  .tavern-spell-choice-options {
+  .tavern-spell-choice-options,
+  .minion-choice-options {
     grid-template-columns: 1fr;
   }
 
   .tavern-spell-choice {
     min-height: 132px;
+  }
+
+  .minion-choice {
+    min-height: 210px;
+    padding-top: 118px;
+  }
+
+  .minion-choice > .card-art {
+    height: 110px;
   }
 
   .hero-power-choice-options {

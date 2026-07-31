@@ -3,7 +3,7 @@ import liveRosterSnapshot from "./generated/battlegrounds-36.0.3-247416.zhCN.jso
 };
 import type { MinionDefinition, Tribe } from "./types.ts";
 
-export const CURRENT_ROSTER_VERSION = "battlegrounds-36.0.3-247416-v30";
+export const CURRENT_ROSTER_VERSION = "battlegrounds-36.0.3-247416-v31";
 /** Compatibility alias for existing save and engine imports. */
 export const CLASSIC_ROSTER_VERSION = CURRENT_ROSTER_VERSION;
 
@@ -1153,6 +1153,37 @@ const LIVE_RULE_OVERRIDES: Readonly<
       "塑造法术：\n抉择：使你的随从获得+8攻击力；或者+8生命值。",
     spellcraft: {
       definitionId: "spellcraft-escape-eruption",
+    },
+  },
+  BG30_123: {
+    goldenCardId: "BG30_123_G",
+    goldenDescription:
+      "抉择：在本局对战中，你的鲜血宝石使随从额外获得+2/+2；或者获取8张鲜血宝石。",
+    onPlayChoice: {
+      kind: "bloodGemImproveOrGain",
+      attack: 1,
+      health: 1,
+      count: 4,
+      goldenMode: "doubleValues",
+    },
+  },
+  BG30_121: {
+    goldenCardId: "BG30_121_G",
+    goldenDescription:
+      "从你手牌中使用的鲜血宝石会额外施放2次。",
+    bloodGemFromHandAura: {
+      extraCasts: 1,
+      goldenMode: "doubleCount",
+    },
+  },
+  BG28_583: {
+    goldenCardId: "BG28_583_G",
+    goldenDescription:
+      "圣盾。每当一张鲜血宝石被用于本随从时，本随从对一个不同的友方随从使用2张鲜血宝石。",
+    afterBloodGemCastOnSelf: {
+      kind: "playBloodGemsOnRandomOther",
+      count: 1,
+      goldenMode: "doubleCount",
     },
   },
   BG33_319: {
@@ -2606,6 +2637,7 @@ const FULLY_SUPPORTED_LIVE_CARD_IDS = new Set([
   "BG27_005",
   "BG27_556",
   "BG28_551",
+  "BG28_583",
   "BG28_595",
   "BG28_741",
   "BG28_300",
@@ -2618,7 +2650,9 @@ const FULLY_SUPPORTED_LIVE_CARD_IDS = new Set([
   "BG29_841",
   "BG29_300",
   "BG30_117",
+  "BG30_121",
   "BG30_122",
+  "BG30_123",
   "BG30_125",
   "BG31_175",
   "BG31_178",

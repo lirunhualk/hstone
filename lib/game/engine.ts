@@ -45,7 +45,9 @@ import type {
   DynamicWarbandEndOfTurnEffect,
   EndOfTurnEffect,
   GameAction,
+  GameActionTrace,
   GameState,
+  GameTransition,
   GainRandomGeneratedMinionEffect,
   GainRandomTavernSpellEffect,
   GainTavernSpellEffect,
@@ -59,12 +61,14 @@ import type {
   MagneticAttachment,
   MinionEffect,
   MinionInstance,
+  MinionChoiceId,
   PendingCardPlayedEvent,
   PendingDiscoverInteraction,
   TavernSpellChoiceId,
   PlayerId,
   PlayerState,
   QueueDemonFodderEffect,
+  RecruitBloodGemPulseResolution,
   RallyCastChefsChoiceEffect,
   RallyGrantSourceAttackEffect,
   RallyGrantSourceMaxHealthEffect,
@@ -95,8 +99,10 @@ export type {
   BoardMinionInstance,
   ConsolationCoinSpellInstance,
   GameAction,
+  GameActionTrace,
   GamePhase,
   GameState,
+  GameTransition,
   HandCardInstance,
   HelpfulRefreshKind,
   HeroPowerDefinition,
@@ -108,6 +114,7 @@ export type {
   PendingInteraction,
   PlayerId,
   PlayerState,
+  RecruitBloodGemPulseResolution,
   ScheduledPairing,
   SpellFamily,
   SpellcraftDefinition,
@@ -205,6 +212,9 @@ const TRIPLE_REWARD_CARD_ID = "TB_BaconShop_Triples_01" as const;
 const TRIPLE_REWARD_DEFINITION_ID = "triple-reward" as const;
 const BLOOD_GEM_CARD_ID = "BG20_GEM" as const;
 const BLOOD_GEM_DEFINITION_ID = "blood-gem" as const;
+const FEARLESS_FOODIE_DEFINITION_ID = "BG30_123" as const;
+const GEOMAGUS_ROOGUG_DEFINITION_ID = "BG28_583" as const;
+const COMPOSER_BRISTLEBACK_DEFINITION_ID = "BG26_157" as const;
 const CONSOLATION_COIN_CARD_ID = "BG28_521t" as const;
 const CONSOLATION_COIN_DEFINITION_ID = "consolation-coin" as const;
 const ASTRAL_AUTOMATON_DEFINITION_ID = "BG_TTN_401" as const;
@@ -1072,17 +1082,6 @@ function grantPlayedMinionSpellcraft(
   }
 }
 
-function applyBloodGem(
-  player: PlayerState,
-  target: BoardMinionInstance,
-): void {
-  applyBloodGemStats(
-    target,
-    player.bloodGemAttack,
-    player.bloodGemHealth,
-  );
-}
-
 function applyBloodGemStats(
   target: BoardMinionInstance,
   attack: number,
@@ -1093,6 +1092,134 @@ function applyBloodGemStats(
   target.bloodGemAttack += attack;
   target.bloodGemHealth += health;
   reconcileConditionalMinion(target);
+}
+
+function bloodGemFromHandExtraCasts(player: PlayerState): number {
+  return bloodGemHandCastMultiplier(player.board) - 1;
+}
+
+function minionHasEffectSource(
+  minion: MinionInstance,
+  definitionId: string,
+): boolean {
+  return minionEffectSources(minion).some(
+    (component) => component.definitionId === definitionId,
+  );
+}
+
+interface RecruitBloodGemPulseOptions {
+  bonusKeyword?: BloodGemBonusKeyword;
+  origin?: RecruitBloodGemPulseResolution["origin"];
+  sourceInstanceId?: string;
+  triggerObservers?: boolean;
+}
+
+function applyBloodGemBonusKeyword(
+  target: BoardMinionInstance,
+  bonusKeyword: BloodGemBonusKeyword | undefined,
+): void {
+  if (!minionHasTribe(target, "quilboar")) {
+    return;
+  }
+  if (bonusKeyword === "rebornForQuilboar") {
+    target.reborn = true;
+  } else if (bonusKeyword === "divineShieldForQuilboar") {
+    target.divineShield = true;
+    target.temporaryDivineShield = false;
+  }
+}
+
+function triggerRecruitBloodGemObservers(
+  state: GameState,
+  player: PlayerState,
+  target: BoardMinionInstance,
+  trace?: GameActionTrace,
+): void {
+  for (const component of minionEffectSources(target)) {
+    const effect = getMinionDefinition(
+      component.definitionId,
+    ).afterBloodGemCastOnSelf;
+    if (
+      effect?.kind !== "playBloodGemsOnRandomOther" ||
+      !player.board.some(
+        (minion) => minion.instanceId === target.instanceId,
+      )
+    ) {
+      continue;
+    }
+    const candidates = player.board.filter(
+      (candidate) =>
+        candidate.instanceId !== target.instanceId &&
+        !minionHasEffectSource(
+          candidate,
+          GEOMAGUS_ROOGUG_DEFINITION_ID,
+        ),
+    );
+    if (candidates.length === 0) {
+      continue;
+    }
+    const selected =
+      candidates[randomIndex(state, candidates.length)];
+    const count =
+      effect.count *
+      (component.golden && effect.goldenMode === "doubleCount"
+        ? 2
+        : 1);
+    for (let application = 0; application < count; application += 1) {
+      applyRecruitBloodGemPulse(
+        state,
+        player,
+        selected,
+        {
+          origin: "roogug",
+          sourceInstanceId: component.sourceInstanceId,
+        },
+        trace,
+      );
+    }
+  }
+}
+
+function applyRecruitBloodGemPulse(
+  state: GameState,
+  player: PlayerState,
+  target: BoardMinionInstance,
+  options: RecruitBloodGemPulseOptions = {},
+  trace?: GameActionTrace,
+): void {
+  const targetBefore =
+    trace && options.origin && options.sourceInstanceId
+      ? cloneMinion(target)
+      : null;
+  applyBloodGemStats(
+    target,
+    player.bloodGemAttack,
+    player.bloodGemHealth,
+  );
+  applyBloodGemBonusKeyword(target, options.bonusKeyword);
+  if (targetBefore && trace && options.origin && options.sourceInstanceId) {
+    const gainedKeywords: RecruitBloodGemPulseResolution["gainedKeywords"] =
+      [];
+    if (!targetBefore.divineShield && target.divineShield) {
+      gainedKeywords.push("divineShield");
+    }
+    if (!targetBefore.reborn && target.reborn) {
+      gainedKeywords.push("reborn");
+    }
+    trace.recruitBloodGemPulses.push({
+      origin: options.origin,
+      sourceInstanceId: options.sourceInstanceId,
+      targetInstanceId: target.instanceId,
+      attackDelta: player.bloodGemAttack,
+      healthDelta: player.bloodGemHealth,
+      gainedKeywords,
+      targetBefore,
+      targetAfter: cloneMinion(target),
+    });
+  }
+  if (options.triggerObservers !== false) {
+    triggerRecruitBloodGemObservers(state, player, target, trace);
+  }
 }
 
 function nextInteractionId(state: GameState): string {
@@ -2352,7 +2479,7 @@ function applyRecruitEffects(
         application += 1
       ) {
         for (const target of targets) {
-          applyBloodGem(player, target);
+          applyRecruitBloodGemPulse(state, player, target);
         }
       }
     } else if (effect.kind === "improveBloodGems") {
@@ -3039,7 +3166,7 @@ function applyOneEndOfTurnEffect(
       (1 + bonusKeywordCount(source));
     for (let application = 0; application < applications; application += 1) {
       for (const target of player.board) {
-        applyBloodGem(player, target);
+        applyRecruitBloodGemPulse(state, player, target);
       }
     }
     return;
@@ -3567,6 +3694,338 @@ function sellMinion(
   return sellMinionTransaction(state, player, boardIndex) !== null;
 }
 
+function fearlessFoodieOptionIds(
+  golden: boolean,
+): [MinionChoiceId, MinionChoiceId] {
+  return golden
+    ? ["BG30_123_Gt", "BG30_123_Gt2"]
+    : ["BG30_123t", "BG30_123t2"];
+}
+
+function minionChoiceImprovesBloodGems(
+  optionId: MinionChoiceId,
+): boolean {
+  return optionId === "BG30_123t" || optionId === "BG30_123_Gt";
+}
+
+function boardWithCandidate(
+  player: PlayerState,
+  candidate?: BoardMinionInstance,
+): readonly BoardMinionInstance[] {
+  return candidate &&
+    !player.board.some(
+      (minion) => minion.instanceId === candidate.instanceId,
+    )
+    ? [...player.board, candidate]
+    : player.board;
+}
+
+function roogugRedirectCount(minion: MinionInstance): number {
+  return minionEffectSources(minion).reduce((total, component) => {
+    const effect = getMinionDefinition(
+      component.definitionId,
+    ).afterBloodGemCastOnSelf;
+    if (effect?.kind !== "playBloodGemsOnRandomOther") {
+      return total;
+    }
+    return (
+      total +
+      effect.count *
+        (component.golden && effect.goldenMode === "doubleCount"
+          ? 2
+          : 1)
+    );
+  }, 0);
+}
+
+function hasRoogugRedirectTarget(
+  board: readonly BoardMinionInstance[],
+  roogug: BoardMinionInstance,
+): boolean {
+  return board.some(
+    (candidate) =>
+      candidate.instanceId !== roogug.instanceId &&
+      !minionHasEffectSource(
+        candidate,
+        GEOMAGUS_ROOGUG_DEFINITION_ID,
+      ),
+  );
+}
+
+function bestUsefulRoogugRedirectCount(
+  board: readonly BoardMinionInstance[],
+): number {
+  return board.reduce((best, minion) => {
+    const count = roogugRedirectCount(minion);
+    return count > 0 && hasRoogugRedirectTarget(board, minion)
+      ? Math.max(best, count)
+      : best;
+  }, 0);
+}
+
+function bloodGemHandCastMultiplier(
+  board: readonly BoardMinionInstance[],
+): number {
+  return (
+    1 +
+    board.reduce(
+      (total, minion) =>
+        total +
+        minionEffectSources(minion).reduce(
+          (componentTotal, component) => {
+            const aura = getMinionDefinition(
+              component.definitionId,
+            ).bloodGemFromHandAura;
+            if (!aura) {
+              return componentTotal;
+            }
+            return (
+              componentTotal +
+              aura.extraCasts *
+                (component.golden &&
+                aura.goldenMode === "doubleCount"
+                  ? 2
+                  : 1)
+            );
+          },
+          0,
+        ),
+      0,
+    )
+  );
+}
+
+function estimatedNearTermHandBloodGems(
+  player: PlayerState,
+  excludedInstanceId?: string,
+): number {
+  let estimate = player.hand.filter(
+    (card) => card.kind === "bloodGem",
+  ).length;
+  for (const card of player.hand) {
+    if (
+      card.kind !== "minion" ||
+      card.instanceId === excludedInstanceId
+    ) {
+      continue;
+    }
+    for (const component of minionEffectSources(card)) {
+      const definition = getMinionDefinition(component.definitionId);
+      const choice = definition.onPlayChoice;
+      if (choice?.kind === "bloodGemImproveOrGain") {
+        const count =
+          choice.count *
+          (component.golden &&
+          choice.goldenMode === "doubleValues"
+            ? 2
+            : 1);
+        const spaceAfterPlay =
+          MAX_HAND_SIZE - player.hand.length + 1;
+        estimate += Math.min(Math.max(0, spaceAfterPlay), count);
+      }
+      for (const effect of definition.battlecry ?? []) {
+        if (effect.kind === "gainBloodGems") {
+          estimate +=
+            effect.count *
+            (component.golden ? 2 : 1) *
+            battlecryTriggerCount(player);
+        }
+      }
+    }
+  }
+  for (const source of player.board) {
+    for (const component of minionEffectSources(source)) {
+      const effect =
+        getMinionDefinition(component.definitionId).endOfTurn;
+      if (effect?.kind === "gainBloodGems") {
+        estimate +=
+          effect.count *
+          (component.golden ? 2 : 1) *
+          endOfTurnTriggerCount(player);
+      }
+    }
+  }
+  return Math.min(8, estimate);
+}
+
+function composerBloodGemPulsesOnTarget(
+  board: readonly BoardMinionInstance[],
+  target: BoardMinionInstance,
+): number {
+  const expectedDeaths = Math.max(0, board.length - 1);
+  let pulses = 0;
+  for (const source of board) {
+    for (const component of minionEffectSources(source)) {
+      const avenge = getMinionDefinition(component.definitionId).avenge;
+      if (!avenge || expectedDeaths < avenge.threshold) {
+        continue;
+      }
+      for (const effect of avenge.effects) {
+        if (
+          effect.kind === "applyBloodGemsToTribe" &&
+          minionHasTribe(target, effect.tribe)
+        ) {
+          pulses += effect.count * (component.golden ? 2 : 1);
+        }
+      }
+    }
+  }
+  return pulses;
+}
+
+function composerBloodGemApplications(
+  board: readonly BoardMinionInstance[],
+): number {
+  return board.reduce((total, target) => {
+    const pulses = composerBloodGemPulsesOnTarget(board, target);
+    const redirects =
+      roogugRedirectCount(target) > 0 &&
+      hasRoogugRedirectTarget(board, target)
+        ? roogugRedirectCount(target)
+        : 0;
+    return total + pulses * (1 + redirects);
+  }, 0);
+}
+
+interface BloodGemAiBranchScores {
+  gainScore: number;
+  improveScore: number;
+}
+
+function bloodGemAiBranchScores(
+  player: PlayerState,
+  source: BoardMinionInstance,
+  underPressure: boolean,
+): BloodGemAiBranchScores {
+  const effect = getMinionDefinition(source.definitionId).onPlayChoice;
+  if (effect?.kind !== "bloodGemImproveOrGain") {
+    return { gainScore: 0, improveScore: 0 };
+  }
+  const multiplier =
+    source.golden && effect.goldenMode === "doubleValues" ? 2 : 1;
+  const sourceWasInHand = player.hand.some(
+    (card) => card.instanceId === source.instanceId,
+  );
+  const handSpace =
+    MAX_HAND_SIZE -
+    player.hand.length +
+    (sourceWasInHand ? 1 : 0);
+  const retained = Math.min(
+    Math.max(0, handSpace),
+    effect.count * multiplier,
+  );
+  const projectedBoard = boardWithCandidate(player, source);
+  const handMultiplier = bloodGemHandCastMultiplier(projectedBoard);
+  const redirectMultiplier =
+    1 + bestUsefulRoogugRedirectCount(projectedBoard);
+  const applicationMultiplier =
+    handMultiplier * redirectMultiplier;
+  const currentGemStats =
+    player.bloodGemAttack + player.bloodGemHealth;
+  const gainScore =
+    retained *
+    applicationMultiplier *
+    currentGemStats *
+    (underPressure ? 1.25 : 1);
+  const futureApplications =
+    estimatedNearTermHandBloodGems(player, source.instanceId) *
+      applicationMultiplier +
+    composerBloodGemApplications(projectedBoard);
+  const improveScore =
+    (effect.attack + effect.health) *
+    multiplier *
+    Math.min(24, futureApplications);
+  return { gainScore, improveScore };
+}
+
+function applyBloodGemImproveOrGainChoice(
+  state: GameState,
+  player: PlayerState,
+  source: BoardMinionInstance,
+  optionId: MinionChoiceId,
+  effectMultiplier: 1 | 2,
+): boolean {
+  const definition = getMinionDefinition(source.definitionId);
+  const effect = definition.onPlayChoice;
+  const optionIds = fearlessFoodieOptionIds(source.golden);
+  const expectedMultiplier: 1 | 2 =
+    source.golden && effect?.goldenMode === "doubleValues" ? 2 : 1;
+  if (
+    effect?.kind !== "bloodGemImproveOrGain" ||
+    !optionIds.includes(optionId) ||
+    effectMultiplier !== expectedMultiplier
+  ) {
+    return false;
+  }
+  if (minionChoiceImprovesBloodGems(optionId)) {
+    player.bloodGemAttack += effect.attack * effectMultiplier;
+    player.bloodGemHealth += effect.health * effectMultiplier;
+  } else {
+    addBloodGems(
+      state,
+      player,
+      effect.count * effectMultiplier,
+    );
+  }
+  return true;
+}
+
+function chooseAiBloodGemImproveOrGainOption(
+  state: GameState,
+  player: PlayerState,
+  source: BoardMinionInstance,
+): MinionChoiceId {
+  const [improveOption, gainOption] = fearlessFoodieOptionIds(
+    source.golden,
+  );
+  const underPressure =
+    player.health + player.armor <= 20 ||
+    player.board.length < aiTargetBoardSize(state.round);
+  const scores = bloodGemAiBranchScores(
+    player,
+    source,
+    underPressure,
+  );
+  if (scores.gainScore > scores.improveScore) {
+    return gainOption;
+  }
+  return improveOption;
+}
+
+function beginOnPlayMinionChoice(
+  state: GameState,
+  player: PlayerState,
+  source: BoardMinionInstance,
+): boolean {
+  const effect = getMinionDefinition(source.definitionId).onPlayChoice;
+  if (effect?.kind !== "bloodGemImproveOrGain") {
+    return false;
+  }
+  const effectMultiplier: 1 | 2 =
+    source.golden && effect.goldenMode === "doubleValues" ? 2 : 1;
+  const optionIds = fearlessFoodieOptionIds(source.golden);
+  if (!player.isHuman) {
+    applyBloodGemImproveOrGainChoice(
+      state,
+      player,
+      source,
+      chooseAiBloodGemImproveOrGainOption(state, player, source),
+      effectMultiplier,
+    );
+    return false;
+  }
+  state.pendingInteraction = {
+    kind: "minionChoice",
+    interactionId: nextInteractionId(state),
+    playerId: player.id,
+    sourceInstanceId: source.instanceId,
+    definitionId: source.definitionId,
+    optionIds,
+    effectMultiplier,
+  };
+  return true;
+}
+
 function playMinion(
   state: GameState,
   player: PlayerState,
@@ -3609,6 +4068,9 @@ function playMinion(
   }
   applyRecruitSummonTriggers(state, player, minion);
   beginInteractiveBattlecry(state, player, minion);
+  if (state.pendingInteraction === null) {
+    beginOnPlayMinionChoice(state, player, minion);
+  }
   if (state.pendingInteraction === null) {
     finishCardPlayed(state, player);
   }
@@ -3948,6 +4410,7 @@ function castBloodGem(
   player: PlayerState,
   cardInstanceId: string,
   targetInstanceId: string,
+  trace?: GameActionTrace,
 ): boolean {
   const handIndex = player.hand.findIndex(
     (card) => card.instanceId === cardInstanceId,
@@ -3965,14 +4428,19 @@ function castBloodGem(
     cardKind: "other",
     tribes: [],
   });
-  applyBloodGem(player, target);
-  if (minionHasTribe(target, "quilboar")) {
-    if (card.bonusKeyword === "rebornForQuilboar") {
-      target.reborn = true;
-    } else if (card.bonusKeyword === "divineShieldForQuilboar") {
-      target.divineShield = true;
-      target.temporaryDivineShield = false;
-    }
+  const pulseCount = 1 + bloodGemFromHandExtraCasts(player);
+  for (let pulse = 0; pulse < pulseCount; pulse += 1) {
+    applyRecruitBloodGemPulse(
+      state,
+      player,
+      target,
+      {
+        bonusKeyword: card.bonusKeyword,
+        origin: "hand",
+        sourceInstanceId: card.instanceId,
+      },
+      trace,
+    );
   }
   finishCardPlayed(state, player);
   return true;
@@ -5450,8 +5918,8 @@ function applyTavernSpellEffect(
       if (!target) {
         break;
       }
-      applyBloodGem(player, target);
-      applyBloodGem(player, target);
+      applyRecruitBloodGemPulse(state, player, target);
+      applyRecruitBloodGemPulse(state, player, target);
       for (const neighbor of adjacentRecruitMinions(player, target)) {
         const stolenAttack = neighbor.bloodGemAttack;
         const stolenHealth = neighbor.bloodGemHealth;
@@ -6076,6 +6544,75 @@ function minionScore(
     if (definition.spellcraft) {
       score += 3;
     }
+    if (
+      definition.onPlayChoice?.kind === "bloodGemImproveOrGain" &&
+      !player.board.some(
+        (owned) => owned.instanceId === minion.instanceId,
+      )
+    ) {
+      const branchScores = bloodGemAiBranchScores(
+        player,
+        minion,
+        false,
+      );
+      score +=
+        Math.max(
+          branchScores.gainScore,
+          branchScores.improveScore,
+        ) * 0.35;
+    }
+    if (definition.bloodGemFromHandAura) {
+      const extraCasts =
+        definition.bloodGemFromHandAura.extraCasts *
+        (minion.golden &&
+        definition.bloodGemFromHandAura.goldenMode === "doubleCount"
+          ? 2
+          : 1);
+      const projectedBoard = boardWithCandidate(player, minion);
+      const expectedGems = estimatedNearTermHandBloodGems(player);
+      const redirects =
+        1 + bestUsefulRoogugRedirectCount(projectedBoard);
+      score +=
+        extraCasts *
+        expectedGems *
+        redirects *
+        (player.bloodGemAttack + player.bloodGemHealth) *
+        0.45;
+    }
+    if (
+      definition.afterBloodGemCastOnSelf?.kind ===
+      "playBloodGemsOnRandomOther"
+    ) {
+      const projectedBoard = boardWithCandidate(player, minion);
+      const count = roogugRedirectCount(minion);
+      if (hasRoogugRedirectTarget(projectedBoard, minion)) {
+        const expectedHandPulses =
+          estimatedNearTermHandBloodGems(player) *
+          bloodGemHandCastMultiplier(projectedBoard);
+        const expectedComposerPulses =
+          composerBloodGemPulsesOnTarget(projectedBoard, minion);
+        score +=
+          count *
+          (expectedHandPulses + expectedComposerPulses) *
+          (player.bloodGemAttack + player.bloodGemHealth) *
+          0.45;
+      }
+    }
+    if (definition.id === COMPOSER_BRISTLEBACK_DEFINITION_ID) {
+      const withoutComposer = player.board.filter(
+        (owned) => owned.instanceId !== minion.instanceId,
+      );
+      const withComposer = boardWithCandidate(player, minion);
+      const marginalApplications = Math.max(
+        0,
+        composerBloodGemApplications(withComposer) -
+          composerBloodGemApplications(withoutComposer),
+      );
+      score +=
+        marginalApplications *
+        (player.bloodGemAttack + player.bloodGemHealth) *
+        0.35;
+    }
     if (definition.afterCardPurchased) {
       score += 2.5;
     }
@@ -6598,6 +7135,42 @@ function resolvePendingInteraction(
     return next;
   }
 
+  if (pending.kind === "minionChoice") {
+    if (
+      pending.definitionId !== FEARLESS_FOODIE_DEFINITION_ID ||
+      !pending.optionIds.includes(
+        action.optionInstanceId as MinionChoiceId,
+      )
+    ) {
+      return state;
+    }
+    const next = cloneState(state);
+    const nextPlayer = findPlayer(next, pending.playerId);
+    const nextPending = next.pendingInteraction;
+    const source = nextPlayer?.board.find(
+      (minion) =>
+        minion.instanceId === pending.sourceInstanceId &&
+        minion.definitionId === pending.definitionId,
+    );
+    if (
+      !nextPlayer ||
+      !source ||
+      nextPending?.kind !== "minionChoice" ||
+      !applyBloodGemImproveOrGainChoice(
+        next,
+        nextPlayer,
+        source,
+        action.optionInstanceId as MinionChoiceId,
+        pending.effectMultiplier,
+      )
+    ) {
+      return state;
+    }
+    next.pendingInteraction = null;
+    finishCardPlayed(next, nextPlayer);
+    return next;
+  }
+
   if (pending.kind === "spellcraftChoice") {
     if (
       action.optionInstanceId !== "escapeEruptionAttack" &&
@@ -6722,9 +7295,37 @@ function playBestAiBloodGem(
               !minion.divineShield,
           )
         : [];
+  const usefulRoogugs = player.board.filter(
+    (minion) =>
+      minionHasEffectSource(
+        minion,
+        GEOMAGUS_ROOGUG_DEFINITION_ID,
+      ) &&
+      player.board.some(
+        (candidate) =>
+          candidate.instanceId !== minion.instanceId &&
+          !minionHasEffectSource(
+            candidate,
+            GEOMAGUS_ROOGUG_DEFINITION_ID,
+          ),
+      ),
+  );
+  const usefulKeywordRoogugs = keywordTargets.filter((minion) =>
+    usefulRoogugs.some(
+      (candidate) => candidate.instanceId === minion.instanceId,
+    ),
+  );
+  const candidates =
+    usefulKeywordRoogugs.length > 0
+      ? usefulKeywordRoogugs
+      : keywordTargets.length > 0
+        ? keywordTargets
+        : usefulRoogugs.length > 0
+          ? usefulRoogugs
+          : player.board;
   const target = bestMinionByScore(
     player,
-    keywordTargets.length > 0 ? keywordTargets : player.board,
+    candidates,
   );
   return castBloodGem(
     state,
@@ -8397,6 +8998,132 @@ function applyCombatEnchantingGain(
     retained.keywords.add(keyword);
   }
   return { gainedKeywords, retentionMultiplier };
+}
+
+interface CombatBloodGemPulseOptions {
+  actorInstanceId: string;
+  sourceLabel: string;
+  applicationIndex?: number;
+  applicationCount?: number;
+  triggerObservers?: boolean;
+}
+
+function triggerCombatBloodGemObservers(
+  context: CombatContext,
+  ownerId: PlayerId,
+  target: MinionInstance,
+): void {
+  if (target.kind !== "minion" || target.health <= 0) {
+    return;
+  }
+  for (const component of minionEffectSources(target)) {
+    const effect = getMinionDefinition(
+      component.definitionId,
+    ).afterBloodGemCastOnSelf;
+    if (
+      effect?.kind !== "playBloodGemsOnRandomOther" ||
+      !context.boards[ownerId].some(
+        (minion) =>
+          minion.instanceId === target.instanceId &&
+          minion.health > 0,
+      )
+    ) {
+      continue;
+    }
+    const candidates = context.boards[ownerId].filter(
+      (candidate): candidate is BoardMinionInstance =>
+        candidate.kind === "minion" &&
+        candidate.health > 0 &&
+        candidate.instanceId !== target.instanceId &&
+        !minionHasEffectSource(
+          candidate,
+          GEOMAGUS_ROOGUG_DEFINITION_ID,
+        ),
+    );
+    if (candidates.length === 0) {
+      continue;
+    }
+    const selected =
+      candidates[randomIndex(context.state, candidates.length)];
+    const applicationCount =
+      effect.count *
+      (component.golden && effect.goldenMode === "doubleCount"
+        ? 2
+        : 1);
+    pushBattleEvent(context.events, {
+      type: "trigger",
+      actorPlayerId: ownerId,
+      actorInstanceId: target.instanceId,
+      targetPlayerId: ownerId,
+      targetInstanceId: selected.instanceId,
+      actorMinion: cloneMinion(target),
+      minion: cloneMinion(selected),
+      message: `${rallySourceLabel(component)}触发，对${selected.name}使用${
+        applicationCount
+      }张鲜血宝石。`,
+    });
+    for (
+      let application = 0;
+      application < applicationCount;
+      application += 1
+    ) {
+      applyCombatBloodGemPulse(context, ownerId, selected, {
+        actorInstanceId: target.instanceId,
+        sourceLabel: rallySourceLabel(component),
+        applicationIndex: application,
+        applicationCount,
+      });
+    }
+  }
+}
+
+function applyCombatBloodGemPulse(
+  context: CombatContext,
+  ownerId: PlayerId,
+  target: MinionInstance,
+  options: CombatBloodGemPulseOptions,
+): void {
+  const owner = findPlayer(context.state, ownerId);
+  if (!owner || target.kind !== "minion" || target.health <= 0) {
+    return;
+  }
+  const gain = applyCombatEnchantingGain(
+    context,
+    ownerId,
+    target,
+    {
+      attack: owner.bloodGemAttack,
+      health: owner.bloodGemHealth,
+      bloodGemAttack: owner.bloodGemAttack,
+      bloodGemHealth: owner.bloodGemHealth,
+    },
+  );
+  target.bloodGemAttack += owner.bloodGemAttack;
+  target.bloodGemHealth += owner.bloodGemHealth;
+  const applicationCount = options.applicationCount ?? 1;
+  const applicationIndex = options.applicationIndex ?? 0;
+  pushBattleEvent(context.events, {
+    type: "buff",
+    actorPlayerId: ownerId,
+    actorInstanceId: options.actorInstanceId,
+    targetPlayerId: ownerId,
+    targetInstanceId: target.instanceId,
+    attackDelta: owner.bloodGemAttack,
+    healthDelta: owner.bloodGemHealth,
+    minion: cloneMinion(target),
+    retained: gain.retentionMultiplier > 0,
+    ...(gain.retentionMultiplier > 0
+      ? { retentionMultiplier: gain.retentionMultiplier }
+      : {}),
+    message: `${options.sourceLabel}对${target.name}使用了一张鲜血宝石${
+      applicationCount > 1
+        ? `（第${applicationIndex + 1}张）`
+        : ""
+    }，使其获得+${owner.bloodGemAttack}/+${owner.bloodGemHealth}。`,
+  });
+  if (options.triggerObservers !== false) {
+    triggerCombatBloodGemObservers(context, ownerId, target);
+  }
 }
 
 function flushRetainedCombatEnchantments(
@@ -11228,37 +11955,11 @@ function resolveCombatAvengeEffect(
       application < applicationCount;
       application += 1
     ) {
-      const gain = applyCombatEnchantingGain(
-        context,
-        ownerId,
-        target,
-        {
-          attack: owner.bloodGemAttack,
-          health: owner.bloodGemHealth,
-          bloodGemAttack: owner.bloodGemAttack,
-          bloodGemHealth: owner.bloodGemHealth,
-        },
-      );
-      target.bloodGemAttack += owner.bloodGemAttack;
-      target.bloodGemHealth += owner.bloodGemHealth;
-      pushBattleEvent(context.events, {
-        type: "buff",
-        actorPlayerId: ownerId,
+      applyCombatBloodGemPulse(context, ownerId, target, {
         actorInstanceId: watcher.instanceId,
-        targetPlayerId: ownerId,
-        targetInstanceId: target.instanceId,
-        attackDelta: owner.bloodGemAttack,
-        healthDelta: owner.bloodGemHealth,
-        minion: cloneMinion(target),
-        retained: gain.retentionMultiplier > 0,
-        ...(gain.retentionMultiplier > 0
-          ? { retentionMultiplier: gain.retentionMultiplier }
-          : {}),
-        message: `${rallySourceLabel(component)}对${target.name}使用了一张鲜血宝石${
-          applicationCount > 1
-            ? `（第${application + 1}张）`
-            : ""
-        }，使其获得+${owner.bloodGemAttack}/+${owner.bloodGemHealth}。`,
+        sourceLabel: rallySourceLabel(component),
+        applicationIndex: application,
+        applicationCount,
       });
     }
   }
@@ -13016,7 +13717,11 @@ export function createGame(seed?: number): GameState {
   return state;
 }
 
-export function gameReducer(state: GameState, action: GameAction): GameState {
+function reduceGame(
+  state: GameState,
+  action: GameAction,
+  trace?: GameActionTrace,
+): GameState {
   if (action.type === "RESOLVE_INTERACTION") {
     const resolved = resolvePendingInteraction(state, action);
     if (resolved !== state && resolved.phase === "recruit") {
@@ -13085,6 +13790,7 @@ export function gameReducer(state: GameState, action: GameAction): GameState {
         player,
         action.cardInstanceId,
         action.targetInstanceId,
+        trace,
       );
       break;
     case "CAST_TAVERN_SPELL":
@@ -13133,4 +13839,25 @@ export function gameReducer(state: GameState, action: GameAction): GameState {
     reconcileConditionalMinions(player);
   }
   return next;
+}
+
+function createGameActionTrace(): GameActionTrace {
+  return {
+    recruitBloodGemPulses: [],
+  };
+}
+
+export function gameTransition(
+  state: GameState,
+  action: GameAction,
+): GameTransition {
+  const trace = createGameActionTrace();
+  return {
+    state: reduceGame(state, action, trace),
+    trace,
+  };
+}
+
+export function gameReducer(state: GameState, action: GameAction): GameState {
+  return reduceGame(state, action);
 }

@@ -641,6 +641,25 @@ export interface SpellcraftSpec {
   definitionId: string;
 }
 
+export interface BloodGemImproveOrGainChoice {
+  kind: "bloodGemImproveOrGain";
+  attack: number;
+  health: number;
+  count: number;
+  goldenMode?: "doubleValues";
+}
+
+export interface BloodGemFromHandAura {
+  extraCasts: number;
+  goldenMode?: "doubleCount";
+}
+
+export interface AfterBloodGemCastOnSelfEffect {
+  kind: "playBloodGemsOnRandomOther";
+  count: number;
+  goldenMode?: "doubleCount";
+}
+
 export interface MinionDefinition {
   id: string;
   /** Hearthstone CardID used only to locate the familiar card artwork. */
@@ -704,6 +723,12 @@ export interface MinionDefinition {
   aura?: StatAura;
   magnetic?: MagneticSpec;
   spellcraft?: SpellcraftSpec;
+  /** A non-Battlecry choice that resolves only when this minion is played. */
+  onPlayChoice?: BloodGemImproveOrGainChoice;
+  /** Extra full pulses for a Blood Gem played from hand. */
+  bloodGemFromHandAura?: BloodGemFromHandAura;
+  /** Observer invoked after each real Blood Gem pulse lands on this minion. */
+  afterBloodGemCastOnSelf?: AfterBloodGemCastOnSelfEffect;
   extraBattlecries?: number;
   extraDeathrattles?: number;
   extraEndOfTurnTriggers?: number;
@@ -1299,13 +1324,28 @@ export interface PendingHeroPowerChoiceInteraction
   optionIds: string[];
 }
 
+export type MinionChoiceId =
+  | "BG30_123t"
+  | "BG30_123t2"
+  | "BG30_123_Gt"
+  | "BG30_123_Gt2";
+
+export interface PendingMinionChoiceInteraction
+  extends PendingInteractionBase {
+  kind: "minionChoice";
+  definitionId: string;
+  optionIds: MinionChoiceId[];
+  effectMultiplier: 1 | 2;
+}
+
 export type PendingInteraction =
   | PendingTargetInteraction
   | PendingMagnetizeTargetInteraction
   | PendingDiscoverInteraction
   | PendingTavernSpellChoiceInteraction
   | PendingSpellcraftChoiceInteraction
-  | PendingHeroPowerChoiceInteraction;
+  | PendingHeroPowerChoiceInteraction
+  | PendingMinionChoiceInteraction;
 
 export type BattleResult = "win" | "loss" | "tie";
 
@@ -1424,3 +1464,27 @@ export type GameAction =
   | { type: "MOVE_MINION"; fromIndex: number; toIndex: number }
   | { type: "END_TURN" }
   | { type: "CONTINUE" };
+
+/**
+ * One real Recruit-phase Blood Gem resolution. These snapshots are emitted in
+ * causal order for presentation only and never become part of GameState.
+ */
+export interface RecruitBloodGemPulseResolution {
+  origin: "hand" | "roogug";
+  sourceInstanceId: string;
+  targetInstanceId: string;
+  attackDelta: number;
+  healthDelta: number;
+  gainedKeywords: Array<"divineShield" | "reborn">;
+  targetBefore: BoardMinionInstance;
+  targetAfter: BoardMinionInstance;
+}
+
+export interface GameActionTrace {
+  recruitBloodGemPulses: RecruitBloodGemPulseResolution[];
+}
+
+export interface GameTransition {
+  state: GameState;
+  trace: GameActionTrace;
+}

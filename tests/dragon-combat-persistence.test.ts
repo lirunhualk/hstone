@@ -1057,7 +1057,7 @@ test("a ghost can animate retention cards without mutating its eliminated owner"
   );
 });
 
-test("v28 saves migrate through v30 while preserving Fire-forged counters and excluding combat ledgers", () => {
+test("v28 saves migrate through v31 while preserving Fire-forged counters and excluding combat ledgers", () => {
   const legacy = createGame(0x8270);
   legacy.contentVersion = LEGACY_SCHEMA_11_CONTENT_VERSION_V28;
   const human = humanPlayer(legacy);
@@ -1081,7 +1081,7 @@ test("v28 saves migrate through v30 while preserving Fire-forged counters and ex
   assert.equal(migrated.contentVersion, CURRENT_ROSTER_VERSION);
   assert.equal(
     CURRENT_ROSTER_VERSION,
-    "battlegrounds-36.0.3-247416-v30",
+    "battlegrounds-36.0.3-247416-v31",
   );
   const saved = humanPlayer(migrated).board[0];
   assert.deepEqual(saved.effectCounters, evoker.effectCounters);

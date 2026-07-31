@@ -6,6 +6,7 @@ import {
 import type {
   BoardMinionInstance,
   GameAction,
+  GameActionTrace,
   GameState,
   PlayerState,
   TavernSpellInstance,
@@ -57,6 +58,19 @@ export type RecruitPresentationEvent =
        * must not claim this list is always exhaustive.
        */
       knownConsumedInstanceIds: string[];
+    }
+  | {
+      kind: "bloodGemPulse";
+      targetInstanceId: string;
+      targetName: string;
+      attack: number;
+      health: number;
+      origin: "hand" | "roogug";
+      bonusKeyword?: string;
+      pulseIndex: number;
+      pulseCount: number;
+      boardBeforePulse: BoardMinionInstance[];
+      boardAfterPulse: BoardMinionInstance[];
     };
 
 export function enqueueRecruitPresentation<T>(
@@ -161,6 +175,44 @@ function tripleEvents(
   });
 }
 
+function bloodGemPulseEvents(
+  beforePlayer: PlayerState,
+  trace: GameActionTrace | undefined,
+): RecruitPresentationEvent[] {
+  const pulses = trace?.recruitBloodGemPulses ?? [];
+  if (pulses.length === 0) {
+    return [];
+  }
+  let stagedBoard = [...beforePlayer.board];
+  return pulses.map((pulse, pulseIndex) => {
+    const boardBeforePulse = [...stagedBoard];
+    const targetIndex = stagedBoard.findIndex(
+      (minion) => minion.instanceId === pulse.targetInstanceId,
+    );
+    if (targetIndex >= 0) {
+      stagedBoard = [...stagedBoard];
+      stagedBoard[targetIndex] = pulse.targetAfter;
+    }
+    return {
+      kind: "bloodGemPulse",
+      targetInstanceId: pulse.targetInstanceId,
+      targetName: pulse.targetAfter.name,
+      attack: pulse.attackDelta,
+      health: pulse.healthDelta,
+      origin: pulse.origin,
+      ...(pulse.gainedKeywords.includes("reborn")
+        ? { bonusKeyword: "rebornForQuilboar" }
+        : pulse.gainedKeywords.includes("divineShield")
+          ? { bonusKeyword: "divineShieldForQuilboar" }
+          : {}),
+      pulseIndex,
+      pulseCount: pulses.length,
+      boardBeforePulse,
+      boardAfterPulse: [...stagedBoard],
+    };
+  });
+}
+
 /**
  * Derives short-lived recruit presentation from an immutable reducer
  * transition. The events intentionally stay outside GameState and saves.
@@ -169,6 +221,7 @@ export function deriveRecruitPresentation(
   before: GameState,
   after: GameState,
   action: GameAction,
+  trace?: GameActionTrace,
 ): RecruitPresentationEvent[] {
   const playerId = before.humanPlayerId;
   const beforePlayer = playerFor(before, playerId);
@@ -180,7 +233,11 @@ export function deriveRecruitPresentation(
   const events: RecruitPresentationEvent[] = [];
   let purchasedMinion: BoardMinionInstance | null = null;
 
-  if (action.type === "BUY_MINION") {
+  if (action.type === "CAST_BLOOD_GEM") {
+    events.push(
+      ...bloodGemPulseEvents(beforePlayer, trace),
+    );
+  } else if (action.type === "BUY_MINION") {
     const offered = beforePlayer.shop[action.shopIndex];
     const stillOffered =
       offered !== undefined &&
@@ -331,9 +388,28 @@ export function recruitPresentationAnnouncement(
   const upgrade = events.find((event) => event.kind === "tavernUpgrade");
   const currencies = events.filter((event) => event.kind === "currency");
   const triples = events.filter((event) => event.kind === "triple");
+  const bloodGemPulse = events.find(
+    (event) => event.kind === "bloodGemPulse",
+  );
   const parts: string[] = [];
 
-  if (move?.kind === "cardMove") {
+  if (bloodGemPulse?.kind === "bloodGemPulse") {
+    parts.push(
+      `${
+        bloodGemPulse.origin === "roogug"
+          ? "鲁古格转投"
+          : "鲜血宝石"
+      }：${bloodGemPulse.targetName} +${bloodGemPulse.attack}/+${
+        bloodGemPulse.health
+      }${
+        bloodGemPulse.pulseCount > 1
+          ? `（第${bloodGemPulse.pulseIndex + 1}/${
+              bloodGemPulse.pulseCount
+            }颗）`
+          : ""
+      }`,
+    );
+  } else if (move?.kind === "cardMove") {
     parts.push(
       move.motion === "shop-to-hand"
         ? `购买${move.card.name}`
@@ -363,6 +439,9 @@ export function recruitPresentationAnnouncement(
 export function recruitPresentationDuration(
   events: readonly RecruitPresentationEvent[],
 ): number {
+  if (events.some((event) => event.kind === "bloodGemPulse")) {
+    return 720;
+  }
   if (events.some((event) => event.kind === "triple")) {
     return 1500;
   }
