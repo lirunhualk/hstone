@@ -3,6 +3,7 @@ import type { MinionInstance } from "./types";
 export type MinionKeywordVisualKind =
   | "divine-shield"
   | "taunt"
+  | "stealth"
   | "poisonous"
   | "venomous"
   | "windfury"
@@ -17,6 +18,7 @@ export type MinionKeywordVisualState = Pick<
   MinionInstance,
   | "divineShield"
   | "taunt"
+  | "stealth"
   | "poisonous"
   | "venomous"
   | "windfury"
@@ -29,6 +31,7 @@ const KEYWORD_VISUALS: ReadonlyArray<{
   label: string;
 }> = [
   { kind: "taunt", field: "taunt", label: "嘲讽" },
+  { kind: "stealth", field: "stealth", label: "潜行" },
   {
     kind: "divine-shield",
     field: "divineShield",

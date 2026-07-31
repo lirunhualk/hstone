@@ -29,21 +29,59 @@ import {
   getMinionDefinition,
 } from "../lib/game/content.ts";
 import {
+  RIME_OR_REASON_STAT_GRANTING_CARD_IDS,
+} from "../lib/game/tavern-spells.ts";
+import {
   LEGACY_SCHEMA_5_CONTENT_VERSION,
   LEGACY_SCHEMA_6_CONTENT_VERSION,
   LEGACY_SCHEMA_7_CONTENT_VERSION,
   LEGACY_SCHEMA_8_CONTENT_VERSION,
   LEGACY_SCHEMA_9_CONTENT_VERSION,
   LEGACY_SCHEMA_10_CONTENT_VERSION,
+  LEGACY_SCHEMA_11_CONTENT_VERSION_V23,
   migrateSchema5GameState,
   migrateSchema6GameState,
   migrateSchema7GameState,
   migrateSchema8GameState,
   migrateSchema9GameState,
   migrateSchema10GameState,
+  migrateSchema11GameState,
+  normalizePersistedGameState,
 } from "../lib/game/save.ts";
 
 const SPELL_POOL_COPIES_BY_TIER = [0, 5, 7, 9, 11, 7, 5] as const;
+const STAT_GRANTING_TAVERN_SPELL_CARD_IDS = [
+  "BG28_168",
+  "BG28_169",
+  "BG28_503",
+  "BG28_519",
+  "BG28_520",
+  "BG28_825",
+  "BG28_838",
+  "BG28_845",
+  "BG28_886",
+  "BG28_888",
+  "BG28_897",
+  "BG28_966",
+  "BG31_881",
+  "BG32_815",
+  "BG33_811",
+  "BG33_812",
+  "BG33_813",
+  "BG33_817",
+  "BG33_899",
+  "BG34_444",
+  "BG34_990",
+  "BG35_149",
+  "BG35_910",
+  "BG35_911",
+  "BG35_912",
+  "BG35_922",
+  "BG35_951",
+  "BG35_952",
+  "EBG_Spell_014",
+  "EBG_Spell_032",
+] as const;
 
 function humanPlayer(state: GameState): PlayerState {
   const player = state.players.find(
@@ -312,6 +350,7 @@ function legacyState(
     delete record.nextTurnBoardAttackBonus;
     delete record.nextTurnBoardHealthBonus;
     delete record.nextTurnBoardBuffPulses;
+    delete record.tavernBloodGemBarrageCount;
     delete record.tavernBloodGemBarrageAttack;
     delete record.tavernBloodGemBarrageHealth;
     delete record.backToBackBonus;
@@ -460,6 +499,7 @@ function assertMigratedSchema11(value: unknown): asserts value is GameState {
     assert.equal(player.nextTurnBoardAttackBonus, 0);
     assert.equal(player.nextTurnBoardHealthBonus, 0);
     assert.equal(player.nextTurnBoardBuffPulses, 0);
+    assert.equal(player.tavernBloodGemBarrageCount, 0);
     assert.equal(player.tavernBloodGemBarrageAttack, 0);
     assert.equal(player.tavernBloodGemBarrageHealth, 0);
     assert.equal(player.backToBackBonus, 0);
@@ -821,6 +861,52 @@ test("the playable Tavern Spell pool covers all five current Solo Tier 6 spells"
   }
 });
 
+test("Tavern Spell support metadata exposes the two bounded local approximations", () => {
+  const partial = TAVERN_SPELL_DEFINITIONS.filter(
+    (definition) => definition.effectSupport === "partial",
+  );
+  assert.deepEqual(
+    partial.map((definition) => definition.cardId).sort(),
+    ["BG30_802", "EBG_Spell_037"],
+  );
+  assert.match(
+    getTavernSpellDefinition(
+      "tavern-spell-unmasked-identity",
+    ).implementationNote ?? "",
+    /4个已完整支持的英雄技能/u,
+  );
+  assert.match(
+    getTavernSpellDefinition(
+      "tavern-spell-knockoff-wisdomball",
+    ).implementationNote ?? "",
+    /7星随从页面/u,
+  );
+  assert.equal(
+    TAVERN_SPELL_DEFINITIONS.filter(
+      (definition) => definition.effectSupport === "complete",
+    ).length,
+    63,
+  );
+});
+
+test("Rime or Reason uses the exact 30 stat-granting Tavern Spell card IDs", () => {
+  assert.equal(RIME_OR_REASON_STAT_GRANTING_CARD_IDS.length, 30);
+  assert.deepEqual(
+    [...RIME_OR_REASON_STAT_GRANTING_CARD_IDS].sort(),
+    [...STAT_GRANTING_TAVERN_SPELL_CARD_IDS].sort(),
+  );
+  assert.deepEqual(
+    TAVERN_SPELL_DEFINITIONS.filter((definition) =>
+      RIME_OR_REASON_STAT_GRANTING_CARD_IDS.some(
+        (cardId) => cardId === definition.cardId,
+      ),
+    )
+      .map((definition) => definition.cardId)
+      .sort(),
+    [...STAT_GRANTING_TAVERN_SPELL_CARD_IDS].sort(),
+  );
+});
+
 test("the pinned pool exposes all nine ordinary Spellcraft definitions", () => {
   const expected = [
     [
@@ -924,6 +1010,12 @@ test("playable Tavern Spell text removes client-only dynamic branches", () => {
         "tavern-spell-healthy-bounty",
         "tavern-spell-hostile-bounty",
         "tavern-spell-sanctify",
+        "tavern-spell-search-the-past",
+        "tavern-spell-slimy-seafood",
+        "tavern-spell-defenders-rites",
+        "tavern-spell-arcane-absorption",
+        "tavern-spell-azerite-empowerment",
+        "tavern-spell-knockoff-wisdomball",
       ].map((definitionId) => {
         const definition = getTavernSpellDefinition(definitionId);
         return [definition.cardId, definition.description];
@@ -935,6 +1027,14 @@ test("playable Tavern Spell text removes client-only dynamic branches", () => {
       BG33_811: "使四个友方随从获得+4生命值。",
       BG33_812: "使四个友方随从获得+4攻击力。",
       BG33_817: "使你具有圣盾的随从获得+6攻击力。",
+      BG34_330:
+        "发现一张你当前等级的随从牌，将其锁入你的手牌1个回合。",
+      BG28_606: "随机获取3张塑造法术的法术牌。",
+      BG28_825: "使一个友方随从获得+6/+6和嘲讽。",
+      BG35_911:
+        "使一个友方元素获得酒馆中生命值最高的随从的一半属性值。",
+      BG28_169: "使你的随从获得+2/+2，触发两次。",
+      BG30_802: "你的下2次刷新均为有用的刷新！（还剩2次！）",
     },
   );
   assert.ok(
@@ -2152,7 +2252,7 @@ test("Hubris pays only the next combat result and clears every wager", () => {
   }
 });
 
-test("Blood Gem Barrage banks cast-time values and triggers on any real Tavern refill", () => {
+test("Blood Gem Barrage uses current Blood Gem values on every real Tavern refill", () => {
   let state = createGame(0x71b4);
   let player = humanPlayer(state);
   const template = player.shop[0];
@@ -2193,10 +2293,11 @@ test("Blood Gem Barrage banks cast-time values and triggers on any real Tavern r
   );
   assert.deepEqual(
     [
+      player.tavernBloodGemBarrageCount,
       player.tavernBloodGemBarrageAttack,
       player.tavernBloodGemBarrageHealth,
     ],
-    [2, 3],
+    [1, 0, 0],
   );
 
   state = gameReducer(state, { type: "REFRESH_SHOP" });
@@ -2220,12 +2321,12 @@ test("Blood Gem Barrage banks cast-time values and triggers on any real Tavern r
   assert.ok(
     player.shop.every(
       (minion) =>
-        minion.attack === base.attack + 2 &&
-        minion.health === base.health + 3 &&
-        minion.bloodGemAttack === 2 &&
-        minion.bloodGemHealth === 3,
+        minion.attack === base.attack + 7 &&
+        minion.health === base.health + 8 &&
+        minion.bloodGemAttack === 7 &&
+        minion.bloodGemHealth === 8,
     ),
-    "later Blood Gem upgrades must not change the banked Barrage value",
+    "later Blood Gem upgrades must change every Barrage trigger",
   );
 
   for (const [index, ai] of state.players
@@ -2278,7 +2379,7 @@ test("Blood Gem Barrage banks cast-time values and triggers on any real Tavern r
     assert.ok(before);
     assert.deepEqual(
       [minion.attack, minion.health],
-      [before.attack + 2, before.health + 3],
+      [before.attack + 7, before.health + 8],
       "refilling only the bought Tavern Spell slot must retrigger Barrage on every frozen minion",
     );
   }
@@ -2302,15 +2403,210 @@ test("Blood Gem Barrage banks cast-time values and triggers on any real Tavern r
     if (before) {
       assert.deepEqual(
         [minion.attack, minion.health],
-        [before.attack + 2, before.health + 3],
+        [before.attack + 7, before.health + 8],
       );
     } else {
       assert.deepEqual(
         [minion.bloodGemAttack, minion.bloodGemHealth],
-        [2, 3],
+        [7, 8],
       );
     }
   }
+});
+
+test("multiple Blood Gem Barrages preserve Meditation bonuses across a JSON round-trip", () => {
+  let state = createGame(0x71b5);
+  let player = humanPlayer(state);
+  player.gold = 20;
+  player.bloodGemAttack = 2;
+  player.bloodGemHealth = 3;
+  player.hand = [
+    spellcraft("spellcraft-meditation", "barrage-meditation"),
+    tavernSpell("tavern-spell-blood-gem-barrage", "barrage-one"),
+    tavernSpell("tavern-spell-blood-gem-barrage", "barrage-two"),
+  ];
+
+  state = gameReducer(state, {
+    type: "CAST_SPELLCRAFT",
+    cardInstanceId: "barrage-meditation",
+  });
+  state = gameReducer(state, {
+    type: "CAST_TAVERN_SPELL",
+    cardInstanceId: "barrage-one",
+  });
+  state = gameReducer(state, {
+    type: "CAST_TAVERN_SPELL",
+    cardInstanceId: "barrage-two",
+  });
+  player = humanPlayer(state);
+  assert.deepEqual(
+    [
+      player.tavernBloodGemBarrageCount,
+      player.tavernBloodGemBarrageAttack,
+      player.tavernBloodGemBarrageHealth,
+    ],
+    [2, 2, 2],
+    "each cast must preserve one Meditation bonus in addition to its live Blood Gem value",
+  );
+
+  const normalized = normalizePersistedGameState(jsonClone(state));
+  assert.ok(normalized !== null && typeof normalized === "object");
+  state = normalized as GameState;
+  player = humanPlayer(state);
+  assert.deepEqual(
+    [
+      player.tavernBloodGemBarrageCount,
+      player.tavernBloodGemBarrageAttack,
+      player.tavernBloodGemBarrageHealth,
+    ],
+    [2, 2, 2],
+  );
+
+  player.gold = 20;
+  player.bloodGemAttack = 5;
+  player.bloodGemHealth = 7;
+  state = gameReducer(state, { type: "REFRESH_SHOP" });
+  player = humanPlayer(state);
+  assert.ok(player.shop.length > 0);
+  assert.ok(
+    player.shop.every(
+      (minion) =>
+        minion.bloodGemAttack === 12 &&
+        minion.bloodGemHealth === 16,
+    ),
+    "two Barrages must use 2 x current Blood Gem values plus both banked Meditation bonuses",
+  );
+});
+
+test("v23 Blood Gem Barrage saves migrate conservatively without losing visible stats", () => {
+  const legacy = jsonClone(createGame(0x71b6)) as GameState;
+  legacy.contentVersion = LEGACY_SCHEMA_11_CONTENT_VERSION_V23;
+  for (const player of legacy.players) {
+    delete (player as Partial<PlayerState>).tavernBloodGemBarrageCount;
+  }
+  const legacyPlayer = humanPlayer(legacy);
+  legacyPlayer.bloodGemAttack = 5;
+  legacyPlayer.bloodGemHealth = 7;
+  legacyPlayer.tavernBloodGemBarrageAttack = 13;
+  legacyPlayer.tavernBloodGemBarrageHealth = 17;
+
+  const migrated = migrateSchema11GameState(legacy);
+  assert.ok(migrated !== null && typeof migrated === "object");
+  let state = migrated as GameState;
+  let player = humanPlayer(state);
+  assert.equal(state.contentVersion, CURRENT_ROSTER_VERSION);
+  assert.deepEqual(
+    [
+      player.tavernBloodGemBarrageCount,
+      player.tavernBloodGemBarrageAttack,
+      player.tavernBloodGemBarrageHealth,
+    ],
+    [1, 8, 10],
+    "v23 aggregate stats can only prove one cast, so migration must preserve the remainder as a fixed bonus",
+  );
+  assert.deepEqual(
+    [
+      player.tavernBloodGemBarrageCount * player.bloodGemAttack +
+        player.tavernBloodGemBarrageAttack,
+      player.tavernBloodGemBarrageCount * player.bloodGemHealth +
+        player.tavernBloodGemBarrageHealth,
+    ],
+    [13, 17],
+  );
+
+  player.gold = 20;
+  player.bloodGemAttack = 6;
+  player.bloodGemHealth = 9;
+  state = gameReducer(state, { type: "REFRESH_SHOP" });
+  player = humanPlayer(state);
+  assert.ok(player.shop.length > 0);
+  assert.ok(
+    player.shop.every(
+      (minion) =>
+        minion.bloodGemAttack === 14 &&
+        minion.bloodGemHealth === 19,
+    ),
+  );
+});
+
+test("Azerite Empowerment applies two full Tavern Spell bonus pulses", () => {
+  let state = createGame(0x71b7);
+  let player = humanPlayer(state);
+  const template = player.shop[0];
+  assert.ok(template);
+  player.board = [
+    definitionMinion(template, "BG20_100", "azerite-target", {
+      attack: 1,
+      health: 2,
+      poolCopies: 0,
+    }),
+  ];
+  player.tavernSpellAttackBonus = 1;
+  player.tavernSpellHealthBonus = 2;
+  player.hand = [
+    tavernSpell(
+      "tavern-spell-azerite-empowerment",
+      "azerite-empowerment",
+    ),
+  ];
+
+  state = gameReducer(state, {
+    type: "CAST_TAVERN_SPELL",
+    cardInstanceId: "azerite-empowerment",
+  });
+  player = humanPlayer(state);
+  assert.deepEqual(
+    [player.board[0].attack, player.board[0].health],
+    [7, 10],
+    "each +2/+2 pulse must independently include the +1/+2 Tavern Spell bonus",
+  );
+  assert.equal(player.tavernSpellsCastThisTurn, 1);
+});
+
+test("Back to Back repeats the complete buff, including Tavern Spell bonuses", () => {
+  let state = createGame(0x71b8);
+  let player = humanPlayer(state);
+  const template = player.shop[0];
+  assert.ok(template);
+  player.board = [
+    definitionMinion(template, "BG20_100", "back-to-back-target", {
+      attack: 1,
+      health: 2,
+      poolCopies: 0,
+    }),
+  ];
+  player.tavernSpellAttackBonus = 1;
+  player.tavernSpellHealthBonus = 2;
+  player.hand = [
+    tavernSpell("tavern-spell-back-to-back", "back-to-back-one"),
+    tavernSpell("tavern-spell-back-to-back", "back-to-back-two"),
+  ];
+
+  state = gameReducer(state, {
+    type: "CAST_TAVERN_SPELL",
+    cardInstanceId: "back-to-back-one",
+    targetInstanceId: "back-to-back-target",
+  });
+  player = humanPlayer(state);
+  assert.deepEqual(
+    [player.board[0].attack, player.board[0].health],
+    [6, 8],
+  );
+  assert.equal(player.backToBackBonus, 4);
+
+  state = gameReducer(state, {
+    type: "CAST_TAVERN_SPELL",
+    cardInstanceId: "back-to-back-two",
+    targetInstanceId: "back-to-back-target",
+  });
+  player = humanPlayer(state);
+  assert.deepEqual(
+    [player.board[0].attack, player.board[0].health],
+    [16, 20],
+    "the second cast must repeat the full +5/+6 modified buff twice",
+  );
+  assert.equal(player.backToBackBonus, 8);
+  assert.equal(player.tavernSpellsCastThisTurn, 2);
 });
 
 test("Trainee and Lasso add real pool/shop minions to hand deterministically", () => {
@@ -3416,34 +3712,8 @@ test("targetless Spellcraft resolves choices, draws from the pool, and empowers 
   );
   assert.ok(generatedSpell);
   assert.ok(
-    [
-      "fortify",
-      "pointyArrow",
-      "tavernDishBanana",
-      "themApples",
-      "mightOfStormwind",
-      "healthyBounty",
-      "hostileBounty",
-      "selfishBounty",
-      "shinyRing",
-      "staffOfEnrichment",
-      "trickyTrousers",
-      "stackedAvalanche",
-      "backToBack",
-      "deepwaterClan",
-      "defendersRites",
-      "misplacedTeaSet",
-      "naturalBlessing",
-      "shiftingTide",
-      "blazingInferno",
-      "arcaneAbsorption",
-      "queensCommand",
-      "sanctify",
-      "waveOfGold",
-      "azeriteEmpowerment",
-      "perfectVision",
-    ].includes(
-      getTavernSpellDefinition(generatedSpell.definitionId).effect,
+    STAT_GRANTING_TAVERN_SPELL_CARD_IDS.some(
+      (cardId) => cardId === generatedSpell.cardId,
     ),
   );
 });
@@ -4723,6 +4993,7 @@ test("schema 7 saves migrate every minion zone and pending discover to schema 11
     delete record.nextTurnBoardAttackBonus;
     delete record.nextTurnBoardHealthBonus;
     delete record.nextTurnBoardBuffPulses;
+    delete record.tavernBloodGemBarrageCount;
     delete record.tavernBloodGemBarrageAttack;
     delete record.tavernBloodGemBarrageHealth;
   }

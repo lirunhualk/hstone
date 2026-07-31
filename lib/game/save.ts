@@ -42,11 +42,43 @@ export const LEGACY_SCHEMA_11_CONTENT_VERSION_V21 =
   "battlegrounds-36.0.3-247416-v21";
 export const LEGACY_SCHEMA_11_CONTENT_VERSION_V22 =
   "battlegrounds-36.0.3-247416-v22";
+export const LEGACY_SCHEMA_11_CONTENT_VERSION_V23 =
+  "battlegrounds-36.0.3-247416-v23";
 
 const SPELL_POOL_COPIES_BY_TIER = [0, 5, 7, 9, 11, 7, 5] as const;
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return value !== null && typeof value === "object";
+}
+
+function migrateBloodGemBarrageState(
+  player: Record<string, unknown>,
+): void {
+  const legacyBarrageAttack =
+    typeof player.tavernBloodGemBarrageAttack === "number"
+      ? Math.max(0, player.tavernBloodGemBarrageAttack)
+      : 0;
+  const legacyBarrageHealth =
+    typeof player.tavernBloodGemBarrageHealth === "number"
+      ? Math.max(0, player.tavernBloodGemBarrageHealth)
+      : 0;
+  const hadLegacyBarrage =
+    legacyBarrageAttack > 0 || legacyBarrageHealth > 0;
+  const currentBloodGemAttack =
+    typeof player.bloodGemAttack === "number"
+      ? Math.max(0, player.bloodGemAttack)
+      : 1;
+  const currentBloodGemHealth =
+    typeof player.bloodGemHealth === "number"
+      ? Math.max(0, player.bloodGemHealth)
+      : 1;
+  player.tavernBloodGemBarrageCount = hadLegacyBarrage ? 1 : 0;
+  player.tavernBloodGemBarrageAttack = hadLegacyBarrage
+    ? Math.max(0, legacyBarrageAttack - currentBloodGemAttack)
+    : 0;
+  player.tavernBloodGemBarrageHealth = hadLegacyBarrage
+    ? Math.max(0, legacyBarrageHealth - currentBloodGemHealth)
+    : 0;
 }
 
 function repairHumanScoutingReports(
@@ -239,6 +271,9 @@ function refreshMinionSupport(
   ) {
     value.divineShield = true;
     value.temporaryDivineShield = false;
+  }
+  if (definition.stealth === true) {
+    value.stealth = true;
   }
   if (value.golden === true) {
     value.cardId = definition.goldenCardId ?? value.cardId;
@@ -856,6 +891,7 @@ export function migrateSchema10GameState(value: unknown): unknown {
       }
       player.helpfulRefreshes = 0;
       player.lastHelpfulRefreshKind = null;
+      migrateBloodGemBarrageState(player);
 
       const reserveOffer = (offer: unknown): Record<string, unknown> | null => {
         if (!isRecord(offer) || !player.alive) {
@@ -918,7 +954,8 @@ export function migrateSchema11GameState(value: unknown): unknown {
       value.contentVersion !== LEGACY_SCHEMA_11_CONTENT_VERSION_V19 &&
       value.contentVersion !== LEGACY_SCHEMA_11_CONTENT_VERSION_V20 &&
       value.contentVersion !== LEGACY_SCHEMA_11_CONTENT_VERSION_V21 &&
-      value.contentVersion !== LEGACY_SCHEMA_11_CONTENT_VERSION_V22) ||
+      value.contentVersion !== LEGACY_SCHEMA_11_CONTENT_VERSION_V22 &&
+      value.contentVersion !== LEGACY_SCHEMA_11_CONTENT_VERSION_V23) ||
     !Array.isArray(value.players)
   ) {
     return null;
@@ -930,12 +967,14 @@ export function migrateSchema11GameState(value: unknown): unknown {
       LEGACY_SCHEMA_11_CONTENT_VERSION_V20,
       LEGACY_SCHEMA_11_CONTENT_VERSION_V21,
       LEGACY_SCHEMA_11_CONTENT_VERSION_V22,
+      LEGACY_SCHEMA_11_CONTENT_VERSION_V23,
     ].includes(value.contentVersion as string);
     const preserveCurrentFields = [
       LEGACY_SCHEMA_11_CONTENT_VERSION_V19,
       LEGACY_SCHEMA_11_CONTENT_VERSION_V20,
       LEGACY_SCHEMA_11_CONTENT_VERSION_V21,
       LEGACY_SCHEMA_11_CONTENT_VERSION_V22,
+      LEGACY_SCHEMA_11_CONTENT_VERSION_V23,
     ].includes(value.contentVersion as string);
     const preservePendingSpellcraft =
       value.contentVersion === LEGACY_SCHEMA_11_CONTENT_VERSION_V17 ||
@@ -966,6 +1005,7 @@ export function migrateSchema11GameState(value: unknown): unknown {
       player.lastTavernSpellDefinitionId = null;
       player.pendingTavernSpellDefinitionId = null;
       player.demonFodderRefreshQueue = [];
+      migrateBloodGemBarrageState(player);
     }
     if (!repairHumanScoutingReports(migrated)) {
       return null;

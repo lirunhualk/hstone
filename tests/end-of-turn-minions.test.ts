@@ -433,8 +433,11 @@ test("Fodder feeds its original stats before one Barrage pulse is applied to eve
   player.additionalSpellShop = [];
   player.demonFodderRefreshQueue = [1];
   player.freeRefreshes = 1;
-  player.tavernBloodGemBarrageAttack = 2;
-  player.tavernBloodGemBarrageHealth = 3;
+  player.bloodGemAttack = 2;
+  player.bloodGemHealth = 3;
+  player.tavernBloodGemBarrageCount = 1;
+  player.tavernBloodGemBarrageAttack = 0;
+  player.tavernBloodGemBarrageHealth = 0;
   player.rideTheWindBuffs = [];
   clearMinionPool(state);
   clearSpellPool(state);
@@ -484,8 +487,11 @@ test("Fodder left on the final page receives one Barrage pulse and participates 
   player.additionalSpellShop = [];
   player.demonFodderRefreshQueue = [1];
   player.freeRefreshes = 1;
-  player.tavernBloodGemBarrageAttack = 2;
-  player.tavernBloodGemBarrageHealth = 3;
+  player.bloodGemAttack = 2;
+  player.bloodGemHealth = 3;
+  player.tavernBloodGemBarrageCount = 1;
+  player.tavernBloodGemBarrageAttack = 0;
+  player.tavernBloodGemBarrageHealth = 0;
   player.rideTheWindBuffs = [{ attack: 6, health: 6 }];
   clearMinionPool(state);
   clearSpellPool(state);

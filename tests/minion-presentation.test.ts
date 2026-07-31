@@ -8,6 +8,7 @@ function keywordState(
   overrides: Partial<MinionKeywordVisualState> = {},
 ): MinionKeywordVisualState {
   return {
+    stealth: false,
     divineShield: false,
     taunt: false,
     poisonous: false,
@@ -22,6 +23,7 @@ test("minion presentation exposes a distinct visual layer for every requested ke
   assert.deepEqual(
     activeMinionKeywordVisuals(
       keywordState({
+        stealth: true,
         divineShield: true,
         taunt: true,
         poisonous: true,
@@ -31,11 +33,23 @@ test("minion presentation exposes a distinct visual layer for every requested ke
     ),
     [
       { kind: "taunt", label: "嘲讽" },
+      { kind: "stealth", label: "潜行" },
       { kind: "divine-shield", label: "圣盾" },
       { kind: "poisonous", label: "剧毒" },
       { kind: "windfury", label: "风怒" },
       { kind: "reborn", label: "复生" },
     ],
+  );
+});
+
+test("stealth visual follows the current combat snapshot", () => {
+  assert.deepEqual(
+    activeMinionKeywordVisuals(keywordState({ stealth: true })),
+    [{ kind: "stealth", label: "潜行" }],
+  );
+  assert.deepEqual(
+    activeMinionKeywordVisuals(keywordState({ stealth: false })),
+    [],
   );
 });
 

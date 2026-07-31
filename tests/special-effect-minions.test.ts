@@ -779,10 +779,11 @@ test("Chromawing bonuses affect direct stat spells and delayed Blood Gem Barrage
     [
       player.shop[0].attack,
       player.shop[0].health,
+      player.tavernBloodGemBarrageCount,
       player.tavernBloodGemBarrageAttack,
       player.tavernBloodGemBarrageHealth,
     ],
-    [1, 1, 3, 4],
+    [1, 1, 1, 1, 1],
   );
 
   state.activeTribes = [

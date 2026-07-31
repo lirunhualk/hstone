@@ -65,7 +65,7 @@ function expectedPlainText(html: string): string {
 test("exports the pinned current roster version through the legacy alias", () => {
   assert.equal(
     CURRENT_ROSTER_VERSION,
-    "battlegrounds-36.0.3-247416-v23",
+    "battlegrounds-36.0.3-247416-v24",
   );
   assert.equal(CLASSIC_ROSTER_VERSION, CURRENT_ROSTER_VERSION);
 });
@@ -599,6 +599,119 @@ test("maps the fifth complete-effects batch to its real Golden cards and rules",
   });
 });
 
+test("maps the sixth complete Rally batch to its exact ordinary and Golden rules", () => {
+  const expectations = [
+    {
+      cardId: "BG33_323",
+      description:
+        "进击：\n在本局对战中，你的亡灵拥有+2攻击力（无论它们在哪）。",
+      goldenCardId: "BG33_323_G",
+      goldenDescription:
+        "进击：\n在本局对战中，你的亡灵拥有+4攻击力（无论它们在哪）。",
+      rally: [
+        {
+          kind: "improveUndeadArmy",
+          attack: 2,
+          health: 0,
+        },
+      ],
+      stealth: false,
+    },
+    {
+      cardId: "BG34_604",
+      description: "潜行。进击：获得目标的攻击力。",
+      goldenCardId: "BG34_604_G",
+      goldenDescription: "潜行。进击：获得目标的双倍攻击力。",
+      rally: [{ kind: "gainTargetAttack" }],
+      stealth: true,
+    },
+    {
+      cardId: "BG34_925",
+      description: "进击：对本随从右边的随从施放主厨\n甄选。",
+      goldenCardId: "BG34_925_G",
+      goldenDescription:
+        "进击：对本随从右边的随从施放主厨甄选，触发两次。",
+      rally: [
+        {
+          kind: "castChefsChoice",
+          target: "rightFriendly",
+          goldenMode: "repeat",
+        },
+      ],
+      stealth: false,
+    },
+    {
+      cardId: "BG33_318",
+      description: "烈毒。进击：使另一个友方鱼人获得烈毒。",
+      goldenCardId: "BG33_318_G",
+      goldenDescription:
+        "烈毒。进击：使2个其他友方鱼人获得烈毒。",
+      rally: [
+        {
+          kind: "grantVenomous",
+          target: "otherFriendlyTribe",
+          tribe: "murloc",
+          count: 1,
+          goldenMode: "doubleCount",
+        },
+      ],
+      stealth: false,
+    },
+    {
+      cardId: "BG33_885",
+      description:
+        "进击：在本局对战中，你的鲜血宝石使随从额外获得+1/+2。",
+      goldenCardId: "BG33_885_G",
+      goldenDescription:
+        "进击：在本局对战中，你的鲜血宝石使随从额外获得+2/+4。",
+      rally: [
+        {
+          kind: "improveBloodGems",
+          attack: 1,
+          health: 2,
+        },
+      ],
+      stealth: false,
+    },
+    {
+      cardId: "BG34_765",
+      description: "进击：使4个其他友方随从获得本随从的攻击力。",
+      goldenCardId: "BG34_765_G",
+      goldenDescription:
+        "进击：使4个其他友方随从获得本随从的攻击力，触发两次。",
+      rally: [
+        {
+          kind: "grantSourceAttack",
+          target: "otherFriendly",
+          count: 4,
+          goldenMode: "repeat",
+        },
+      ],
+      stealth: false,
+    },
+  ] as const;
+
+  for (const expectation of expectations) {
+    const definition = getMinionDefinition(expectation.cardId);
+    assert.equal(definition.effectSupport, "complete");
+    assert.equal(definition.description, expectation.description);
+    assert.equal(definition.goldenCardId, expectation.goldenCardId);
+    assert.equal(
+      definition.goldenDescription,
+      expectation.goldenDescription,
+    );
+    assert.deepEqual(definition.rally, expectation.rally);
+    assert.equal(definition.stealth, expectation.stealth);
+    assert.ok(definition.printedMechanics?.includes("BACON_RALLY"));
+  }
+
+  assert.ok(
+    getMinionDefinition("BG34_604").printedMechanics?.includes(
+      "STEALTH",
+    ),
+  );
+});
+
 test("marks every live card honestly as complete or partial", () => {
   assert.ok(
     LIVE_MINION_DEFINITIONS.every(
@@ -699,6 +812,8 @@ test("marks every live card honestly as complete or partial", () => {
       "BG33_156",
       "BG33_140",
       "BG33_241",
+      "BG33_318",
+      "BG33_323",
       "BG33_319",
       "BG33_820",
       "BG33_821",
@@ -708,11 +823,13 @@ test("marks every live card honestly as complete or partial", () => {
       "BG33_809",
       "BG33_888",
       "BG33_894",
+      "BG33_885",
       "BG34_140",
       "BG34_175",
       "BG34_231",
       "BG34_500",
       "BG34_523",
+      "BG34_604",
       "BG34_630",
       "BG34_634t",
       "BG34_635t",
@@ -725,6 +842,8 @@ test("marks every live card honestly as complete or partial", () => {
       "BG34_692",
       "BG34_694",
       "BG34_731",
+      "BG34_765",
+      "BG34_925",
       "BG35_143",
       "BG35_123",
       "BG35_142",
@@ -763,13 +882,13 @@ test("marks every live card honestly as complete or partial", () => {
     LIVE_MINION_DEFINITIONS.filter(
       (definition) => definition.effectSupport === "partial",
     ).length,
-    104,
+    98,
   );
   assert.equal(
     LIVE_MINION_DEFINITIONS.filter(
       (definition) => definition.effectSupport === "complete",
     ).length,
-    133,
+    139,
   );
   assert.deepEqual(getMinionDefinition("BG35_702").interactiveBattlecry, {
     kind: "targetedBuff",

@@ -877,6 +877,45 @@
   transform: translateX(-50%);
 }
 
+.keyword-vfx-stealth {
+  z-index: 5;
+  inset: 2px;
+  overflow: hidden;
+  border: 1px solid rgb(197 183 255 / 42%);
+  border-radius: 48% 48% 43% 43%;
+  background:
+    radial-gradient(circle at 28% 34%, rgb(231 226 255 / 24%), transparent 24%),
+    radial-gradient(circle at 72% 62%, rgb(123 98 180 / 34%), transparent 30%),
+    linear-gradient(145deg, rgb(42 36 66 / 16%), rgb(14 13 25 / 52%));
+  box-shadow:
+    inset 0 0 24px rgb(142 115 210 / 34%),
+    0 0 15px rgb(103 82 156 / 30%);
+  opacity: 0.82;
+  animation: keyword-stealth-drift 2.8s ease-in-out infinite;
+}
+
+.keyword-vfx-stealth::before,
+.keyword-vfx-stealth::after {
+  position: absolute;
+  width: 70%;
+  height: 28%;
+  border-radius: 50%;
+  content: "";
+  background: radial-gradient(ellipse, rgb(210 199 255 / 30%), transparent 70%);
+  filter: blur(3px);
+}
+
+.keyword-vfx-stealth::before {
+  top: 18%;
+  left: -18%;
+}
+
+.keyword-vfx-stealth::after {
+  right: -20%;
+  bottom: 16%;
+  animation-delay: -1.4s;
+}
+
 .keyword-vfx-poisonous,
 .keyword-vfx-venomous {
   z-index: 2;
@@ -894,6 +933,19 @@
   mix-blend-mode: screen;
   opacity: 0.74;
   animation: keyword-toxic-breathe 2.4s ease-in-out infinite;
+}
+
+@keyframes keyword-stealth-drift {
+  0%,
+  100% {
+    opacity: 0.68;
+    transform: translateX(-1px);
+  }
+
+  50% {
+    opacity: 0.9;
+    transform: translateX(2px);
+  }
 }
 
 .keyword-vfx-venomous {

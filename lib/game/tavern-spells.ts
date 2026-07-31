@@ -2,6 +2,7 @@ import pinnedSnapshot from "./generated/battlegrounds-36.0.3-247416.zhCN.json" w
   type: "json",
 };
 import type {
+  EffectSupport,
   TavernSpellDefinition,
   TavernSpellEffect,
   TavernSpellInstance,
@@ -15,6 +16,8 @@ interface TavernSpellRule {
   cardId: string;
   effect: TavernSpellEffect;
   target: TavernSpellTarget;
+  effectSupport?: EffectSupport;
+  implementationNote?: string;
   purchaseCurrency?: "health";
 }
 
@@ -366,6 +369,9 @@ export const TAVERN_SPELL_RULES = [
     cardId: "EBG_Spell_037",
     effect: "unmaskedIdentity",
     target: "none",
+    effectSupport: "partial",
+    implementationNote:
+      "本地版目前只会发现4个已完整支持的英雄技能；完整官方英雄技能池仍在适配。",
   },
   {
     id: "tavern-spell-queens-command",
@@ -402,6 +408,9 @@ export const TAVERN_SPELL_RULES = [
     cardId: "BG30_802",
     effect: "knockoffWisdomball",
     target: "none",
+    effectSupport: "partial",
+    implementationNote:
+      "本地版已实现1至6星范围的有用刷新；偶发的7星随从页面和未公开的服务器权重仍在适配。",
   },
   {
     id: "tavern-spell-eyes-of-earth-mother",
@@ -416,6 +425,43 @@ export const TAVERN_SPELL_RULES = [
     target: "anyMinion",
   },
 ] as const satisfies readonly TavernSpellRule[];
+
+/**
+ * Build 247416 cards tagged by Blizzard as direct stat-granting Tavern
+ * Spells. Frostscale Priestess's Rime or Reason samples only this set.
+ */
+export const RIME_OR_REASON_STAT_GRANTING_CARD_IDS = [
+  "BG28_168",
+  "BG28_169",
+  "BG28_503",
+  "BG28_519",
+  "BG28_520",
+  "BG28_825",
+  "BG28_838",
+  "BG28_845",
+  "BG28_886",
+  "BG28_888",
+  "BG28_897",
+  "BG28_966",
+  "BG31_881",
+  "BG32_815",
+  "BG33_811",
+  "BG33_812",
+  "BG33_813",
+  "BG33_817",
+  "BG33_899",
+  "BG34_444",
+  "BG34_990",
+  "BG35_149",
+  "BG35_910",
+  "BG35_911",
+  "BG35_912",
+  "BG35_922",
+  "BG35_951",
+  "BG35_952",
+  "EBG_Spell_014",
+  "EBG_Spell_032",
+] as const;
 
 const SOURCE_TRIBES: Readonly<Record<string, Tribe>> = {
   BEAST: "beast",
@@ -437,6 +483,14 @@ const READABLE_TEXT_OVERRIDES: Readonly<Record<string, string>> = {
   BG33_811: "使四个友方随从获得+4生命值。",
   BG33_812: "使四个友方随从获得+4攻击力。",
   BG33_817: "使你具有圣盾的随从获得+6攻击力。",
+  BG34_330:
+    "发现一张你当前等级的随从牌，将其锁入你的手牌1个回合。",
+  BG28_606: "随机获取3张塑造法术的法术牌。",
+  BG28_825: "使一个友方随从获得+6/+6和嘲讽。",
+  BG35_911:
+    "使一个友方元素获得酒馆中生命值最高的随从的一半属性值。",
+  BG28_169: "使你的随从获得+2/+2，触发两次。",
+  BG30_802: "你的下2次刷新均为有用的刷新！（还剩2次！）",
   BG28_604:
     "消灭一个友方亡灵。在本局对战中，你的亡灵拥有+5攻击力（无论它们在哪）。",
   BG28_849: "刷新酒馆，使其中变为酒馆法术牌。",
@@ -498,6 +552,10 @@ export const TAVERN_SPELL_DEFINITIONS: readonly TavernSpellDefinition[] =
       description:
         READABLE_TEXT_OVERRIDES[printed.id] ??
         plainText(printed.text),
+      effectSupport: rule.effectSupport ?? "complete",
+      ...(rule.implementationNote
+        ? { implementationNote: rule.implementationNote }
+        : {}),
       effect: rule.effect,
       target: rule.target,
       ...(rule.purchaseCurrency

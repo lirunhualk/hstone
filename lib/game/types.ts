@@ -172,11 +172,36 @@ export interface RallySummonFromHandEffect {
   goldenMode?: "doubleCount";
 }
 
-export type RallyRemovedKeyword = "reborn" | "taunt";
+export type RallyRemovedKeyword = "reborn" | "taunt" | "stealth";
 
 export interface RallyRemoveTargetKeywordsEffect {
   kind: "removeTargetKeywords";
   keywords: readonly RallyRemovedKeyword[];
+}
+
+export interface RallyGainTargetAttackEffect {
+  kind: "gainTargetAttack";
+}
+
+export interface RallyCastChefsChoiceEffect {
+  kind: "castChefsChoice";
+  target: "rightFriendly";
+  goldenMode?: "repeat";
+}
+
+export interface RallyGrantVenomousEffect {
+  kind: "grantVenomous";
+  target: "otherFriendlyTribe";
+  tribe: Tribe;
+  count: number;
+  goldenMode?: "doubleCount";
+}
+
+export interface RallyGrantSourceAttackEffect {
+  kind: "grantSourceAttack";
+  target: "otherFriendly";
+  count: number;
+  goldenMode?: "repeat";
 }
 
 export type RallyEffect =
@@ -184,7 +209,13 @@ export type RallyEffect =
   | GainRandomTavernSpellEffect
   | RallyBuffEffect
   | RallySummonFromHandEffect
-  | RallyRemoveTargetKeywordsEffect;
+  | RallyRemoveTargetKeywordsEffect
+  | RallyGainTargetAttackEffect
+  | RallyCastChefsChoiceEffect
+  | RallyGrantVenomousEffect
+  | RallyGrantSourceAttackEffect
+  | ImproveUndeadArmyEffect
+  | ImproveBloodGemsEffect;
 
 export interface DamageAllMinionsEffect {
   kind: "damageAllMinions";
@@ -822,6 +853,9 @@ export interface TavernSpellDefinition {
   tier: TavernTier;
   cost: number;
   description: string;
+  effectSupport: EffectSupport;
+  /** Reader-facing boundary when the local rule is intentionally incomplete. */
+  implementationNote?: string;
   effect: TavernSpellEffect;
   target: TavernSpellTarget;
   /** Omitted for Gold. Hasty Excavation is bought with Health instead. */
@@ -967,6 +1001,12 @@ export interface PlayerState {
   nextTurnBoardAttackBonus: number;
   nextTurnBoardHealthBonus: number;
   nextTurnBoardBuffPulses: number;
+  /** Number of persistent Blood Gem Barrage refresh triggers. */
+  tavernBloodGemBarrageCount: number;
+  /**
+   * Cast-time Tavern Spell bonuses are stored separately; each refresh reads
+   * the player's current Blood Gem value for every active Barrage.
+   */
   tavernBloodGemBarrageAttack: number;
   tavernBloodGemBarrageHealth: number;
   backToBackBonus: number;

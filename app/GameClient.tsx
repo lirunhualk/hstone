@@ -925,6 +925,9 @@ function isGameState(value: unknown): value is GameState {
         typeof player.nextTurnBoardAttackBonus === "number" &&
         typeof player.nextTurnBoardHealthBonus === "number" &&
         typeof player.nextTurnBoardBuffPulses === "number" &&
+        typeof player.tavernBloodGemBarrageCount === "number" &&
+        Number.isInteger(player.tavernBloodGemBarrageCount) &&
+        player.tavernBloodGemBarrageCount >= 0 &&
         typeof player.tavernBloodGemBarrageAttack === "number" &&
         typeof player.tavernBloodGemBarrageHealth === "number" &&
         typeof player.backToBackBonus === "number" &&
@@ -1207,6 +1210,7 @@ function unitKeyword(unit: MinionInstance): string {
       unit.golden ? "金色" : "",
       isMagneticMinion(unit) ? "磁力" : "",
       unit.taunt ? "嘲讽" : "",
+      unit.stealth ? "潜行" : "",
       unit.divineShield ? "圣盾" : "",
       unit.reborn ? "复生" : "",
       unit.poisonous ? "剧毒" : "",
@@ -3412,7 +3416,11 @@ export default function GameClient() {
     currentBattleEvent.removedKeywords?.length
       ? `移除 ${currentBattleEvent.removedKeywords
           .map((keyword) =>
-            keyword === "reborn" ? "复生" : "嘲讽",
+            keyword === "reborn"
+              ? "复生"
+              : keyword === "taunt"
+                ? "嘲讽"
+                : "潜行",
           )
           .join(" · ")}`
       : undefined;
@@ -3449,6 +3457,9 @@ export default function GameClient() {
     selectedHandCard?.kind === "tavernSpell" ? selectedHandCard : null;
   const selectedTavernSpell =
     selectedHandTavernSpell ?? selectedShopSpell;
+  const selectedTavernSpellDefinition = selectedTavernSpell
+    ? getTavernSpellDefinition(selectedTavernSpell.definitionId)
+    : null;
   const selectedMagneticSource =
     !interactionLocked &&
     selectedHandCard?.kind === "minion" &&
@@ -6687,6 +6698,17 @@ export default function GameClient() {
                         : "枚金币"}
                     </p>
                     <p>{selectedTavernSpell.description}</p>
+                    {selectedTavernSpellDefinition?.effectSupport ===
+                      "partial" && (
+                      <p
+                        className="rules-support-note"
+                        data-testid="partial-tavern-spell-rules-note"
+                      >
+                        {
+                          selectedTavernSpellDefinition.implementationNote
+                        }
+                      </p>
+                    )}
                     {selection?.zone === "hand" && (
                       <p
                         className="tavern-spell-play-hint"
@@ -6826,6 +6848,7 @@ export default function GameClient() {
                     <div className="detail-keywords">
                       {isMagneticMinion(selectedUnit) && <span>磁力</span>}
                       {selectedUnit.taunt && <span>嘲讽</span>}
+                      {selectedUnit.stealth && <span>潜行</span>}
                       {selectedUnit.divineShield && <span>圣盾</span>}
                       {selectedUnit.reborn && <span>复生</span>}
                       {selectedUnit.poisonous && <span>剧毒</span>}

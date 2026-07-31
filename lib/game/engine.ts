@@ -6,6 +6,7 @@ import {
   getMinionDefinition,
 } from "./content.ts";
 import {
+  RIME_OR_REASON_STAT_GRANTING_CARD_IDS,
   TAVERN_SPELL_DEFINITIONS,
   getTavernSpellDefinition,
   tavernSpellCanTargetShop,
@@ -49,6 +50,8 @@ import type {
   HelpfulRefreshKind,
   HeroPowerDefinition,
   HumanScoutingReport,
+  ImproveBloodGemsEffect,
+  ImproveUndeadArmyEffect,
   MagneticAttachment,
   MinionEffect,
   MinionInstance,
@@ -58,6 +61,9 @@ import type {
   PlayerId,
   PlayerState,
   QueueDemonFodderEffect,
+  RallyCastChefsChoiceEffect,
+  RallyGrantSourceAttackEffect,
+  RallyGrantVenomousEffect,
   RallyRemoveTargetKeywordsEffect,
   RallyRemovedKeyword,
   RallySummonFromHandEffect,
@@ -1697,14 +1703,19 @@ function applyAfterTavernRefreshEffects(
   player: PlayerState,
 ): void {
   if (
-    player.tavernBloodGemBarrageAttack > 0 ||
-    player.tavernBloodGemBarrageHealth > 0
+    player.tavernBloodGemBarrageCount > 0
   ) {
+    const attack =
+      player.tavernBloodGemBarrageCount * player.bloodGemAttack +
+      player.tavernBloodGemBarrageAttack;
+    const health =
+      player.tavernBloodGemBarrageCount * player.bloodGemHealth +
+      player.tavernBloodGemBarrageHealth;
     for (const minion of player.shop) {
       applyBloodGemStats(
         minion,
-        player.tavernBloodGemBarrageAttack,
-        player.tavernBloodGemBarrageHealth,
+        attack,
+        health,
       );
     }
   }
@@ -3868,13 +3879,13 @@ function castBloodGem(
   return true;
 }
 
-function randomBoardSubset(
+function randomBoardSubset<T extends MinionInstance>(
   state: GameState,
-  board: readonly BoardMinionInstance[],
+  board: readonly T[],
   count: number,
-): BoardMinionInstance[] {
+): T[] {
   const candidates = [...board];
-  const selected: BoardMinionInstance[] = [];
+  const selected: T[] = [];
   while (candidates.length > 0 && selected.length < count) {
     selected.push(candidates.splice(randomIndex(state, candidates.length), 1)[0]);
   }
@@ -4160,37 +4171,9 @@ function addGeneratedMinionCopyToHand(
   resolveTriples(state, player);
 }
 
-const STAT_GRANTING_TAVERN_SPELL_EFFECTS = new Set<string>([
-  "fortify",
-  "pointyArrow",
-  "tavernDishBanana",
-  "themApples",
-  "mightOfStormwind",
-  "healthyBounty",
-  "hostileBounty",
-  "selfishBounty",
-  "shinyRing",
-  "staffOfEnrichment",
-  "trickyTrousers",
-  "stackedAvalanche",
-  "backToBack",
-  "deepwaterClan",
-  "defendersRites",
-  "misplacedTeaSet",
-  "naturalBlessing",
-  "shiftingTide",
-  "blazingInferno",
-  "arcaneAbsorption",
-  "slaughter",
-  "corruptedCupcakes",
-  "nozdormusProgeny",
-  "invokeTheDevourer",
-  "queensCommand",
-  "sanctify",
-  "waveOfGold",
-  "azeriteEmpowerment",
-  "perfectVision",
-]);
+const STAT_GRANTING_TAVERN_SPELL_CARD_IDS = new Set<string>(
+  RIME_OR_REASON_STAT_GRANTING_CARD_IDS,
+);
 
 function addRandomStatTavernSpell(
   state: GameState,
@@ -4201,7 +4184,7 @@ function addRandomStatTavernSpell(
   }
   const eligible = TAVERN_SPELL_DEFINITIONS.filter(
     (definition) =>
-      STAT_GRANTING_TAVERN_SPELL_EFFECTS.has(definition.effect) &&
+      STAT_GRANTING_TAVERN_SPELL_CARD_IDS.has(definition.cardId) &&
       tavernSpellIsAvailable(definition, state.activeTribes),
   );
   if (eligible.length === 0) {
@@ -4281,7 +4264,7 @@ function finishTavernSpellCast(
 
 function chefsChoiceMatches(
   candidate: (typeof MINION_DEFINITIONS)[number],
-  target: BoardMinionInstance,
+  target: MinionInstance,
 ): boolean {
   if (candidate.id === target.definitionId) {
     return false;
@@ -4399,10 +4382,10 @@ function adjacentRecruitMinions(
   );
 }
 
-function selectDistinctMinionsByTribe(
+function selectDistinctMinionsByTribe<T extends MinionInstance>(
   state: GameState,
-  board: readonly BoardMinionInstance[],
-): BoardMinionInstance[] {
+  board: readonly T[],
+): T[] {
   const tribes = [...LOBBY_TRIBES];
   shuffleInPlace(state, tribes);
   const assignedTribeByInstance = new Map<string, Tribe>();
@@ -5206,10 +5189,11 @@ function applyTavernSpellEffect(
       break;
     }
     case "bloodGemBarrage":
+      player.tavernBloodGemBarrageCount += 1;
       player.tavernBloodGemBarrageAttack +=
-        player.bloodGemAttack + player.tavernSpellAttackBonus;
+        player.tavernSpellAttackBonus;
       player.tavernBloodGemBarrageHealth +=
-        player.bloodGemHealth + player.tavernSpellHealthBonus;
+        player.tavernSpellHealthBonus;
       break;
     case "cloneHorn": {
       const original = drawMatchingFromPool(
@@ -5258,12 +5242,14 @@ function applyTavernSpellEffect(
     }
     case "backToBack":
       if (target) {
-        const amount = 4 + player.backToBackBonus;
+        const repetitions =
+          1 + Math.floor(player.backToBackBonus / 4);
         buffMinionsFromTavernSpell(
           player,
           [target],
-          amount,
-          amount,
+          4,
+          4,
+          repetitions,
         );
         player.backToBackBonus += 4;
       }
@@ -5592,7 +5578,7 @@ function applyTavernSpellEffect(
       );
       break;
     case "azeriteEmpowerment":
-      buffMinionsFromTavernSpell(player, player.board, 4, 4);
+      buffMinionsFromTavernSpell(player, player.board, 2, 2, 2);
       break;
     case "perfectVision":
       if (target) {
@@ -8185,7 +8171,7 @@ function chooseAttackTarget(
   enemyId: PlayerId,
 ): MinionInstance | null {
   const enemyBoard = context.boards[enemyId].filter(
-    (minion) => minion.health > 0,
+    (minion) => minion.health > 0 && !minion.stealth,
   );
   if (enemyBoard.length === 0) {
     return null;
@@ -8526,11 +8512,406 @@ function resolveRallySummonFromHand(
   }
 }
 
+function rallySourceLabel(component: MinionEffectSource): string {
+  const definition = getMinionDefinition(component.definitionId);
+  return component.golden
+    ? `金色·${definition.name}`
+    : definition.name;
+}
+
+function resolveCombatImproveUndeadArmy(
+  context: CombatContext,
+  ownerId: PlayerId,
+  source: MinionInstance,
+  component: MinionEffectSource,
+  effect: ImproveUndeadArmyEffect,
+  triggerLabel: string,
+): void {
+  const scale = component.golden ? 2 : 1;
+  const attackDelta = effect.attack * scale;
+  const healthDelta = effect.health * scale;
+  const current = context.tribeBuffs[ownerId].undead ?? {
+    attack: 0,
+    health: 0,
+  };
+  context.tribeBuffs[ownerId].undead = {
+    attack: current.attack + attackDelta,
+    health: current.health + healthDelta,
+  };
+
+  for (const target of context.boards[ownerId]) {
+    if (!minionHasTribe(target, "undead")) {
+      continue;
+    }
+    target.attack += attackDelta;
+    target.health += healthDelta;
+    reconcileConditionalMinion(target);
+    pushBattleEvent(context.events, {
+      type: "buff",
+      actorPlayerId: ownerId,
+      actorInstanceId: source.instanceId,
+      targetPlayerId: ownerId,
+      targetInstanceId: target.instanceId,
+      attackDelta,
+      healthDelta,
+      minion: cloneMinion(target),
+      message: `${rallySourceLabel(component)}的${triggerLabel}使${target.name}获得+${attackDelta}/+${healthDelta}。`,
+    });
+  }
+
+  const owner = persistentCombatOwner(context, ownerId);
+  if (!owner) {
+    return;
+  }
+  owner.undeadArmyAttackBonus += attackDelta;
+  owner.undeadArmyHealthBonus += healthDelta;
+  for (const target of [
+    ...owner.board,
+    ...owner.hand.filter(
+      (card): card is BoardMinionInstance => card.kind === "minion",
+    ),
+  ]) {
+    if (!minionHasTribe(target, "undead")) {
+      continue;
+    }
+    target.attack += attackDelta;
+    target.health += healthDelta;
+    reconcileConditionalMinion(target);
+  }
+}
+
+function resolveCombatImproveBloodGems(
+  context: CombatContext,
+  ownerId: PlayerId,
+  source: MinionInstance,
+  component: MinionEffectSource,
+  effect: ImproveBloodGemsEffect,
+  triggerLabel: string,
+): void {
+  const owner = persistentCombatOwner(context, ownerId);
+  if (!owner) {
+    return;
+  }
+  const scale = component.golden ? 2 : 1;
+  const attackDelta = effect.attack * scale;
+  const healthDelta = effect.health * scale;
+  owner.bloodGemAttack += attackDelta;
+  owner.bloodGemHealth += healthDelta;
+  pushBattleEvent(context.events, {
+    type: "buff",
+    actorPlayerId: ownerId,
+    actorInstanceId: source.instanceId,
+    targetPlayerId: ownerId,
+    targetInstanceId: source.instanceId,
+    attackDelta: 0,
+    healthDelta: 0,
+    minion: cloneMinion(source),
+    message: `${rallySourceLabel(component)}的${triggerLabel}使鲜血宝石永久获得+${attackDelta}/+${healthDelta}。`,
+  });
+}
+
+function resolveRallyGainTargetAttack(
+  context: CombatContext,
+  ownerId: PlayerId,
+  attacker: MinionInstance,
+  attackTarget: MinionInstance,
+  component: MinionEffectSource,
+): void {
+  const attackDelta =
+    attackTarget.attack * (component.golden ? 2 : 1);
+  attacker.attack += attackDelta;
+  reconcileConditionalMinion(attacker);
+  pushBattleEvent(context.events, {
+    type: "buff",
+    actorPlayerId: ownerId,
+    actorInstanceId: attacker.instanceId,
+    targetPlayerId: ownerId,
+    targetInstanceId: attacker.instanceId,
+    attackDelta,
+    healthDelta: 0,
+    minion: cloneMinion(attacker),
+    message: `${rallySourceLabel(component)}的进击获得了${attackTarget.name}的${attackDelta}点攻击力。`,
+  });
+}
+
+function resolveRallyGrantVenomous(
+  context: CombatContext,
+  ownerId: PlayerId,
+  attacker: MinionInstance,
+  component: MinionEffectSource,
+  effect: RallyGrantVenomousEffect,
+): void {
+  const count =
+    effect.count *
+    (component.golden && effect.goldenMode === "doubleCount" ? 2 : 1);
+  const candidates = context.boards[ownerId].filter(
+    (minion) =>
+      minion.instanceId !== attacker.instanceId &&
+      minion.health > 0 &&
+      minionHasTribe(minion, effect.tribe),
+  );
+  for (const target of randomBoardSubset(
+    context.state,
+    candidates,
+    count,
+  )) {
+    target.venomous = true;
+    pushBattleEvent(context.events, {
+      type: "buff",
+      actorPlayerId: ownerId,
+      actorInstanceId: attacker.instanceId,
+      targetPlayerId: ownerId,
+      targetInstanceId: target.instanceId,
+      attackDelta: 0,
+      healthDelta: 0,
+      minion: cloneMinion(target),
+      message: `${rallySourceLabel(component)}的进击使${target.name}获得烈毒。`,
+    });
+  }
+}
+
+function resolveRallyGrantSourceAttack(
+  context: CombatContext,
+  ownerId: PlayerId,
+  attacker: MinionInstance,
+  component: MinionEffectSource,
+  effect: RallyGrantSourceAttackEffect,
+): void {
+  const repetitions =
+    component.golden && effect.goldenMode === "repeat" ? 2 : 1;
+  for (let repetition = 0; repetition < repetitions; repetition += 1) {
+    const candidates = context.boards[ownerId].filter(
+      (minion) =>
+        minion.instanceId !== attacker.instanceId &&
+        minion.health > 0,
+    );
+    for (const target of randomBoardSubset(
+      context.state,
+      candidates,
+      effect.count,
+    )) {
+      const attackDelta = attacker.attack;
+      target.attack += attackDelta;
+      reconcileConditionalMinion(target);
+      pushBattleEvent(context.events, {
+        type: "buff",
+        actorPlayerId: ownerId,
+        actorInstanceId: attacker.instanceId,
+        targetPlayerId: ownerId,
+        targetInstanceId: target.instanceId,
+        attackDelta,
+        healthDelta: 0,
+        minion: cloneMinion(target),
+        message: `${rallySourceLabel(component)}的进击使${target.name}获得+${attackDelta}攻击力。`,
+      });
+    }
+  }
+}
+
+function pushCombatSpellBuff(
+  context: CombatContext,
+  ownerId: PlayerId,
+  source: MinionInstance,
+  target: MinionInstance,
+  attackDelta: number,
+  healthDelta: number,
+  message: string,
+): void {
+  target.attack += attackDelta;
+  target.health += healthDelta;
+  reconcileConditionalMinion(target);
+  pushBattleEvent(context.events, {
+    type: "buff",
+    actorPlayerId: ownerId,
+    actorInstanceId: source.instanceId,
+    targetPlayerId: ownerId,
+    targetInstanceId: target.instanceId,
+    attackDelta,
+    healthDelta,
+    minion: cloneMinion(target),
+    message,
+  });
+}
+
+function triggerCombatAfterTavernSpellCast(
+  context: CombatContext,
+  ownerId: PlayerId,
+): void {
+  const board = context.boards[ownerId];
+  for (const source of [...board]) {
+    for (const component of minionEffectSources(source)) {
+      const effects =
+        getMinionDefinition(component.definitionId)
+          .afterTavernSpellCast ?? [];
+      const scale = component.golden ? 2 : 1;
+      for (const effect of effects) {
+        if (effect.kind === "improveUndeadArmy") {
+          resolveCombatImproveUndeadArmy(
+            context,
+            ownerId,
+            source,
+            component,
+            effect,
+            "酒馆法术响应",
+          );
+          continue;
+        }
+        if (effect.kind === "buff") {
+          for (const target of combatBuffTargets(
+            context.state,
+            board,
+            source,
+            effect,
+          )) {
+            pushCombatSpellBuff(
+              context,
+              ownerId,
+              source,
+              target,
+              effect.attack * scale,
+              effect.health * scale,
+              `${source.name}响应酒馆法术，使${target.name}获得+${effect.attack * scale}/+${effect.health * scale}。`,
+            );
+          }
+          continue;
+        }
+        if (effect.kind === "onePerTribe") {
+          for (const target of selectDistinctMinionsByTribe(
+            context.state,
+            board,
+          )) {
+            pushCombatSpellBuff(
+              context,
+              ownerId,
+              source,
+              target,
+              effect.attack * scale,
+              effect.health * scale,
+              `${source.name}响应酒馆法术，使${target.name}获得+${effect.attack * scale}/+${effect.health * scale}。`,
+            );
+          }
+          continue;
+        }
+        if (effect.kind === "buffKeyword") {
+          for (const target of board.filter(
+            (candidate) =>
+              effect.keyword === "divineShield" &&
+              candidate.divineShield,
+          )) {
+            pushCombatSpellBuff(
+              context,
+              ownerId,
+              source,
+              target,
+              effect.attack * scale,
+              effect.health * scale,
+              `${source.name}响应酒馆法术，使${target.name}获得+${effect.attack * scale}/+${effect.health * scale}。`,
+            );
+          }
+        }
+      }
+    }
+  }
+}
+
+function resolveRallyCastChefsChoice(
+  context: CombatContext,
+  ownerId: PlayerId,
+  attacker: MinionInstance,
+  component: MinionEffectSource,
+  effect: RallyCastChefsChoiceEffect,
+): void {
+  const board = context.boards[ownerId];
+  const attackerIndex = board.findIndex(
+    (minion) => minion.instanceId === attacker.instanceId,
+  );
+  const target =
+    effect.target === "rightFriendly" && attackerIndex >= 0
+      ? board[attackerIndex + 1]
+      : undefined;
+  const owner = persistentCombatOwner(context, ownerId);
+  if (!target || target.health <= 0 || !owner) {
+    return;
+  }
+  const repetitions =
+    component.golden && effect.goldenMode === "repeat" ? 2 : 1;
+  for (let repetition = 0; repetition < repetitions; repetition += 1) {
+    if (owner.hand.length >= MAX_HAND_SIZE) {
+      pushBattleEvent(context.events, {
+        type: "cardGain",
+        actorPlayerId: ownerId,
+        actorInstanceId: attacker.instanceId,
+        targetPlayerId: ownerId,
+        amount: 0,
+        cardGainResult: "handFull",
+        message: owner.isHuman
+          ? `手牌已满，${rallySourceLabel(component)}的主厨甄选未能获取随从。`
+          : `${rallySourceLabel(component)}的主厨甄选未能使${owner.name}获取随从。`,
+      });
+      triggerCombatAfterTavernSpellCast(context, ownerId);
+      continue;
+    }
+    const gained = drawMatchingFromPool(
+      context.state,
+      owner.tavernTier,
+      (candidate) => chefsChoiceMatches(candidate, target),
+    );
+    if (!gained) {
+      addConsolationCoin(context.state, owner);
+      pushBattleEvent(context.events, {
+        type: "cardGain",
+        actorPlayerId: ownerId,
+        actorInstanceId: attacker.instanceId,
+        targetPlayerId: ownerId,
+        amount: 1,
+        cardName: owner.isHuman ? "酒馆币" : undefined,
+        cardGainResult: "noCandidate",
+        message: owner.isHuman
+          ? `${rallySourceLabel(component)}的主厨甄选没有找到候选，改为获得一张酒馆币。`
+          : `${rallySourceLabel(component)}的主厨甄选没有找到候选。`,
+      });
+      triggerCombatAfterTavernSpellCast(context, ownerId);
+      continue;
+    }
+    applyOwnedUndeadArmyBonus(owner, gained);
+    reconcileWhereverMinion(
+      gained,
+      owner.astralAutomatonsSummoned ?? 0,
+      owner.eternalKnightsDied ?? 0,
+    );
+    const gainedSnapshot = cloneMinion(gained);
+    owner.hand.push(gained);
+    resolveTriples(context.state, owner);
+    pushBattleEvent(context.events, {
+      type: "cardGain",
+      actorPlayerId: ownerId,
+      actorInstanceId: attacker.instanceId,
+      targetPlayerId: ownerId,
+      targetInstanceId: owner.isHuman
+        ? gained.instanceId
+        : undefined,
+      amount: 1,
+      minion: owner.isHuman ? gainedSnapshot : undefined,
+      cardGainResult: "added",
+      message: owner.isHuman
+        ? `${rallySourceLabel(component)}的主厨甄选使你获得了「${gained.name}」。`
+        : `${rallySourceLabel(component)}的主厨甄选使${owner.name}获得了一张随从牌。`,
+    });
+    triggerCombatAfterTavernSpellCast(context, ownerId);
+  }
+}
+
 function removedKeywordLabel(
   keywords: readonly RallyRemovedKeyword[],
 ): string {
   return keywords
-    .map((keyword) => (keyword === "reborn" ? "复生" : "嘲讽"))
+    .map((keyword) =>
+      keyword === "reborn"
+        ? "复生"
+        : keyword === "taunt"
+          ? "嘲讽"
+          : "潜行",
+    )
     .join("和");
 }
 
@@ -8549,6 +8930,9 @@ function resolveRallyKeywordRemoval(
       removedKeywords.push(keyword);
     } else if (keyword === "taunt" && target.taunt) {
       target.taunt = false;
+      removedKeywords.push(keyword);
+    } else if (keyword === "stealth" && target.stealth) {
+      target.stealth = false;
       removedKeywords.push(keyword);
     }
   }
@@ -8621,6 +9005,74 @@ function triggerRally(
           attackTarget,
           component,
           effect,
+        );
+        continue;
+      }
+
+      if (effect.kind === "gainTargetAttack") {
+        resolveRallyGainTargetAttack(
+          context,
+          ownerId,
+          attacker,
+          attackTarget,
+          component,
+        );
+        continue;
+      }
+
+      if (effect.kind === "castChefsChoice") {
+        resolveRallyCastChefsChoice(
+          context,
+          ownerId,
+          attacker,
+          component,
+          effect,
+        );
+        continue;
+      }
+
+      if (effect.kind === "grantVenomous") {
+        resolveRallyGrantVenomous(
+          context,
+          ownerId,
+          attacker,
+          component,
+          effect,
+        );
+        continue;
+      }
+
+      if (effect.kind === "grantSourceAttack") {
+        resolveRallyGrantSourceAttack(
+          context,
+          ownerId,
+          attacker,
+          component,
+          effect,
+        );
+        continue;
+      }
+
+      if (effect.kind === "improveUndeadArmy") {
+        resolveCombatImproveUndeadArmy(
+          context,
+          ownerId,
+          attacker,
+          component,
+          effect,
+          "进击",
+        );
+        continue;
+      }
+
+      if (effect.kind === "improveBloodGems") {
+        resolveCombatImproveBloodGems(
+          context,
+          ownerId,
+          attacker,
+          component,
+          effect,
+          "进击",
         );
         continue;
       }
@@ -8704,6 +9156,19 @@ function performAttackStrike(
     amount: attacker.attack,
     message: `${attacker.name}${options.immediate ? "立即攻击" : "攻击"}${target.name}${options.windfuryStrike ? "（风怒）" : ""}。`,
   });
+  if (attacker.stealth) {
+    attacker.stealth = false;
+    pushBattleEvent(context.events, {
+      type: "keywordRemoved",
+      actorPlayerId: ownerId,
+      actorInstanceId: attacker.instanceId,
+      targetPlayerId: ownerId,
+      targetInstanceId: attacker.instanceId,
+      removedKeywords: ["stealth"],
+      minion: cloneMinion(attacker),
+      message: `${attacker.name}发动攻击后失去了潜行。`,
+    });
+  }
   triggerRally(context, ownerId, attacker, target);
 
   dealCombatDamage(
@@ -9748,11 +10213,10 @@ function simulateBattle(
       attackingPlayerId = defenderOwner.id;
       continue;
     }
-    consecutiveSkips = 0;
-
     const attacker = ownBoard[attackIndex];
     const attackerInstanceId = attacker.instanceId;
     const strikes = attacker.windfury ? 2 : 1;
+    let completedStrike = false;
     for (
       let strike = 0;
       strike < strikes &&
@@ -9770,7 +10234,16 @@ function simulateBattle(
       if (!attacked) {
         break;
       }
+      completedStrike = true;
       attackCount += 1;
+    }
+    if (completedStrike) {
+      consecutiveSkips = 0;
+    } else {
+      consecutiveSkips += 1;
+      if (consecutiveSkips >= 2) {
+        break;
+      }
     }
 
     const survivingAttackerIndex = ownBoard.findIndex(
@@ -10170,6 +10643,7 @@ export function createGame(seed?: number): GameState {
     nextTurnBoardAttackBonus: 0,
     nextTurnBoardHealthBonus: 0,
     nextTurnBoardBuffPulses: 0,
+    tavernBloodGemBarrageCount: 0,
     tavernBloodGemBarrageAttack: 0,
     tavernBloodGemBarrageHealth: 0,
     backToBackBonus: 0,

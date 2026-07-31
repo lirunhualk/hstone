@@ -3,7 +3,7 @@ import liveRosterSnapshot from "./generated/battlegrounds-36.0.3-247416.zhCN.jso
 };
 import type { MinionDefinition, Tribe } from "./types.ts";
 
-export const CURRENT_ROSTER_VERSION = "battlegrounds-36.0.3-247416-v23";
+export const CURRENT_ROSTER_VERSION = "battlegrounds-36.0.3-247416-v24";
 /** Compatibility alias for existing save and engine imports. */
 export const CLASSIC_ROSTER_VERSION = CURRENT_ROSTER_VERSION;
 
@@ -1171,6 +1171,75 @@ const LIVE_RULE_OVERRIDES: Readonly<
       },
     ],
   },
+  BG33_323: {
+    goldenCardId: "BG33_323_G",
+    goldenDescription:
+      "进击：\n在本局对战中，你的亡灵拥有+4攻击力（无论它们在哪）。",
+    rally: [
+      {
+        kind: "improveUndeadArmy",
+        attack: 2,
+        health: 0,
+      },
+    ],
+  },
+  BG34_604: {
+    goldenCardId: "BG34_604_G",
+    goldenDescription:
+      "潜行。进击：获得目标的双倍攻击力。",
+    rally: [{ kind: "gainTargetAttack" }],
+  },
+  BG34_925: {
+    goldenCardId: "BG34_925_G",
+    goldenDescription:
+      "进击：对本随从右边的随从施放主厨甄选，触发两次。",
+    rally: [
+      {
+        kind: "castChefsChoice",
+        target: "rightFriendly",
+        goldenMode: "repeat",
+      },
+    ],
+  },
+  BG33_318: {
+    goldenCardId: "BG33_318_G",
+    goldenDescription:
+      "烈毒。进击：使2个其他友方鱼人获得烈毒。",
+    rally: [
+      {
+        kind: "grantVenomous",
+        target: "otherFriendlyTribe",
+        tribe: "murloc",
+        count: 1,
+        goldenMode: "doubleCount",
+      },
+    ],
+  },
+  BG33_885: {
+    goldenCardId: "BG33_885_G",
+    goldenDescription:
+      "进击：在本局对战中，你的鲜血宝石使随从额外获得+2/+4。",
+    rally: [
+      {
+        kind: "improveBloodGems",
+        attack: 1,
+        health: 2,
+      },
+    ],
+  },
+  BG34_765: {
+    goldenCardId: "BG34_765_G",
+    goldenDescription:
+      "进击：使4个其他友方随从获得本随从的攻击力，触发两次。",
+    rally: [
+      {
+        kind: "grantSourceAttack",
+        target: "otherFriendly",
+        count: 4,
+        goldenMode: "repeat",
+      },
+    ],
+  },
   BG32_880: {
     goldenCardId: "BG32_880_G",
     goldenDescription:
@@ -2319,6 +2388,8 @@ const FULLY_SUPPORTED_LIVE_CARD_IDS = new Set([
   "BG33_156",
   "BG33_140",
   "BG33_241",
+  "BG33_318",
+  "BG33_323",
   "BG33_319",
   "BG33_888",
   "BG33_809",
@@ -2328,11 +2399,13 @@ const FULLY_SUPPORTED_LIVE_CARD_IDS = new Set([
   "BG33_823",
   "BG33_893",
   "BG33_894",
+  "BG33_885",
   "BG34_140",
   "BG34_175",
   "BG34_231",
   "BG34_500",
   "BG34_523",
+  "BG34_604",
   "BG34_630",
   "BG34_634t",
   "BG34_635t",
@@ -2345,6 +2418,8 @@ const FULLY_SUPPORTED_LIVE_CARD_IDS = new Set([
   "BG34_692",
   "BG34_694",
   "BG34_731",
+  "BG34_765",
+  "BG34_925",
   "BG35_143",
   "BG35_123",
   "BG35_142",
@@ -2429,6 +2504,7 @@ function createLiveDefinition(card: LiveRosterCard): MinionDefinition {
     taunt: hasMechanic(card, "TAUNT"),
     divineShield: hasMechanic(card, "DIVINE_SHIELD"),
     reborn: hasMechanic(card, "REBORN"),
+    stealth: hasMechanic(card, "STEALTH"),
     poisonous: false,
     venomous: hasMechanic(card, "VENOMOUS"),
     windfury: hasMechanic(card, "WINDFURY"),
