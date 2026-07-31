@@ -3,7 +3,7 @@ import liveRosterSnapshot from "./generated/battlegrounds-36.0.3-247416.zhCN.jso
 };
 import type { MinionDefinition, Tribe } from "./types.ts";
 
-export const CURRENT_ROSTER_VERSION = "battlegrounds-36.0.3-247416-v27";
+export const CURRENT_ROSTER_VERSION = "battlegrounds-36.0.3-247416-v28";
 /** Compatibility alias for existing save and engine imports. */
 export const CLASSIC_ROSTER_VERSION = CURRENT_ROSTER_VERSION;
 
@@ -1359,6 +1359,19 @@ const LIVE_RULE_OVERRIDES: Readonly<
       },
     ],
   },
+  BG27_556: {
+    goldenCardId: "BG27_556_G",
+    goldenDescription:
+      "战斗开始时：当你有空位时，召唤你手牌中攻击力最高的两个鱼人，其登场仅限本场战斗。",
+    startOfCombat: [
+      {
+        kind: "summonHighestAttackHandTribeWhenSpace",
+        tribe: "murloc",
+        count: 1,
+        goldenMode: "doubleCount",
+      },
+    ],
+  },
   BG26_157: {
     goldenCardId: "BG26_157_G",
     goldenDescription:
@@ -2489,6 +2502,7 @@ const FULLY_SUPPORTED_LIVE_CARD_IDS = new Set([
   "BG26_817",
   "BG27_004",
   "BG27_005",
+  "BG27_556",
   "BG28_551",
   "BG28_595",
   "BG28_741",

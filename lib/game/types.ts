@@ -551,12 +551,20 @@ export interface StartOfCombatGainAllHandMinionStatsEffect {
   goldenMode?: "doubleAmount";
 }
 
+export interface StartOfCombatSummonHighestAttackHandTribeEffect {
+  kind: "summonHighestAttackHandTribeWhenSpace";
+  tribe: Tribe;
+  count: number;
+  goldenMode?: "doubleCount";
+}
+
 export type StartOfCombatEffect =
   | BuffEffect
   | GrantShieldEffect
   | StartOfCombatBuffRandomOtherTribeEffect
   | StartOfCombatGainHighestHandAttackEffect
-  | StartOfCombatGainAllHandMinionStatsEffect;
+  | StartOfCombatGainAllHandMinionStatsEffect
+  | StartOfCombatSummonHighestAttackHandTribeEffect;
 
 export interface ConditionalKeywordEffect {
   attackAtLeast: number;
@@ -1141,6 +1149,7 @@ export interface BattleEvent {
   summonReason?:
     | "reborn"
     | "rallyFromHand"
+    | "startOfCombatFromHand"
     | "inHandStartOfCombat"
     | "beetle"
     | "spellcraft";

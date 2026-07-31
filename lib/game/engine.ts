@@ -6618,6 +6618,7 @@ function aiReservedCombatHandMinionIds(
 ): Set<string> {
   let reserveHighestAttackCount = 0;
   let reserveAllHandMinions = false;
+  const reserveHighestAttackByTribe = new Map<Tribe, number>();
   for (const minion of player.board) {
     for (const component of minionEffectSources(minion)) {
       const definition = getMinionDefinition(component.definitionId);
@@ -6643,13 +6644,30 @@ function aiReservedCombatHandMinionIds(
           );
         } else if (effect.kind === "gainAllHandMinionStats") {
           reserveAllHandMinions = true;
+        } else if (
+          effect.kind === "summonHighestAttackHandTribeWhenSpace"
+        ) {
+          const count =
+            effect.count *
+            (component.golden &&
+            effect.goldenMode === "doubleCount"
+              ? 2
+              : 1);
+          reserveHighestAttackByTribe.set(
+            effect.tribe,
+            Math.max(
+              reserveHighestAttackByTribe.get(effect.tribe) ?? 0,
+              count,
+            ),
+          );
         }
       }
     }
   }
   if (
     reserveHighestAttackCount === 0 &&
-    !reserveAllHandMinions
+    !reserveAllHandMinions &&
+    reserveHighestAttackByTribe.size === 0
   ) {
     return new Set();
   }
@@ -6680,15 +6698,54 @@ function aiReservedCombatHandMinionIds(
     0,
     candidates.length - boardSlotsNeeded,
   );
-  const requestedReserveCount = reserveAllHandMinions
-    ? candidates.length
-    : reserveHighestAttackCount;
+  const reservationScores = new Map<string, number>();
+  const addReservationScore = (
+    minion: BoardMinionInstance,
+    amount = 1,
+  ) => {
+    reservationScores.set(
+      minion.instanceId,
+      (reservationScores.get(minion.instanceId) ?? 0) + amount,
+    );
+  };
+  if (reserveAllHandMinions) {
+    candidates.forEach((candidate) =>
+      addReservationScore(candidate),
+    );
+  }
+  candidates
+    .slice(0, reserveHighestAttackCount)
+    .forEach((candidate) => addReservationScore(candidate));
+  for (const [tribe, count] of reserveHighestAttackByTribe) {
+    candidates
+      .filter((candidate) => minionHasTribe(candidate, tribe))
+      .slice(0, count)
+      // Prefer overlap: this card can still satisfy a generic hand reader
+      // after higher non-matching cards are played onto the board.
+      .forEach((candidate) => addReservationScore(candidate, 2));
+  }
   return new Set(
     candidates
-      .slice(
-        0,
-        Math.min(maximumReserveCount, requestedReserveCount),
+      .filter(
+        (candidate) =>
+          (reservationScores.get(candidate.instanceId) ?? 0) > 0,
       )
+      .sort((left, right) => {
+        const scoreDifference =
+          (reservationScores.get(right.instanceId) ?? 0) -
+          (reservationScores.get(left.instanceId) ?? 0);
+        if (scoreDifference !== 0) {
+          return scoreDifference;
+        }
+        if (left.attack !== right.attack) {
+          return right.attack - left.attack;
+        }
+        if (left.health !== right.health) {
+          return right.health - left.health;
+        }
+        return left.instanceId.localeCompare(right.instanceId);
+      })
+      .slice(0, maximumReserveCount)
       .map((minion) => minion.instanceId),
   );
 }
@@ -7591,6 +7648,14 @@ interface CombatStatBuff {
   health: number;
 }
 
+interface PendingStartOfCombatHandSummon {
+  source: BoardMinionInstance;
+  sourceLabel: string;
+  tribe: Tribe;
+  remainingCount: number;
+  usedHandInstanceIds: Set<string>;
+}
+
 interface CombatContext {
   state: GameState;
   events: BattleEvent[];
@@ -7601,6 +7666,12 @@ interface CombatContext {
   deadMechs: Record<PlayerId, MinionInstance[]>;
   tribeBuffs: Record<PlayerId, Partial<Record<Tribe, CombatStatBuff>>>;
   pendingBeetles: Record<PlayerId, number>;
+  pendingStartOfCombatHandSummons: Record<
+    PlayerId,
+    PendingStartOfCombatHandSummon[]
+  >;
+  /** Prevent a nested immediate attack from outrunning its outer death wave. */
+  deathResolutionDepth: number;
   astralAutomatonsSummoned: Record<PlayerId, number>;
   eternalKnightsDied: Record<PlayerId, number>;
   /** Combat-only counters keyed by the exact minion or Magnetic component. */
@@ -7943,6 +8014,31 @@ function applyStartOfCombatEffects(
         }
 
         const handMinions = combatHandMinions(context, ownerId);
+        if (
+          effect.kind === "summonHighestAttackHandTribeWhenSpace"
+        ) {
+          const pendingSummon: PendingStartOfCombatHandSummon = {
+            source: cloneMinion(source),
+            sourceLabel: rallySourceLabel(component),
+            tribe: effect.tribe,
+            remainingCount:
+              effect.count *
+              (component.golden &&
+              effect.goldenMode === "doubleCount"
+                ? 2
+                : 1),
+            usedHandInstanceIds: new Set(),
+          };
+          context.pendingStartOfCombatHandSummons[ownerId].push(
+            pendingSummon,
+          );
+          summonPendingStartOfCombatHandMinions(
+            context,
+            ownerId,
+            pendingSummon,
+          );
+          continue;
+        }
         const amountScale =
           component.golden &&
           effect.goldenMode === "doubleAmount"
@@ -7969,6 +8065,9 @@ function applyStartOfCombatEffects(
           continue;
         }
 
+        if (effect.kind !== "gainAllHandMinionStats") {
+          continue;
+        }
         const attackDelta =
           handMinions.reduce(
             (total, minion) => total + minion.attack,
@@ -8291,7 +8390,10 @@ function insertCombatMinion(
     context.astralAutomatonsSummoned[ownerId],
     context.eternalKnightsDied[ownerId],
   );
-  if (summonReason !== "rallyFromHand") {
+  if (
+    summonReason !== "rallyFromHand" &&
+    summonReason !== "startOfCombatFromHand"
+  ) {
     applyPersistentTribeBuff(context, ownerId, summoned);
   }
   applyCombatSummonHeroPower(context, ownerId, summoned);
@@ -8352,6 +8454,85 @@ function summonPendingBeetles(
       return;
     }
     context.pendingBeetles[ownerId] -= 1;
+  }
+}
+
+function summonPendingStartOfCombatHandMinions(
+  context: CombatContext,
+  ownerId: PlayerId,
+  openingPending?: PendingStartOfCombatHandSummon,
+): void {
+  const queue = context.pendingStartOfCombatHandSummons[ownerId];
+  let openingInsertAfterInstanceId =
+    openingPending?.source.instanceId;
+  let madeProgress = true;
+  while (
+    madeProgress &&
+    queue.length > 0 &&
+    context.boards[ownerId].length < MAX_BOARD_SIZE
+  ) {
+    madeProgress = false;
+    for (
+      let queueIndex = 0;
+      queueIndex < queue.length &&
+      context.boards[ownerId].length < MAX_BOARD_SIZE;
+
+    ) {
+      const pending = queue[queueIndex];
+      if (pending.remainingCount <= 0) {
+        queue.splice(queueIndex, 1);
+        continue;
+      }
+      const candidates = combatHandMinions(context, ownerId).filter(
+        (candidate) =>
+          minionHasTribe(candidate, pending.tribe) &&
+          !pending.usedHandInstanceIds.has(candidate.instanceId),
+      );
+      const [selected] = selectHighestAttackHandMinions(
+        context.state,
+        candidates,
+        1,
+      );
+      if (!selected) {
+        queueIndex += 1;
+        continue;
+      }
+      const summoned = cloneOwnedMinionForCombat(
+        context.state,
+        selected,
+      );
+      const openingAnchorIndex =
+        pending === openingPending &&
+        openingInsertAfterInstanceId !== undefined
+          ? context.boards[ownerId].findIndex(
+              (minion) =>
+                minion.instanceId === openingInsertAfterInstanceId,
+            )
+          : -1;
+      const inserted = insertCombatMinion(
+        context,
+        ownerId,
+        summoned,
+        openingAnchorIndex >= 0
+          ? openingAnchorIndex + 1
+          : context.boards[ownerId].length,
+        pending.source,
+        `${pending.sourceLabel}从手牌召唤了${summoned.name}（仅限本场战斗）。`,
+        "startOfCombatFromHand",
+      );
+      if (!inserted) {
+        return;
+      }
+      pending.usedHandInstanceIds.add(selected.instanceId);
+      pending.remainingCount -= 1;
+      madeProgress = true;
+      if (pending === openingPending && openingAnchorIndex >= 0) {
+        openingInsertAfterInstanceId = summoned.instanceId;
+      }
+      if (pending.remainingCount <= 0) {
+        queue.splice(queueIndex, 1);
+      }
+    }
   }
 }
 
@@ -8906,6 +9087,7 @@ function cloneOwnedMinionForCombat(
   const combatCopy = cloneMinion(minion);
   combatCopy.instanceId = `minion-${state.nextInstanceId}`;
   combatCopy.poolCopies = 0;
+  delete combatCopy.poolCopiesOnPurchase;
   combatCopy.grantsTripleReward = false;
   combatCopy.attachments = combatCopy.attachments.map(
     clearAttachmentPoolCopies,
@@ -9689,6 +9871,9 @@ function performAttackStrike(
     });
   }
   triggerRally(context, ownerId, attacker, target);
+  if (context.deathResolutionDepth === 0) {
+    summonPendingStartOfCombatHandMinions(context, ownerId);
+  }
 
   dealCombatDamage(
     context,
@@ -10349,85 +10534,97 @@ function resolveOneDeathrattle(
 }
 
 function resolveCombatDeaths(context: CombatContext): void {
-  for (let wave = 0; wave < 50; wave += 1) {
-    const deaths = context.playerIds.flatMap((ownerId) =>
-      removeDead(context.boards[ownerId], ownerId),
-    );
-    if (deaths.length === 0) {
-      return;
-    }
+  context.deathResolutionDepth += 1;
+  try {
+    for (let wave = 0; wave < 50; wave += 1) {
+      const deaths = context.playerIds.flatMap((ownerId) =>
+        removeDead(context.boards[ownerId], ownerId),
+      );
+      if (deaths.length === 0) {
+        return;
+      }
 
-    for (const death of deaths) {
-      if (minionHasTribe(death.minion, "mech")) {
-        context.deadMechs[death.ownerId].push(cloneMinion(death.minion));
+      for (const death of deaths) {
+        if (minionHasTribe(death.minion, "mech")) {
+          context.deadMechs[death.ownerId].push(
+            cloneMinion(death.minion),
+          );
+        }
+        const deathSnapshot = cloneMinion(death.minion);
+        deathSnapshot.health = 0;
+        pushBattleEvent(context.events, {
+          type: "death",
+          actorPlayerId: death.ownerId,
+          actorInstanceId: death.minion.instanceId,
+          minion: deathSnapshot,
+          message: `${death.minion.name}被消灭。`,
+        });
       }
-      const deathSnapshot = cloneMinion(death.minion);
-      deathSnapshot.health = 0;
-      pushBattleEvent(context.events, {
-        type: "death",
-        actorPlayerId: death.ownerId,
-        actorInstanceId: death.minion.instanceId,
-        minion: deathSnapshot,
-        message: `${death.minion.name}被消灭。`,
-      });
-    }
-    for (const death of deaths) {
-      removeCombatAuraSource(context, death);
-    }
-    for (const death of deaths) {
-      observeCombatFriendlyDeath(context, death);
-    }
-    const eligibleDeathWatchers = Object.fromEntries(
-      context.playerIds.map((ownerId) => [
-        ownerId,
-        new Set(
-          context.boards[ownerId]
-            .filter((minion) => minion.health > 0)
-            .map((minion) => minion.instanceId),
-        ),
-      ]),
-    ) as Record<PlayerId, ReadonlySet<string>>;
-    for (const death of deaths) {
-      triggerAfterFriendlyDied(
-        context,
-        death.ownerId,
-        death,
-        eligibleDeathWatchers[death.ownerId],
-      );
-    }
-    for (const death of deaths) {
-      resolveOneDeathrattle(context, death);
-    }
-    for (const death of deaths) {
-      if (
-        !death.minion.reborn ||
-        context.boards[death.ownerId].length >= MAX_BOARD_SIZE
-      ) {
-        continue;
+      for (const death of deaths) {
+        removeCombatAuraSource(context, death);
       }
-      const reborn = createMinionInstance(
-        context.state,
-        death.minion.definitionId,
-        0,
-      );
-      if (death.minion.golden) {
-        makeGoldenToken(reborn);
+      for (const death of deaths) {
+        observeCombatFriendlyDeath(context, death);
       }
-      reborn.health = 1;
-      reborn.reborn = false;
-      insertCombatMinion(
-        context,
-        death.ownerId,
-        reborn,
-        death.index,
-        death.minion,
-        `${death.minion.name}复生了。`,
-        "reborn",
-      );
+      const eligibleDeathWatchers = Object.fromEntries(
+        context.playerIds.map((ownerId) => [
+          ownerId,
+          new Set(
+            context.boards[ownerId]
+              .filter((minion) => minion.health > 0)
+              .map((minion) => minion.instanceId),
+          ),
+        ]),
+      ) as Record<PlayerId, ReadonlySet<string>>;
+      for (const death of deaths) {
+        triggerAfterFriendlyDied(
+          context,
+          death.ownerId,
+          death,
+          eligibleDeathWatchers[death.ownerId],
+        );
+      }
+      for (const death of deaths) {
+        resolveOneDeathrattle(context, death);
+      }
+      for (const death of deaths) {
+        if (
+          !death.minion.reborn ||
+          context.boards[death.ownerId].length >= MAX_BOARD_SIZE
+        ) {
+          continue;
+        }
+        const reborn = createMinionInstance(
+          context.state,
+          death.minion.definitionId,
+          0,
+        );
+        if (death.minion.golden) {
+          makeGoldenToken(reborn);
+        }
+        reborn.health = 1;
+        reborn.reborn = false;
+        insertCombatMinion(
+          context,
+          death.ownerId,
+          reborn,
+          death.index,
+          death.minion,
+          `${death.minion.name}复生了。`,
+          "reborn",
+        );
+      }
+      for (const ownerId of context.playerIds) {
+        summonPendingBeetles(context, ownerId);
+      }
+      if (context.deathResolutionDepth === 1) {
+        for (const ownerId of context.playerIds) {
+          summonPendingStartOfCombatHandMinions(context, ownerId);
+        }
+      }
     }
-    for (const ownerId of context.playerIds) {
-      summonPendingBeetles(context, ownerId);
-    }
+  } finally {
+    context.deathResolutionDepth -= 1;
   }
 }
 
@@ -10829,6 +11026,11 @@ function simulateBattle(
       [playerA.id]: playerA.nextCombatBeetles,
       [playerB.id]: isGhost ? 0 : playerB.nextCombatBeetles,
     },
+    pendingStartOfCombatHandSummons: {
+      [playerA.id]: [],
+      [playerB.id]: [],
+    },
+    deathResolutionDepth: 0,
     astralAutomatonsSummoned,
     eternalKnightsDied,
     avengeProgress: {
@@ -10862,6 +11064,8 @@ function simulateBattle(
   summonPendingBeetles(context, playerB.id);
   applyStartOfCombatEffects(context, playerA.id);
   applyStartOfCombatEffects(context, playerB.id);
+  summonPendingStartOfCombatHandMinions(context, playerA.id);
+  summonPendingStartOfCombatHandMinions(context, playerB.id);
   resolveInHandStartOfCombatMinions(context, playerA, false);
   resolveInHandStartOfCombatMinions(context, playerB, isGhost);
 

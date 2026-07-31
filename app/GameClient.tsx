@@ -3498,6 +3498,7 @@ export default function GameClient() {
   const currentSummonLabel =
     currentBattleEvent?.type === "summon"
       ? currentBattleEvent.summonReason === "rallyFromHand" ||
+        currentBattleEvent.summonReason === "startOfCombatFromHand" ||
         currentBattleEvent.summonReason === "inHandStartOfCombat"
         ? "仅本场"
         : currentBattleEvent.summonReason === "reborn"
