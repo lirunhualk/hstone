@@ -531,6 +531,33 @@ export interface InHandStartOfCombatEffect {
   goldenMode?: "doubleStats";
 }
 
+export interface StartOfCombatBuffRandomOtherTribeEffect {
+  kind: "buffRandomOtherTribe";
+  tribe: Tribe;
+  attack: number;
+  health: number;
+  divineShield?: boolean;
+  count: number;
+  goldenMode?: "doubleCount";
+}
+
+export interface StartOfCombatGainHighestHandAttackEffect {
+  kind: "gainHighestHandAttack";
+  goldenMode?: "doubleAmount";
+}
+
+export interface StartOfCombatGainAllHandMinionStatsEffect {
+  kind: "gainAllHandMinionStats";
+  goldenMode?: "doubleAmount";
+}
+
+export type StartOfCombatEffect =
+  | BuffEffect
+  | GrantShieldEffect
+  | StartOfCombatBuffRandomOtherTribeEffect
+  | StartOfCombatGainHighestHandAttackEffect
+  | StartOfCombatGainAllHandMinionStatsEffect;
+
 export interface ConditionalKeywordEffect {
   attackAtLeast: number;
   keyword: "divineShield";
@@ -599,7 +626,7 @@ export interface MinionDefinition {
   afterSelfDamaged?: readonly MinionEffect[];
   afterTavernSpellCast?: readonly AfterTavernSpellCastEffect[];
   startOfTurn?: readonly MinionEffect[];
-  startOfCombat?: readonly MinionEffect[];
+  startOfCombat?: readonly StartOfCombatEffect[];
   inHandStartOfCombat?: InHandStartOfCombatEffect;
   rally?: readonly RallyEffect[];
   endOfTurn?: EndOfTurnEffect;
@@ -979,6 +1006,11 @@ export interface PlayerState {
   board: BoardMinionInstance[];
   hand: HandCardInstance[];
   /**
+   * Minion-only, zero-pool-ownership hand snapshot retained when this player
+   * becomes a ghost. Combat may read it, but no game action mutates it.
+   */
+  ghostHand: BoardMinionInstance[];
+  /**
    * Spellcraft waits here when the hand is full and materializes as soon as a
    * slot opens during the same Recruit turn.
    */
@@ -1063,6 +1095,7 @@ export interface PlayerState {
 
 export type BattleEventType =
   | "battleStart"
+  | "startOfCombat"
   | "attack"
   | "avenge"
   | "tavernSpellCast"

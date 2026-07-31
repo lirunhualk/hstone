@@ -674,6 +674,30 @@ function isMagneticAttachment(
   );
 }
 
+function isZeroPoolMagneticAttachment(
+  value: unknown,
+): value is MagneticAttachment {
+  return (
+    isMagneticAttachment(value) &&
+    value.poolCopies === 0 &&
+    value.attachments.every(isZeroPoolMagneticAttachment)
+  );
+}
+
+function isGhostHandMinion(
+  value: unknown,
+): value is BoardMinionInstance {
+  return (
+    isRecord(value) &&
+    value.kind === "minion" &&
+    value.poolCopies === 0 &&
+    value.poolCopiesOnPurchase === undefined &&
+    Array.isArray(value.attachments) &&
+    value.attachments.every(isZeroPoolMagneticAttachment) &&
+    hasSchema9MinionState(value)
+  );
+}
+
 function isBloodGemSpell(value: unknown): value is BloodGemSpellInstance {
   return (
     isRecord(value) &&
@@ -985,6 +1009,9 @@ function isGameState(value: unknown): value is GameState {
               card.attachments.every(isMagneticAttachment) &&
               hasSchema9MinionState(card)),
         ) &&
+        Array.isArray(player.ghostHand) &&
+        player.ghostHand.length <= 10 &&
+        player.ghostHand.every(isGhostHandMinion) &&
         Array.isArray(player.shop) &&
         player.shop.every(
           (minion) =>
@@ -1169,25 +1196,27 @@ function battleEventDelay(
         ? 800
         : event?.type === "damage"
           ? 720
-        : event?.type === "avenge"
-          ? 720
-        : event?.type === "buff"
-          ? 620
-          : event?.type === "handBuff"
-            ? 620
-            : event?.type === "keywordRemoved"
-              ? 620
-              : event?.type === "shieldBroken"
+          : event?.type === "startOfCombat"
+            ? 720
+            : event?.type === "avenge"
+              ? 720
+              : event?.type === "buff"
                 ? 620
-                : event?.type === "death"
-                  ? 680
-                  : event?.type === "summon"
-                    ? 650
-                    : event?.type === "cardGain"
-                      ? 720
-                      : event?.type === "heroDamage"
-                        ? 850
-                        : 650;
+                : event?.type === "handBuff"
+                  ? 620
+                  : event?.type === "keywordRemoved"
+                    ? 620
+                    : event?.type === "shieldBroken"
+                      ? 620
+                      : event?.type === "death"
+                        ? 680
+                        : event?.type === "summon"
+                          ? 650
+                          : event?.type === "cardGain"
+                            ? 720
+                            : event?.type === "heroDamage"
+                              ? 850
+                              : 650;
   return Math.max(180, Math.round(baseDelay / speed));
 }
 
@@ -1286,6 +1315,7 @@ function UnitCard({
   combatDamageLabel,
   combatShieldBreaking = false,
   combatDead = false,
+  combatStartOfCombat = false,
   combatAvenge = false,
   combatBuffTarget = false,
   combatBuffLabel,
@@ -1330,6 +1360,7 @@ function UnitCard({
   combatDamageLabel?: string;
   combatShieldBreaking?: boolean;
   combatDead?: boolean;
+  combatStartOfCombat?: boolean;
   combatAvenge?: boolean;
   combatBuffTarget?: boolean;
   combatBuffLabel?: string;
@@ -1365,25 +1396,27 @@ function UnitCard({
   const keywordVisuals = activeMinionKeywordVisuals(unit);
   const combatRole = combatDead
     ? "dead"
-    : combatAvenge
-      ? "avenge"
-    : combatActor
-    ? combatBuffTarget
-      ? "actor buff-target"
-      : combatDebuffTarget
-        ? "actor debuff-target"
-        : combatTarget
-          ? "actor target"
-          : "actor"
-    : combatBuffTarget
-      ? "buff-target"
-      : combatDebuffTarget
-        ? "debuff-target"
-        : combatSummoned
-          ? "summoned"
-          : combatTarget
-            ? "target"
-            : undefined;
+    : combatStartOfCombat
+      ? "start-of-combat"
+      : combatAvenge
+        ? "avenge"
+        : combatActor
+          ? combatBuffTarget
+            ? "actor buff-target"
+            : combatDebuffTarget
+              ? "actor debuff-target"
+              : combatTarget
+                ? "actor target"
+                : "actor"
+          : combatBuffTarget
+            ? "buff-target"
+            : combatDebuffTarget
+              ? "debuff-target"
+              : combatSummoned
+                ? "summoned"
+                : combatTarget
+                  ? "target"
+                  : undefined;
   return (
     <button
       type="button"
@@ -1401,6 +1434,8 @@ function UnitCard({
         combatShieldBreaking ? " is-shield-breaking" : ""
       }${
         combatDead ? " is-dead" : ""
+      }${
+        combatStartOfCombat ? " is-start-of-combat-trigger" : ""
       }${
         combatAvenge ? " is-avenge-trigger" : ""
       }${
@@ -1447,6 +1482,8 @@ function UnitCard({
       }${
         newlyGenerated ? "，本轮战斗新获得" : ""
       }${
+        combatStartOfCombat ? "，正在触发战斗开始效果" : ""
+      }${
         combatAvenge ? "，正在触发复仇" : ""
       }${
         locked ? "，锁定至下个招募回合" : ""
@@ -1481,6 +1518,7 @@ function UnitCard({
         keywordVisuals.map(({ kind }) => kind).join(" ") || undefined
       }
       data-shield-breaking={combatShieldBreaking || undefined}
+      data-start-of-combat-trigger={combatStartOfCombat || undefined}
       data-avenge-trigger={combatAvenge || undefined}
       data-testid={testId}
       data-unit-instance-id={unit.instanceId}
@@ -1512,6 +1550,11 @@ function UnitCard({
       {combatDead && (
         <span className="combat-death-label" aria-hidden="true">
           阵亡
+        </span>
+      )}
+      {combatStartOfCombat && (
+        <span className="combat-start-of-combat-label" aria-hidden="true">
+          开战！
         </span>
       )}
       {combatAvenge && (
@@ -2264,6 +2307,7 @@ function BoardRow({
   hitLabel,
   shieldBrokenInstanceId,
   deadInstanceId,
+  startOfCombatInstanceId,
   avengeInstanceId,
   combatEventIndex,
   buffTargetInstanceId,
@@ -2304,6 +2348,7 @@ function BoardRow({
   hitLabel?: string;
   shieldBrokenInstanceId?: string;
   deadInstanceId?: string;
+  startOfCombatInstanceId?: string;
   avengeInstanceId?: string;
   combatEventIndex?: number;
   buffTargetInstanceId?: string;
@@ -2457,6 +2502,7 @@ function BoardRow({
                       unit.instanceId === hitInstanceId ||
                       unit.instanceId === shieldBrokenInstanceId ||
                       unit.instanceId === deadInstanceId ||
+                      unit.instanceId === startOfCombatInstanceId ||
                       unit.instanceId === avengeInstanceId ||
                       unit.instanceId === buffTargetInstanceId ||
                       unit.instanceId === debuffTargetInstanceId ||
@@ -2495,6 +2541,9 @@ function BoardRow({
                     unit.instanceId === shieldBrokenInstanceId
                   }
                   combatDead={unit.instanceId === deadInstanceId}
+                  combatStartOfCombat={
+                    unit.instanceId === startOfCombatInstanceId
+                  }
                   combatAvenge={
                     unit.instanceId === avengeInstanceId
                   }
@@ -5903,6 +5952,12 @@ export default function GameClient() {
                       ? currentBattleEvent.actorInstanceId
                       : undefined
                   }
+                  startOfCombatInstanceId={
+                    currentBattleEvent?.type === "startOfCombat" &&
+                    currentBattleEvent.actorPlayerId === opponentId
+                      ? currentBattleEvent.actorInstanceId
+                      : undefined
+                  }
                   avengeInstanceId={
                     currentBattleEvent?.type === "avenge" &&
                     currentBattleEvent.actorPlayerId === opponentId
@@ -5963,6 +6018,15 @@ export default function GameClient() {
                             aria-hidden="true"
                           >
                             攻击 →
+                          </span>
+                        )}
+                        {currentBattleEvent?.type ===
+                          "startOfCombat" && (
+                          <span
+                            className="combat-start-of-combat-mark"
+                            aria-hidden="true"
+                          >
+                            开战！
                           </span>
                         )}
                         {currentBattleEvent?.type === "avenge" && (
@@ -6121,6 +6185,12 @@ export default function GameClient() {
                 }
                 deadInstanceId={
                   currentBattleEvent?.type === "death" &&
+                  currentBattleEvent.actorPlayerId === human.id
+                    ? currentBattleEvent.actorInstanceId
+                    : undefined
+                }
+                startOfCombatInstanceId={
+                  currentBattleEvent?.type === "startOfCombat" &&
                   currentBattleEvent.actorPlayerId === human.id
                     ? currentBattleEvent.actorInstanceId
                     : undefined

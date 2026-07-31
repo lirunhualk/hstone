@@ -48,11 +48,53 @@ export const LEGACY_SCHEMA_11_CONTENT_VERSION_V24 =
   "battlegrounds-36.0.3-247416-v24";
 export const LEGACY_SCHEMA_11_CONTENT_VERSION_V25 =
   "battlegrounds-36.0.3-247416-v25";
+export const LEGACY_SCHEMA_11_CONTENT_VERSION_V26 =
+  "battlegrounds-36.0.3-247416-v26";
 
 const SPELL_POOL_COPIES_BY_TIER = [0, 5, 7, 9, 11, 7, 5] as const;
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return value !== null && typeof value === "object";
+}
+
+function hasZeroAttachmentPoolOwnership(value: unknown): boolean {
+  return (
+    isRecord(value) &&
+    value.poolCopies === 0 &&
+    Array.isArray(value.attachments) &&
+    value.attachments.every(hasZeroAttachmentPoolOwnership)
+  );
+}
+
+function repairGhostHandSnapshots(
+  value: Record<string, unknown>,
+): boolean {
+  if (!Array.isArray(value.players)) {
+    return false;
+  }
+  for (const player of value.players) {
+    if (!isRecord(player)) {
+      return false;
+    }
+    if (player.ghostHand === undefined) {
+      player.ghostHand = [];
+    }
+    if (
+      !Array.isArray(player.ghostHand) ||
+      player.ghostHand.some(
+        (card) =>
+          !isRecord(card) ||
+          card.kind !== "minion" ||
+          card.poolCopies !== 0 ||
+          card.poolCopiesOnPurchase !== undefined ||
+          !Array.isArray(card.attachments) ||
+          !card.attachments.every(hasZeroAttachmentPoolOwnership),
+      )
+    ) {
+      return false;
+    }
+  }
+  return true;
 }
 
 function migrateBloodGemBarrageState(
@@ -315,7 +357,15 @@ function refreshOwnedMinions(
     if (!preserveCurrentFields) {
       player.nextTavernSpellDiscount = 0;
     }
-    for (const zone of ["board", "hand", "shop"] as const) {
+    if (player.ghostHand === undefined) {
+      player.ghostHand = [];
+    }
+    for (const zone of [
+      "board",
+      "hand",
+      "ghostHand",
+      "shop",
+    ] as const) {
       const cards = player[zone];
       if (!Array.isArray(cards)) {
         return false;
@@ -961,7 +1011,8 @@ export function migrateSchema11GameState(value: unknown): unknown {
       value.contentVersion !== LEGACY_SCHEMA_11_CONTENT_VERSION_V22 &&
       value.contentVersion !== LEGACY_SCHEMA_11_CONTENT_VERSION_V23 &&
       value.contentVersion !== LEGACY_SCHEMA_11_CONTENT_VERSION_V24 &&
-      value.contentVersion !== LEGACY_SCHEMA_11_CONTENT_VERSION_V25) ||
+      value.contentVersion !== LEGACY_SCHEMA_11_CONTENT_VERSION_V25 &&
+      value.contentVersion !== LEGACY_SCHEMA_11_CONTENT_VERSION_V26) ||
     !Array.isArray(value.players)
   ) {
     return null;
@@ -976,6 +1027,7 @@ export function migrateSchema11GameState(value: unknown): unknown {
       LEGACY_SCHEMA_11_CONTENT_VERSION_V23,
       LEGACY_SCHEMA_11_CONTENT_VERSION_V24,
       LEGACY_SCHEMA_11_CONTENT_VERSION_V25,
+      LEGACY_SCHEMA_11_CONTENT_VERSION_V26,
     ].includes(value.contentVersion as string);
     const preserveCurrentFields = [
       LEGACY_SCHEMA_11_CONTENT_VERSION_V19,
@@ -985,6 +1037,7 @@ export function migrateSchema11GameState(value: unknown): unknown {
       LEGACY_SCHEMA_11_CONTENT_VERSION_V23,
       LEGACY_SCHEMA_11_CONTENT_VERSION_V24,
       LEGACY_SCHEMA_11_CONTENT_VERSION_V25,
+      LEGACY_SCHEMA_11_CONTENT_VERSION_V26,
     ].includes(value.contentVersion as string);
     const preservePendingSpellcraft =
       value.contentVersion === LEGACY_SCHEMA_11_CONTENT_VERSION_V17 ||
@@ -1090,10 +1143,15 @@ export function normalizePersistedGameState(value: unknown): unknown {
     value.version === 11 &&
     value.contentVersion === CURRENT_ROSTER_VERSION
   ) {
-    return repairSpellPool(value) &&
+    return repairGhostHandSnapshots(value) &&
+      repairSpellPool(value) &&
       repairHumanScoutingReports(value)
       ? value
       : null;
   }
-  return migrateLegacyGameState(value);
+  const migrated = migrateLegacyGameState(value);
+  return isRecord(migrated) &&
+    repairGhostHandSnapshots(migrated)
+    ? migrated
+    : null;
 }

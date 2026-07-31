@@ -1275,16 +1275,44 @@ test("current live end-of-turn and start-of-combat effects resolve", () => {
   const battle = combat.lastBattle;
   assert.ok(battle);
   const initialHumanBoard = battle.initialBoards[state.humanPlayerId];
-  const dragonAfterStart = initialHumanBoard.find(
+  const dragonBeforeStart = initialHumanBoard.find(
     (minion) => minion.instanceId === "left-dragon",
   );
-  const whelpAfterStart = initialHumanBoard.find(
+  const whelpBeforeStart = initialHumanBoard.find(
     (minion) => minion.instanceId === "enhanced-whelp",
   );
-  assert.equal(dragonAfterStart?.attack, 6);
-  assert.equal(dragonAfterStart?.health, 5);
-  assert.equal(whelpAfterStart?.attack, 6);
-  assert.equal(whelpAfterStart?.health, 5);
+  assert.equal(dragonBeforeStart?.attack, 2);
+  assert.equal(dragonBeforeStart?.health, 1);
+  assert.equal(whelpBeforeStart?.attack, 2);
+  assert.equal(whelpBeforeStart?.health, 1);
+
+  const startEvent = battle.events.find(
+    (event) =>
+      event.type === "startOfCombat" &&
+      event.actorInstanceId === "enhanced-whelp",
+  );
+  assert.ok(startEvent);
+  const dragonBuff = battle.events.find(
+    (event) =>
+      event.type === "buff" &&
+      event.actorInstanceId === "enhanced-whelp" &&
+      event.targetInstanceId === "left-dragon",
+  );
+  const whelpBuff = battle.events.find(
+    (event) =>
+      event.type === "buff" &&
+      event.actorInstanceId === "enhanced-whelp" &&
+      event.targetInstanceId === "enhanced-whelp",
+  );
+  assert.deepEqual(
+    [dragonBuff?.minion?.attack, dragonBuff?.minion?.health],
+    [6, 5],
+  );
+  assert.deepEqual(
+    [whelpBuff?.minion?.attack, whelpBuff?.minion?.health],
+    [6, 5],
+  );
+  assert.ok(startEvent.index < (dragonBuff?.index ?? -1));
 });
 
 test("current live Deathrattles summon real tokens", () => {

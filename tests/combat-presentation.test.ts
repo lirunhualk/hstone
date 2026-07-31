@@ -50,15 +50,16 @@ function battle(overrides: Partial<BattleSummary> = {}): BattleSummary {
 test("combat playback omits framing events represented by the intro and result stages", () => {
   const events = [
     event("battleStart", 0),
-    event("attack", 1),
-    event("damage", 2),
-    event("heroDamage", 3),
-    event("battleEnd", 4),
+    event("startOfCombat", 1),
+    event("attack", 2),
+    event("damage", 3),
+    event("heroDamage", 4),
+    event("battleEnd", 5),
   ];
 
   assert.deepEqual(
     events.filter(isCombatPlaybackEvent).map(({ type }) => type),
-    ["attack", "damage", "heroDamage"],
+    ["startOfCombat", "attack", "damage", "heroDamage"],
   );
 });
 

@@ -3,7 +3,7 @@ import liveRosterSnapshot from "./generated/battlegrounds-36.0.3-247416.zhCN.jso
 };
 import type { MinionDefinition, Tribe } from "./types.ts";
 
-export const CURRENT_ROSTER_VERSION = "battlegrounds-36.0.3-247416-v26";
+export const CURRENT_ROSTER_VERSION = "battlegrounds-36.0.3-247416-v27";
 /** Compatibility alias for existing save and engine imports. */
 export const CLASSIC_ROSTER_VERSION = CURRENT_ROSTER_VERSION;
 
@@ -1321,6 +1321,44 @@ const LIVE_RULE_OVERRIDES: Readonly<
       ],
     },
   },
+  BG24_500: {
+    goldenCardId: "BG24_500_G",
+    goldenDescription:
+      "嘲讽。战斗开始时：使两条其他友方的龙获得+2/+2和圣盾。",
+    startOfCombat: [
+      {
+        kind: "buffRandomOtherTribe",
+        tribe: "dragon",
+        attack: 2,
+        health: 2,
+        divineShield: true,
+        count: 1,
+        goldenMode: "doubleCount",
+      },
+    ],
+  },
+  BG34_142: {
+    goldenCardId: "BG34_142_G",
+    goldenDescription:
+      "圣盾。战斗开始时：获得你手牌中攻击力最高的随从牌的双倍攻击力。",
+    startOfCombat: [
+      {
+        kind: "gainHighestHandAttack",
+        goldenMode: "doubleAmount",
+      },
+    ],
+  },
+  BG26_354: {
+    goldenCardId: "BG26_354_G",
+    goldenDescription:
+      "战斗开始时：获得你手牌中所有随从牌的双倍属性值。",
+    startOfCombat: [
+      {
+        kind: "gainAllHandMinionStats",
+        goldenMode: "doubleAmount",
+      },
+    ],
+  },
   BG26_157: {
     goldenCardId: "BG26_157_G",
     goldenDescription:
@@ -2413,6 +2451,7 @@ const FULLY_SUPPORTED_LIVE_CARD_IDS = new Set([
   "BG20_203",
   "BG20_301",
   "BG24_009",
+  "BG24_500",
   "BG22_202",
   "BG21_014",
   "BG21_005",
@@ -2438,6 +2477,7 @@ const FULLY_SUPPORTED_LIVE_CARD_IDS = new Set([
   "BG26_159",
   "BG26_160",
   "BG26_199",
+  "BG26_354",
   "BG26_360",
   "BG26_501",
   "BG26_502",
@@ -2499,6 +2539,7 @@ const FULLY_SUPPORTED_LIVE_CARD_IDS = new Set([
   "BG33_894",
   "BG33_885",
   "BG34_140",
+  "BG34_142",
   "BG34_175",
   "BG34_231",
   "BG34_403",

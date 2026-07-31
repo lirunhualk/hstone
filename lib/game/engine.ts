@@ -6612,10 +6612,12 @@ function playBestAiTavernSpell(
   return false;
 }
 
-function aiReservedRallyHandMinionIds(
+function aiReservedCombatHandMinionIds(
+  state: GameState,
   player: PlayerState,
 ): Set<string> {
-  let reserveCount = 0;
+  let reserveHighestAttackCount = 0;
+  let reserveAllHandMinions = false;
   for (const minion of player.board) {
     for (const component of minionEffectSources(minion)) {
       const definition = getMinionDefinition(component.definitionId);
@@ -6628,25 +6630,65 @@ function aiReservedRallyHandMinionIds(
           (component.golden && rally.goldenMode === "doubleCount"
             ? 2
             : 1);
-        reserveCount = Math.max(reserveCount, count);
+        reserveHighestAttackCount = Math.max(
+          reserveHighestAttackCount,
+          count,
+        );
+      }
+      for (const effect of definition.startOfCombat ?? []) {
+        if (effect.kind === "gainHighestHandAttack") {
+          reserveHighestAttackCount = Math.max(
+            reserveHighestAttackCount,
+            1,
+          );
+        } else if (effect.kind === "gainAllHandMinionStats") {
+          reserveAllHandMinions = true;
+        }
       }
     }
   }
-  if (reserveCount === 0) {
+  if (
+    reserveHighestAttackCount === 0 &&
+    !reserveAllHandMinions
+  ) {
     return new Set();
   }
+  const candidates = player.hand
+    .filter(
+      (card): card is BoardMinionInstance =>
+        card.kind === "minion" &&
+        (card.playableFromRound ?? 0) <= state.round &&
+        (card.destroyAfterPlayThroughRound ?? -1) < state.round &&
+        getMinionDefinition(card.definitionId)
+          .inHandStartOfCombat === undefined,
+    )
+    .sort((left, right) => {
+      if (left.attack !== right.attack) {
+        return right.attack - left.attack;
+      }
+      if (left.health !== right.health) {
+        return right.health - left.health;
+      }
+      return left.instanceId.localeCompare(right.instanceId);
+    });
+  const boardSlotsNeeded = Math.max(
+    0,
+    Math.min(MAX_BOARD_SIZE, aiTargetBoardSize(state.round)) -
+      player.board.length,
+  );
+  const maximumReserveCount = Math.max(
+    0,
+    candidates.length - boardSlotsNeeded,
+  );
+  const requestedReserveCount = reserveAllHandMinions
+    ? candidates.length
+    : reserveHighestAttackCount;
   return new Set(
-    player.hand
-      .filter(
-        (card): card is BoardMinionInstance => card.kind === "minion",
+    candidates
+      .slice(
+        0,
+        Math.min(maximumReserveCount, requestedReserveCount),
       )
-      .sort((left, right) => {
-        if (left.attack !== right.attack) {
-          return right.attack - left.attack;
-        }
-        return left.instanceId.localeCompare(right.instanceId);
-      })
-      .slice(0, reserveCount)
       .map((minion) => minion.instanceId),
   );
 }
@@ -6682,11 +6724,11 @@ function playAiHand(state: GameState, player: PlayerState): void {
         (card.playableFromRound ?? 0) <= state.round &&
         (card.destroyAfterPlayThroughRound ?? -1) < state.round,
     );
-    const reservedRallyTargets =
-      aiReservedRallyHandMinionIds(player);
+    const reservedCombatTargets =
+      aiReservedCombatHandMinionIds(state, player);
     const unreservedPlayableMinions = playableMinions.filter(
       (card) =>
-        !reservedRallyTargets.has(card.instanceId) &&
+        !reservedCombatTargets.has(card.instanceId) &&
         getMinionDefinition(card.definitionId)
           .inHandStartOfCombat === undefined,
     );
@@ -7582,6 +7624,22 @@ function persistentCombatOwner(
   return owner?.alive ? owner : undefined;
 }
 
+function combatHandMinions(
+  context: CombatContext,
+  ownerId: PlayerId,
+): readonly BoardMinionInstance[] {
+  const owner = findPlayer(context.state, ownerId);
+  if (!owner) {
+    return [];
+  }
+  if (context.ghostOwnerId === ownerId) {
+    return owner.ghostHand;
+  }
+  return owner.hand.filter(
+    (card): card is BoardMinionInstance => card.kind === "minion",
+  );
+}
+
 function pushWhereverBuffEvent(
   context: CombatContext,
   ownerId: PlayerId,
@@ -7717,27 +7775,102 @@ function combatBuffTargets(
   }
 }
 
-function applyStartOfCombatEffects(
-  state: GameState,
-  board: MinionInstance[],
+function pushStartOfCombatBuff(
+  context: CombatContext,
+  ownerId: PlayerId,
+  source: MinionInstance,
+  component: MinionEffectSource,
+  target: MinionInstance,
+  attackDelta: number,
+  healthDelta: number,
+  divineShield: boolean,
+  message: string,
 ): void {
+  target.attack = Math.max(0, target.attack + attackDelta);
+  target.health = Math.max(1, target.health + healthDelta);
+  if (divineShield) {
+    target.divineShield = true;
+  }
+  reconcileConditionalMinion(target);
+  pushBattleEvent(context.events, {
+    type: "buff",
+    actorPlayerId: ownerId,
+    actorInstanceId: source.instanceId,
+    targetPlayerId: ownerId,
+    targetInstanceId: target.instanceId,
+    attackDelta,
+    healthDelta,
+    minion: cloneMinion(target),
+    message: `${rallySourceLabel(component)}${message}`,
+  });
+}
+
+function applyStartOfCombatEffects(
+  context: CombatContext,
+  ownerId: PlayerId,
+): void {
+  const board = context.boards[ownerId];
   for (const source of [...board]) {
     for (const component of minionEffectSources(source)) {
       const effects =
         getMinionDefinition(component.definitionId).startOfCombat ?? [];
+      if (effects.length === 0) {
+        continue;
+      }
+      pushBattleEvent(context.events, {
+        type: "startOfCombat",
+        actorPlayerId: ownerId,
+        actorInstanceId: source.instanceId,
+        targetPlayerId: ownerId,
+        message: `${rallySourceLabel(component)}触发了战斗开始效果。`,
+      });
       const scale = component.golden ? 2 : 1;
       for (const effect of effects) {
         if (effect.kind === "buff") {
           const targets =
             effect.target === "self"
               ? [source]
-              : combatBuffTargets(state, board, source, effect);
+              : combatBuffTargets(
+                  context.state,
+                  board,
+                  source,
+                  effect,
+                );
           for (const target of targets) {
-            applyBuff(target, effect, scale);
+            const attackDelta = effect.attack * scale;
+            const healthDelta = effect.health * scale;
+            if (effect.taunt) {
+              target.taunt = true;
+              target.temporaryTaunt = false;
+            }
+            pushStartOfCombatBuff(
+              context,
+              ownerId,
+              source,
+              component,
+              target,
+              attackDelta,
+              healthDelta,
+              false,
+              `使${target.name}获得+${attackDelta}/+${healthDelta}。`,
+            );
           }
-        } else if (effect.kind === "grantShield") {
+          continue;
+        }
+
+        if (effect.kind === "grantShield") {
           if (effect.target === "self") {
-            source.divineShield = true;
+            pushStartOfCombatBuff(
+              context,
+              ownerId,
+              source,
+              component,
+              source,
+              0,
+              0,
+              true,
+              "获得了圣盾。",
+            );
             continue;
           }
           const candidates = board.filter(
@@ -7748,11 +7881,118 @@ function applyStartOfCombatEffects(
             count < scale && candidates.length > 0;
             count += 1
           ) {
-            const targetIndex = randomIndex(state, candidates.length);
-            candidates[targetIndex].divineShield = true;
+            const targetIndex = randomIndex(
+              context.state,
+              candidates.length,
+            );
+            const target = candidates[targetIndex];
+            pushStartOfCombatBuff(
+              context,
+              ownerId,
+              source,
+              component,
+              target,
+              0,
+              0,
+              true,
+              `使${target.name}获得圣盾。`,
+            );
             candidates.splice(targetIndex, 1);
           }
+          continue;
         }
+
+        if (effect.kind === "buffRandomOtherTribe") {
+          const candidates = board.filter(
+            (minion) =>
+              minion.instanceId !== source.instanceId &&
+              minionHasTribe(minion, effect.tribe),
+          );
+          const targetCount =
+            effect.count *
+            (component.golden &&
+            effect.goldenMode === "doubleCount"
+              ? 2
+              : 1);
+          for (
+            let count = 0;
+            count < targetCount && candidates.length > 0;
+            count += 1
+          ) {
+            const targetIndex = randomIndex(
+              context.state,
+              candidates.length,
+            );
+            const target = candidates[targetIndex];
+            pushStartOfCombatBuff(
+              context,
+              ownerId,
+              source,
+              component,
+              target,
+              effect.attack,
+              effect.health,
+              effect.divineShield === true,
+              `使${target.name}获得+${effect.attack}/+${effect.health}${
+                effect.divineShield ? "和圣盾" : ""
+              }。`,
+            );
+            candidates.splice(targetIndex, 1);
+          }
+          continue;
+        }
+
+        const handMinions = combatHandMinions(context, ownerId);
+        const amountScale =
+          component.golden &&
+          effect.goldenMode === "doubleAmount"
+            ? 2
+            : 1;
+        if (effect.kind === "gainHighestHandAttack") {
+          if (handMinions.length === 0) {
+            continue;
+          }
+          const attackDelta =
+            Math.max(...handMinions.map((minion) => minion.attack)) *
+            amountScale;
+          pushStartOfCombatBuff(
+            context,
+            ownerId,
+            source,
+            component,
+            source,
+            attackDelta,
+            0,
+            false,
+            `从手牌随从中获得了+${attackDelta}攻击力。`,
+          );
+          continue;
+        }
+
+        const attackDelta =
+          handMinions.reduce(
+            (total, minion) => total + minion.attack,
+            0,
+          ) * amountScale;
+        const healthDelta =
+          handMinions.reduce(
+            (total, minion) => total + minion.health,
+            0,
+          ) * amountScale;
+        if (attackDelta === 0 && healthDelta === 0) {
+          continue;
+        }
+        pushStartOfCombatBuff(
+          context,
+          ownerId,
+          source,
+          component,
+          source,
+          attackDelta,
+          healthDelta,
+          false,
+          `汇总手牌随从，获得+${attackDelta}/+${healthDelta}。`,
+        );
       }
     }
   }
@@ -8637,12 +8877,10 @@ function resolveCombatGainRandomTavernSpell(
 
 function selectHighestAttackHandMinions(
   state: GameState,
-  owner: PlayerState,
+  handMinions: readonly BoardMinionInstance[],
   count: number,
 ): BoardMinionInstance[] {
-  const candidates = owner.hand.filter(
-    (card): card is BoardMinionInstance => card.kind === "minion",
-  );
+  const candidates = [...handMinions];
   const selected: BoardMinionInstance[] = [];
   while (selected.length < count && candidates.length > 0) {
     const highestAttack = Math.max(
@@ -8693,7 +8931,7 @@ function resolveRallySummonFromHand(
     (component.golden && effect.goldenMode === "doubleCount" ? 2 : 1);
   const selections = selectHighestAttackHandMinions(
     context.state,
-    owner,
+    combatHandMinions(context, ownerId),
     Math.min(count, MAX_BOARD_SIZE - board.length),
   );
   const definition = getMinionDefinition(component.definitionId);
@@ -10554,8 +10792,6 @@ function simulateBattle(
   playerA.nextCombatHealthBonus = 0;
   playerB.nextCombatAttackBonus = 0;
   playerB.nextCombatHealthBonus = 0;
-  applyStartOfCombatEffects(state, boardA);
-  applyStartOfCombatEffects(state, boardB);
   applyCombatAuras(boardA);
   applyCombatAuras(boardB);
   const initialBoards: Record<PlayerId, MinionInstance[]> = {
@@ -10610,8 +10846,6 @@ function simulateBattle(
     targetPlayerId: playerB.id,
     message: `${playerA.name}对阵${isGhost ? "幽灵·" : ""}${playerB.name}。`,
   });
-  resolveInHandStartOfCombatMinions(context, playerA, false);
-  resolveInHandStartOfCombatMinions(context, playerB, isGhost);
   applyQueuedStartOfCombatSpells(
     context,
     playerA,
@@ -10626,6 +10860,10 @@ function simulateBattle(
   );
   summonPendingBeetles(context, playerA.id);
   summonPendingBeetles(context, playerB.id);
+  applyStartOfCombatEffects(context, playerA.id);
+  applyStartOfCombatEffects(context, playerB.id);
+  resolveInHandStartOfCombatMinions(context, playerA, false);
+  resolveInHandStartOfCombatMinions(context, playerB, isGhost);
 
   let attackingPlayerId: PlayerId;
   if (boardA.length > boardB.length) {
@@ -10830,6 +11068,16 @@ function releaseEliminatedPlayer(
   const ownedMinions = player.hand.filter(
     (card): card is BoardMinionInstance => card.kind === "minion",
   );
+  player.ghostHand = ownedMinions.map((minion) => {
+    const snapshot = cloneMinion(minion);
+    clearTemporarySpellcraftBuffs(snapshot);
+    snapshot.poolCopies = 0;
+    delete snapshot.poolCopiesOnPurchase;
+    snapshot.attachments = snapshot.attachments.map(
+      clearAttachmentPoolCopies,
+    );
+    return snapshot;
+  });
   for (const minion of [...player.board, ...ownedMinions, ...player.shop]) {
     returnMinionToPool(state, minion);
   }
@@ -11064,6 +11312,7 @@ export function createGame(seed?: number): GameState {
     gold: 3,
     board: [],
     hand: [],
+    ghostHand: [],
     pendingSpellcraft: [],
     shop: [],
     spellShop: null,
