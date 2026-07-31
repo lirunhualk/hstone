@@ -1799,6 +1799,29 @@
   transform: translate(-50%, -50%);
 }
 
+.combat-avenge-label {
+  position: absolute;
+  z-index: 31;
+  top: 8px;
+  left: 50%;
+  padding: 5px 9px;
+  border: 1px solid rgb(255 239 171 / 88%);
+  border-radius: 999px;
+  pointer-events: none;
+  color: #fff9dd;
+  background: linear-gradient(135deg, #642080, #d14ebd);
+  box-shadow:
+    0 6px 16px rgb(0 0 0 / 42%),
+    0 0 24px rgb(209 78 189 / 62%);
+  font-size: 11px;
+  font-weight: 950;
+  letter-spacing: 0.08em;
+  line-height: 1;
+  white-space: nowrap;
+  transform: translateX(-50%);
+  animation: combat-buff-pop 420ms ease both;
+}
+
 .unit-card.is-hit .stat[data-stat="health"] {
   color: #fff;
   background: rgb(181 24 45 / 92%);
@@ -5165,6 +5188,21 @@
   vertical-align: 1px;
 }
 
+.combat-avenge-mark {
+  display: inline-block;
+  margin-right: 7px;
+  padding: 2px 7px;
+  border: 1px solid rgb(255 239 171 / 76%);
+  border-radius: 999px;
+  color: #fff9dd;
+  background: linear-gradient(135deg, #6b238f, #d14ebd);
+  box-shadow: 0 0 18px rgb(209 78 189 / 58%);
+  font-size: 11px;
+  font-weight: 950;
+  letter-spacing: 0.08em;
+  vertical-align: 1px;
+}
+
 .combat-attack-link {
   position: absolute;
   z-index: 24;
@@ -5466,6 +5504,11 @@
   animation: card-summon 240ms cubic-bezier(0.2, 0.9, 0.3, 1);
 }
 
+.unit-card.is-avenge-trigger {
+  z-index: 9;
+  animation: card-avenge 620ms cubic-bezier(0.2, 0.9, 0.3, 1);
+}
+
 .unit-card.is-dead {
   pointer-events: none;
   animation: card-death 620ms ease forwards;
@@ -5514,6 +5557,21 @@
     box-shadow:
       0 0 0 4px rgb(50 215 196 / 68%),
       0 0 26px rgb(50 215 196 / 35%);
+  }
+}
+
+@keyframes card-avenge {
+  0%,
+  100% {
+    filter: none;
+    transform: translateY(0) scale(1);
+  }
+  48% {
+    filter: brightness(1.42) saturate(1.45);
+    box-shadow:
+      0 0 0 4px rgb(234 142 255 / 78%),
+      0 0 34px rgb(209 78 189 / 64%);
+    transform: translateY(-7px) scale(1.045);
   }
 }
 
@@ -6486,6 +6544,7 @@
   .unit-card.is-attacking,
   .unit-card.is-hit,
   .unit-card.is-buffed,
+  .unit-card.is-avenge-trigger,
   .unit-card.is-debuffed,
   .unit-card.is-summoned,
   .unit-card.is-dead,
@@ -6523,6 +6582,7 @@
   }
 
   .combat-buff-label,
+  .combat-avenge-label,
   .combat-debuff-label,
   .combat-summon-label,
   .combat-damage-label,

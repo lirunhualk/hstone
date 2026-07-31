@@ -29,6 +29,7 @@ import {
   shouldAiUpgrade,
 } from "./ai.ts";
 import type {
+  AvengeEffect,
   BattleEvent,
   BattleResult,
   BattleSummary,
@@ -45,6 +46,7 @@ import type {
   EndOfTurnEffect,
   GameAction,
   GameState,
+  GainRandomGeneratedMinionEffect,
   GainRandomTavernSpellEffect,
   GainTavernSpellEffect,
   GetRandomMinionEffect,
@@ -71,6 +73,7 @@ import type {
   ScheduledPairing,
   SpellcraftDefinition,
   SpellcraftSpellInstance,
+  SummonEffect,
   TavernSpellDefinition,
   TavernSpellEffect,
   TavernSpellInstance,
@@ -243,6 +246,7 @@ interface DeadMinion {
 }
 
 interface MinionEffectSource {
+  sourceInstanceId: string;
   definitionId: string;
   golden: boolean;
 }
@@ -283,6 +287,7 @@ function collectAttachmentEffectSources(
   sources: MinionEffectSource[],
 ): void {
   sources.push({
+    sourceInstanceId: attachment.sourceInstanceId,
     definitionId: attachment.definitionId,
     golden: attachment.golden,
   });
@@ -296,6 +301,7 @@ function minionEffectSources(
 ): MinionEffectSource[] {
   const sources: MinionEffectSource[] = [
     {
+      sourceInstanceId: minion.instanceId,
       definitionId: minion.definitionId,
       golden: minion.golden,
     },
@@ -7555,6 +7561,8 @@ interface CombatContext {
   pendingBeetles: Record<PlayerId, number>;
   astralAutomatonsSummoned: Record<PlayerId, number>;
   eternalKnightsDied: Record<PlayerId, number>;
+  /** Combat-only counters keyed by the exact minion or Magnetic component. */
+  avengeProgress: Record<PlayerId, Record<string, number>>;
 }
 
 function opponentId(context: CombatContext, ownerId: PlayerId): PlayerId {
@@ -7991,6 +7999,40 @@ function summonCombatMinion(
   );
 }
 
+function resolveCombatSummonEffect(
+  context: CombatContext,
+  ownerId: PlayerId,
+  source: MinionInstance,
+  component: MinionEffectSource,
+  effect: SummonEffect,
+  insertAt: number,
+): void {
+  const board = context.boards[ownerId];
+  const baseCount =
+    effect.count === "sourceAttack" ? source.attack : effect.count;
+  const doublesCount =
+    component.golden && effect.goldenMode === "doubleCount";
+  const summonCount = baseCount * (doublesCount ? 2 : 1);
+  for (
+    let count = 0;
+    count < summonCount && board.length < MAX_BOARD_SIZE;
+    count += 1
+  ) {
+    const summoned = summonCombatMinion(
+      context,
+      ownerId,
+      effect.definitionId,
+      insertAt + count,
+      source,
+      component.golden && !doublesCount,
+      effect.taunt === true,
+    );
+    if (summoned && effect.immediateAttack) {
+      performImmediateAttack(context, ownerId, summoned);
+    }
+  }
+}
+
 function insertCombatMinion(
   context: CombatContext,
   ownerId: PlayerId,
@@ -8364,6 +8406,88 @@ function resolveCombatGetRandomMinion(
       message: owner.isHuman
         ? `${sourceLabel}使你获得了「${gained.name}」。`
         : `${sourceLabel}使${owner.name}获得了一张磁力机械。`,
+    });
+  }
+}
+
+function resolveCombatGainRandomGeneratedMinion(
+  context: CombatContext,
+  ownerId: PlayerId,
+  source: MinionInstance,
+  component: MinionEffectSource,
+  effect: GainRandomGeneratedMinionEffect,
+): void {
+  const owner = persistentCombatOwner(context, ownerId);
+  if (!owner) {
+    return;
+  }
+  const sourceLabel = rallySourceLabel(component);
+  const gainCount =
+    effect.count *
+    (component.golden && effect.goldenMode === "doubleCount" ? 2 : 1);
+
+  for (let count = 0; count < gainCount; count += 1) {
+    if (owner.hand.length >= MAX_HAND_SIZE) {
+      pushBattleEvent(context.events, {
+        type: "cardGain",
+        actorPlayerId: ownerId,
+        actorInstanceId: source.instanceId,
+        targetPlayerId: ownerId,
+        amount: 0,
+        cardKind: "minion",
+        cardGainResult: "handFull",
+        message: owner.isHuman
+          ? `手牌已满，${sourceLabel}未能使你获得随从牌。`
+          : `${sourceLabel}未能使${owner.name}获得一张随从牌。`,
+      });
+      continue;
+    }
+    if (effect.definitionIds.length === 0) {
+      pushBattleEvent(context.events, {
+        type: "cardGain",
+        actorPlayerId: ownerId,
+        actorInstanceId: source.instanceId,
+        targetPlayerId: ownerId,
+        amount: 0,
+        cardKind: "minion",
+        cardGainResult: "noCandidate",
+        message: `${sourceLabel}没有找到可获取的随从牌。`,
+      });
+      continue;
+    }
+    const definitionId =
+      effect.definitionIds[
+        randomIndex(context.state, effect.definitionIds.length)
+      ];
+    const gained = createMinionInstance(
+      context.state,
+      definitionId,
+      0,
+    );
+    applyOwnedUndeadArmyBonus(owner, gained);
+    reconcileWhereverMinion(
+      gained,
+      owner.astralAutomatonsSummoned ?? 0,
+      owner.eternalKnightsDied ?? 0,
+    );
+    const gainedSnapshot = cloneMinion(gained);
+    owner.hand.push(gained);
+    resolveTriples(context.state, owner);
+    pushBattleEvent(context.events, {
+      type: "cardGain",
+      actorPlayerId: ownerId,
+      actorInstanceId: source.instanceId,
+      targetPlayerId: ownerId,
+      targetInstanceId: owner.isHuman
+        ? gained.instanceId
+        : undefined,
+      amount: 1,
+      minion: owner.isHuman ? gainedSnapshot : undefined,
+      cardKind: "minion",
+      cardGainResult: "added",
+      message: owner.isHuman
+        ? `${sourceLabel}使你获得了「${gained.name}」。`
+        : `${sourceLabel}使${owner.name}获得了一张随从牌。`,
     });
   }
 }
@@ -9371,6 +9495,134 @@ function performImmediateAttack(
   });
 }
 
+function resolveCombatAvengeEffect(
+  context: CombatContext,
+  ownerId: PlayerId,
+  watcher: MinionInstance,
+  component: MinionEffectSource,
+  effect: AvengeEffect,
+): void {
+  if (effect.kind === "gainRandomGeneratedMinion") {
+    resolveCombatGainRandomGeneratedMinion(
+      context,
+      ownerId,
+      watcher,
+      component,
+      effect,
+    );
+    return;
+  }
+  if (effect.kind === "gainTavernSpell") {
+    resolveCombatGainTavernSpell(
+      context,
+      ownerId,
+      watcher,
+      component,
+      effect,
+    );
+    return;
+  }
+  if (effect.kind === "summon") {
+    const watcherIndex = context.boards[ownerId].findIndex(
+      (minion) => minion.instanceId === watcher.instanceId,
+    );
+    if (watcherIndex >= 0) {
+      resolveCombatSummonEffect(
+        context,
+        ownerId,
+        watcher,
+        component,
+        effect,
+        watcherIndex + 1,
+      );
+    }
+    return;
+  }
+
+  const owner = findPlayer(context.state, ownerId);
+  if (!owner) {
+    return;
+  }
+  const applicationCount =
+    effect.count * (component.golden ? 2 : 1);
+  const targets = context.boards[ownerId].filter(
+    (minion): minion is BoardMinionInstance =>
+      minion.kind === "minion" &&
+      minion.health > 0 &&
+      minionHasTribe(minion, effect.tribe),
+  );
+  for (const target of targets) {
+    for (
+      let application = 0;
+      application < applicationCount;
+      application += 1
+    ) {
+      applyBloodGemStats(
+        target,
+        owner.bloodGemAttack,
+        owner.bloodGemHealth,
+      );
+      pushBattleEvent(context.events, {
+        type: "buff",
+        actorPlayerId: ownerId,
+        actorInstanceId: watcher.instanceId,
+        targetPlayerId: ownerId,
+        targetInstanceId: target.instanceId,
+        attackDelta: owner.bloodGemAttack,
+        healthDelta: owner.bloodGemHealth,
+        minion: cloneMinion(target),
+        message: `${rallySourceLabel(component)}对${target.name}使用了一张鲜血宝石${
+          applicationCount > 1
+            ? `（第${application + 1}张）`
+            : ""
+        }，使其获得+${owner.bloodGemAttack}/+${owner.bloodGemHealth}。`,
+      });
+    }
+  }
+}
+
+function advanceAvenge(
+  context: CombatContext,
+  ownerId: PlayerId,
+  watcher: MinionInstance,
+  component: MinionEffectSource,
+): void {
+  const avenge = getMinionDefinition(component.definitionId).avenge;
+  if (!avenge) {
+    return;
+  }
+  const progressKey =
+    `${watcher.instanceId}:${component.sourceInstanceId}:` +
+    component.definitionId;
+  const progress =
+    (context.avengeProgress[ownerId][progressKey] ?? 0) + 1;
+  if (progress < avenge.threshold) {
+    context.avengeProgress[ownerId][progressKey] = progress;
+    return;
+  }
+
+  // Reset before resolving effects: an immediate attack may synchronously
+  // produce more friendly deaths and start the next Avenge cycle.
+  context.avengeProgress[ownerId][progressKey] =
+    progress - avenge.threshold;
+  pushBattleEvent(context.events, {
+    type: "avenge",
+    actorPlayerId: ownerId,
+    actorInstanceId: watcher.instanceId,
+    minion: cloneMinion(watcher),
+    message: `${rallySourceLabel(component)}触发了复仇（${avenge.threshold}）。`,
+  });
+  for (const effect of avenge.effects) {
+    resolveCombatAvengeEffect(
+      context,
+      ownerId,
+      watcher,
+      component,
+      effect,
+    );
+  }
+}
+
 function advanceDynamicEndOfTurnAvenge(
   context: CombatContext,
   ownerId: PlayerId,
@@ -9458,10 +9710,31 @@ function triggerAfterFriendlyDied(
   context: CombatContext,
   ownerId: PlayerId,
   death: DeadMinion,
+  eligibleWatcherInstanceIds: ReadonlySet<string>,
 ): void {
   const enemyId = opponentId(context, ownerId);
-  for (const watcher of context.boards[ownerId]) {
+  for (const watcher of [...context.boards[ownerId]]) {
+    if (
+      watcher.health <= 0 ||
+      !eligibleWatcherInstanceIds.has(watcher.instanceId) ||
+      !context.boards[ownerId].some(
+        (minion) =>
+          minion.instanceId === watcher.instanceId &&
+          minion.health > 0,
+      )
+    ) {
+      continue;
+    }
     for (const component of minionEffectSources(watcher)) {
+      if (
+        !context.boards[ownerId].some(
+          (minion) =>
+            minion.instanceId === watcher.instanceId &&
+            minion.health > 0,
+        )
+      ) {
+        break;
+      }
       const definition = getMinionDefinition(component.definitionId);
       const trigger = definition.afterFriendlyDied;
       const scale = component.golden ? 2 : 1;
@@ -9544,6 +9817,15 @@ function triggerAfterFriendlyDied(
           scale,
         );
       }
+
+      if (definition.avenge) {
+        advanceAvenge(
+          context,
+          ownerId,
+          watcher,
+          component,
+        );
+      }
     }
   }
 }
@@ -9564,29 +9846,14 @@ function resolveOneDeathrattle(
     for (let repetition = 0; repetition < repetitions; repetition += 1) {
       for (const effect of effects) {
         if (effect.kind === "summon") {
-          const baseCount =
-            effect.count === "sourceAttack" ? source.attack : effect.count;
-          const doublesCount =
-            component.golden && effect.goldenMode === "doubleCount";
-          const summonCount = baseCount * (doublesCount ? 2 : 1);
-          for (
-            let count = 0;
-            count < summonCount && board.length < MAX_BOARD_SIZE;
-            count += 1
-          ) {
-            const summoned = summonCombatMinion(
-              context,
-              ownerId,
-              effect.definitionId,
-              death.index + count,
-              source,
-              component.golden && !doublesCount,
-              effect.taunt === true,
-            );
-            if (summoned && effect.immediateAttack) {
-              performImmediateAttack(context, ownerId, summoned);
-            }
-          }
+          resolveCombatSummonEffect(
+            context,
+            ownerId,
+            source,
+            component,
+            effect,
+            death.index,
+          );
         } else if (effect.kind === "buff") {
           if (
             effect.target === "friendlyTribe" &&
@@ -9872,8 +10139,23 @@ function resolveCombatDeaths(context: CombatContext): void {
     for (const death of deaths) {
       observeCombatFriendlyDeath(context, death);
     }
+    const eligibleDeathWatchers = Object.fromEntries(
+      context.playerIds.map((ownerId) => [
+        ownerId,
+        new Set(
+          context.boards[ownerId]
+            .filter((minion) => minion.health > 0)
+            .map((minion) => minion.instanceId),
+        ),
+      ]),
+    ) as Record<PlayerId, ReadonlySet<string>>;
     for (const death of deaths) {
-      triggerAfterFriendlyDied(context, death.ownerId, death);
+      triggerAfterFriendlyDied(
+        context,
+        death.ownerId,
+        death,
+        eligibleDeathWatchers[death.ownerId],
+      );
     }
     for (const death of deaths) {
       resolveOneDeathrattle(context, death);
@@ -10313,6 +10595,10 @@ function simulateBattle(
     },
     astralAutomatonsSummoned,
     eternalKnightsDied,
+    avengeProgress: {
+      [playerA.id]: {},
+      [playerB.id]: {},
+    },
   };
   const healthABefore = playerA.health;
   const healthBBefore = playerB.health;

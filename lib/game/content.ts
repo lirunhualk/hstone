@@ -3,7 +3,7 @@ import liveRosterSnapshot from "./generated/battlegrounds-36.0.3-247416.zhCN.jso
 };
 import type { MinionDefinition, Tribe } from "./types.ts";
 
-export const CURRENT_ROSTER_VERSION = "battlegrounds-36.0.3-247416-v25";
+export const CURRENT_ROSTER_VERSION = "battlegrounds-36.0.3-247416-v26";
 /** Compatibility alias for existing save and engine imports. */
 export const CLASSIC_ROSTER_VERSION = CURRENT_ROSTER_VERSION;
 
@@ -1266,6 +1266,76 @@ const LIVE_RULE_OVERRIDES: Readonly<
       },
     ],
   },
+  BG34_632: {
+    goldenCardId: "BG34_632_G",
+    goldenDescription:
+      "复仇（3）：随机获取2张多彩幼龙。",
+    avenge: {
+      threshold: 3,
+      effects: [
+        {
+          kind: "gainRandomGeneratedMinion",
+          definitionIds: [
+            "BG34_634t",
+            "BG34_635t",
+            "BG34_636t",
+            "BG34_637t",
+            "BG34_638t",
+          ],
+          count: 1,
+          goldenMode: "doubleCount",
+        },
+      ],
+    },
+  },
+  BG32_324: {
+    goldenCardId: "BG32_324_G",
+    goldenDescription:
+      "复仇（3）：获取2张宰割。",
+    avenge: {
+      threshold: 3,
+      effects: [
+        {
+          kind: "gainTavernSpell",
+          definitionId: "tavern-spell-slaughter",
+          count: 1,
+          goldenMode: "doubleCount",
+        },
+      ],
+    },
+  },
+  BG34_403: {
+    goldenCardId: "BG34_403_G",
+    goldenDescription:
+      "复仇（5）：召唤一个金色永恒骑士并使其立即发起攻击。",
+    avenge: {
+      threshold: 5,
+      effects: [
+        {
+          kind: "summon",
+          definitionId: "BG25_008",
+          count: 1,
+          immediateAttack: true,
+          goldenMode: "goldenToken",
+        },
+      ],
+    },
+  },
+  BG26_157: {
+    goldenCardId: "BG26_157_G",
+    goldenDescription:
+      "复仇（2）：本随从对你的所有野猪人各使用4张鲜血宝石。",
+    avenge: {
+      threshold: 2,
+      effects: [
+        {
+          kind: "applyBloodGemsToTribe",
+          tribe: "quilboar",
+          count: 2,
+        },
+      ],
+    },
+  },
   BG32_880: {
     goldenCardId: "BG32_880_G",
     goldenDescription:
@@ -2364,6 +2434,7 @@ const FULLY_SUPPORTED_LIVE_CARD_IDS = new Set([
   "BG26_137",
   "BG26_147",
   "BG26_148",
+  "BG26_157",
   "BG26_159",
   "BG26_160",
   "BG26_199",
@@ -2402,6 +2473,7 @@ const FULLY_SUPPORTED_LIVE_CARD_IDS = new Set([
   "BG31_859",
   "BG32_235",
   "BG32_236",
+  "BG32_324",
   "BG32_330",
   "BG32_821",
   "BG32_835",
@@ -2429,10 +2501,12 @@ const FULLY_SUPPORTED_LIVE_CARD_IDS = new Set([
   "BG34_140",
   "BG34_175",
   "BG34_231",
+  "BG34_403",
   "BG34_500",
   "BG34_523",
   "BG34_604",
   "BG34_630",
+  "BG34_632",
   "BG34_634t",
   "BG34_635t",
   "BG34_636t",

@@ -125,6 +125,13 @@ export interface GainMinionEffect {
   goldenMode?: "doubleCount";
 }
 
+export interface GainRandomGeneratedMinionEffect {
+  kind: "gainRandomGeneratedMinion";
+  definitionIds: readonly string[];
+  count: number;
+  goldenMode?: "doubleCount";
+}
+
 export interface DamageHeroEffect {
   kind: "damageHero";
   amount: number;
@@ -383,6 +390,17 @@ export interface FriendlyCombatDeathTrigger {
   health: number;
 }
 
+export type AvengeEffect =
+  | GainRandomGeneratedMinionEffect
+  | GainTavernSpellEffect
+  | SummonEffect
+  | ApplyBloodGemsToTribeEffect;
+
+export interface AvengeTrigger {
+  threshold: number;
+  effects: readonly AvengeEffect[];
+}
+
 export interface CardPlayedFilter {
   tribe?: Tribe;
   tierParity?: TierParity;
@@ -577,6 +595,7 @@ export interface MinionDefinition {
   afterFriendlySummoned?: FriendlyTribeTrigger;
   afterFriendlyDied?: FriendlyTribeTrigger;
   afterFriendlyCombatDied?: FriendlyCombatDeathTrigger;
+  avenge?: AvengeTrigger;
   afterSelfDamaged?: readonly MinionEffect[];
   afterTavernSpellCast?: readonly AfterTavernSpellCastEffect[];
   startOfTurn?: readonly MinionEffect[];
@@ -1045,6 +1064,7 @@ export interface PlayerState {
 export type BattleEventType =
   | "battleStart"
   | "attack"
+  | "avenge"
   | "tavernSpellCast"
   | "damage"
   | "buff"

@@ -1169,6 +1169,8 @@ function battleEventDelay(
         ? 800
         : event?.type === "damage"
           ? 720
+        : event?.type === "avenge"
+          ? 720
         : event?.type === "buff"
           ? 620
           : event?.type === "handBuff"
@@ -1284,6 +1286,7 @@ function UnitCard({
   combatDamageLabel,
   combatShieldBreaking = false,
   combatDead = false,
+  combatAvenge = false,
   combatBuffTarget = false,
   combatBuffLabel,
   combatDebuffTarget = false,
@@ -1327,6 +1330,7 @@ function UnitCard({
   combatDamageLabel?: string;
   combatShieldBreaking?: boolean;
   combatDead?: boolean;
+  combatAvenge?: boolean;
   combatBuffTarget?: boolean;
   combatBuffLabel?: string;
   combatDebuffTarget?: boolean;
@@ -1361,6 +1365,8 @@ function UnitCard({
   const keywordVisuals = activeMinionKeywordVisuals(unit);
   const combatRole = combatDead
     ? "dead"
+    : combatAvenge
+      ? "avenge"
     : combatActor
     ? combatBuffTarget
       ? "actor buff-target"
@@ -1395,6 +1401,8 @@ function UnitCard({
         combatShieldBreaking ? " is-shield-breaking" : ""
       }${
         combatDead ? " is-dead" : ""
+      }${
+        combatAvenge ? " is-avenge-trigger" : ""
       }${
         combatBuffTarget ? " is-combat-buff-target is-buffed" : ""
       }${
@@ -1439,6 +1447,8 @@ function UnitCard({
       }${
         newlyGenerated ? "，本轮战斗新获得" : ""
       }${
+        combatAvenge ? "，正在触发复仇" : ""
+      }${
         locked ? "，锁定至下个招募回合" : ""
       }`}
       aria-pressed={selected}
@@ -1471,6 +1481,7 @@ function UnitCard({
         keywordVisuals.map(({ kind }) => kind).join(" ") || undefined
       }
       data-shield-breaking={combatShieldBreaking || undefined}
+      data-avenge-trigger={combatAvenge || undefined}
       data-testid={testId}
       data-unit-instance-id={unit.instanceId}
       onClick={onClick}
@@ -1501,6 +1512,11 @@ function UnitCard({
       {combatDead && (
         <span className="combat-death-label" aria-hidden="true">
           阵亡
+        </span>
+      )}
+      {combatAvenge && (
+        <span className="combat-avenge-label" aria-hidden="true">
+          复仇！
         </span>
       )}
       {combatDebuffTarget && combatDebuffLabel && (
@@ -2248,6 +2264,7 @@ function BoardRow({
   hitLabel,
   shieldBrokenInstanceId,
   deadInstanceId,
+  avengeInstanceId,
   combatEventIndex,
   buffTargetInstanceId,
   buffLabel,
@@ -2287,6 +2304,7 @@ function BoardRow({
   hitLabel?: string;
   shieldBrokenInstanceId?: string;
   deadInstanceId?: string;
+  avengeInstanceId?: string;
   combatEventIndex?: number;
   buffTargetInstanceId?: string;
   buffLabel?: string;
@@ -2439,6 +2457,7 @@ function BoardRow({
                       unit.instanceId === hitInstanceId ||
                       unit.instanceId === shieldBrokenInstanceId ||
                       unit.instanceId === deadInstanceId ||
+                      unit.instanceId === avengeInstanceId ||
                       unit.instanceId === buffTargetInstanceId ||
                       unit.instanceId === debuffTargetInstanceId ||
                       unit.instanceId === summonedInstanceId)
@@ -2476,6 +2495,9 @@ function BoardRow({
                     unit.instanceId === shieldBrokenInstanceId
                   }
                   combatDead={unit.instanceId === deadInstanceId}
+                  combatAvenge={
+                    unit.instanceId === avengeInstanceId
+                  }
                   combatBuffTarget={
                     unit.instanceId === buffTargetInstanceId
                   }
@@ -5881,6 +5903,12 @@ export default function GameClient() {
                       ? currentBattleEvent.actorInstanceId
                       : undefined
                   }
+                  avengeInstanceId={
+                    currentBattleEvent?.type === "avenge" &&
+                    currentBattleEvent.actorPlayerId === opponentId
+                      ? currentBattleEvent.actorInstanceId
+                      : undefined
+                  }
                   combatEventIndex={currentBattleEvent?.index}
                   buffTargetInstanceId={
                     currentBattleEvent?.type === "buff" &&
@@ -5935,6 +5963,14 @@ export default function GameClient() {
                             aria-hidden="true"
                           >
                             攻击 →
+                          </span>
+                        )}
+                        {currentBattleEvent?.type === "avenge" && (
+                          <span
+                            className="combat-avenge-mark"
+                            aria-hidden="true"
+                          >
+                            复仇！
                           </span>
                         )}
                         {currentBattleEvent?.message ?? "准备战斗回放…"}
@@ -6085,6 +6121,12 @@ export default function GameClient() {
                 }
                 deadInstanceId={
                   currentBattleEvent?.type === "death" &&
+                  currentBattleEvent.actorPlayerId === human.id
+                    ? currentBattleEvent.actorInstanceId
+                    : undefined
+                }
+                avengeInstanceId={
+                  currentBattleEvent?.type === "avenge" &&
                   currentBattleEvent.actorPlayerId === human.id
                     ? currentBattleEvent.actorInstanceId
                     : undefined
