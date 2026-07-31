@@ -15,8 +15,10 @@ function asBoardMinion(
 
 /**
  * Projects structured combat snapshots onto the opening board without parsing
- * localized event messages. Deaths remain visible for their own event, then
- * structured summon positions and effect snapshots update later replay frames.
+ * localized event messages. Deaths remain visible for their own event. A dead
+ * source is temporarily restored for each later trigger frame, including
+ * simultaneous deaths and repeated Deathrattles, before summon positions and
+ * effect snapshots update later replay frames.
  */
 export function projectCombatBoard(
   initialBoard: readonly BoardMinionInstance[],
@@ -25,16 +27,20 @@ export function projectCombatBoard(
   options: { flushPendingDeaths?: boolean } = {},
 ): BoardMinionInstance[] {
   const projected = [...initialBoard];
-  let pendingDeathInstanceId: string | undefined;
+  const recentlyDead = new Map<
+    string,
+    { boardIndex: number; minion?: BoardMinionInstance }
+  >();
+  let transientDeathInstanceId: string | undefined;
   for (const event of events) {
-    if (pendingDeathInstanceId) {
+    if (transientDeathInstanceId) {
       const deadIndex = projected.findIndex(
-        (unit) => unit.instanceId === pendingDeathInstanceId,
+        (unit) => unit.instanceId === transientDeathInstanceId,
       );
       if (deadIndex >= 0) {
         projected.splice(deadIndex, 1);
       }
-      pendingDeathInstanceId = undefined;
+      transientDeathInstanceId = undefined;
     }
 
     if (
@@ -51,7 +57,39 @@ export function projectCombatBoard(
       if (snapshot && dyingIndex >= 0) {
         projected[dyingIndex] = snapshot;
       }
-      pendingDeathInstanceId = event.actorInstanceId;
+      recentlyDead.set(event.actorInstanceId, {
+        boardIndex: Math.max(0, dyingIndex),
+        minion: snapshot,
+      });
+      transientDeathInstanceId = event.actorInstanceId;
+      continue;
+    }
+
+    if (
+      event.type === "trigger" &&
+      event.actorPlayerId === playerId &&
+      event.actorInstanceId &&
+      !projected.some(
+        (unit) => unit.instanceId === event.actorInstanceId,
+      )
+    ) {
+      const deadSource = recentlyDead.get(event.actorInstanceId);
+      const triggerSnapshot =
+        deadSource?.minion ??
+        (event.actorMinion
+          ? asBoardMinion(event.actorMinion)
+          : undefined);
+      if (deadSource && triggerSnapshot) {
+        projected.splice(
+          Math.min(
+            Math.max(0, deadSource.boardIndex),
+            projected.length,
+          ),
+          0,
+          triggerSnapshot,
+        );
+        transientDeathInstanceId = event.actorInstanceId;
+      }
       continue;
     }
 
@@ -106,9 +144,9 @@ export function projectCombatBoard(
       }
     }
   }
-  if (options.flushPendingDeaths && pendingDeathInstanceId) {
+  if (options.flushPendingDeaths && transientDeathInstanceId) {
     const deadIndex = projected.findIndex(
-      (unit) => unit.instanceId === pendingDeathInstanceId,
+      (unit) => unit.instanceId === transientDeathInstanceId,
     );
     if (deadIndex >= 0) {
       projected.splice(deadIndex, 1);

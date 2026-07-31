@@ -5,6 +5,7 @@ import {
   COMBAT_START_INTRO_DURATION_MS,
   combatBuffLabel,
   combatIntroOpponent,
+  combatTriggerLabel,
   initialCombatPlayback,
   isCombatPlaybackEvent,
   projectCombatArmor,
@@ -113,6 +114,26 @@ test("combat buff labels distinguish permanent changes from ordinary zero-stat k
       message: "属性永久保留。",
     }),
     "+2/+1 · 永久×2",
+  );
+  assert.equal(
+    combatTriggerLabel({
+      ...event("trigger", 5),
+      attackDelta: 5,
+      healthDelta: 5,
+      permanentEffectImprovement: true,
+      message: "本局甲虫永久成长。",
+    }),
+    "本局永久 +5/+5",
+  );
+  assert.equal(
+    combatTriggerLabel({
+      ...event("trigger", 6),
+      attackDelta: 5,
+      healthDelta: 5,
+      permanentEffectImprovement: false,
+      message: "幽灵甲虫仅在本场战斗成长。",
+    }),
+    undefined,
   );
 });
 

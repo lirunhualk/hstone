@@ -285,6 +285,12 @@ export interface ImproveBloodGemsEffect {
   health: number;
 }
 
+export interface ImproveBeetlesEffect {
+  kind: "improveBeetles";
+  attack: number;
+  health: number;
+}
+
 export interface ApplyBloodGemsToTribeEffect {
   kind: "applyBloodGemsToTribe";
   tribe: Tribe;
@@ -365,6 +371,7 @@ export type MinionEffect =
   | DamageAllMinionsEffect
   | GainBloodGemsEffect
   | ImproveBloodGemsEffect
+  | ImproveBeetlesEffect
   | ApplyBloodGemsToTribeEffect
   | ImproveTavernSpellBuffsEffect
   | ImproveBallersEffect
@@ -1167,6 +1174,9 @@ export interface PlayerState {
   rideTheWindBuffs: TavernRefreshBuff[];
   elementalsPlayedThisTurn: number;
   nextCombatBeetles: number;
+  /** Permanent game-wide stats granted to every Beetle token. */
+  beetleAttackBonus: number;
+  beetleHealthBonus: number;
   ballerAttackBonus: number;
   ballerHealthBonus: number;
   deepBlueBonus: number;
@@ -1243,7 +1253,7 @@ export interface BattleEvent {
   retained?: boolean;
   /** Golden Tarecgosa/Poet retain twice the gained Attack and Health. */
   retentionMultiplier?: 0 | 1 | 2;
-  /** A zero-stat event permanently improved a persistent card effect. */
+  /** This event permanently improved a persistent card effect or global ledger. */
   permanentEffectImprovement?: boolean;
 }
 

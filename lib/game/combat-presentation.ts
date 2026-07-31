@@ -44,6 +44,27 @@ export function combatBuffLabel(
   }`;
 }
 
+export function combatTriggerLabel(
+  event: BattleEvent | undefined,
+): string | undefined {
+  if (
+    event?.type !== "trigger" ||
+    !event.permanentEffectImprovement
+  ) {
+    return undefined;
+  }
+  if (
+    event.attackDelta === undefined ||
+    event.healthDelta === undefined ||
+    (event.attackDelta === 0 && event.healthDelta === 0)
+  ) {
+    return "效果永久提升";
+  }
+  return `本局永久 ${formatSignedCombatStat(
+    event.attackDelta,
+  )}/${formatSignedCombatStat(event.healthDelta)}`;
+}
+
 export function isCombatPlaybackEvent(event: BattleEvent): boolean {
   return event.type !== "battleStart" && event.type !== "battleEnd";
 }

@@ -55,6 +55,7 @@ import type {
   HelpfulRefreshKind,
   HeroPowerDefinition,
   HumanScoutingReport,
+  ImproveBeetlesEffect,
   ImproveBloodGemsEffect,
   ImproveStartOfCombatBuffEffect,
   ImproveUndeadArmyEffect,
@@ -215,6 +216,7 @@ const BLOOD_GEM_DEFINITION_ID = "blood-gem" as const;
 const FEARLESS_FOODIE_DEFINITION_ID = "BG30_123" as const;
 const GEOMAGUS_ROOGUG_DEFINITION_ID = "BG28_583" as const;
 const COMPOSER_BRISTLEBACK_DEFINITION_ID = "BG26_157" as const;
+const BEETLE_TOKEN_DEFINITION_ID = "live-beetle-token" as const;
 const CONSOLATION_COIN_CARD_ID = "BG28_521t" as const;
 const CONSOLATION_COIN_DEFINITION_ID = "consolation-coin" as const;
 const ASTRAL_AUTOMATON_DEFINITION_ID = "BG_TTN_401" as const;
@@ -1495,6 +1497,17 @@ function applyOwnedUndeadArmyBonus(
   minion.health += player.undeadArmyHealthBonus;
 }
 
+function applyOwnedBeetleBonus(
+  player: PlayerState,
+  minion: BoardMinionInstance,
+): void {
+  if (!isBeetleToken(minion)) {
+    return;
+  }
+  minion.attack += player.beetleAttackBonus;
+  minion.health += player.beetleHealthBonus;
+}
+
 function ancientSoulDescription(remainingDeaths: number): string {
   return `当本随从在你手牌中时，在15个友方随从死亡后，将本随从变为金色。（还剩${Math.max(
     0,
@@ -2324,6 +2337,35 @@ function queueDemonFodder(
   }
 }
 
+function isBeetleToken(
+  minion: Pick<BoardMinionInstance, "definitionId">,
+): boolean {
+  return minion.definitionId === BEETLE_TOKEN_DEFINITION_ID;
+}
+
+function improveRecruitBeetles(
+  player: PlayerState,
+  effect: ImproveBeetlesEffect,
+  scale: number,
+): void {
+  const attack = effect.attack * scale;
+  const health = effect.health * scale;
+  player.beetleAttackBonus += attack;
+  player.beetleHealthBonus += health;
+  const handBeetles = player.hand.filter(
+    (card): card is BoardMinionInstance =>
+      card.kind === "minion" && isBeetleToken(card),
+  );
+  buffMinions(
+    [
+      ...player.board.filter(isBeetleToken),
+      ...handBeetles,
+    ],
+    attack,
+    health,
+  );
+}
+
 function applyRecruitEffects(
   state: GameState,
   player: PlayerState,
@@ -2485,6 +2527,8 @@ function applyRecruitEffects(
     } else if (effect.kind === "improveBloodGems") {
       player.bloodGemAttack += effect.attack * scale;
       player.bloodGemHealth += effect.health * scale;
+    } else if (effect.kind === "improveBeetles") {
+      improveRecruitBeetles(player, effect, scale);
     } else if (effect.kind === "improveBallers") {
       if (effect.attack > 0) {
         buffMinions(
@@ -2594,6 +2638,7 @@ function applyRecruitEffects(
           summoned.taunt = true;
         }
         applyOwnedUndeadArmyBonus(player, summoned);
+        applyOwnedBeetleBonus(player, summoned);
         player.board.push(summoned);
         applyRecruitSummonTriggers(state, player, summoned);
       }
@@ -3315,12 +3360,21 @@ function resolveTriples(
         definitionHasTribe(definition, "undead")
           ? player.undeadArmyHealthBonus
           : 0;
+      const beetleAttack =
+        definitionId === BEETLE_TOKEN_DEFINITION_ID
+          ? player.beetleAttackBonus
+          : 0;
+      const beetleHealth =
+        definitionId === BEETLE_TOKEN_DEFINITION_ID
+          ? player.beetleHealthBonus
+          : 0;
       const extraAttack = consumed.reduce(
         (total, minion) =>
           total +
           (minion.attack -
             definition.attack -
             undeadArmyAttack -
+            beetleAttack -
             (minion.whereverAttackBonus ?? 0)),
         0,
       );
@@ -3330,6 +3384,7 @@ function resolveTriples(
           (minion.health -
             definition.health -
             undeadArmyHealth -
+            beetleHealth -
             (minion.whereverHealthBonus ?? 0)),
         0,
       );
@@ -3343,9 +3398,15 @@ function resolveTriples(
       golden.grantsTripleReward = true;
       golden.name = `金色·${definition.name}`;
       golden.attack =
-        definition.attack * 2 + undeadArmyAttack + extraAttack;
+        definition.attack * 2 +
+        undeadArmyAttack +
+        beetleAttack +
+        extraAttack;
       golden.health =
-        definition.health * 2 + undeadArmyHealth + extraHealth;
+        definition.health * 2 +
+        undeadArmyHealth +
+        beetleHealth +
+        extraHealth;
       golden.bloodGemAttack = consumed.reduce(
         (total, minion) => total + minion.bloodGemAttack,
         0,
@@ -3602,6 +3663,7 @@ function buyMinion(
   const [minion] = player.shop.splice(shopIndex, 1);
   claimGeneratedShopMinion(minion);
   applyOwnedUndeadArmyBonus(player, minion);
+  applyOwnedBeetleBonus(player, minion);
   reconcileWhereverMinion(
     minion,
     player.astralAutomatonsSummoned ?? 0,
@@ -3718,6 +3780,69 @@ function boardWithCandidate(
     )
     ? [...player.board, candidate]
     : player.board;
+}
+
+function beetleSummonCount(
+  minion: BoardMinionInstance,
+): number {
+  return minionEffectSources(minion).reduce((total, component) => {
+    const definition = getMinionDefinition(component.definitionId);
+    return (
+      total +
+      [
+        ...(definition.battlecry ?? []),
+        ...(definition.deathrattle ?? []),
+        ...(definition.afterSelfDamaged ?? []),
+      ].reduce((effectTotal, effect) => {
+        if (
+          effect.kind !== "summon" ||
+          effect.definitionId !== BEETLE_TOKEN_DEFINITION_ID ||
+          typeof effect.count !== "number"
+        ) {
+          return effectTotal;
+        }
+        return (
+          effectTotal +
+          effect.count *
+            (component.golden &&
+            effect.goldenMode === "doubleCount"
+              ? 2
+              : 1)
+        );
+      }, 0)
+    );
+  }, 0);
+}
+
+interface BeetleGrowthPotential {
+  battlecry: number;
+  deathrattle: number;
+  selfDamaged: number;
+}
+
+function beetleGrowthPotential(
+  minion: BoardMinionInstance,
+): BeetleGrowthPotential {
+  return minionEffectSources(minion).reduce<BeetleGrowthPotential>(
+    (total, component) => {
+      const definition = getMinionDefinition(component.definitionId);
+      const scale = component.golden ? 2 : 1;
+      const growth = (effects: readonly MinionEffect[] | undefined) =>
+        (effects ?? []).reduce(
+          (amount, effect) =>
+            effect.kind === "improveBeetles"
+              ? amount +
+                (effect.attack + effect.health) * scale
+              : amount,
+          0,
+        );
+      total.battlecry += growth(definition.battlecry);
+      total.deathrattle += growth(definition.deathrattle);
+      total.selfDamaged += growth(definition.afterSelfDamaged);
+      return total;
+    },
+    { battlecry: 0, deathrattle: 0, selfDamaged: 0 },
+  );
 }
 
 function roogugRedirectCount(minion: MinionInstance): number {
@@ -4226,6 +4351,7 @@ function destroyRecruitMinion(
     reborn.health = 1;
     reborn.reborn = false;
     applyOwnedUndeadArmyBonus(player, reborn);
+    applyOwnedBeetleBonus(player, reborn);
     player.board.splice(
       Math.min(boardIndex, player.board.length),
       0,
@@ -4752,6 +4878,7 @@ function addDrawnMinionToHand(
   }
   claimGeneratedShopMinion(minion);
   applyOwnedUndeadArmyBonus(player, minion);
+  applyOwnedBeetleBonus(player, minion);
   reconcileWhereverMinion(
     minion,
     player.astralAutomatonsSummoned ?? 0,
@@ -4772,6 +4899,7 @@ function addGeneratedMinionCopyToHand(
   }
   const minion = createMinionInstance(state, definitionId, 0);
   applyOwnedUndeadArmyBonus(player, minion);
+  applyOwnedBeetleBonus(player, minion);
   reconcileWhereverMinion(
     minion,
     player.astralAutomatonsSummoned ?? 0,
@@ -6492,31 +6620,41 @@ function minionScore(
   const definitions = minionEffectSources(minion).map((component) =>
     getMinionDefinition(component.definitionId),
   );
-  const ownedDefinitions = player.board.flatMap((owned) =>
-    minionEffectSources(owned).map((component) =>
-      getMinionDefinition(component.definitionId),
-    ),
-  );
-  const battlecryScale =
-    1 +
-    ownedDefinitions.reduce(
-      (best, definition) =>
-        Math.max(best, definition.extraBattlecries ?? 0),
-      0,
-    );
-  const deathrattleScale =
-    1 +
-    ownedDefinitions.reduce(
-      (best, definition) =>
-        Math.max(best, definition.extraDeathrattles ?? 0),
-      0,
-    );
+  const battlecryScale = battlecryTriggerCount(player);
+  const deathrattleScale = 1 + extraDeathrattles(player.board);
   if (definitions.some((definition) => definition.deathrattle)) {
     score += profile.deathrattleBonus * deathrattleScale;
   }
   if (definitions.some((definition) => definition.battlecry)) {
     score += profile.battlecryBonus * battlecryScale;
   }
+  const projectedBoard = boardWithCandidate(player, minion);
+  const projectedBeetleCount =
+    player.nextCombatBeetles +
+    projectedBoard.reduce(
+      (total, candidate) => total + beetleSummonCount(candidate),
+      0,
+    );
+  const candidateBeetleSummons = beetleSummonCount(minion);
+  const growth = beetleGrowthPotential(minion);
+  const candidateAlreadyOwned = player.board.some(
+    (owned) => owned.instanceId === minion.instanceId,
+  );
+  const expectedGrowth =
+    (candidateAlreadyOwned ? 0 : growth.battlecry * battlecryScale) +
+    growth.deathrattle * deathrattleScale +
+    growth.selfDamaged * 2;
+  const beetleStatValue =
+    4 + player.beetleAttackBonus + player.beetleHealthBonus;
+  score +=
+    candidateBeetleSummons *
+    beetleStatValue *
+    deathrattleScale *
+    0.32;
+  score +=
+    expectedGrowth *
+    Math.max(1, projectedBeetleCount) *
+    0.28;
   for (const definition of definitions) {
     const consumeEffect = (definition.battlecry ?? []).find(
       (effect) => effect.kind === "consumeRandomShopMinion",
@@ -6842,6 +6980,7 @@ function beginDiscoverInteraction(
           destination.destroyAfterPlayThroughRound;
       }
       applyOwnedUndeadArmyBonus(player, selected);
+      applyOwnedBeetleBonus(player, selected);
       reconcileWhereverMinion(
         selected,
         player.astralAutomatonsSummoned ?? 0,
@@ -7231,6 +7370,7 @@ function resolvePendingInteraction(
         destination.destroyAfterPlayThroughRound;
     }
     applyOwnedUndeadArmyBonus(nextPlayer, nextSelected);
+    applyOwnedBeetleBonus(nextPlayer, nextSelected);
     reconcileWhereverMinion(
       nextSelected,
       nextPlayer.astralAutomatonsSummoned ?? 0,
@@ -8764,6 +8904,8 @@ interface CombatContext {
   boards: Record<PlayerId, MinionInstance[]>;
   deadMechs: Record<PlayerId, MinionInstance[]>;
   tribeBuffs: Record<PlayerId, Partial<Record<Tribe, CombatStatBuff>>>;
+  /** Current per-player Beetle stats, including permanent in-game growth. */
+  beetleBonuses: Record<PlayerId, CombatStatBuff>;
   pendingBeetles: Record<PlayerId, number>;
   pendingStartOfCombatHandSummons: Record<
     PlayerId,
@@ -9000,6 +9142,104 @@ function applyCombatEnchantingGain(
   return { gainedKeywords, retentionMultiplier };
 }
 
+function applyCurrentBeetleBonus(
+  context: CombatContext,
+  ownerId: PlayerId,
+  minion: BoardMinionInstance,
+): void {
+  if (!isBeetleToken(minion)) {
+    return;
+  }
+  const bonus = context.beetleBonuses[ownerId];
+  minion.attack += bonus.attack;
+  minion.health += bonus.health;
+  reconcileConditionalMinion(minion);
+}
+
+function improveBeetlesInCombat(
+  context: CombatContext,
+  ownerId: PlayerId,
+  source: MinionInstance,
+  component: MinionEffectSource,
+  effect: ImproveBeetlesEffect,
+  triggerLabel: string,
+): void {
+  const scale = component.golden ? 2 : 1;
+  const attackDelta = effect.attack * scale;
+  const healthDelta = effect.health * scale;
+  const bonus = context.beetleBonuses[ownerId];
+  bonus.attack += attackDelta;
+  bonus.health += healthDelta;
+
+  const owner = persistentCombatOwner(context, ownerId);
+  if (owner) {
+    owner.beetleAttackBonus += attackDelta;
+    owner.beetleHealthBonus += healthDelta;
+    const handBeetles = owner.hand.filter(
+      (card): card is BoardMinionInstance =>
+        card.kind === "minion" && isBeetleToken(card),
+    );
+    buffMinions(
+      [
+        ...owner.board.filter(isBeetleToken),
+        ...handBeetles,
+      ],
+      attackDelta,
+      healthDelta,
+    );
+  }
+
+  const sourceLabel = rallySourceLabel(component);
+  pushBattleEvent(context.events, {
+    type: "trigger",
+    actorPlayerId: ownerId,
+    actorInstanceId: source.instanceId,
+    targetPlayerId: ownerId,
+    actorMinion: cloneMinion(source),
+    attackDelta,
+    healthDelta,
+    permanentEffectImprovement: owner !== undefined,
+    message: `${sourceLabel}的${triggerLabel}使本局甲虫获得+${attackDelta}/+${healthDelta}。`,
+  });
+
+  for (const target of context.boards[ownerId]) {
+    if (!isBeetleToken(target) || target.health <= 0) {
+      continue;
+    }
+    target.attack += attackDelta;
+    target.health += healthDelta;
+    adjustCombatMaximumHealth(
+      context,
+      ownerId,
+      target,
+      healthDelta,
+    );
+    reconcileConditionalMinion(target);
+
+    const persistentTarget = owner?.board.find(
+      (candidate) =>
+        candidate.instanceId === target.instanceId &&
+        isBeetleToken(candidate),
+    );
+
+    pushBattleEvent(context.events, {
+      type: "buff",
+      actorPlayerId: ownerId,
+      actorInstanceId: source.instanceId,
+      targetPlayerId: ownerId,
+      targetInstanceId: target.instanceId,
+      attackDelta,
+      healthDelta,
+      minion: cloneMinion(target),
+      retained: persistentTarget !== undefined,
+      ...(persistentTarget
+        ? { retentionMultiplier: 1 as const }
+        : {}),
+      message: `${sourceLabel}使${target.name}获得+${attackDelta}/+${healthDelta}。`,
+    });
+  }
+}
+
 interface CombatBloodGemPulseOptions {
   actorInstanceId: string;
   sourceLabel: string;
@@ -9173,7 +9413,24 @@ function combatHandMinions(
     return [];
   }
   if (context.ghostOwnerId === ownerId) {
-    return owner.ghostHand;
+    const currentBonus = context.beetleBonuses[ownerId];
+    const attackDelta =
+      currentBonus.attack - owner.beetleAttackBonus;
+    const healthDelta =
+      currentBonus.health - owner.beetleHealthBonus;
+    if (attackDelta === 0 && healthDelta === 0) {
+      return owner.ghostHand;
+    }
+    return owner.ghostHand.map((minion) => {
+      if (!isBeetleToken(minion)) {
+        return minion;
+      }
+      const adjusted = cloneMinion(minion);
+      adjusted.attack += attackDelta;
+      adjusted.health += healthDelta;
+      reconcileConditionalMinion(adjusted);
+      return adjusted;
+    });
   }
   return owner.hand.filter(
     (card): card is BoardMinionInstance => card.kind === "minion",
@@ -9850,6 +10107,7 @@ function summonCombatMinion(
   if (golden) {
     makeGoldenToken(summoned);
   }
+  applyCurrentBeetleBonus(context, ownerId, summoned);
   if (taunt) {
     summoned.taunt = true;
   }
@@ -9970,9 +10228,10 @@ function summonPendingBeetles(
   ) {
     const beetle = createMinionInstance(
       context.state,
-      "live-beetle-token",
+      BEETLE_TOKEN_DEFINITION_ID,
       0,
     );
+    applyCurrentBeetleBonus(context, ownerId, beetle);
     beetle.taunt = true;
     const summoned = insertCombatMinion(
       context,
@@ -10117,6 +10376,17 @@ function triggerSelfDamaged(
         );
         continue;
       }
+      if (effect.kind === "improveBeetles") {
+        improveBeetlesInCombat(
+          context,
+          ownerId,
+          target,
+          component,
+          effect,
+          "受伤效果",
+        );
+        continue;
+      }
       if (effect.kind !== "summon") {
         continue;
       }
@@ -10191,9 +10461,10 @@ function dealCombatDamage(
   target: MinionInstance,
   amount: number,
   poisonous: boolean,
-): void {
+  deferSelfDamaged = false,
+): boolean {
   if (amount <= 0 || target.health <= 0) {
-    return;
+    return false;
   }
   const conditionalGain = applyCombatEnchantingGain(
     context,
@@ -10233,7 +10504,7 @@ function dealCombatDamage(
       minion: cloneMinion(target),
       message: `${target.name}的圣盾被击破。`,
     });
-    return;
+    return false;
   }
   target.health -= amount;
   if (poisonous || source.venomous) {
@@ -10255,7 +10526,24 @@ function dealCombatDamage(
     minion: targetSnapshot,
     message: `${target.name}受到${amount}点伤害，剩余${targetSnapshot.health}点生命。`,
   });
-  triggerSelfDamaged(context, targetOwnerId, target);
+  if (!deferSelfDamaged) {
+    triggerSelfDamaged(context, targetOwnerId, target);
+  }
+  return true;
+}
+
+interface DeferredSelfDamageTarget {
+  ownerId: PlayerId;
+  target: MinionInstance;
+}
+
+function triggerDeferredSelfDamage(
+  context: CombatContext,
+  damagedTargets: readonly DeferredSelfDamageTarget[],
+): void {
+  for (const { ownerId, target } of damagedTargets) {
+    triggerSelfDamaged(context, ownerId, target);
+  }
 }
 
 function chooseAttackTarget(
@@ -10351,6 +10639,7 @@ function resolveCombatGetRandomMinion(
       continue;
     }
     applyOwnedUndeadArmyBonus(owner, gained);
+    applyOwnedBeetleBonus(owner, gained);
     reconcileWhereverMinion(
       gained,
       owner.astralAutomatonsSummoned ?? 0,
@@ -10432,6 +10721,7 @@ function resolveCombatGainRandomGeneratedMinion(
       0,
     );
     applyOwnedUndeadArmyBonus(owner, gained);
+    applyOwnedBeetleBonus(owner, gained);
     reconcileWhereverMinion(
       gained,
       owner.astralAutomatonsSummoned ?? 0,
@@ -11340,6 +11630,7 @@ function resolveRallyCastChefsChoice(
       continue;
     }
     applyOwnedUndeadArmyBonus(owner, gained);
+    applyOwnedBeetleBonus(owner, gained);
     reconcileWhereverMinion(
       gained,
       owner.astralAutomatonsSummoned ?? 0,
@@ -11754,16 +12045,28 @@ function triggerAfterAttackKills(
         minion: cloneMinion(adjacentTarget),
         message: `${rallySourceLabel(component)}将${excessDamage}点过量伤害溅射给${adjacentTarget.name}。`,
       });
-      dealCombatDamage(
-        context,
-        ownerId,
-        attacker,
-        targetOwnerId,
-        adjacentTarget,
-        excessDamage,
-        false,
-      );
     }
+    const damagedTargets: DeferredSelfDamageTarget[] = [];
+    for (const adjacentTarget of targets) {
+      if (
+        dealCombatDamage(
+          context,
+          ownerId,
+          attacker,
+          targetOwnerId,
+          adjacentTarget,
+          excessDamage,
+          false,
+          true,
+        )
+      ) {
+        damagedTargets.push({
+          ownerId: targetOwnerId,
+          target: adjacentTarget,
+        });
+      }
+    }
+    triggerDeferredSelfDamage(context, damagedTargets);
   }
 }
 
@@ -11840,35 +12143,55 @@ function performAttackStrike(
 
   const targetHealthBefore = target.health;
   const attackDamage = attacker.attack;
-  dealCombatDamage(
-    context,
-    ownerId,
-    attacker,
-    enemyId,
-    target,
-    attacker.attack,
-    attacker.poisonous,
-  );
-  dealCombatDamage(
-    context,
-    enemyId,
-    target,
-    ownerId,
-    attacker,
-    target.attack,
-    target.poisonous,
-  );
-  for (const adjacent of cleaveTargets) {
+  const retaliationDamage = target.attack;
+  const attackerPoisonous = attacker.poisonous;
+  const targetPoisonous = target.poisonous;
+  const damagedTargets: DeferredSelfDamageTarget[] = [];
+  if (
     dealCombatDamage(
       context,
       ownerId,
       attacker,
       enemyId,
-      adjacent,
-      attacker.attack,
-      attacker.poisonous,
-    );
+      target,
+      attackDamage,
+      attackerPoisonous,
+      true,
+    )
+  ) {
+    damagedTargets.push({ ownerId: enemyId, target });
   }
+  if (
+    dealCombatDamage(
+      context,
+      enemyId,
+      target,
+      ownerId,
+      attacker,
+      retaliationDamage,
+      targetPoisonous,
+      true,
+    )
+  ) {
+    damagedTargets.push({ ownerId, target: attacker });
+  }
+  for (const adjacent of cleaveTargets) {
+    if (
+      dealCombatDamage(
+        context,
+        ownerId,
+        attacker,
+        enemyId,
+        adjacent,
+        attackDamage,
+        attackerPoisonous,
+        true,
+      )
+    ) {
+      damagedTargets.push({ ownerId: enemyId, target: adjacent });
+    }
+  }
+  triggerDeferredSelfDamage(context, damagedTargets);
   triggerAfterAttackKills(
     context,
     ownerId,
@@ -12376,6 +12699,7 @@ function resolveOneDeathrattle(
               ? effect.amount * 2
               : effect.amount;
           for (let hit = 0; hit < repeats; hit += 1) {
+            const damagedTargets: DeferredSelfDamageTarget[] = [];
             for (const targetOwnerId of context.playerIds) {
               for (const target of [...context.boards[targetOwnerId]]) {
                 if (
@@ -12385,17 +12709,26 @@ function resolveOneDeathrattle(
                 ) {
                   continue;
                 }
-                dealCombatDamage(
-                  context,
-                  ownerId,
-                  source,
-                  targetOwnerId,
-                  target,
-                  amount,
-                  false,
-                );
+                if (
+                  dealCombatDamage(
+                    context,
+                    ownerId,
+                    source,
+                    targetOwnerId,
+                    target,
+                    amount,
+                    false,
+                    true,
+                  )
+                ) {
+                  damagedTargets.push({
+                    ownerId: targetOwnerId,
+                    target,
+                  });
+                }
               }
             }
+            triggerDeferredSelfDamage(context, damagedTargets);
           }
         } else if (effect.kind === "resummonMechs") {
           const history = context.deadMechs[ownerId];
@@ -12449,6 +12782,15 @@ function resolveOneDeathrattle(
             source,
             component,
             effect,
+          );
+        } else if (effect.kind === "improveBeetles") {
+          improveBeetlesInCombat(
+            context,
+            ownerId,
+            source,
+            component,
+            effect,
+            "亡语",
           );
         } else if (effect.kind === "improveBloodGems") {
           const owner = persistentCombatOwner(context, ownerId);
@@ -12613,6 +12955,7 @@ function resolveCombatDeaths(context: CombatContext): void {
         if (death.minion.golden) {
           makeGoldenToken(reborn);
         }
+        applyCurrentBeetleBonus(context, death.ownerId, reborn);
         const rebornMaximumHealth = reborn.health;
         reborn.health = 1;
         reborn.reborn = false;
@@ -13072,6 +13415,16 @@ function simulateBattle(
           attack: playerB.undeadArmyAttackBonus,
           health: playerB.undeadArmyHealthBonus,
         },
+      },
+    },
+    beetleBonuses: {
+      [playerA.id]: {
+        attack: playerA.beetleAttackBonus,
+        health: playerA.beetleHealthBonus,
+      },
+      [playerB.id]: {
+        attack: playerB.beetleAttackBonus,
+        health: playerB.beetleHealthBonus,
       },
     },
     pendingBeetles: {
@@ -13659,6 +14012,8 @@ export function createGame(seed?: number): GameState {
     rideTheWindBuffs: [],
     elementalsPlayedThisTurn: 0,
     nextCombatBeetles: 0,
+    beetleAttackBonus: 0,
+    beetleHealthBonus: 0,
     ballerAttackBonus: 1,
     ballerHealthBonus: 1,
     deepBlueBonus: 0,

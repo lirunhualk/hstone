@@ -63,6 +63,7 @@ import {
   COMBAT_START_INTRO_DURATION_MS,
   combatBuffLabel,
   combatIntroOpponent,
+  combatTriggerLabel,
   initialCombatPlayback,
   isCombatPlaybackEvent,
   projectCombatArmor,
@@ -1002,6 +1003,10 @@ function isGameState(value: unknown): value is GameState {
         ) &&
         typeof player.elementalsPlayedThisTurn === "number" &&
         typeof player.nextCombatBeetles === "number" &&
+        typeof player.beetleAttackBonus === "number" &&
+        player.beetleAttackBonus >= 0 &&
+        typeof player.beetleHealthBonus === "number" &&
+        player.beetleHealthBonus >= 0 &&
         typeof player.ballerAttackBonus === "number" &&
         typeof player.ballerHealthBonus === "number" &&
         typeof player.deepBlueBonus === "number" &&
@@ -1350,6 +1355,7 @@ function UnitCard({
   combatStartOfCombat = false,
   combatAvenge = false,
   combatTrigger = false,
+  combatTriggerLabel,
   combatBuffTarget = false,
   combatBuffLabel,
   combatDebuffTarget = false,
@@ -1396,6 +1402,7 @@ function UnitCard({
   combatStartOfCombat?: boolean;
   combatAvenge?: boolean;
   combatTrigger?: boolean;
+  combatTriggerLabel?: string;
   combatBuffTarget?: boolean;
   combatBuffLabel?: string;
   combatDebuffTarget?: boolean;
@@ -1605,7 +1612,7 @@ function UnitCard({
       )}
       {combatTrigger && (
         <span className="combat-trigger-label" aria-hidden="true">
-          触发！
+          {combatTriggerLabel ?? "触发！"}
         </span>
       )}
       {combatDebuffTarget && combatDebuffLabel && (
@@ -2356,6 +2363,7 @@ function BoardRow({
   startOfCombatInstanceId,
   avengeInstanceId,
   triggerInstanceId,
+  triggerLabel,
   combatEventIndex,
   buffTargetInstanceId,
   buffLabel,
@@ -2398,6 +2406,7 @@ function BoardRow({
   startOfCombatInstanceId?: string;
   avengeInstanceId?: string;
   triggerInstanceId?: string;
+  triggerLabel?: string;
   combatEventIndex?: number;
   buffTargetInstanceId?: string;
   buffLabel?: string;
@@ -2598,6 +2607,11 @@ function BoardRow({
                   }
                   combatTrigger={
                     unit.instanceId === triggerInstanceId
+                  }
+                  combatTriggerLabel={
+                    unit.instanceId === triggerInstanceId
+                      ? triggerLabel
+                      : undefined
                   }
                   combatBuffTarget={
                     unit.instanceId === buffTargetInstanceId
@@ -3527,6 +3541,7 @@ export default function GameClient() {
           ? queuedRecruitBloodGemPulse.boardBeforePulse
           : human.board;
   const currentBuffLabel = combatBuffLabel(currentBattleEvent);
+  const currentTriggerLabel = combatTriggerLabel(currentBattleEvent);
   const currentHitLabel =
     currentBattleEvent?.type === "damage"
       ? `-${currentBattleEvent.amount ?? 0} · 剩余 ${
@@ -6057,6 +6072,7 @@ export default function GameClient() {
                       ? currentBattleEvent.actorInstanceId
                       : undefined
                   }
+                  triggerLabel={currentTriggerLabel}
                   combatEventIndex={currentBattleEvent?.index}
                   buffTargetInstanceId={
                     currentBattleEvent?.type === "buff" &&
@@ -6312,6 +6328,7 @@ export default function GameClient() {
                     ? currentBattleEvent.actorInstanceId
                     : undefined
                 }
+                triggerLabel={currentTriggerLabel}
                 combatEventIndex={currentBattleEvent?.index}
                 buffTargetInstanceId={
                   currentBattleEvent?.type === "buff" &&

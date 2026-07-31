@@ -3,7 +3,7 @@ import liveRosterSnapshot from "./generated/battlegrounds-36.0.3-247416.zhCN.jso
 };
 import type { MinionDefinition, Tribe } from "./types.ts";
 
-export const CURRENT_ROSTER_VERSION = "battlegrounds-36.0.3-247416-v31";
+export const CURRENT_ROSTER_VERSION = "battlegrounds-36.0.3-247416-v32";
 /** Compatibility alias for existing save and engine imports. */
 export const CLASSIC_ROSTER_VERSION = CURRENT_ROSTER_VERSION;
 
@@ -2095,6 +2095,64 @@ const LIVE_RULE_OVERRIDES: Readonly<
       },
     ],
   },
+  BG31_801: {
+    goldenCardId: "BG31_801_G",
+    goldenDescription:
+      "战吼：在本局对战中，你的甲虫拥有+4/+2。\n亡语：召唤两只2/2的甲虫。",
+    battlecry: [
+      {
+        kind: "improveBeetles",
+        attack: 2,
+        health: 1,
+      },
+    ],
+    deathrattle: [
+      {
+        kind: "summon",
+        definitionId: "live-beetle-token",
+        count: 1,
+        goldenMode: "doubleCount",
+      },
+    ],
+  },
+  BG31_809: {
+    goldenCardId: "BG31_809_G",
+    goldenDescription:
+      "亡语：在本局对战中，你的甲虫拥有+10/+10。召唤两只2/2的甲虫。",
+    deathrattle: [
+      {
+        kind: "improveBeetles",
+        attack: 5,
+        health: 5,
+      },
+      {
+        kind: "summon",
+        definitionId: "live-beetle-token",
+        count: 1,
+        goldenMode: "doubleCount",
+      },
+    ],
+  },
+  BG32_204: {
+    goldenCardId: "BG32_204_G",
+    goldenDescription:
+      "每当本随从受到伤害，在本局对战中，你的甲虫拥有+4/+4。亡语：召唤两只2/2的甲虫。",
+    afterSelfDamaged: [
+      {
+        kind: "improveBeetles",
+        attack: 2,
+        health: 2,
+      },
+    ],
+    deathrattle: [
+      {
+        kind: "summon",
+        definitionId: "live-beetle-token",
+        count: 1,
+        goldenMode: "doubleCount",
+      },
+    ],
+  },
   BG34_630: {
     deathrattle: [
       {
@@ -2657,7 +2715,9 @@ const FULLY_SUPPORTED_LIVE_CARD_IDS = new Set([
   "BG31_175",
   "BG31_178",
   "BG31_330",
+  "BG31_801",
   "BG31_803",
+  "BG31_809",
   "BG31_815",
   "BG31_816",
   "BG31_818",
@@ -2674,6 +2734,7 @@ const FULLY_SUPPORTED_LIVE_CARD_IDS = new Set([
   "BG32_880",
   "BG32_170",
   "BG32_172",
+  "BG32_204",
   "BG32_111",
   "BG32_891",
   "BG33_156",

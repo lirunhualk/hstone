@@ -58,6 +58,8 @@ export const LEGACY_SCHEMA_11_CONTENT_VERSION_V29 =
   "battlegrounds-36.0.3-247416-v29";
 export const LEGACY_SCHEMA_11_CONTENT_VERSION_V30 =
   "battlegrounds-36.0.3-247416-v30";
+export const LEGACY_SCHEMA_11_CONTENT_VERSION_V31 =
+  "battlegrounds-36.0.3-247416-v31";
 
 const SPELL_POOL_COPIES_BY_TIER = [0, 5, 7, 9, 11, 7, 5] as const;
 
@@ -133,6 +135,19 @@ function migrateBloodGemBarrageState(
   player.tavernBloodGemBarrageHealth = hadLegacyBarrage
     ? Math.max(0, legacyBarrageHealth - currentBloodGemHealth)
     : 0;
+}
+
+function migrateBeetleBonusState(
+  player: Record<string, unknown>,
+): void {
+  player.beetleAttackBonus =
+    typeof player.beetleAttackBonus === "number"
+      ? Math.max(0, player.beetleAttackBonus)
+      : 0;
+  player.beetleHealthBonus =
+    typeof player.beetleHealthBonus === "number"
+      ? Math.max(0, player.beetleHealthBonus)
+      : 0;
 }
 
 function repairHumanScoutingReports(
@@ -979,6 +994,7 @@ export function migrateSchema10GameState(value: unknown): unknown {
       }
       player.helpfulRefreshes = 0;
       player.lastHelpfulRefreshKind = null;
+      migrateBeetleBonusState(player);
       migrateBloodGemBarrageState(player);
 
       const reserveOffer = (offer: unknown): Record<string, unknown> | null => {
@@ -1050,7 +1066,8 @@ export function migrateSchema11GameState(value: unknown): unknown {
       value.contentVersion !== LEGACY_SCHEMA_11_CONTENT_VERSION_V27 &&
       value.contentVersion !== LEGACY_SCHEMA_11_CONTENT_VERSION_V28 &&
       value.contentVersion !== LEGACY_SCHEMA_11_CONTENT_VERSION_V29 &&
-      value.contentVersion !== LEGACY_SCHEMA_11_CONTENT_VERSION_V30) ||
+      value.contentVersion !== LEGACY_SCHEMA_11_CONTENT_VERSION_V30 &&
+      value.contentVersion !== LEGACY_SCHEMA_11_CONTENT_VERSION_V31) ||
     !Array.isArray(value.players)
   ) {
     return null;
@@ -1070,6 +1087,7 @@ export function migrateSchema11GameState(value: unknown): unknown {
       LEGACY_SCHEMA_11_CONTENT_VERSION_V28,
       LEGACY_SCHEMA_11_CONTENT_VERSION_V29,
       LEGACY_SCHEMA_11_CONTENT_VERSION_V30,
+      LEGACY_SCHEMA_11_CONTENT_VERSION_V31,
     ].includes(value.contentVersion as string);
     const preserveCurrentFields = [
       LEGACY_SCHEMA_11_CONTENT_VERSION_V19,
@@ -1084,6 +1102,7 @@ export function migrateSchema11GameState(value: unknown): unknown {
       LEGACY_SCHEMA_11_CONTENT_VERSION_V28,
       LEGACY_SCHEMA_11_CONTENT_VERSION_V29,
       LEGACY_SCHEMA_11_CONTENT_VERSION_V30,
+      LEGACY_SCHEMA_11_CONTENT_VERSION_V31,
     ].includes(value.contentVersion as string);
     const preservePendingSpellcraft =
       value.contentVersion === LEGACY_SCHEMA_11_CONTENT_VERSION_V17 ||
@@ -1114,6 +1133,7 @@ export function migrateSchema11GameState(value: unknown): unknown {
       player.lastTavernSpellDefinitionId = null;
       player.pendingTavernSpellDefinitionId = null;
       player.demonFodderRefreshQueue = [];
+      migrateBeetleBonusState(player);
       migrateBloodGemBarrageState(player);
     }
     if (!repairHumanScoutingReports(migrated)) {
