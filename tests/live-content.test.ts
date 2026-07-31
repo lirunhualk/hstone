@@ -65,7 +65,7 @@ function expectedPlainText(html: string): string {
 test("exports the pinned current roster version through the legacy alias", () => {
   assert.equal(
     CURRENT_ROSTER_VERSION,
-    "battlegrounds-36.0.3-247416-v32",
+    "battlegrounds-36.0.3-247416-v33",
   );
   assert.equal(CLASSIC_ROSTER_VERSION, CURRENT_ROSTER_VERSION);
 });
@@ -772,6 +772,7 @@ test("marks every live card honestly as complete or partial", () => {
       "BG21_015",
       "BG24_009",
       "BG24_500",
+      "BG24_707",
       "BG22_202",
       "BG23_002",
       "BG23_004",
@@ -794,6 +795,7 @@ test("marks every live card honestly as complete or partial", () => {
       "BG26_157",
       "BG26_159",
       "BG26_160",
+      "BG26_162",
       "BG26_199",
       "BG26_354",
       "BG26_360",
@@ -815,12 +817,14 @@ test("marks every live card honestly as complete or partial", () => {
       "BG28_595",
       "BG28_741",
       "BG28_308",
+      "BG28_309",
       "BG29_503",
       "BG29_611",
       "BG29_816",
       "BG29_813",
       "BG29_840",
       "BG29_841",
+      "BG29_862",
       "BG29_300",
       "BG30_117",
       "BG30_121",
@@ -878,6 +882,7 @@ test("marks every live card honestly as complete or partial", () => {
       "BG34_604",
       "BG34_630",
       "BG34_632",
+      "BG34_633",
       "BG34_634t",
       "BG34_635t",
       "BG34_636t",
@@ -902,6 +907,7 @@ test("marks every live card honestly as complete or partial", () => {
       "BG35_334",
       "BG35_340",
       "BG35_431",
+      "BG35_437",
       "BG35_701",
       "BG35_702",
       "BG35_801",
@@ -933,13 +939,13 @@ test("marks every live card honestly as complete or partial", () => {
     LIVE_MINION_DEFINITIONS.filter(
       (definition) => definition.effectSupport === "partial",
     ).length,
-    75,
+    69,
   );
   assert.equal(
     LIVE_MINION_DEFINITIONS.filter(
       (definition) => definition.effectSupport === "complete",
     ).length,
-    162,
+    168,
   );
   assert.deepEqual(getMinionDefinition("BG35_702").interactiveBattlecry, {
     kind: "targetedBuff",

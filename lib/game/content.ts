@@ -3,7 +3,7 @@ import liveRosterSnapshot from "./generated/battlegrounds-36.0.3-247416.zhCN.jso
 };
 import type { MinionDefinition, Tribe } from "./types.ts";
 
-export const CURRENT_ROSTER_VERSION = "battlegrounds-36.0.3-247416-v32";
+export const CURRENT_ROSTER_VERSION = "battlegrounds-36.0.3-247416-v33";
 /** Compatibility alias for existing save and engine imports. */
 export const CLASSIC_ROSTER_VERSION = CURRENT_ROSTER_VERSION;
 
@@ -1420,6 +1420,116 @@ const LIVE_RULE_OVERRIDES: Readonly<
       ],
     },
   },
+  BG24_707: {
+    goldenCardId: "BG24_707_G",
+    goldenDescription:
+      "在一个友方嘲讽随从死亡后，获取2张鲜血宝石。",
+    afterFriendlyDied: {
+      taunt: true,
+      effects: [{ kind: "gainBloodGems", count: 1 }],
+    },
+  },
+  BG28_309: {
+    goldenCardId: "BG28_309_G",
+    goldenDescription:
+      "亡语：使2个不同的友方亡灵获得复生。",
+    deathrattle: [
+      {
+        kind: "grantKeyword",
+        keyword: "reborn",
+        target: "otherFriendlyTribe",
+        tribe: "undead",
+        count: 1,
+        goldenMode: "doubleCount",
+      },
+    ],
+  },
+  BG29_862: {
+    goldenCardId: "BG29_862_G",
+    goldenDescription:
+      "亡语：随机获取2张战吼随从牌。",
+    deathrattle: [
+      {
+        kind: "getRandomMinion",
+        count: 1,
+        filter: { battlecry: true },
+        maximumTier: "ownerTavern",
+        source: "sharedPool",
+        goldenMode: "doubleCount",
+      },
+    ],
+  },
+  BG26_162: {
+    goldenCardId: "BG26_162_G",
+    goldenDescription:
+      "战吼，亡语：使酒馆中的元素在本局对战中获得+8/+8，触发两次。",
+    battlecry: [
+      {
+        kind: "buffTavernType",
+        tribe: "elemental",
+        attack: 8,
+        health: 8,
+        goldenMode: "repeat",
+      },
+    ],
+    deathrattle: [
+      {
+        kind: "buffTavernType",
+        tribe: "elemental",
+        attack: 8,
+        health: 8,
+        goldenMode: "repeat",
+      },
+    ],
+  },
+  BG34_633: {
+    goldenCardId: "BG34_633_G",
+    goldenDescription:
+      "战吼，亡语：随机获取2张多彩幼龙。",
+    battlecry: [
+      {
+        kind: "gainRandomGeneratedMinion",
+        definitionIds: [
+          "BG34_634t",
+          "BG34_635t",
+          "BG34_636t",
+          "BG34_637t",
+          "BG34_638t",
+        ],
+        count: 1,
+        goldenMode: "doubleCount",
+      },
+    ],
+    deathrattle: [
+      {
+        kind: "gainRandomGeneratedMinion",
+        definitionIds: [
+          "BG34_634t",
+          "BG34_635t",
+          "BG34_636t",
+          "BG34_637t",
+          "BG34_638t",
+        ],
+        count: 1,
+        goldenMode: "doubleCount",
+      },
+    ],
+  },
+  BG35_437: {
+    goldenCardId: "BG35_437_G",
+    goldenDescription:
+      "在一个友方亡语随从死亡后，你的鲜血宝石会在本局对战中使随从额外获得+4攻击力。",
+    afterFriendlyDied: {
+      deathrattle: true,
+      effects: [
+        {
+          kind: "improveBloodGems",
+          attack: 2,
+          health: 0,
+        },
+      ],
+    },
+  },
   BG32_324: {
     goldenCardId: "BG32_324_G",
     goldenDescription:
@@ -2662,6 +2772,7 @@ const FULLY_SUPPORTED_LIVE_CARD_IDS = new Set([
   "BG23_002",
   "BG23_004",
   "BG23_018",
+  "BG24_707",
   "BG25_001",
   "BG25_008",
   "BG25_009",
@@ -2680,6 +2791,7 @@ const FULLY_SUPPORTED_LIVE_CARD_IDS = new Set([
   "BG26_157",
   "BG26_159",
   "BG26_160",
+  "BG26_162",
   "BG26_199",
   "BG26_354",
   "BG26_360",
@@ -2700,12 +2812,14 @@ const FULLY_SUPPORTED_LIVE_CARD_IDS = new Set([
   "BG28_741",
   "BG28_300",
   "BG28_308",
+  "BG28_309",
   "BG29_503",
   "BG29_611",
   "BG29_816",
   "BG29_813",
   "BG29_840",
   "BG29_841",
+  "BG29_862",
   "BG29_300",
   "BG30_117",
   "BG30_121",
@@ -2763,6 +2877,7 @@ const FULLY_SUPPORTED_LIVE_CARD_IDS = new Set([
   "BG34_604",
   "BG34_630",
   "BG34_632",
+  "BG34_633",
   "BG34_634t",
   "BG34_635t",
   "BG34_636t",
@@ -2787,6 +2902,7 @@ const FULLY_SUPPORTED_LIVE_CARD_IDS = new Set([
   "BG35_334",
   "BG35_340",
   "BG35_431",
+  "BG35_437",
   "BG35_701",
   "BG35_702",
   "BG35_801",

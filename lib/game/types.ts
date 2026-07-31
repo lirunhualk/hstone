@@ -164,10 +164,20 @@ export interface GetRandomMinionEffect {
   filter: {
     tribe?: Tribe;
     magnetic?: true;
+    battlecry?: true;
     exactTier?: TavernTier;
   };
   maximumTier: "ownerTavern";
   source: "sharedPool";
+  goldenMode?: "doubleCount";
+}
+
+export interface GrantKeywordEffect {
+  kind: "grantKeyword";
+  keyword: "reborn";
+  target: "otherFriendlyTribe";
+  tribe: Tribe;
+  count: number;
   goldenMode?: "doubleCount";
 }
 
@@ -321,6 +331,7 @@ export interface BuffTavernTypeEffect {
   tribe: Tribe;
   attack: number;
   health: number;
+  goldenMode?: "repeat";
 }
 
 export interface ImproveUndeadArmyEffect {
@@ -362,12 +373,14 @@ export type MinionEffect =
   | CastTavernSpellEffect
   | BuffRandomHandMinionEffect
   | GainMinionEffect
+  | GainRandomGeneratedMinionEffect
   | DamageHeroEffect
   | DamageEnemyEffect
   | GainMissingHealthEffect
   | ResummonMechsEffect
   | SummonRandomDeathrattleEffect
   | GetRandomMinionEffect
+  | GrantKeywordEffect
   | DamageAllMinionsEffect
   | GainBloodGemsEffect
   | ImproveBloodGemsEffect
@@ -423,6 +436,17 @@ export interface FriendlyTribeTrigger {
   damageEnemy?: number;
   damageTarget?: "random" | "highestHealth";
   grantShield?: boolean;
+}
+
+export interface FriendlyDeathTrigger {
+  tribe?: Tribe;
+  taunt?: true;
+  deathrattle?: true;
+  attack?: number;
+  health?: number;
+  damageEnemy?: number;
+  damageTarget?: "random" | "highestHealth";
+  effects?: readonly MinionEffect[];
 }
 
 export interface FriendlyCombatDeathTrigger {
@@ -709,7 +733,7 @@ export interface MinionDefinition {
   inHandAfterCardPlayed?: CardPlayedTrigger;
   afterGoldSpent?: GoldSpentThresholdTrigger;
   afterFriendlySummoned?: FriendlyTribeTrigger;
-  afterFriendlyDied?: FriendlyTribeTrigger;
+  afterFriendlyDied?: FriendlyDeathTrigger;
   afterFriendlyCombatDied?: FriendlyCombatDeathTrigger;
   afterFriendlyAttacks?: readonly FriendlyAttackTriggerEffect[];
   afterAttackKills?: ExcessDamageToAdjacentEffect;
@@ -1239,7 +1263,7 @@ export interface BattleEvent {
   /** Updated target snapshot used by combat playback. */
   minion?: MinionInstance;
   cardName?: string;
-  cardKind?: "minion" | "tavernSpell";
+  cardKind?: "minion" | "tavernSpell" | "bloodGem";
   summonReason?:
     | "reborn"
     | "rallyFromHand"

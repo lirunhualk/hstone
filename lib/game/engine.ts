@@ -48,10 +48,13 @@ import type {
   GameActionTrace,
   GameState,
   GameTransition,
+  GainBloodGemsEffect,
   GainRandomGeneratedMinionEffect,
   GainRandomTavernSpellEffect,
   GainTavernSpellEffect,
   GetRandomMinionEffect,
+  GrantKeywordEffect,
+  FriendlyDeathTrigger,
   HelpfulRefreshKind,
   HeroPowerDefinition,
   HumanScoutingReport,
@@ -328,6 +331,37 @@ function minionEffectSources(
     collectAttachmentEffectSources(attachment, sources);
   }
   return sources;
+}
+
+function minionHasDeathrattle(minion: MinionInstance): boolean {
+  return (
+    minion.temporaryCrabDeathrattles > 0 ||
+    (minion.temporaryGoldenCrabDeathrattles ?? 0) > 0 ||
+    minionEffectSources(minion).some(
+      (component) => {
+        const definition = getMinionDefinition(
+          component.definitionId,
+        );
+        return (
+          (definition.deathrattle?.length ?? 0) > 0 ||
+          definition.printedMechanics?.includes("DEATHRATTLE") ===
+            true
+        );
+      },
+    )
+  );
+}
+
+function friendlyDeathMatches(
+  minion: MinionInstance,
+  trigger: FriendlyDeathTrigger,
+): boolean {
+  return (
+    (trigger.tribe === undefined ||
+      minionHasTribe(minion, trigger.tribe)) &&
+    (trigger.taunt !== true || minion.taunt) &&
+    (trigger.deathrattle !== true || minionHasDeathrattle(minion))
+  );
 }
 
 export function minionHasTribe(
@@ -1379,6 +1413,24 @@ function definitionHasTribe(
   return tribes.includes("all") || tribes.includes(tribe);
 }
 
+function matchesGetRandomMinionEffect(
+  definition: (typeof MINION_DEFINITIONS)[number],
+  effect: GetRandomMinionEffect,
+): boolean {
+  return (
+    (effect.filter.tribe === undefined ||
+      definitionHasTribe(definition, effect.filter.tribe)) &&
+    (effect.filter.magnetic !== true ||
+      definition.magnetic !== undefined) &&
+    (effect.filter.battlecry !== true ||
+      definition.battlecry !== undefined ||
+      definition.interactiveBattlecry !== undefined ||
+      definition.printedMechanics?.includes("BATTLECRY") === true) &&
+    (effect.filter.exactTier === undefined ||
+      definition.tier === effect.filter.exactTier)
+  );
+}
+
 function reserveDiscoverOptions(
   state: GameState,
   filter: DiscoverFilter,
@@ -2366,6 +2418,60 @@ function improveRecruitBeetles(
   );
 }
 
+function applyPersistentTavernTypeBuff(
+  player: PlayerState,
+  tribe: Tribe,
+  attack: number,
+  health: number,
+): void {
+  const existing = player.tavernTypeBuffs.find(
+    (buff) =>
+      buff.tribes.length === 1 && buff.tribes[0] === tribe,
+  );
+  if (existing) {
+    existing.attack += attack;
+    existing.health += health;
+  } else {
+    player.tavernTypeBuffs.push({
+      tribes: [tribe],
+      attack,
+      health,
+    });
+  }
+  buffMinions(
+    player.shop.filter((minion) => minionHasTribe(minion, tribe)),
+    attack,
+    health,
+  );
+}
+
+function grantRecruitKeyword(
+  state: GameState,
+  player: PlayerState,
+  source: MinionInstance,
+  effect: GrantKeywordEffect,
+  scale: number,
+): void {
+  const candidates = player.board.filter(
+    (minion) =>
+      minion.instanceId !== source.instanceId &&
+      minionHasTribe(minion, effect.tribe) &&
+      !minion[effect.keyword],
+  );
+  const count =
+    effect.count *
+    (effect.goldenMode === "doubleCount" ? scale : 1);
+  for (
+    let granted = 0;
+    granted < count && candidates.length > 0;
+    granted += 1
+  ) {
+    const targetIndex = randomIndex(state, candidates.length);
+    const [target] = candidates.splice(targetIndex, 1);
+    target[effect.keyword] = true;
+  }
+}
+
 function applyRecruitEffects(
   state: GameState,
   player: PlayerState,
@@ -2475,6 +2581,27 @@ function applyRecruitEffects(
           effect.definitionId,
         );
       }
+    } else if (effect.kind === "gainRandomGeneratedMinion") {
+      const gainCount =
+        effect.count *
+        (effect.goldenMode === "doubleCount" ? scale : 1);
+      for (
+        let count = 0;
+        count < gainCount &&
+        effect.definitionIds.length > 0 &&
+        player.hand.length < MAX_HAND_SIZE;
+        count += 1
+      ) {
+        const definitionId =
+          effect.definitionIds[
+            randomIndex(state, effect.definitionIds.length)
+          ];
+        addGeneratedMinionCopyToHand(
+          state,
+          player,
+          definitionId,
+        );
+      }
     } else if (effect.kind === "getRandomMinion") {
       const gainCount =
         effect.count *
@@ -2487,18 +2614,18 @@ function applyRecruitEffects(
             state,
             player.tavernTier,
             (definition) =>
-              (effect.filter.tribe === undefined ||
-                definitionHasTribe(
-                  definition,
-                  effect.filter.tribe,
-                )) &&
-              (effect.filter.magnetic !== true ||
-                definition.magnetic !== undefined) &&
-              (effect.filter.exactTier === undefined ||
-                definition.tier === effect.filter.exactTier),
+              matchesGetRandomMinionEffect(definition, effect),
           ),
         );
       }
+    } else if (effect.kind === "grantKeyword") {
+      grantRecruitKeyword(
+        state,
+        player,
+        source,
+        effect,
+        scale,
+      );
     } else if (effect.kind === "damageHero") {
       damagePlayer(player, effect.amount);
     } else if (effect.kind === "gainMissingHealth") {
@@ -2558,30 +2685,22 @@ function applyRecruitEffects(
       player.tavernSpellAttackBonus += effect.attack * scale;
       player.tavernSpellHealthBonus += effect.health * scale;
     } else if (effect.kind === "buffTavernType") {
-      const attack = effect.attack * scale;
-      const health = effect.health * scale;
-      const existing = player.tavernTypeBuffs.find(
-        (buff) =>
-          buff.tribes.length === 1 &&
-          buff.tribes[0] === effect.tribe,
-      );
-      if (existing) {
-        existing.attack += attack;
-        existing.health += health;
-      } else {
-        player.tavernTypeBuffs.push({
-          tribes: [effect.tribe],
-          attack,
-          health,
-        });
+      const repetitions =
+        effect.goldenMode === "repeat" ? scale : 1;
+      const pulseScale =
+        effect.goldenMode === "repeat" ? 1 : scale;
+      for (
+        let repetition = 0;
+        repetition < repetitions;
+        repetition += 1
+      ) {
+        applyPersistentTavernTypeBuff(
+          player,
+          effect.tribe,
+          effect.attack * pulseScale,
+          effect.health * pulseScale,
+        );
       }
-      buffMinions(
-        player.shop.filter((minion) =>
-          minionHasTribe(minion, effect.tribe),
-        ),
-        attack,
-        health,
-      );
     } else if (effect.kind === "improveUndeadArmy") {
       const attack = effect.attack * scale;
       const health = effect.health * scale;
@@ -4274,9 +4393,16 @@ function destroyRecruitMinion(
       const definition = getMinionDefinition(component.definitionId);
       const trigger = definition.afterFriendlyDied;
       const scale = component.golden ? 2 : 1;
-      if (trigger && minionHasTribe(source, trigger.tribe)) {
+      if (trigger && friendlyDeathMatches(source, trigger)) {
         watcher.attack += (trigger.attack ?? 0) * scale;
         watcher.health += (trigger.health ?? 0) * scale;
+        applyRecruitEffects(
+          state,
+          player,
+          watcher,
+          trigger.effects,
+          scale,
+        );
       }
       const dynamicEndOfTurn = definition.endOfTurn;
       if (dynamicEndOfTurn?.kind === "dynamicWarbandEndOfTurn") {
@@ -6588,6 +6714,7 @@ const AI_ECONOMY_EFFECT_KINDS = new Set<MinionEffect["kind"]>([
   "gainTavernSpell",
   "gainRandomTavernSpell",
   "gainMinion",
+  "gainRandomGeneratedMinion",
   "getRandomMinion",
   "gainBloodGems",
   "discountNextTavernSpell",
@@ -10592,6 +10719,11 @@ function resolveCombatGetRandomMinion(
   const sourceLabel = triggerLabel
     ? `${componentName}的${triggerLabel}`
     : componentName;
+  const rewardDescription = effect.filter.magnetic
+    ? "磁力机械"
+    : effect.filter.battlecry
+      ? "战吼随从牌"
+      : "随从牌";
   const gainCount =
     effect.count *
     (component.golden && effect.goldenMode === "doubleCount"
@@ -10606,10 +10738,11 @@ function resolveCombatGetRandomMinion(
         actorInstanceId: source.instanceId,
         targetPlayerId: ownerId,
         amount: 0,
+        cardKind: "minion",
         cardGainResult: "handFull",
         message: owner.isHuman
-          ? `手牌已满，${sourceLabel}未能使你获得磁力机械。`
-          : `${sourceLabel}未能使${owner.name}获得磁力机械。`,
+          ? `手牌已满，${sourceLabel}未能使你获得${rewardDescription}。`
+          : `${sourceLabel}未能使${owner.name}获得${rewardDescription}。`,
       });
       continue;
     }
@@ -10617,12 +10750,7 @@ function resolveCombatGetRandomMinion(
       context.state,
       owner.tavernTier,
       (definition) =>
-        (effect.filter.tribe === undefined ||
-          definitionHasTribe(definition, effect.filter.tribe)) &&
-        (effect.filter.magnetic !== true ||
-          definition.magnetic !== undefined) &&
-        (effect.filter.exactTier === undefined ||
-          definition.tier === effect.filter.exactTier),
+        matchesGetRandomMinionEffect(definition, effect),
     );
     if (!gained) {
       pushBattleEvent(context.events, {
@@ -10631,10 +10759,11 @@ function resolveCombatGetRandomMinion(
         actorInstanceId: source.instanceId,
         targetPlayerId: ownerId,
         amount: 0,
+        cardKind: "minion",
         cardGainResult: "noCandidate",
         message: owner.isHuman
-          ? `当前共享池中没有可由${sourceLabel}获取的磁力机械。`
-          : `${sourceLabel}没有找到可获取的磁力机械。`,
+          ? `当前共享池中没有可由${sourceLabel}获取的${rewardDescription}。`
+          : `${sourceLabel}没有找到可获取的${rewardDescription}。`,
       });
       continue;
     }
@@ -10658,10 +10787,11 @@ function resolveCombatGetRandomMinion(
         : undefined,
       amount: 1,
       minion: owner.isHuman ? gainedSnapshot : undefined,
+      cardKind: "minion",
       cardGainResult: "added",
       message: owner.isHuman
         ? `${sourceLabel}使你获得了「${gained.name}」。`
-        : `${sourceLabel}使${owner.name}获得了一张磁力机械。`,
+        : `${sourceLabel}使${owner.name}获得了一张${rewardDescription}。`,
     });
   }
 }
@@ -10745,6 +10875,52 @@ function resolveCombatGainRandomGeneratedMinion(
       message: owner.isHuman
         ? `${sourceLabel}使你获得了「${gained.name}」。`
         : `${sourceLabel}使${owner.name}获得了一张随从牌。`,
+    });
+  }
+}
+
+function resolveCombatGainBloodGems(
+  context: CombatContext,
+  ownerId: PlayerId,
+  source: MinionInstance,
+  component: MinionEffectSource,
+  effect: GainBloodGemsEffect,
+  triggerLabel?: string,
+): void {
+  const owner = persistentCombatOwner(context, ownerId);
+  if (!owner) {
+    return;
+  }
+  const requested =
+    effect.count * (component.golden ? 2 : 1);
+  const sourceName = rallySourceLabel(component);
+  const sourceLabel = triggerLabel
+    ? `${sourceName}的${triggerLabel}`
+    : sourceName;
+  for (let count = 0; count < requested; count += 1) {
+    const added = addBloodGems(
+      context.state,
+      owner,
+      1,
+      effect.bonusKeyword,
+    );
+    pushBattleEvent(context.events, {
+      type: "cardGain",
+      actorPlayerId: ownerId,
+      actorInstanceId: source.instanceId,
+      targetPlayerId: ownerId,
+      amount: added,
+      cardName: owner.isHuman ? "鲜血宝石" : undefined,
+      cardKind: "bloodGem",
+      cardGainResult: added > 0 ? "added" : "handFull",
+      message:
+        added > 0
+          ? owner.isHuman
+            ? `${sourceLabel}使你获得了一张鲜血宝石。`
+            : `${sourceLabel}使${owner.name}获得了一张牌。`
+          : owner.isHuman
+            ? `手牌已满，${sourceLabel}未能使你获得鲜血宝石。`
+            : `${sourceLabel}未能使${owner.name}获得牌。`,
     });
   }
 }
@@ -12421,6 +12597,104 @@ function advanceDynamicEndOfTurnAvenge(
   });
 }
 
+function resolveCombatGrantKeyword(
+  context: CombatContext,
+  ownerId: PlayerId,
+  source: MinionInstance,
+  component: MinionEffectSource,
+  effect: GrantKeywordEffect,
+): void {
+  const candidates = context.boards[ownerId].filter(
+    (minion) =>
+      minion.health > 0 &&
+      minion.instanceId !== source.instanceId &&
+      minionHasTribe(minion, effect.tribe) &&
+      !minion[effect.keyword],
+  );
+  const count =
+    effect.count *
+    (component.golden && effect.goldenMode === "doubleCount"
+      ? 2
+      : 1);
+  for (
+    let granted = 0;
+    granted < count && candidates.length > 0;
+    granted += 1
+  ) {
+    const targetIndex = randomIndex(
+      context.state,
+      candidates.length,
+    );
+    const [target] = candidates.splice(targetIndex, 1);
+    const gain = applyCombatEnchantingGain(
+      context,
+      ownerId,
+      target,
+      { keywords: [effect.keyword] },
+    );
+    pushBattleEvent(context.events, {
+      type: "buff",
+      actorPlayerId: ownerId,
+      actorInstanceId: source.instanceId,
+      targetPlayerId: ownerId,
+      targetInstanceId: target.instanceId,
+      minion: cloneMinion(target),
+      retained: gain.retentionMultiplier > 0,
+      ...(gain.retentionMultiplier > 0
+        ? { retentionMultiplier: gain.retentionMultiplier }
+        : {}),
+      message: `${rallySourceLabel(component)}使${target.name}获得复生。`,
+    });
+  }
+}
+
+function resolveCombatFriendlyDeathEffects(
+  context: CombatContext,
+  ownerId: PlayerId,
+  watcher: MinionInstance,
+  component: MinionEffectSource,
+  effects: readonly MinionEffect[] | undefined,
+): void {
+  if (!effects) {
+    return;
+  }
+  for (const effect of effects) {
+    if (effect.kind === "gainBloodGems") {
+      resolveCombatGainBloodGems(
+        context,
+        ownerId,
+        watcher,
+        component,
+        effect,
+        "死亡观察",
+      );
+      continue;
+    }
+    if (effect.kind === "improveBloodGems") {
+      const owner = persistentCombatOwner(context, ownerId);
+      if (!owner) {
+        continue;
+      }
+      const scale = component.golden ? 2 : 1;
+      const attackDelta = effect.attack * scale;
+      const healthDelta = effect.health * scale;
+      owner.bloodGemAttack += attackDelta;
+      owner.bloodGemHealth += healthDelta;
+      pushBattleEvent(context.events, {
+        type: "trigger",
+        actorPlayerId: ownerId,
+        actorInstanceId: watcher.instanceId,
+        targetPlayerId: ownerId,
+        actorMinion: cloneMinion(watcher),
+        attackDelta,
+        healthDelta,
+        permanentEffectImprovement: true,
+        message: `${rallySourceLabel(component)}使本局鲜血宝石额外获得+${attackDelta}/+${healthDelta}。`,
+      });
+    }
+  }
+}
+
 function triggerAfterFriendlyDied(
   context: CombatContext,
   ownerId: PlayerId,
@@ -12453,7 +12727,7 @@ function triggerAfterFriendlyDied(
       const definition = getMinionDefinition(component.definitionId);
       const trigger = definition.afterFriendlyDied;
       const scale = component.golden ? 2 : 1;
-      if (trigger && minionHasTribe(death.minion, trigger.tribe)) {
+      if (trigger && friendlyDeathMatches(death.minion, trigger)) {
         const attackDelta = (trigger.attack ?? 0) * scale;
         const healthDelta = (trigger.health ?? 0) * scale;
         const gain = applyCombatEnchantingGain(
@@ -12502,6 +12776,13 @@ function triggerAfterFriendlyDied(
             );
           }
         }
+        resolveCombatFriendlyDeathEffects(
+          context,
+          ownerId,
+          watcher,
+          component,
+          trigger.effects,
+        );
       }
 
       const combatDeathTrigger =
@@ -12811,8 +13092,56 @@ function resolveOneDeathrattle(
               (owner.nextTavernSpellDiscount ?? 0) +
               effect.amount * scale;
           }
+        } else if (effect.kind === "buffTavernType") {
+          const owner = persistentCombatOwner(context, ownerId);
+          if (owner) {
+            const effectRepetitions =
+              effect.goldenMode === "repeat" ? scale : 1;
+            const pulseScale =
+              effect.goldenMode === "repeat" ? 1 : scale;
+            for (
+              let effectRepetition = 0;
+              effectRepetition < effectRepetitions;
+              effectRepetition += 1
+            ) {
+              const attackDelta = effect.attack * pulseScale;
+              const healthDelta = effect.health * pulseScale;
+              applyPersistentTavernTypeBuff(
+                owner,
+                effect.tribe,
+                attackDelta,
+                healthDelta,
+              );
+              pushBattleEvent(context.events, {
+                type: "trigger",
+                actorPlayerId: ownerId,
+                actorInstanceId: source.instanceId,
+                targetPlayerId: ownerId,
+                attackDelta,
+                healthDelta,
+                permanentEffectImprovement: true,
+                message: `${rallySourceLabel(component)}的亡语使酒馆中对应类型的随从在本局对战中获得+${attackDelta}/+${healthDelta}。`,
+              });
+            }
+          }
+        } else if (effect.kind === "grantKeyword") {
+          resolveCombatGrantKeyword(
+            context,
+            ownerId,
+            source,
+            component,
+            effect,
+          );
         } else if (effect.kind === "getRandomMinion") {
           resolveCombatGetRandomMinion(
+            context,
+            ownerId,
+            source,
+            component,
+            effect,
+          );
+        } else if (effect.kind === "gainRandomGeneratedMinion") {
+          resolveCombatGainRandomGeneratedMinion(
             context,
             ownerId,
             source,
