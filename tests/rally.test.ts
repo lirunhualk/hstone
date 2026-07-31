@@ -1433,6 +1433,283 @@ test("Dead Sea Ravager selects at most four distinct allies per pulse and Golden
   }
 });
 
+test("Merciless Queen's Guard Battlecry combines Brann and Golden repetitions while each Queen's Command pulse gets Tavern Spell bonuses", () => {
+  for (const [caseIndex, golden] of [false, true].entries()) {
+    const state = createGame(5280 + caseIndex);
+    const human = humanPlayer(state);
+    const brann = definitionMinion(
+      "BG_LOE_077",
+      `queen-guard-brann-${caseIndex}`,
+      { attack: 10, health: 10 },
+    );
+    const spellResponder = definitionMinion(
+      "BG28_741",
+      `queen-guard-responder-${caseIndex}`,
+      {
+        tribe: "neutral",
+        tribes: [],
+        attack: 10,
+        health: 10,
+        divineShield: true,
+      },
+    );
+    const guard = definitionMinion(
+      "BG34_926",
+      `queen-guard-battlecry-${caseIndex}`,
+      { golden, attack: 3, health: 3 },
+    );
+    human.board = [brann, spellResponder];
+    human.hand = [guard];
+    human.tavernSpellAttackBonus = 1;
+    human.tavernSpellHealthBonus = 2;
+
+    const next = gameReducer(state, {
+      type: "PLAY_MINION",
+      handIndex: 0,
+    });
+    const nextHuman = humanPlayer(next);
+    const castCount = golden ? 4 : 2;
+    const nextGuard = nextHuman.board.find(
+      (minion) => minion.instanceId === guard.instanceId,
+    );
+    const nextBrann = nextHuman.board.find(
+      (minion) => minion.instanceId === brann.instanceId,
+    );
+    const nextResponder = nextHuman.board.find(
+      (minion) => minion.instanceId === spellResponder.instanceId,
+    );
+
+    assert.equal(nextHuman.tavernSpellsCastThisTurn, castCount);
+    assert.equal(
+      nextHuman.cardsPlayedThisTurn,
+      1,
+      "synthetic Tavern Spell casts must not count as extra played cards",
+    );
+    assert.equal(
+      nextHuman.lastTavernSpellDefinitionId,
+      "tavern-spell-queens-command",
+    );
+    assert.deepEqual(
+      [nextGuard?.attack, nextGuard?.health],
+      [guard.attack + 6 * castCount, guard.health + 8 * castCount],
+      "the Naga Guard must receive both +2/+2 pulses and both per-pulse Tavern Spell bonuses",
+    );
+    assert.deepEqual(
+      [nextBrann?.attack, nextBrann?.health],
+      [brann.attack + 3 * castCount, brann.health + 4 * castCount],
+    );
+    assert.deepEqual(
+      [nextResponder?.attack, nextResponder?.health],
+      [
+        spellResponder.attack + 7 * castCount,
+        spellResponder.health + 4 * castCount,
+      ],
+      "the Shield responder must trigger once after every complete synthetic cast",
+    );
+  }
+});
+
+test("Windfury Queen's Guard casts before each strike, responds to each spell, and can fire its Deathrattle from the same lethal attack", () => {
+  for (const [caseIndex, golden] of [false, true].entries()) {
+    const state = createGame(5290 + caseIndex);
+    const human = humanPlayer(state);
+    const guard = definitionMinion(
+      "BG34_926",
+      `queen-guard-windfury-${caseIndex}`,
+      {
+        golden,
+        attack: 1,
+        health: 100,
+        taunt: true,
+        windfury: true,
+      },
+    );
+    const spellResponder = definitionMinion(
+      "BG28_741",
+      `queen-guard-combat-responder-${caseIndex}`,
+      {
+        tribe: "neutral",
+        tribes: [],
+        attack: 0,
+        health: 1000,
+        divineShield: true,
+      },
+    );
+    human.board = [guard, spellResponder];
+    human.tavernSpellAttackBonus = 1;
+    human.tavernSpellHealthBonus = 2;
+    const permanentBoard = structuredClone(human.board);
+    keepOnlyOneOpponent(state, [
+      definitionMinion(
+        "BG29_611",
+        `queen-guard-windfury-enemy-${caseIndex}`,
+        {
+          attack: 60,
+          health: 5000,
+          taunt: true,
+          reborn: false,
+        },
+      ),
+    ]);
+
+    const combat = gameReducer(state, { type: "END_TURN" });
+    const events = combat.lastBattle?.events ?? [];
+    const rallyCasts = events.filter(
+      (event) =>
+        event.type === "tavernSpellCast" &&
+        event.actorInstanceId === guard.instanceId &&
+        event.message.includes("进击"),
+    );
+    const deathrattleCasts = events.filter(
+      (event) =>
+        event.type === "tavernSpellCast" &&
+        event.actorInstanceId === guard.instanceId &&
+        event.message.includes("亡语"),
+    );
+    const responseBuffs = events.filter(
+      (event) =>
+        event.type === "buff" &&
+        event.actorInstanceId === spellResponder.instanceId &&
+        event.targetInstanceId === spellResponder.instanceId &&
+        event.attackDelta === 4,
+    );
+    const expectedRallyCasts = golden ? 4 : 2;
+    const expectedDeathrattleCasts = golden ? 2 : 1;
+
+    assert.equal(rallyCasts.length, expectedRallyCasts);
+    assert.equal(deathrattleCasts.length, expectedDeathrattleCasts);
+    assert.equal(
+      responseBuffs.length,
+      expectedRallyCasts + expectedDeathrattleCasts,
+    );
+    assert.deepEqual(humanPlayer(combat).board, permanentBoard);
+
+    if (!golden) {
+      const guardAttacks = events.filter(
+        (event) =>
+          event.type === "attack" &&
+          event.actorInstanceId === guard.instanceId,
+      );
+      const guardDeath = events.find(
+        (event) =>
+          event.type === "death" &&
+          event.actorInstanceId === guard.instanceId,
+      );
+      assert.equal(guardAttacks.length, 2);
+      assert.ok(guardDeath);
+      assert.ok(guardAttacks[1].index < rallyCasts[1].index);
+      assert.ok(rallyCasts[1].index < guardDeath.index);
+      assert.ok(guardDeath.index < deathrattleCasts[0].index);
+    }
+  }
+});
+
+test("Queen's Guard Deathrattle composes with ordinary and Golden Titus without persisting combat buffs", () => {
+  const cases = [
+    { guardGolden: false, titusGolden: false, expectedCasts: 2 },
+    { guardGolden: true, titusGolden: true, expectedCasts: 6 },
+  ] as const;
+
+  for (const [caseIndex, scenario] of cases.entries()) {
+    const state = createGame(5300 + caseIndex);
+    const human = humanPlayer(state);
+    const guard = definitionMinion(
+      "BG34_926",
+      `queen-guard-deathrattle-${caseIndex}`,
+      {
+        golden: scenario.guardGolden,
+        attack: 0,
+        health: 1,
+        taunt: true,
+      },
+    );
+    const titus = definitionMinion(
+      "BG25_354",
+      `queen-guard-titus-${caseIndex}`,
+      {
+        golden: scenario.titusGolden,
+        attack: 0,
+        health: 1000,
+      },
+    );
+    const survivor = definitionMinion(
+      "BG29_611",
+      `queen-guard-survivor-${caseIndex}`,
+      { attack: 0, health: 1000 },
+    );
+    human.board = [guard, titus, survivor];
+    const permanentBoard = structuredClone(human.board);
+    keepOnlyOneOpponent(state, [
+      definitionMinion(
+        "BG29_611",
+        `queen-guard-deathrattle-enemy-${caseIndex}`,
+        {
+          attack: 100,
+          health: 5000,
+          taunt: true,
+          reborn: false,
+        },
+      ),
+    ]);
+
+    const combat = gameReducer(state, { type: "END_TURN" });
+    const deathrattleCasts =
+      combat.lastBattle?.events.filter(
+        (event) =>
+          event.type === "tavernSpellCast" &&
+          event.actorInstanceId === guard.instanceId &&
+          event.message.includes("亡语"),
+      ) ?? [];
+    assert.equal(deathrattleCasts.length, scenario.expectedCasts);
+    assert.deepEqual(humanPlayer(combat).board, permanentBoard);
+  }
+});
+
+test("AI Queen's Guard uses combat-only Rally and Deathrattle state", () => {
+  const state = createGame(5310);
+  const guard = definitionMinion("BG34_926", "ai-queen-guard", {
+    attack: 1,
+    health: 20,
+    taunt: true,
+  });
+  const ally = definitionMinion("BG29_611", "ai-queen-guard-ally", {
+    attack: 0,
+    health: 1000,
+  });
+  const enemy = keepOnlyOneOpponent(state, [guard, ally]);
+  humanPlayer(state).board = [
+    definitionMinion("BG29_611", "ai-queen-guard-human-target", {
+      attack: 100,
+      health: 5000,
+      taunt: true,
+      reborn: false,
+    }),
+  ];
+  const permanentBoard = structuredClone(enemy.board);
+
+  const combat = gameReducer(state, { type: "END_TURN" });
+  const nextEnemy = combat.players.find(
+    (player) => player.id === enemy.id,
+  );
+  assert.ok(nextEnemy);
+  assert.deepEqual(
+    [...nextEnemy.board].sort((left, right) =>
+      left.instanceId.localeCompare(right.instanceId),
+    ),
+    [...permanentBoard].sort((left, right) =>
+      left.instanceId.localeCompare(right.instanceId),
+    ),
+  );
+  const casts =
+    combat.lastBattle?.events.filter(
+      (event) =>
+        event.type === "tavernSpellCast" &&
+        event.actorPlayerId === enemy.id &&
+        event.actorInstanceId === guard.instanceId,
+    ) ?? [];
+  assert.equal(casts.length, 2);
+});
+
 test("ghost Rally effects animate in combat without mutating the eliminated owner's hand, pool, or persistent bonuses", () => {
   const state = createGame(5270);
   for (const player of state.players) {
@@ -1461,6 +1738,11 @@ test("ghost Rally effects animate in combat without mutating the eliminated owne
   }
   const ghost = state.players[3];
   ghost.eliminatedRound = 1;
+  const queenGuard = definitionMinion(
+    "BG34_926",
+    "ghost-rally-queen-guard",
+    { attack: 10, health: 1000 },
+  );
   const dustbone = definitionMinion(
     "BG33_323",
     "ghost-rally-dustbone",
@@ -1481,7 +1763,13 @@ test("ghost Rally effects animate in combat without mutating the eliminated owne
     "ghost-rally-right",
     { attack: 10, health: 1000 },
   );
-  ghost.board = [dustbone, refiner, recruiter, rightMurloc];
+  ghost.board = [
+    queenGuard,
+    dustbone,
+    refiner,
+    recruiter,
+    rightMurloc,
+  ];
   ghost.hand = [
     definitionMinion("BG25_008", "ghost-rally-hand", {
       poolCopies: 1,
@@ -1534,6 +1822,13 @@ test("ghost Rally effects animate in combat without mutating the eliminated owne
       (event) =>
         event.type === "buff" &&
         event.actorInstanceId === dustbone.instanceId,
+    ),
+  );
+  assert.ok(
+    ghostBattle.events.some(
+      (event) =>
+        event.type === "tavernSpellCast" &&
+        event.actorInstanceId === queenGuard.instanceId,
     ),
   );
   assert.equal(

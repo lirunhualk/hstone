@@ -39,6 +39,7 @@ import {
   LEGACY_SCHEMA_9_CONTENT_VERSION,
   LEGACY_SCHEMA_10_CONTENT_VERSION,
   LEGACY_SCHEMA_11_CONTENT_VERSION_V23,
+  LEGACY_SCHEMA_11_CONTENT_VERSION_V24,
   migrateSchema5GameState,
   migrateSchema6GameState,
   migrateSchema7GameState,
@@ -2526,6 +2527,68 @@ test("v23 Blood Gem Barrage saves migrate conservatively without losing visible 
         minion.bloodGemAttack === 14 &&
         minion.bloodGemHealth === 19,
     ),
+  );
+});
+
+test("v24 saves migrate to v25 while refreshing Queen's Guard support and preserving persistent state", () => {
+  const legacy = jsonClone(createGame(0x71b7)) as GameState;
+  legacy.contentVersion = LEGACY_SCHEMA_11_CONTENT_VERSION_V24;
+  const legacyPlayer = humanPlayer(legacy);
+  const template = legacyPlayer.shop[0];
+  assert.ok(template);
+  const guard = definitionMinion(
+    template,
+    "BG34_926",
+    "legacy-golden-queen-guard",
+    {
+      golden: true,
+      cardId: "BG34_926",
+      description: "战吼，亡语，进击：施放女王的命令。",
+      effectSupport: "partial",
+      attack: 37,
+      health: 41,
+    },
+  );
+  legacyPlayer.board = [guard];
+  legacyPlayer.tavernSpellAttackBonus = 4;
+  legacyPlayer.tavernSpellHealthBonus = 5;
+  legacyPlayer.nextTavernSpellDiscount = 3;
+
+  const migrated = migrateSchema11GameState(
+    jsonClone(legacy),
+  );
+  assert.ok(migrated !== null && typeof migrated === "object");
+  const state = migrated as GameState;
+  const player = humanPlayer(state);
+  const migratedGuard = player.board[0];
+  assert.equal(state.contentVersion, CURRENT_ROSTER_VERSION);
+  assert.equal(migratedGuard.instanceId, guard.instanceId);
+  assert.equal(migratedGuard.effectSupport, "complete");
+  assert.equal(migratedGuard.cardId, "BG34_926_G");
+  assert.equal(
+    migratedGuard.description,
+    "战吼，亡语，进击：施放女王的命令，触发两次。",
+  );
+  assert.deepEqual(
+    [migratedGuard.attack, migratedGuard.health],
+    [37, 41],
+  );
+  assert.deepEqual(
+    [
+      player.tavernSpellAttackBonus,
+      player.tavernSpellHealthBonus,
+      player.nextTavernSpellDiscount,
+    ],
+    [4, 5, 3],
+  );
+
+  const normalized = normalizePersistedGameState(
+    jsonClone(state),
+  );
+  assert.ok(normalized !== null && typeof normalized === "object");
+  assert.equal(
+    humanPlayer(normalized as GameState).board[0].cardId,
+    "BG34_926_G",
   );
 });
 

@@ -9,6 +9,9 @@ export const metadata: Metadata = {
   },
   description:
     "一名玩家与七名 AI 对战、使用 36.0.3 当前随从池且没有回合倒计时的本地酒馆战棋。",
+  icons: {
+    icon: "/ui/battle-crossed-weapons.webp",
+  },
 };
 
 export default function RootLayout({

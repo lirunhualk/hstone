@@ -105,6 +105,13 @@ export interface GainRandomTavernSpellEffect {
   goldenMode?: "doubleCount";
 }
 
+export interface CastTavernSpellEffect {
+  kind: "castTavernSpell";
+  definitionId: string;
+  /** Golden cards repeat the complete spell instead of doubling one buff. */
+  goldenMode?: "repeat";
+}
+
 export interface BuffRandomHandMinionEffect {
   kind: "buffRandomHandMinion";
   attack: number;
@@ -207,6 +214,7 @@ export interface RallyGrantSourceAttackEffect {
 export type RallyEffect =
   | GetRandomMinionEffect
   | GainRandomTavernSpellEffect
+  | CastTavernSpellEffect
   | RallyBuffEffect
   | RallySummonFromHandEffect
   | RallyRemoveTargetKeywordsEffect
@@ -305,6 +313,7 @@ export type MinionEffect =
   | GainFreeRefreshesEffect
   | GainTavernSpellEffect
   | GainRandomTavernSpellEffect
+  | CastTavernSpellEffect
   | BuffRandomHandMinionEffect
   | GainMinionEffect
   | DamageHeroEffect
@@ -1036,6 +1045,7 @@ export interface PlayerState {
 export type BattleEventType =
   | "battleStart"
   | "attack"
+  | "tavernSpellCast"
   | "damage"
   | "buff"
   | "handBuff"

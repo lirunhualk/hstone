@@ -65,7 +65,7 @@ function expectedPlainText(html: string): string {
 test("exports the pinned current roster version through the legacy alias", () => {
   assert.equal(
     CURRENT_ROSTER_VERSION,
-    "battlegrounds-36.0.3-247416-v24",
+    "battlegrounds-36.0.3-247416-v25",
   );
   assert.equal(CLASSIC_ROSTER_VERSION, CURRENT_ROSTER_VERSION);
 });
@@ -712,6 +712,34 @@ test("maps the sixth complete Rally batch to its exact ordinary and Golden rules
   );
 });
 
+test("maps Merciless Queen's Guard to the same exact Tavern Spell cast for Battlecry, Deathrattle, and Rally", () => {
+  const definition = getMinionDefinition("BG34_926");
+  const castQueensCommand = [
+    {
+      kind: "castTavernSpell",
+      definitionId: "tavern-spell-queens-command",
+      goldenMode: "repeat",
+    },
+  ] as const;
+
+  assert.equal(definition.effectSupport, "complete");
+  assert.equal(
+    definition.description,
+    "战吼，亡语，进击：施放女王的命令。",
+  );
+  assert.equal(definition.goldenCardId, "BG34_926_G");
+  assert.equal(
+    definition.goldenDescription,
+    "战吼，亡语，进击：施放女王的命令，触发两次。",
+  );
+  assert.deepEqual(definition.battlecry, castQueensCommand);
+  assert.deepEqual(definition.deathrattle, castQueensCommand);
+  assert.deepEqual(definition.rally, castQueensCommand);
+  assert.ok(definition.printedMechanics?.includes("BATTLECRY"));
+  assert.ok(definition.printedMechanics?.includes("DEATHRATTLE"));
+  assert.ok(definition.printedMechanics?.includes("BACON_RALLY"));
+});
+
 test("marks every live card honestly as complete or partial", () => {
   assert.ok(
     LIVE_MINION_DEFINITIONS.every(
@@ -844,6 +872,7 @@ test("marks every live card honestly as complete or partial", () => {
       "BG34_731",
       "BG34_765",
       "BG34_925",
+      "BG34_926",
       "BG35_143",
       "BG35_123",
       "BG35_142",
@@ -882,13 +911,13 @@ test("marks every live card honestly as complete or partial", () => {
     LIVE_MINION_DEFINITIONS.filter(
       (definition) => definition.effectSupport === "partial",
     ).length,
-    98,
+    97,
   );
   assert.equal(
     LIVE_MINION_DEFINITIONS.filter(
       (definition) => definition.effectSupport === "complete",
     ).length,
-    139,
+    140,
   );
   assert.deepEqual(getMinionDefinition("BG35_702").interactiveBattlecry, {
     kind: "targetedBuff",

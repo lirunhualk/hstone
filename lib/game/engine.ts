@@ -37,6 +37,7 @@ import type {
   BoardMinionInstance,
   BuffRandomHandMinionEffect,
   BuffEffect,
+  CastTavernSpellEffect,
   ConsolationCoinSpellInstance,
   DiscoverDestination,
   DiscoverFilter,
@@ -2244,6 +2245,16 @@ function applyRecruitEffects(
         }
         player.hand.push(createTavernSpell(state, definition));
       }
+    } else if (effect.kind === "castTavernSpell") {
+      const repetitions =
+        effect.goldenMode === "repeat" ? scale : 1;
+      for (let count = 0; count < repetitions; count += 1) {
+        resolveTriggeredRecruitTavernSpell(
+          state,
+          player,
+          effect.definitionId,
+        );
+      }
     } else if (effect.kind === "gainMinion") {
       const gainCount =
         effect.count *
@@ -3920,6 +3931,49 @@ function buffMinionsFromTavernSpell(
   }
 }
 
+interface TavernSpellWarbandBuffPulse {
+  attack: number;
+  health: number;
+  tribe?: Tribe;
+}
+
+function tavernSpellWarbandBuffPulses(
+  effect: TavernSpellEffect,
+): readonly TavernSpellWarbandBuffPulse[] | null {
+  if (effect === "shinyRing") {
+    return [{ attack: 1, health: 1 }];
+  }
+  if (effect === "queensCommand") {
+    return [
+      { attack: 2, health: 2 },
+      { attack: 2, health: 2, tribe: "naga" },
+    ];
+  }
+  return null;
+}
+
+function applyTavernSpellWarbandBuffPulses(
+  player: PlayerState,
+  effect: TavernSpellEffect,
+): void {
+  const pulses = tavernSpellWarbandBuffPulses(effect);
+  if (!pulses) {
+    throw new Error(`Tavern Spell ${effect} has no warband buff payload`);
+  }
+  for (const pulse of pulses) {
+    buffMinionsFromTavernSpell(
+      player,
+      pulse.tribe
+        ? player.board.filter((minion) =>
+            minionHasTribe(minion, pulse.tribe),
+          )
+        : player.board,
+      pulse.attack,
+      pulse.health,
+    );
+  }
+}
+
 function applyTemporarySpellcraftBuff(
   target: BoardMinionInstance,
   attack: number,
@@ -4260,6 +4314,36 @@ function finishTavernSpellCast(
   player.tavernSpellsCastThisTurn += 1;
   applyAfterTavernSpellCastTriggers(state, player);
   finishCardPlayed(state, player);
+}
+
+function resolveTriggeredRecruitTavernSpell(
+  state: GameState,
+  player: PlayerState,
+  definitionId: string,
+): void {
+  const definition = getTavernSpellDefinition(definitionId);
+  if (tavernSpellNeedsTarget(definition)) {
+    throw new Error(
+      `Triggered Tavern Spell ${definition.id} requires a target`,
+    );
+  }
+  const spell = createTavernSpell(state, definition);
+  if (
+    !applyTavernSpellEffect(
+      state,
+      player,
+      spell,
+      definition,
+      undefined,
+    )
+  ) {
+    throw new Error(
+      `Triggered Tavern Spell ${definition.id} did not finish synchronously`,
+    );
+  }
+  player.lastTavernSpellDefinitionId = definition.id;
+  player.tavernSpellsCastThisTurn += 1;
+  applyAfterTavernSpellCastTriggers(state, player);
 }
 
 function chefsChoiceMatches(
@@ -5083,7 +5167,10 @@ function applyTavernSpellEffect(
       }
       break;
     case "shinyRing":
-      buffMinionsFromTavernSpell(player, player.board, 1, 1);
+      applyTavernSpellWarbandBuffPulses(
+        player,
+        definition.effect,
+      );
       break;
     case "staffOfEnrichment": {
       const attack = 2 + player.tavernSpellAttackBonus;
@@ -5552,12 +5639,9 @@ function applyTavernSpellEffect(
       }
       break;
     case "queensCommand":
-      buffMinionsFromTavernSpell(player, player.board, 2, 2);
-      buffMinionsFromTavernSpell(
+      applyTavernSpellWarbandBuffPulses(
         player,
-        player.board.filter((minion) => minionHasTribe(minion, "naga")),
-        2,
-        2,
+        definition.effect,
       );
       break;
     case "sanctify":
@@ -8733,6 +8817,67 @@ function pushCombatSpellBuff(
   });
 }
 
+function resolveCombatCastTavernSpell(
+  context: CombatContext,
+  ownerId: PlayerId,
+  source: MinionInstance,
+  component: MinionEffectSource,
+  effect: CastTavernSpellEffect,
+  triggerLabel: string,
+): void {
+  const definition = getTavernSpellDefinition(effect.definitionId);
+  const repetitions =
+    component.golden && effect.goldenMode === "repeat" ? 2 : 1;
+  const owner = findPlayer(context.state, ownerId);
+
+  for (let repetition = 0; repetition < repetitions; repetition += 1) {
+    const attackBonus = owner?.tavernSpellAttackBonus ?? 0;
+    const healthBonus = owner?.tavernSpellHealthBonus ?? 0;
+    pushBattleEvent(context.events, {
+      type: "tavernSpellCast",
+      actorPlayerId: ownerId,
+      actorInstanceId: source.instanceId,
+      cardName: definition.name,
+      cardKind: "tavernSpell",
+      message: `${rallySourceLabel(component)}的${triggerLabel}施放了「${definition.name}」${
+        repetitions > 1 ? `（第${repetition + 1}次）` : ""
+      }。`,
+    });
+
+    const pulses = tavernSpellWarbandBuffPulses(
+      definition.effect,
+    );
+    if (!pulses) {
+      throw new Error(
+        `Combat-triggered Tavern Spell ${definition.id} is not supported`,
+      );
+    }
+    for (const pulse of pulses) {
+      const attackDelta = pulse.attack + attackBonus;
+      const healthDelta = pulse.health + healthBonus;
+      const targets = context.boards[ownerId].filter(
+        (target) =>
+          target.health > 0 &&
+          (!pulse.tribe || minionHasTribe(target, pulse.tribe)),
+      );
+      for (const target of targets) {
+        pushCombatSpellBuff(
+          context,
+          ownerId,
+          source,
+          target,
+          attackDelta,
+          healthDelta,
+          pulse.tribe
+            ? `${definition.name}额外使${pulse.tribe === "naga" ? "纳迦" : ""}${target.name}获得+${attackDelta}/+${healthDelta}。`
+            : `${definition.name}使${target.name}获得+${attackDelta}/+${healthDelta}。`,
+        );
+      }
+    }
+    triggerCombatAfterTavernSpellCast(context, ownerId);
+  }
+}
+
 function triggerCombatAfterTavernSpellCast(
   context: CombatContext,
   ownerId: PlayerId,
@@ -8976,6 +9121,18 @@ function triggerRally(
 
       if (effect.kind === "gainRandomTavernSpell") {
         resolveCombatGainRandomTavernSpell(
+          context,
+          ownerId,
+          attacker,
+          component,
+          effect,
+          "进击",
+        );
+        continue;
+      }
+
+      if (effect.kind === "castTavernSpell") {
+        resolveCombatCastTavernSpell(
           context,
           ownerId,
           attacker,
@@ -9634,6 +9791,15 @@ function resolveOneDeathrattle(
             source,
             component,
             effect,
+          );
+        } else if (effect.kind === "castTavernSpell") {
+          resolveCombatCastTavernSpell(
+            context,
+            ownerId,
+            source,
+            component,
+            effect,
+            "亡语",
           );
         }
       }

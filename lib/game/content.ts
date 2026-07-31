@@ -3,7 +3,7 @@ import liveRosterSnapshot from "./generated/battlegrounds-36.0.3-247416.zhCN.jso
 };
 import type { MinionDefinition, Tribe } from "./types.ts";
 
-export const CURRENT_ROSTER_VERSION = "battlegrounds-36.0.3-247416-v24";
+export const CURRENT_ROSTER_VERSION = "battlegrounds-36.0.3-247416-v25";
 /** Compatibility alias for existing save and engine imports. */
 export const CLASSIC_ROSTER_VERSION = CURRENT_ROSTER_VERSION;
 
@@ -1240,6 +1240,32 @@ const LIVE_RULE_OVERRIDES: Readonly<
       },
     ],
   },
+  BG34_926: {
+    goldenCardId: "BG34_926_G",
+    goldenDescription:
+      "战吼，亡语，进击：施放女王的命令，触发两次。",
+    battlecry: [
+      {
+        kind: "castTavernSpell",
+        definitionId: "tavern-spell-queens-command",
+        goldenMode: "repeat",
+      },
+    ],
+    deathrattle: [
+      {
+        kind: "castTavernSpell",
+        definitionId: "tavern-spell-queens-command",
+        goldenMode: "repeat",
+      },
+    ],
+    rally: [
+      {
+        kind: "castTavernSpell",
+        definitionId: "tavern-spell-queens-command",
+        goldenMode: "repeat",
+      },
+    ],
+  },
   BG32_880: {
     goldenCardId: "BG32_880_G",
     goldenDescription:
@@ -2420,6 +2446,7 @@ const FULLY_SUPPORTED_LIVE_CARD_IDS = new Set([
   "BG34_731",
   "BG34_765",
   "BG34_925",
+  "BG34_926",
   "BG35_143",
   "BG35_123",
   "BG35_142",
