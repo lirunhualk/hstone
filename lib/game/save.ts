@@ -62,6 +62,8 @@ export const LEGACY_SCHEMA_11_CONTENT_VERSION_V31 =
   "battlegrounds-36.0.3-247416-v31";
 export const LEGACY_SCHEMA_11_CONTENT_VERSION_V32 =
   "battlegrounds-36.0.3-247416-v32";
+export const LEGACY_SCHEMA_11_CONTENT_VERSION_V33 =
+  "battlegrounds-36.0.3-247416-v33";
 
 const SPELL_POOL_COPIES_BY_TIER = [0, 5, 7, 9, 11, 7, 5] as const;
 
@@ -1070,7 +1072,8 @@ export function migrateSchema11GameState(value: unknown): unknown {
       value.contentVersion !== LEGACY_SCHEMA_11_CONTENT_VERSION_V29 &&
       value.contentVersion !== LEGACY_SCHEMA_11_CONTENT_VERSION_V30 &&
       value.contentVersion !== LEGACY_SCHEMA_11_CONTENT_VERSION_V31 &&
-      value.contentVersion !== LEGACY_SCHEMA_11_CONTENT_VERSION_V32) ||
+      value.contentVersion !== LEGACY_SCHEMA_11_CONTENT_VERSION_V32 &&
+      value.contentVersion !== LEGACY_SCHEMA_11_CONTENT_VERSION_V33) ||
     !Array.isArray(value.players)
   ) {
     return null;
@@ -1092,6 +1095,7 @@ export function migrateSchema11GameState(value: unknown): unknown {
       LEGACY_SCHEMA_11_CONTENT_VERSION_V30,
       LEGACY_SCHEMA_11_CONTENT_VERSION_V31,
       LEGACY_SCHEMA_11_CONTENT_VERSION_V32,
+      LEGACY_SCHEMA_11_CONTENT_VERSION_V33,
     ].includes(value.contentVersion as string);
     const preserveCurrentFields = [
       LEGACY_SCHEMA_11_CONTENT_VERSION_V19,
@@ -1108,6 +1112,7 @@ export function migrateSchema11GameState(value: unknown): unknown {
       LEGACY_SCHEMA_11_CONTENT_VERSION_V30,
       LEGACY_SCHEMA_11_CONTENT_VERSION_V31,
       LEGACY_SCHEMA_11_CONTENT_VERSION_V32,
+      LEGACY_SCHEMA_11_CONTENT_VERSION_V33,
     ].includes(value.contentVersion as string);
     const preservePendingSpellcraft =
       value.contentVersion === LEGACY_SCHEMA_11_CONTENT_VERSION_V17 ||

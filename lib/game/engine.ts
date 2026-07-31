@@ -1956,8 +1956,7 @@ function applyAfterTavernRefreshEffects(
     for (const buff of player.rideTheWindBuffs) {
       const target =
         player.shop[randomIndex(state, player.shop.length)];
-      target.attack += buff.attack;
-      target.health += buff.health;
+      buffMinions([target], buff.attack, buff.health);
     }
   }
 }
@@ -2521,6 +2520,35 @@ function applyRecruitEffects(
           effect.attack * scale,
           effect.health * scale,
         );
+      }
+    } else if (effect.kind === "buffOwnedTribe") {
+      buffMinions(
+        [
+          ...player.board,
+          ...player.hand.filter(
+            (card): card is BoardMinionInstance =>
+              card.kind === "minion",
+          ),
+        ].filter(
+          (target) =>
+            target.instanceId !== source.instanceId &&
+            minionHasTribe(target, effect.tribe),
+        ),
+        effect.attack * scale,
+        effect.health * scale,
+      );
+    } else if (effect.kind === "installTavernRefreshBuff") {
+      const repetitions =
+        effect.goldenMode === "repeat" ? scale : 1;
+      for (
+        let repetition = 0;
+        repetition < repetitions;
+        repetition += 1
+      ) {
+        player.rideTheWindBuffs.push({
+          attack: effect.attack,
+          health: effect.health,
+        });
       }
     } else if (effect.kind === "gainGold") {
       player.gold += effect.amount * scale;
@@ -6718,6 +6746,7 @@ const AI_ECONOMY_EFFECT_KINDS = new Set<MinionEffect["kind"]>([
   "getRandomMinion",
   "gainBloodGems",
   "discountNextTavernSpell",
+  "installTavernRefreshBuff",
 ]);
 
 function minionScore(
@@ -7169,6 +7198,16 @@ function beginInteractiveBattlecry(
   const repetitions =
     battlecryTriggerCount(player) * goldenRepetitions;
   if (ability.kind === "discoverMinion") {
+    if (
+      ability.requiresOtherTribe &&
+      !player.board.some(
+        (minion) =>
+          minion.instanceId !== source.instanceId &&
+          minionHasTribe(minion, ability.requiresOtherTribe),
+      )
+    ) {
+      return;
+    }
     beginDiscoverInteraction(
       state,
       player,

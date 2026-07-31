@@ -38,6 +38,7 @@ export const SPELLCRAFT_DEFINITIONS = [
   {
     id: "spellcraft-glowing-crown",
     cardId: "BG23_008t",
+    goldenCardId: "BG23_008_Gt",
     name: "闪鳞头冠",
     description: "直到下个回合，使一个随从获得圣盾。",
     sourceTier: 5,

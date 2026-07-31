@@ -3,7 +3,7 @@ import liveRosterSnapshot from "./generated/battlegrounds-36.0.3-247416.zhCN.jso
 };
 import type { MinionDefinition, Tribe } from "./types.ts";
 
-export const CURRENT_ROSTER_VERSION = "battlegrounds-36.0.3-247416-v33";
+export const CURRENT_ROSTER_VERSION = "battlegrounds-36.0.3-247416-v34";
 /** Compatibility alias for existing save and engine imports. */
 export const CLASSIC_ROSTER_VERSION = CURRENT_ROSTER_VERSION;
 
@@ -1530,6 +1530,65 @@ const LIVE_RULE_OVERRIDES: Readonly<
       ],
     },
   },
+  BG23_008: {
+    goldenCardId: "BG23_008_G",
+    goldenDescription:
+      "嘲讽，塑造法术：直到下个回合，使一个随从获得圣盾。",
+    spellcraft: {
+      definitionId: "spellcraft-glowing-crown",
+    },
+  },
+  BG34_858: {
+    goldenCardId: "BG34_858_G",
+    goldenDescription:
+      "在你花掉7枚铸币后，施放两张乘借东风。（还剩7枚！）",
+    afterGoldSpent: {
+      threshold: 7,
+      effects: [
+        {
+          kind: "castTavernSpell",
+          definitionId: "tavern-spell-ride-the-wind",
+        },
+      ],
+    },
+  },
+  BG34_865: {
+    goldenCardId: "BG34_865_G",
+    goldenDescription:
+      "战吼：在本局对战中，在酒馆刷新后，使酒馆中一个随机随从获得+7/+7，触发两次。",
+    battlecry: [
+      {
+        kind: "installTavernRefreshBuff",
+        attack: 7,
+        health: 7,
+        goldenMode: "repeat",
+      },
+    ],
+  },
+  BGS_030: {
+    goldenCardId: "TB_BaconUps_100",
+    goldenDescription:
+      "战吼：使你手牌中和场上的所有其他鱼人获得+8/+8。",
+    battlecry: [
+      {
+        kind: "buffOwnedTribe",
+        tribe: "murloc",
+        attack: 4,
+        health: 4,
+      },
+    ],
+  },
+  BGS_020: {
+    goldenCardId: "TB_BaconUps_089",
+    goldenDescription:
+      "战吼：如果你控制着其他鱼人，发现2张鱼人牌。",
+    interactiveBattlecry: {
+      kind: "discoverMinion",
+      tribe: "murloc",
+      requiresOtherTribe: "murloc",
+      goldenMode: "repeat",
+    },
+  },
   BG32_324: {
     goldenCardId: "BG32_324_G",
     goldenDescription:
@@ -2771,6 +2830,7 @@ const FULLY_SUPPORTED_LIVE_CARD_IDS = new Set([
   "BG21_015",
   "BG23_002",
   "BG23_004",
+  "BG23_008",
   "BG23_018",
   "BG24_707",
   "BG25_001",
@@ -2890,6 +2950,8 @@ const FULLY_SUPPORTED_LIVE_CARD_IDS = new Set([
   "BG34_694",
   "BG34_731",
   "BG34_765",
+  "BG34_858",
+  "BG34_865",
   "BG34_921",
   "BG34_925",
   "BG34_926",
@@ -2916,6 +2978,8 @@ const FULLY_SUPPORTED_LIVE_CARD_IDS = new Set([
   "BGS_004",
   "BGS_012",
   "BGS_018",
+  "BGS_020",
+  "BGS_030",
   "BGS_049",
   "BGS_104",
   "BGS_115",

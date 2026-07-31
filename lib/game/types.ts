@@ -118,6 +118,20 @@ export interface BuffRandomHandMinionEffect {
   health: number;
 }
 
+export interface BuffOwnedTribeEffect {
+  kind: "buffOwnedTribe";
+  tribe: Tribe;
+  attack: number;
+  health: number;
+}
+
+export interface InstallTavernRefreshBuffEffect {
+  kind: "installTavernRefreshBuff";
+  attack: number;
+  health: number;
+  goldenMode?: "repeat";
+}
+
 export interface GainMinionEffect {
   kind: "gainMinion";
   definitionId: string;
@@ -372,6 +386,8 @@ export type MinionEffect =
   | GainRandomTavernSpellEffect
   | CastTavernSpellEffect
   | BuffRandomHandMinionEffect
+  | BuffOwnedTribeEffect
+  | InstallTavernRefreshBuffEffect
   | GainMinionEffect
   | GainRandomGeneratedMinionEffect
   | DamageHeroEffect
@@ -412,6 +428,7 @@ export interface TargetedBuffBattlecry {
 export interface DiscoverMinionBattlecry {
   kind: "discoverMinion";
   tribe: Tribe;
+  requiresOtherTribe?: Tribe;
   goldenMode: "repeat";
 }
 
