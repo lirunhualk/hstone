@@ -3,7 +3,7 @@ import liveRosterSnapshot from "./generated/battlegrounds-36.0.3-247416.zhCN.jso
 };
 import type { MinionDefinition, Tribe } from "./types.ts";
 
-export const CURRENT_ROSTER_VERSION = "battlegrounds-36.0.3-247416-v37";
+export const CURRENT_ROSTER_VERSION = "battlegrounds-36.0.3-247416-v38";
 /** Compatibility alias for existing save and engine imports. */
 export const CLASSIC_ROSTER_VERSION = CURRENT_ROSTER_VERSION;
 
@@ -2291,6 +2291,40 @@ const LIVE_RULE_OVERRIDES: Readonly<
       permanent: true,
     },
   },
+  BG33_155: {
+    goldenCardId: "BG33_155_G",
+    goldenDescription:
+      "在另一个友方恶魔造成伤害后，永久获得+2/+4。",
+    afterFriendlyDealsDamage: {
+      tribe: "demon",
+      otherSourceOnly: true,
+      target: "self",
+      attack: 1,
+      health: 2,
+      permanent: true,
+    },
+  },
+  BG33_154: {
+    goldenCardId: "BG33_154_G",
+    goldenDescription:
+      "在一个友方恶魔造成伤害后，使其之外的友方随从获得+4/+2。",
+    afterFriendlyDealsDamage: {
+      tribe: "demon",
+      target: "allFriendlyExceptSource",
+      attack: 2,
+      health: 1,
+    },
+  },
+  BG35_602: {
+    goldenCardId: "BG35_602_G",
+    goldenDescription:
+      "每当你召唤野兽时，使其获得+4攻击力并永久提升此效果。",
+    afterFriendlySummoned: {
+      tribe: "beast",
+      attack: 2,
+      permanentAttackGrowth: 1,
+    },
+  },
   BG32_170: {
     deathrattle: [
       {
@@ -3076,6 +3110,8 @@ const FULLY_SUPPORTED_LIVE_CARD_IDS = new Set([
   "BG32_111",
   "BG32_891",
   "BG33_156",
+  "BG33_154",
+  "BG33_155",
   "BG33_140",
   "BG33_241",
   "BG33_240",
@@ -3135,6 +3171,7 @@ const FULLY_SUPPORTED_LIVE_CARD_IDS = new Set([
   "BG35_431",
   "BG35_437",
   "BG35_601",
+  "BG35_602",
   "BG35_701",
   "BG35_702",
   "BG35_801",

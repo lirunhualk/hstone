@@ -70,6 +70,8 @@ export const LEGACY_SCHEMA_11_CONTENT_VERSION_V35 =
   "battlegrounds-36.0.3-247416-v35";
 export const LEGACY_SCHEMA_11_CONTENT_VERSION_V36 =
   "battlegrounds-36.0.3-247416-v36";
+export const LEGACY_SCHEMA_11_CONTENT_VERSION_V37 =
+  "battlegrounds-36.0.3-247416-v37";
 
 const SPELL_POOL_COPIES_BY_TIER = [0, 5, 7, 9, 11, 7, 5] as const;
 
@@ -384,6 +386,21 @@ function refreshMinionSupport(
       `${growingStartOfCombat.attack * scale + attackBonus}/+` +
       `${growingStartOfCombat.health * scale + healthBonus}。` +
       "在你施放一个酒馆法术后永久提升此效果。";
+  }
+  const growingSummon = definition.afterFriendlySummoned;
+  if (growingSummon?.permanentAttackGrowth !== undefined) {
+    const counters = isRecord(value.effectCounters)
+      ? value.effectCounters
+      : {};
+    const attackBonus =
+      typeof counters.summonAttackGrowth === "number"
+        ? counters.summonAttackGrowth
+        : 0;
+    const scale = value.golden === true ? 2 : 1;
+    value.description =
+      `每当你召唤野兽时，使其获得+` +
+      `${(growingSummon.attack ?? 0) * scale + attackBonus}攻击力` +
+      "并永久提升此效果。";
   }
 }
 
@@ -1083,7 +1100,8 @@ export function migrateSchema11GameState(value: unknown): unknown {
       value.contentVersion !== LEGACY_SCHEMA_11_CONTENT_VERSION_V33 &&
       value.contentVersion !== LEGACY_SCHEMA_11_CONTENT_VERSION_V34 &&
       value.contentVersion !== LEGACY_SCHEMA_11_CONTENT_VERSION_V35 &&
-      value.contentVersion !== LEGACY_SCHEMA_11_CONTENT_VERSION_V36) ||
+      value.contentVersion !== LEGACY_SCHEMA_11_CONTENT_VERSION_V36 &&
+      value.contentVersion !== LEGACY_SCHEMA_11_CONTENT_VERSION_V37) ||
     !Array.isArray(value.players)
   ) {
     return null;
@@ -1109,6 +1127,7 @@ export function migrateSchema11GameState(value: unknown): unknown {
       LEGACY_SCHEMA_11_CONTENT_VERSION_V34,
       LEGACY_SCHEMA_11_CONTENT_VERSION_V35,
       LEGACY_SCHEMA_11_CONTENT_VERSION_V36,
+      LEGACY_SCHEMA_11_CONTENT_VERSION_V37,
     ].includes(value.contentVersion as string);
     const preserveCurrentFields = [
       LEGACY_SCHEMA_11_CONTENT_VERSION_V19,
@@ -1129,10 +1148,12 @@ export function migrateSchema11GameState(value: unknown): unknown {
       LEGACY_SCHEMA_11_CONTENT_VERSION_V34,
       LEGACY_SCHEMA_11_CONTENT_VERSION_V35,
       LEGACY_SCHEMA_11_CONTENT_VERSION_V36,
+      LEGACY_SCHEMA_11_CONTENT_VERSION_V37,
     ].includes(value.contentVersion as string);
     const preserveTavernTierBuffs =
       value.contentVersion === LEGACY_SCHEMA_11_CONTENT_VERSION_V35 ||
-      value.contentVersion === LEGACY_SCHEMA_11_CONTENT_VERSION_V36;
+      value.contentVersion === LEGACY_SCHEMA_11_CONTENT_VERSION_V36 ||
+      value.contentVersion === LEGACY_SCHEMA_11_CONTENT_VERSION_V37;
     const preservePendingSpellcraft =
       value.contentVersion === LEGACY_SCHEMA_11_CONTENT_VERSION_V17 ||
       preservePersistentFields;

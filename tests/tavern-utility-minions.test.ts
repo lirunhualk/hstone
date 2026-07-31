@@ -551,7 +551,7 @@ test("Primalfin Lookout requires another Murloc and chains Golden Brann discover
   }
 });
 
-test("v33 saves migrate through v37 and refresh the v34 definitions", () => {
+test("v33 saves migrate through v38 and refresh the v34 definitions", () => {
   const legacy = structuredClone(createGame(0xd3450));
   legacy.contentVersion = LEGACY_SCHEMA_11_CONTENT_VERSION_V33;
   const player = humanPlayer(legacy);
@@ -900,7 +900,7 @@ test("AI plays Void Pup Trainer through the shared persistent Tavern path", () =
   assert.equal(nextAi.shop[0]?.divineShield, true);
 });
 
-test("v34 saves migrate through v37 with an empty Tier ledger and preserved prior state", () => {
+test("v34 saves migrate through v38 with an empty Tier ledger and preserved prior state", () => {
   const legacy = structuredClone(createGame(0xd34a0));
   legacy.contentVersion = LEGACY_SCHEMA_11_CONTENT_VERSION_V34;
   const player = humanPlayer(legacy);
@@ -971,7 +971,7 @@ test("v34 saves migrate through v37 with an empty Tier ledger and preserved prio
   );
 });
 
-test("v35 saves migrate through v37 without losing the Tier ledger or persistent death rewards", () => {
+test("v35 saves migrate through v38 without losing the Tier ledger or persistent death rewards", () => {
   const legacy = structuredClone(createGame(0xd34b0));
   legacy.contentVersion = LEGACY_SCHEMA_11_CONTENT_VERSION_V35;
   const player = humanPlayer(legacy);
@@ -1057,7 +1057,7 @@ test("v35 saves migrate through v37 without losing the Tier ledger or persistent
   );
 });
 
-test("v36 saves migrate to v37 with complete damage observers and unchanged persistent state", () => {
+test("v36 saves migrate to v38 with complete damage observers and unchanged persistent state", () => {
   const legacy = structuredClone(createGame(0xd34c0));
   legacy.contentVersion = LEGACY_SCHEMA_11_CONTENT_VERSION_V36;
   const player = humanPlayer(legacy);

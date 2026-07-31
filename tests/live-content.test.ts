@@ -65,7 +65,7 @@ function expectedPlainText(html: string): string {
 test("exports the pinned current roster version through the legacy alias", () => {
   assert.equal(
     CURRENT_ROSTER_VERSION,
-    "battlegrounds-36.0.3-247416-v37",
+    "battlegrounds-36.0.3-247416-v38",
   );
   assert.equal(CLASSIC_ROSTER_VERSION, CURRENT_ROSTER_VERSION);
 });
@@ -864,6 +864,8 @@ test("marks every live card honestly as complete or partial", () => {
       "BG32_880",
       "BG32_891",
       "BG33_156",
+      "BG33_154",
+      "BG33_155",
       "BG33_140",
       "BG33_241",
       "BG33_240",
@@ -923,6 +925,7 @@ test("marks every live card honestly as complete or partial", () => {
       "BG35_431",
       "BG35_437",
       "BG35_601",
+      "BG35_602",
       "BG35_701",
       "BG35_702",
       "BG35_801",
@@ -956,13 +959,13 @@ test("marks every live card honestly as complete or partial", () => {
     LIVE_MINION_DEFINITIONS.filter(
       (definition) => definition.effectSupport === "partial",
     ).length,
-    52,
+    49,
   );
   assert.equal(
     LIVE_MINION_DEFINITIONS.filter(
       (definition) => definition.effectSupport === "complete",
     ).length,
-    185,
+    188,
   );
   assert.deepEqual(getMinionDefinition("BG35_702").interactiveBattlecry, {
     kind: "targetedBuff",

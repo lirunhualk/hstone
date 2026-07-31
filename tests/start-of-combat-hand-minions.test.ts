@@ -1300,7 +1300,7 @@ test("v26 saves migrate through v31 with refreshed Golden Start-of-Combat metada
   );
   assert.equal(
     CURRENT_ROSTER_VERSION,
-    "battlegrounds-36.0.3-247416-v37",
+    "battlegrounds-36.0.3-247416-v38",
   );
   const nextPlayer = humanPlayer(migratedState);
   assert.deepEqual(nextPlayer.ghostHand, []);

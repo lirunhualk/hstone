@@ -470,6 +470,8 @@ export interface FriendlyTribeTrigger {
   attackMultiplier?: number;
   /** Golden multipliers are card-specific rather than ordinary x2 scaling. */
   goldenAttackMultiplier?: number;
+  /** Permanently increases this source's future summoned-minion Attack bonus. */
+  permanentAttackGrowth?: number;
   heroDamage?: number;
   gainBloodGems?: number;
   damageEnemy?: number;
@@ -485,6 +487,18 @@ export interface FriendlyDamagedTrigger {
   target: "self" | "randomOtherFriendlyTribe";
   /** Required by randomOtherFriendlyTribe; the damaged minion is excluded. */
   targetTribe?: Tribe;
+  attack: number;
+  health: number;
+  /** Printed permanent gains write directly to the original Recruit entity. */
+  permanent?: boolean;
+}
+
+export interface FriendlyDamageDealtTrigger {
+  /** Only actual damage dealt by a friendly minion of this type is observed. */
+  tribe: Tribe;
+  /** The damage source must not be this observer. */
+  otherSourceOnly?: boolean;
+  target: "self" | "allFriendlyExceptSource";
   attack: number;
   health: number;
   /** Printed permanent gains write directly to the original Recruit entity. */
@@ -787,6 +801,7 @@ export interface MinionDefinition {
   afterGoldSpent?: GoldSpentThresholdTrigger;
   afterFriendlySummoned?: FriendlyTribeTrigger;
   afterFriendlyDamaged?: FriendlyDamagedTrigger;
+  afterFriendlyDealsDamage?: FriendlyDamageDealtTrigger;
   afterFriendlyDied?: FriendlyDeathTrigger;
   afterFriendlyCombatDied?: FriendlyCombatDeathTrigger;
   afterFriendlyAttacks?: readonly FriendlyAttackTriggerEffect[];
