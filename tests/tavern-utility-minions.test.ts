@@ -18,6 +18,7 @@ import {
 import {
   LEGACY_SCHEMA_11_CONTENT_VERSION_V33,
   LEGACY_SCHEMA_11_CONTENT_VERSION_V34,
+  LEGACY_SCHEMA_11_CONTENT_VERSION_V35,
   normalizePersistedGameState,
 } from "../lib/game/save.ts";
 import { deriveRecruitPresentation } from "../lib/game/recruit-presentation.ts";
@@ -549,7 +550,7 @@ test("Primalfin Lookout requires another Murloc and chains Golden Brann discover
   }
 });
 
-test("v33 saves migrate through v35 and refresh the v34 definitions", () => {
+test("v33 saves migrate through v36 and refresh the v34 definitions", () => {
   const legacy = structuredClone(createGame(0xd3450));
   legacy.contentVersion = LEGACY_SCHEMA_11_CONTENT_VERSION_V33;
   const player = humanPlayer(legacy);
@@ -563,7 +564,8 @@ test("v33 saves migrate through v35 and refresh the v34 definitions", () => {
     }),
   ];
 
-  const migrated = normalizePersistedGameState(legacy);
+  const persisted = JSON.parse(JSON.stringify(legacy)) as unknown;
+  const migrated = normalizePersistedGameState(persisted);
   assert.ok(migrated);
   const migratedState = migrated as GameState;
   assert.equal(
@@ -897,7 +899,7 @@ test("AI plays Void Pup Trainer through the shared persistent Tavern path", () =
   assert.equal(nextAi.shop[0]?.divineShield, true);
 });
 
-test("v34 saves migrate to v35 with an empty Tier ledger and preserved prior state", () => {
+test("v34 saves migrate through v36 with an empty Tier ledger and preserved prior state", () => {
   const legacy = structuredClone(createGame(0xd34a0));
   legacy.contentVersion = LEGACY_SCHEMA_11_CONTENT_VERSION_V34;
   const player = humanPlayer(legacy);
@@ -964,6 +966,92 @@ test("v34 saves migrate to v35 with an empty Tier ledger and preserved prior sta
       ["BG24_018", "BG24_018_G", "complete"],
       ["BG34_922", "BG34_922_G", "complete"],
       ["BG35_152", "BG35_152_G", "complete"],
+    ],
+  );
+});
+
+test("v35 saves migrate to v36 without losing the Tier ledger or persistent death rewards", () => {
+  const legacy = structuredClone(createGame(0xd34b0));
+  legacy.contentVersion = LEGACY_SCHEMA_11_CONTENT_VERSION_V35;
+  const player = humanPlayer(legacy);
+  player.tavernTierBuffs = [
+    { maximumTier: 3, attack: 6, health: 6 },
+  ];
+  player.tavernTypeBuffs = [
+    { tribes: ["elemental"], attack: 2, health: 3 },
+  ];
+  player.rideTheWindBuffs = [
+    { attack: 7, health: 7 },
+    { attack: 3, health: 3 },
+  ];
+  player.undeadArmyAttackBonus = 5;
+  player.undeadArmyHealthBonus = 1;
+  const opponent = legacy.players[1];
+  const previousBattle = setLastRoundBattle(
+    legacy,
+    player,
+    opponent.id,
+  );
+  player.board = [
+    goldenMinion("BG32_430", "legacy-brightsnout", {
+      cardId: "BG32_430",
+      effectSupport: "partial",
+    }),
+    goldenMinion("BG34_856", "legacy-wavelet", {
+      cardId: "BG34_856",
+      effectSupport: "partial",
+    }),
+    goldenMinion("BG26_867", "legacy-three-boars", {
+      cardId: "BG26_867",
+      effectSupport: "partial",
+    }),
+    goldenMinion("BG34_312", "legacy-orca", {
+      cardId: "BG34_312",
+      effectSupport: "partial",
+    }),
+    goldenMinion("BG34_690", "legacy-plagued", {
+      cardId: "BG34_690",
+      effectSupport: "partial",
+    }),
+  ];
+
+  const persisted = JSON.parse(JSON.stringify(legacy)) as unknown;
+  const migrated = normalizePersistedGameState(persisted);
+  assert.ok(migrated);
+  const migratedState = migrated as GameState;
+  const migratedPlayer = humanPlayer(migratedState);
+  assert.equal(
+    migratedState.contentVersion,
+    CURRENT_ROSTER_VERSION,
+  );
+  assert.deepEqual(migratedPlayer.tavernTierBuffs, [
+    { maximumTier: 3, attack: 6, health: 6 },
+  ]);
+  assert.deepEqual(migratedPlayer.tavernTypeBuffs, [
+    { tribes: ["elemental"], attack: 2, health: 3 },
+  ]);
+  assert.deepEqual(migratedPlayer.rideTheWindBuffs, [
+    { attack: 7, health: 7 },
+    { attack: 3, health: 3 },
+  ]);
+  assert.equal(migratedPlayer.undeadArmyAttackBonus, 5);
+  assert.equal(migratedPlayer.undeadArmyHealthBonus, 1);
+  assert.equal(
+    migratedState.lastRoundBattles[0]?.winnerId,
+    previousBattle.winnerId,
+  );
+  assert.deepEqual(
+    migratedPlayer.board.map((minion) => [
+      minion.definitionId,
+      minion.cardId,
+      minion.effectSupport,
+    ]),
+    [
+      ["BG32_430", "BG32_430_G", "complete"],
+      ["BG34_856", "BG34_856_G", "complete"],
+      ["BG26_867", "BG26_867_G", "complete"],
+      ["BG34_312", "BG34_312_G", "complete"],
+      ["BG34_690", "BG34_690_G", "complete"],
     ],
   );
 });

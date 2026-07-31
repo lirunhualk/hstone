@@ -60,6 +60,10 @@ export interface SummonEffect {
   count: number | "sourceAttack";
   immediateAttack?: boolean;
   taunt?: boolean;
+  /** Apply real Blood Gem pulses to each successfully summoned token. */
+  bloodGemsPerSummon?: number;
+  /** Explicit Golden quantity when it differs from the ordinary token. */
+  goldenBloodGemsPerSummon?: number;
   /**
    * Golden summon text is card-specific: some cards summon a Golden token,
    * while others summon twice as many regular tokens.
@@ -359,6 +363,8 @@ export interface ImproveUndeadArmyEffect {
   kind: "improveUndeadArmy";
   attack: number;
   health: number;
+  /** Some Deathrattles are explicitly stronger outside combat. */
+  outOfCombatMultiplier?: number;
 }
 
 export interface ConsumeRandomShopMinionEffect {

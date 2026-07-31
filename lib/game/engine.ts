@@ -30,6 +30,7 @@ import {
 } from "./ai.ts";
 import type {
   AvengeEffect,
+  ApplyBloodGemsToTribeEffect,
   BattleEvent,
   BattleResult,
   BattleSummary,
@@ -2509,6 +2510,19 @@ function grantRecruitKeyword(
   }
 }
 
+function bloodGemsPerSummonedToken(
+  effect: SummonEffect,
+  goldenSource: boolean,
+): number {
+  if (effect.bloodGemsPerSummon === undefined) {
+    return 0;
+  }
+  return goldenSource
+    ? (effect.goldenBloodGemsPerSummon ??
+        effect.bloodGemsPerSummon)
+    : effect.bloodGemsPerSummon;
+}
+
 function applyRecruitEffects(
   state: GameState,
   player: PlayerState,
@@ -2775,8 +2789,12 @@ function applyRecruitEffects(
         );
       }
     } else if (effect.kind === "improveUndeadArmy") {
-      const attack = effect.attack * scale;
-      const health = effect.health * scale;
+      const outOfCombatScale =
+        effect.outOfCombatMultiplier ?? 1;
+      const attack =
+        effect.attack * scale * outOfCombatScale;
+      const health =
+        effect.health * scale * outOfCombatScale;
       player.undeadArmyAttackBonus += attack;
       player.undeadArmyHealthBonus += health;
       buffMinions(
@@ -2817,6 +2835,7 @@ function applyRecruitEffects(
       const doublesCount =
         effectSourceIsGolden && effect.goldenMode === "doubleCount";
       const summonCount = baseCount * (doublesCount ? 2 : 1);
+      const summonedTokens: BoardMinionInstance[] = [];
       for (
         let count = 0;
         count < summonCount && player.board.length < MAX_BOARD_SIZE;
@@ -2833,6 +2852,24 @@ function applyRecruitEffects(
         applyOwnedBeetleBonus(player, summoned);
         player.board.push(summoned);
         applyRecruitSummonTriggers(state, player, summoned);
+        summonedTokens.push(summoned);
+      }
+      const bloodGemCount = bloodGemsPerSummonedToken(
+        effect,
+        effectSourceIsGolden,
+      );
+      for (const summoned of summonedTokens) {
+        for (
+          let application = 0;
+          application < bloodGemCount;
+          application += 1
+        ) {
+          applyRecruitBloodGemPulse(
+            state,
+            player,
+            summoned,
+          );
+        }
       }
     }
   }
@@ -6937,6 +6974,93 @@ function minionScore(
           : 1) *
         0.7;
     }
+    for (const effect of definition.deathrattle ?? []) {
+      if (effect.kind === "applyBloodGemsToTribe") {
+        const eligibleTargets = projectedBoard.filter(
+          (target) =>
+            target.instanceId !== minion.instanceId &&
+            minionHasTribe(target, effect.tribe),
+        ).length;
+        score +=
+          eligibleTargets *
+          effect.count *
+          (minion.golden ? 2 : 1) *
+          (player.bloodGemAttack + player.bloodGemHealth) *
+          deathrattleScale *
+          0.3;
+      } else if (
+        effect.kind === "summon" &&
+        effect.bloodGemsPerSummon !== undefined &&
+        typeof effect.count === "number"
+      ) {
+        const doublesCount =
+          minion.golden && effect.goldenMode === "doubleCount";
+        const summonCount =
+          effect.count * (doublesCount ? 2 : 1);
+        const availableSpace = Math.max(
+          0,
+          MAX_BOARD_SIZE - projectedBoard.length + 1,
+        );
+        const expectedSummons = Math.min(
+          summonCount,
+          availableSpace,
+        );
+        const token = getMinionDefinition(effect.definitionId);
+        const goldenToken =
+          minion.golden && !doublesCount;
+        const gemCount = bloodGemsPerSummonedToken(
+          effect,
+          minion.golden,
+        );
+        score +=
+          expectedSummons *
+          ((token.attack + token.health) *
+            (goldenToken ? 2 : 1) +
+            gemCount *
+              (player.bloodGemAttack +
+                player.bloodGemHealth)) *
+          deathrattleScale *
+          0.3;
+      } else if (effect.kind === "installTavernRefreshBuff") {
+        const repetitions =
+          minion.golden && effect.goldenMode === "repeat" ? 2 : 1;
+        score +=
+          (effect.attack + effect.health) *
+          repetitions *
+          deathrattleScale *
+          0.45;
+      } else if (effect.kind === "improveUndeadArmy") {
+        const eligibleTargets = [
+          ...projectedBoard,
+          ...player.hand.filter(
+            (card): card is BoardMinionInstance =>
+              card.kind === "minion",
+          ),
+        ].filter((target) =>
+          minionHasTribe(target, "undead"),
+        ).length;
+        score +=
+          Math.max(1, eligibleTargets) *
+          (effect.attack + effect.health) *
+          (minion.golden ? 2 : 1) *
+          deathrattleScale *
+          0.35;
+      }
+    }
+    for (const effect of definition.afterSelfDamaged ?? []) {
+      if (effect.kind !== "buff") {
+        continue;
+      }
+      const eligibleTargets = projectedBoard.filter(
+        (target) =>
+          target.instanceId !== minion.instanceId,
+      ).length;
+      score +=
+        eligibleTargets *
+        (effect.attack + effect.health) *
+        (minion.golden ? 2 : 1) *
+        0.55;
+    }
     if (definition.spellcraft) {
       score += 3;
     }
@@ -7138,6 +7262,9 @@ function minionScore(
     definitions.some(
       (definition) =>
         (definition.battlecry ?? []).some((effect) =>
+          AI_ECONOMY_EFFECT_KINDS.has(effect.kind),
+        ) ||
+        (definition.deathrattle ?? []).some((effect) =>
           AI_ECONOMY_EFFECT_KINDS.has(effect.kind),
         ) ||
         (definition.afterSold ?? []).some((effect) =>
@@ -10446,6 +10573,7 @@ function resolveCombatSummonEffect(
   const doublesCount =
     component.golden && effect.goldenMode === "doubleCount";
   const summonCount = baseCount * (doublesCount ? 2 : 1);
+  const summonedTokens: MinionInstance[] = [];
   for (
     let count = 0;
     count < summonCount && board.length < MAX_BOARD_SIZE;
@@ -10460,8 +10588,41 @@ function resolveCombatSummonEffect(
       component.golden && !doublesCount,
       effect.taunt === true,
     );
+    if (summoned) {
+      summonedTokens.push(summoned);
+    }
     if (summoned && effect.immediateAttack) {
       performImmediateAttack(context, ownerId, summoned);
+    }
+  }
+  const bloodGemCount = bloodGemsPerSummonedToken(
+    effect,
+    component.golden,
+  );
+  for (const summoned of summonedTokens) {
+    if (bloodGemCount > 0) {
+      pushBattleEvent(context.events, {
+        type: "trigger",
+        actorPlayerId: ownerId,
+        actorInstanceId: source.instanceId,
+        targetPlayerId: ownerId,
+        targetInstanceId: summoned.instanceId,
+        actorMinion: cloneMinion(source),
+        minion: cloneMinion(summoned),
+        message: `${rallySourceLabel(component)}开始对${summoned.name}使用${bloodGemCount}张鲜血宝石。`,
+      });
+      for (
+        let application = 0;
+        application < bloodGemCount;
+        application += 1
+      ) {
+        applyCombatBloodGemPulse(context, ownerId, summoned, {
+          actorInstanceId: source.instanceId,
+          sourceLabel: rallySourceLabel(component),
+          applicationIndex: application,
+          applicationCount: bloodGemCount,
+        });
+      }
     }
   }
 }
@@ -10677,6 +10838,63 @@ function triggerSelfDamaged(
       continue;
     }
     for (const effect of effects) {
+      if (effect.kind === "buff") {
+        const attackDelta =
+          effect.attack * (component.golden ? 2 : 1);
+        const healthDelta =
+          effect.health * (component.golden ? 2 : 1);
+        for (const buffTarget of combatBuffTargets(
+          context.state,
+          board,
+          target,
+          effect,
+        )) {
+          const healthBeforeGain = buffTarget.health;
+          const gain = applyCombatEnchantingGain(
+            context,
+            ownerId,
+            buffTarget,
+            {
+              attack: attackDelta,
+              health: healthDelta,
+              keywords: effect.taunt ? ["taunt"] : [],
+            },
+          );
+          const exactHealthAfterGain =
+            healthBeforeGain + healthDelta;
+          if (
+            healthBeforeGain <= 0 &&
+            exactHealthAfterGain <= 0
+          ) {
+            buffTarget.health = exactHealthAfterGain;
+          }
+          const buffSnapshot = cloneMinion(buffTarget);
+          buffSnapshot.health = Math.max(
+            0,
+            buffSnapshot.health,
+          );
+          pushBattleEvent(context.events, {
+            type: "buff",
+            actorPlayerId: ownerId,
+            actorInstanceId: target.instanceId,
+            targetPlayerId: ownerId,
+            targetInstanceId: buffTarget.instanceId,
+            actorMinion: cloneMinion(target),
+            attackDelta,
+            healthDelta,
+            minion: buffSnapshot,
+            retained: gain.retentionMultiplier > 0,
+            ...(gain.retentionMultiplier > 0
+              ? {
+                  retentionMultiplier:
+                    gain.retentionMultiplier,
+                }
+              : {}),
+            message: `${rallySourceLabel(component)}受伤后，使${buffTarget.name}获得+${attackDelta}/+${healthDelta}。`,
+          });
+        }
+        continue;
+      }
       if (effect.kind === "buffRandomHandMinion") {
         resolveCombatHandBuff(
           context,
@@ -12614,6 +12832,36 @@ function performImmediateAttack(
   });
 }
 
+function resolveCombatApplyBloodGemsToTribe(
+  context: CombatContext,
+  ownerId: PlayerId,
+  source: MinionInstance,
+  component: MinionEffectSource,
+  effect: ApplyBloodGemsToTribeEffect,
+): void {
+  const applicationCount =
+    effect.count * (component.golden ? 2 : 1);
+  const targets = context.boards[ownerId].filter(
+    (minion) =>
+      minion.health > 0 &&
+      minionHasTribe(minion, effect.tribe),
+  );
+  for (const target of targets) {
+    for (
+      let application = 0;
+      application < applicationCount;
+      application += 1
+    ) {
+      applyCombatBloodGemPulse(context, ownerId, target, {
+        actorInstanceId: source.instanceId,
+        sourceLabel: rallySourceLabel(component),
+        applicationIndex: application,
+        applicationCount,
+      });
+    }
+  }
+}
+
 function resolveCombatAvengeEffect(
   context: CombatContext,
   ownerId: PlayerId,
@@ -12658,32 +12906,13 @@ function resolveCombatAvengeEffect(
     return;
   }
 
-  const owner = findPlayer(context.state, ownerId);
-  if (!owner) {
-    return;
-  }
-  const applicationCount =
-    effect.count * (component.golden ? 2 : 1);
-  const targets = context.boards[ownerId].filter(
-    (minion): minion is BoardMinionInstance =>
-      minion.kind === "minion" &&
-      minion.health > 0 &&
-      minionHasTribe(minion, effect.tribe),
+  resolveCombatApplyBloodGemsToTribe(
+    context,
+    ownerId,
+    watcher,
+    component,
+    effect,
   );
-  for (const target of targets) {
-    for (
-      let application = 0;
-      application < applicationCount;
-      application += 1
-    ) {
-      applyCombatBloodGemPulse(context, ownerId, target, {
-        actorInstanceId: watcher.instanceId,
-        sourceLabel: rallySourceLabel(component),
-        applicationIndex: application,
-        applicationCount,
-      });
-    }
-  }
 }
 
 function advanceAvenge(
@@ -13301,12 +13530,56 @@ function resolveOneDeathrattle(
             owner.bloodGemAttack += effect.attack * scale;
             owner.bloodGemHealth += effect.health * scale;
           }
+        } else if (effect.kind === "improveUndeadArmy") {
+          resolveCombatImproveUndeadArmy(
+            context,
+            ownerId,
+            source,
+            component,
+            effect,
+            "亡语",
+          );
         } else if (effect.kind === "improveTavernSpellBuffs") {
           const owner = persistentCombatOwner(context, ownerId);
           if (owner) {
             owner.tavernSpellAttackBonus += effect.attack * scale;
             owner.tavernSpellHealthBonus += effect.health * scale;
           }
+        } else if (effect.kind === "installTavernRefreshBuff") {
+          const owner = persistentCombatOwner(context, ownerId);
+          if (owner) {
+            const effectRepetitions =
+              effect.goldenMode === "repeat" ? scale : 1;
+            for (
+              let effectRepetition = 0;
+              effectRepetition < effectRepetitions;
+              effectRepetition += 1
+            ) {
+              owner.rideTheWindBuffs.push({
+                attack: effect.attack,
+                health: effect.health,
+              });
+              pushBattleEvent(context.events, {
+                type: "trigger",
+                actorPlayerId: ownerId,
+                actorInstanceId: source.instanceId,
+                targetPlayerId: ownerId,
+                actorMinion: cloneMinion(source),
+                attackDelta: effect.attack,
+                healthDelta: effect.health,
+                permanentEffectImprovement: true,
+                message: `${rallySourceLabel(component)}的亡语为后续刷新安装了+${effect.attack}/+${effect.health}酒馆增益。`,
+              });
+            }
+          }
+        } else if (effect.kind === "applyBloodGemsToTribe") {
+          resolveCombatApplyBloodGemsToTribe(
+            context,
+            ownerId,
+            source,
+            component,
+            effect,
+          );
         } else if (effect.kind === "discountNextTavernSpell") {
           const owner = persistentCombatOwner(context, ownerId);
           if (owner) {

@@ -1119,7 +1119,7 @@ test("v27 saves migrate through v31 with refreshed Golden Forager metadata and n
 
   assert.equal(
     CURRENT_ROSTER_VERSION,
-    "battlegrounds-36.0.3-247416-v35",
+    "battlegrounds-36.0.3-247416-v36",
   );
   assert.equal(
     migratedState.contentVersion,

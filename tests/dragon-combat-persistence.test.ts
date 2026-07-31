@@ -1081,7 +1081,7 @@ test("v28 saves migrate through v31 while preserving Fire-forged counters and ex
   assert.equal(migrated.contentVersion, CURRENT_ROSTER_VERSION);
   assert.equal(
     CURRENT_ROSTER_VERSION,
-    "battlegrounds-36.0.3-247416-v35",
+    "battlegrounds-36.0.3-247416-v36",
   );
   const saved = humanPlayer(migrated).board[0];
   assert.deepEqual(saved.effectCounters, evoker.effectCounters);

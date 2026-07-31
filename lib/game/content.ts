@@ -3,7 +3,7 @@ import liveRosterSnapshot from "./generated/battlegrounds-36.0.3-247416.zhCN.jso
 };
 import type { MinionDefinition, Tribe } from "./types.ts";
 
-export const CURRENT_ROSTER_VERSION = "battlegrounds-36.0.3-247416-v35";
+export const CURRENT_ROSTER_VERSION = "battlegrounds-36.0.3-247416-v36";
 /** Compatibility alias for existing save and engine imports. */
 export const CLASSIC_ROSTER_VERSION = CURRENT_ROSTER_VERSION;
 
@@ -823,6 +823,23 @@ export const LIVE_TOKEN_DEFINITIONS: readonly MinionDefinition[] =
       collectible: false,
     },
     {
+      id: "live-brightsnout-soldier-token",
+      cardId: "BG32_430t",
+      goldenCardId: "BG32_430t_G",
+      name: "亮喉士兵",
+      tier: 1,
+      tribe: "quilboar",
+      tribes: ["quilboar"],
+      associatedTribes: [],
+      effectSupport: "complete",
+      attack: 1,
+      health: 1,
+      taunt: true,
+      description: "嘲讽",
+      goldenDescription: "嘲讽",
+      collectible: false,
+    },
+    {
       id: "live-twilight-whelp-token",
       cardId: "BG34_630t",
       name: "暮光雏龙",
@@ -1588,6 +1605,72 @@ const LIVE_RULE_OVERRIDES: Readonly<
         maximumTier: 3,
         attack: 3,
         health: 3,
+      },
+    ],
+  },
+  BG32_430: {
+    goldenCardId: "BG32_430_G",
+    goldenDescription:
+      "亡语：召唤两个2/2并具有嘲讽的野猪人。本随从对其使用2张鲜血宝石。",
+    deathrattle: [
+      {
+        kind: "summon",
+        definitionId: "live-brightsnout-soldier-token",
+        count: 2,
+        bloodGemsPerSummon: 1,
+        goldenBloodGemsPerSummon: 2,
+        goldenMode: "goldenToken",
+      },
+    ],
+  },
+  BG34_856: {
+    goldenCardId: "BG34_856_G",
+    goldenDescription:
+      "亡语：在本局对战中，在酒馆刷新后，使酒馆中一个随机随从获得+3/+3，触发两次。",
+    deathrattle: [
+      {
+        kind: "installTavernRefreshBuff",
+        attack: 3,
+        health: 3,
+        goldenMode: "repeat",
+      },
+    ],
+  },
+  BG26_867: {
+    goldenCardId: "BG26_867_G",
+    goldenDescription:
+      "亡语：本随从对你的所有野猪人各使用6张鲜血宝石。",
+    deathrattle: [
+      {
+        kind: "applyBloodGemsToTribe",
+        tribe: "quilboar",
+        count: 3,
+      },
+    ],
+  },
+  BG34_312: {
+    goldenCardId: "BG34_312_G",
+    goldenDescription:
+      "嘲讽。每当本随从受到伤害，使你的其他随从获得+2/+2。",
+    afterSelfDamaged: [
+      {
+        kind: "buff",
+        target: "otherFriendly",
+        attack: 1,
+        health: 1,
+      },
+    ],
+  },
+  BG34_690: {
+    goldenCardId: "BG34_690_G",
+    goldenDescription:
+      "亡语：在本局对战中，你的亡灵拥有+4攻击力，无论它们在哪。（如果本随从在战斗之外死亡，改为+8！）",
+    deathrattle: [
+      {
+        kind: "improveUndeadArmy",
+        attack: 2,
+        health: 0,
+        outOfCombatMultiplier: 2,
       },
     ],
   },
@@ -2860,6 +2943,7 @@ const FULLY_SUPPORTED_LIVE_CARD_IDS = new Set([
   "BG23_008",
   "BG23_018",
   "BG24_707",
+  "BG26_867",
   "BG25_001",
   "BG25_008",
   "BG25_009",
@@ -2927,6 +3011,7 @@ const FULLY_SUPPORTED_LIVE_CARD_IDS = new Set([
   "BG32_235",
   "BG32_236",
   "BG32_324",
+  "BG32_430",
   "BG32_330",
   "BG32_821",
   "BG32_822",
@@ -2958,6 +3043,7 @@ const FULLY_SUPPORTED_LIVE_CARD_IDS = new Set([
   "BG34_142",
   "BG34_175",
   "BG34_231",
+  "BG34_312",
   "BG34_403",
   "BG34_500",
   "BG34_523",
@@ -2973,10 +3059,12 @@ const FULLY_SUPPORTED_LIVE_CARD_IDS = new Set([
   "BG34_682",
   "BG34_683",
   "BG34_684",
+  "BG34_690",
   "BG34_692",
   "BG34_694",
   "BG34_731",
   "BG34_765",
+  "BG34_856",
   "BG34_858",
   "BG34_865",
   "BG34_921",
