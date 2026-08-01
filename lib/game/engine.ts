@@ -10418,7 +10418,8 @@ function applyStartOfCombatEffects(
           const candidates = board.filter(
             (minion) =>
               minion.instanceId !== source.instanceId &&
-              minionHasTribe(minion, effect.tribe),
+              minionHasTribe(minion, effect.tribe) &&
+              (!effect.divineShield || !minion.divineShield),
           );
           const targetCount =
             effect.count *

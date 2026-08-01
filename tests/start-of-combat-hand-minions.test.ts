@@ -348,6 +348,77 @@ test("Amber Guardian buffs one distinct other Dragon and records a replayable sh
   );
 });
 
+test("later Amber Guardians skip Dragons shielded earlier in the same Start-of-Combat phase", () => {
+  const state = createGame(0x5c004);
+  const human = humanPlayer(state);
+  const firstAmber = definitionMinion(
+    "BG24_500",
+    "shield-filter-first-amber",
+    { divineShield: true },
+  );
+  const secondAmber = definitionMinion(
+    "BG24_500",
+    "shield-filter-second-amber",
+    { divineShield: true },
+  );
+  const shieldedDragon = definitionMinion(
+    "BG34_638t",
+    "already-shielded-ordinary-dragon",
+    { attack: 13, health: 17, divineShield: true },
+  );
+  const unshieldedDragon = definitionMinion(
+    "BG34_636t",
+    "unshielded-ordinary-dragon",
+    { attack: 19, health: 23, divineShield: false },
+  );
+  human.board = [
+    firstAmber,
+    secondAmber,
+    shieldedDragon,
+    unshieldedDragon,
+  ];
+  keepOnlyOneOpponent(state, [
+    enemyWall("shield-filter-ordinary-wall"),
+  ]);
+  human.board = [
+    firstAmber,
+    secondAmber,
+    shieldedDragon,
+    unshieldedDragon,
+  ];
+
+  const combat = gameReducer(state, { type: "END_TURN" });
+  const battle = combat.lastBattle;
+  assert.ok(battle);
+  const amberIds = new Set([
+    firstAmber.instanceId,
+    secondAmber.instanceId,
+  ]);
+  const starts = battle.events.filter(
+    (event) =>
+      event.type === "startOfCombat" &&
+      amberIds.has(event.actorInstanceId ?? ""),
+  );
+  const buffs = battle.events.filter(
+    (event) =>
+      event.type === "buff" &&
+      amberIds.has(event.actorInstanceId ?? ""),
+  );
+  assert.equal(starts.length, 2);
+  assert.equal(buffs.length, 1);
+  assert.equal(buffs[0].targetInstanceId, unshieldedDragon.instanceId);
+  assert.deepEqual(
+    [
+      buffs[0].attackDelta,
+      buffs[0].healthDelta,
+      buffs[0].minion?.attack,
+      buffs[0].minion?.health,
+      buffs[0].minion?.divineShield,
+    ],
+    [2, 2, 21, 25, true],
+  );
+});
+
 test("Golden Amber Guardian buffs two different Dragons once each without doubling stats", () => {
   const state = createGame(0x5c002);
   const human = humanPlayer(state);
@@ -415,7 +486,7 @@ test("Golden Amber Guardian buffs two different Dragons once each without doubli
   );
 });
 
-test("Golden Amber Guardian treats ALL as Dragon and never repeats its only legal target", () => {
+test("Golden Amber Guardian treats ALL as Dragon and only targets Dragons without Divine Shield", () => {
   const state = createGame(0x5c003);
   const human = humanPlayer(state);
   const amber = goldenMinion(
@@ -431,16 +502,21 @@ test("Golden Amber Guardian treats ALL as Dragon and never repeats its only lega
       divineShield: false,
     },
   );
+  const shieldedDragon = definitionMinion(
+    "BG34_638t",
+    "already-shielded-golden-dragon",
+    { attack: 31, health: 37, divineShield: true },
+  );
   const nonDragon = definitionMinion(
     "BG29_611",
     "single-target-non-dragon",
     { attack: 23, health: 29, divineShield: false },
   );
-  human.board = [amber, allType, nonDragon];
+  human.board = [amber, allType, shieldedDragon, nonDragon];
   keepOnlyOneOpponent(state, [
     enemyWall("single-target-amber-wall"),
   ]);
-  human.board = [amber, allType, nonDragon];
+  human.board = [amber, allType, shieldedDragon, nonDragon];
 
   const combat = gameReducer(state, { type: "END_TURN" });
   const battle = combat.lastBattle;
