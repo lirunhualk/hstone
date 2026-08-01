@@ -7,6 +7,10 @@ import {
   getTavernSpellDefinition,
   tavernSpellIsAvailable,
 } from "./tavern-spells.ts";
+import {
+  DEFAULT_INITIAL_HEALTH,
+  isValidInitialHealth,
+} from "./setup.ts";
 import type {
   TavernSpellDefinition,
   TavernSpellInstance,
@@ -77,6 +81,14 @@ const SPELL_POOL_COPIES_BY_TIER = [0, 5, 7, 9, 11, 7, 5] as const;
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return value !== null && typeof value === "object";
+}
+
+function repairInitialHealth(value: Record<string, unknown>): boolean {
+  if (value.initialHealth === undefined) {
+    value.initialHealth = DEFAULT_INITIAL_HEALTH;
+    return true;
+  }
+  return isValidInitialHealth(value.initialHealth);
 }
 
 function hasZeroAttachmentPoolOwnership(value: unknown): boolean {
@@ -1066,7 +1078,10 @@ export function migrateSchema10GameState(value: unknown): unknown {
     migrated.version = 11;
     migrated.contentVersion = CURRENT_ROSTER_VERSION;
     migrated.spellPool = spellPool;
-    if (!repairHumanScoutingReports(migrated)) {
+    if (
+      !repairInitialHealth(migrated) ||
+      !repairHumanScoutingReports(migrated)
+    ) {
       return null;
     }
     return migrated;
@@ -1191,7 +1206,10 @@ export function migrateSchema11GameState(value: unknown): unknown {
       migrateBeetleBonusState(player);
       migrateBloodGemBarrageState(player);
     }
-    if (!repairHumanScoutingReports(migrated)) {
+    if (
+      !repairInitialHealth(migrated) ||
+      !repairHumanScoutingReports(migrated)
+    ) {
       return null;
     }
     migrated.contentVersion = CURRENT_ROSTER_VERSION;
@@ -1264,7 +1282,8 @@ export function normalizePersistedGameState(value: unknown): unknown {
     value.version === 11 &&
     value.contentVersion === CURRENT_ROSTER_VERSION
   ) {
-    return repairGhostHandSnapshots(value) &&
+    return repairInitialHealth(value) &&
+      repairGhostHandSnapshots(value) &&
       repairSpellPool(value) &&
       repairHumanScoutingReports(value)
       ? value
@@ -1272,6 +1291,7 @@ export function normalizePersistedGameState(value: unknown): unknown {
   }
   const migrated = migrateLegacyGameState(value);
   return isRecord(migrated) &&
+    repairInitialHealth(migrated) &&
     repairGhostHandSnapshots(migrated)
     ? migrated
     : null;

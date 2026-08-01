@@ -25,6 +25,10 @@ import {
   getHeroPowerDefinition,
 } from "./hero-powers.ts";
 import {
+  DEFAULT_INITIAL_HEALTH,
+  normalizeInitialHealth,
+} from "./setup.ts";
+import {
   aiTargetBoardSize,
   getAiStrategyProfile,
   shouldAiUpgrade,
@@ -15461,13 +15465,17 @@ function beginNextRecruit(state: GameState): void {
   }
 }
 
-export function createGame(seed?: number): GameState {
+export function createGame(
+  seed?: number,
+  initialHealth = DEFAULT_INITIAL_HEALTH,
+): GameState {
   const normalizedSeed = normalizeSeed(seed);
+  const normalizedInitialHealth = normalizeInitialHealth(initialHealth);
   const players: PlayerState[] = PLAYER_NAMES.map((name, index) => ({
     id: `player-${index}`,
     name,
     isHuman: index === 0,
-    health: 40,
+    health: normalizedInitialHealth,
     armor: 0,
     alive: true,
     heroPowerId: null,
@@ -15535,6 +15543,7 @@ export function createGame(seed?: number): GameState {
   const state: GameState = {
     version: 11,
     contentVersion: CURRENT_ROSTER_VERSION,
+    initialHealth: normalizedInitialHealth,
     seed: normalizedSeed,
     rngState: normalizedSeed,
     nextInstanceId: 1,

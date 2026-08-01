@@ -1505,6 +1505,8 @@ export interface GameState {
   version: 11;
   /** Invalidates local saves when the roster or its mechanics change. */
   contentVersion: string;
+  /** Shared starting Health selected before this eight-player lobby began. */
+  initialHealth: number;
   seed: number;
   rngState: number;
   nextInstanceId: number;

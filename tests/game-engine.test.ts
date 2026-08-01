@@ -22,6 +22,17 @@ import {
 } from "../lib/game/content.ts";
 import { activeMinionKeywordVisuals } from "../lib/game/minion-presentation.ts";
 import { projectCombatBoard } from "../lib/game/playback.ts";
+import {
+  LEGACY_SCHEMA_11_CONTENT_VERSION_V37,
+  normalizePersistedGameState,
+} from "../lib/game/save.ts";
+import {
+  DEFAULT_INITIAL_HEALTH,
+  MAX_INITIAL_HEALTH,
+  MIN_INITIAL_HEALTH,
+  normalizeInitialHealth,
+  parseInitialHealthInput,
+} from "../lib/game/setup.ts";
 
 function humanPlayer(state: GameState): PlayerState {
   const player = state.players.find(
@@ -222,6 +233,7 @@ test("createGame builds one human and seven deterministic AI opponents", () => {
   assert.equal(first.players.filter((player) => player.isHuman).length, 1);
   assert.equal(first.players.filter((player) => !player.isHuman).length, 7);
   assert.equal(first.humanPlayerId, "player-0");
+  assert.equal(first.initialHealth, DEFAULT_INITIAL_HEALTH);
   assert.equal(first.activeTribes.length, 5);
   assert.equal(new Set(first.activeTribes).size, 5);
   assert.ok(
@@ -260,6 +272,73 @@ test("createGame builds one human and seven deterministic AI opponents", () => {
     );
   }
   assert.notDeepEqual(createGame(0x1234abce), first);
+});
+
+test("createGame applies one configured initial Health value to all eight players", () => {
+  const state = createGame(0x1234abce, 73);
+
+  assert.equal(state.initialHealth, 73);
+  assert.deepEqual(
+    state.players.map((player) => player.health),
+    Array.from({ length: 8 }, () => 73),
+  );
+  assert.equal(state.players.filter((player) => player.isHuman).length, 1);
+});
+
+test("initial Health input and engine boundaries stay within 1 to 999", () => {
+  assert.equal(parseInitialHealthInput("1"), MIN_INITIAL_HEALTH);
+  assert.equal(parseInitialHealthInput(" 40 "), DEFAULT_INITIAL_HEALTH);
+  assert.equal(parseInitialHealthInput("999"), MAX_INITIAL_HEALTH);
+  assert.equal(parseInitialHealthInput(""), null);
+  assert.equal(parseInitialHealthInput("0"), null);
+  assert.equal(parseInitialHealthInput("12.5"), null);
+  assert.equal(parseInitialHealthInput("1000"), null);
+
+  assert.equal(normalizeInitialHealth(0), MIN_INITIAL_HEALTH);
+  assert.equal(normalizeInitialHealth(12.5), 13);
+  assert.equal(normalizeInitialHealth(10_000), MAX_INITIAL_HEALTH);
+  assert.equal(normalizeInitialHealth(Number.NaN), DEFAULT_INITIAL_HEALTH);
+});
+
+test("current saves without the initial Health setting retain progress and default safely", () => {
+  const legacy = structuredClone(createGame(0x1234abcf, 73));
+  legacy.players[0].health = 61;
+  delete (legacy as Partial<GameState>).initialHealth;
+
+  const normalized = normalizePersistedGameState(legacy);
+  assert.ok(normalized && typeof normalized === "object");
+  const restored = normalized as GameState;
+  assert.equal(restored.initialHealth, DEFAULT_INITIAL_HEALTH);
+  assert.equal(restored.players[0].health, 61);
+  assert.equal(restored.players[1].health, 73);
+
+  const corrupted = structuredClone(restored);
+  corrupted.initialHealth = 0;
+  assert.equal(normalizePersistedGameState(corrupted), null);
+});
+
+test("v37 saves gain default initial Health and survive a JSON round trip", () => {
+  const legacy = structuredClone(createGame(0x1234abd0));
+  legacy.contentVersion = LEGACY_SCHEMA_11_CONTENT_VERSION_V37;
+  delete (legacy as Partial<GameState>).initialHealth;
+
+  const normalized = normalizePersistedGameState(
+    JSON.parse(JSON.stringify(legacy)),
+  );
+  assert.ok(normalized && typeof normalized === "object");
+  const restored = normalized as GameState;
+  assert.equal(restored.initialHealth, DEFAULT_INITIAL_HEALTH);
+  assert.equal(restored.players.length, 8);
+  assert.ok(
+    restored.players.every(
+      (player) => player.health === DEFAULT_INITIAL_HEALTH,
+    ),
+  );
+
+  const roundTripped = normalizePersistedGameState(
+    JSON.parse(JSON.stringify(restored)),
+  );
+  assert.deepEqual(roundTripped, restored);
 });
 
 test("the shared pool uses live copy counts and excludes inactive types", () => {

@@ -101,6 +101,14 @@ import {
   type RecruitPresentationEvent,
 } from "../lib/game/recruit-presentation";
 import { normalizePersistedGameState } from "../lib/game/save";
+import {
+  DEFAULT_INITIAL_HEALTH,
+  MAX_INITIAL_HEALTH,
+  MIN_INITIAL_HEALTH,
+  isValidInitialHealth,
+  normalizeInitialHealth,
+  parseInitialHealthInput,
+} from "../lib/game/setup";
 
 const SAVE_KEY = "hearthstone-battlegrounds-local.save.v11";
 const LEGACY_SAVE_KEYS = [
@@ -907,6 +915,7 @@ function isGameState(value: unknown): value is GameState {
   return (
     candidate.version === 11 &&
     candidate.contentVersion === CURRENT_ROSTER_VERSION &&
+    isValidInitialHealth(candidate.initialHealth) &&
     typeof candidate.seed === "number" &&
     typeof candidate.nextInteractionId === "number" &&
     isTavernSpellPool(candidate.spellPool) &&
@@ -2880,10 +2889,101 @@ function PlayerRow({
   );
 }
 
+function InitialHealthControl({
+  value,
+  onChange,
+  onConfirm,
+  inputTestId,
+  autoFocus = false,
+}: {
+  value: string;
+  onChange: (value: string) => void;
+  onConfirm: () => void;
+  inputTestId: string;
+  autoFocus?: boolean;
+}) {
+  const parsedHealth = parseInitialHealthInput(value);
+  const inputId = `${inputTestId}-field`;
+  const descriptionId = `${inputTestId}-description`;
+  const adjustHealth = (amount: number) => {
+    const current = parsedHealth ?? DEFAULT_INITIAL_HEALTH;
+    onChange(String(normalizeInitialHealth(current + amount)));
+  };
+
+  return (
+    <div
+      className={`initial-health-setting${
+        parsedHealth === null ? " is-invalid" : ""
+      }`}
+    >
+      <label htmlFor={inputId}>
+        <span>所有玩家初始生命值</span>
+        <small>同一数值会应用给你和 7 位 AI</small>
+      </label>
+      <div className="initial-health-control">
+        <button
+          type="button"
+          className="initial-health-step"
+          aria-label="减少一点初始生命值"
+          disabled={parsedHealth === MIN_INITIAL_HEALTH}
+          onClick={() => adjustHealth(-1)}
+        >
+          −
+        </button>
+        <div className="initial-health-input-shell">
+          <input
+            id={inputId}
+            type="number"
+            inputMode="numeric"
+            min={MIN_INITIAL_HEALTH}
+            max={MAX_INITIAL_HEALTH}
+            step={1}
+            value={value}
+            autoFocus={autoFocus}
+            aria-invalid={parsedHealth === null}
+            aria-describedby={descriptionId}
+            data-testid={inputTestId}
+            onChange={(event) => onChange(event.target.value)}
+            onFocus={(event) => event.currentTarget.select()}
+            onKeyDown={(event) => {
+              if (event.key === "Enter" && parsedHealth !== null) {
+                event.preventDefault();
+                onConfirm();
+              }
+            }}
+          />
+          <span>生命</span>
+        </div>
+        <button
+          type="button"
+          className="initial-health-step"
+          aria-label="增加一点初始生命值"
+          disabled={parsedHealth === MAX_INITIAL_HEALTH}
+          onClick={() => adjustHealth(1)}
+        >
+          +
+        </button>
+      </div>
+      <span
+        id={descriptionId}
+        className="initial-health-description"
+        role={parsedHealth === null ? "alert" : "status"}
+      >
+        {parsedHealth === null
+          ? `请输入 ${MIN_INITIAL_HEALTH} 到 ${MAX_INITIAL_HEALTH} 的整数。`
+          : `本局 8 名玩家都将以 ${parsedHealth} 点生命开始。`}
+      </span>
+    </div>
+  );
+}
+
 export default function GameClient() {
   const [game, setGame] = useState<GameState>(() => createGame(INITIAL_SEED));
   const [loaded, setLoaded] = useState(false);
   const [started, setStarted] = useState(false);
+  const [initialHealthInput, setInitialHealthInput] = useState(
+    String(DEFAULT_INITIAL_HEALTH),
+  );
   const [selection, setSelection] = useState<Selection>(null);
   const [infoTab, setInfoTab] = useState<InfoTab>("details");
   const [selectedStandingPlayerId, setSelectedStandingPlayerId] =
@@ -2927,6 +3027,7 @@ export default function GameClient() {
   const combatIntroTimerRef = useRef<number | null>(null);
   const tavernSpellCastTimerRef = useRef<number | null>(null);
   const interactionReturnFocusRef = useRef<HTMLElement | null>(null);
+  const restartReturnFocusRef = useRef<HTMLElement | null>(null);
   const previousInteractionIdRef = useRef<string | null>(null);
   const magneticFocusTargetRef = useRef<string | null>(null);
   const previousMagneticSelectionRef = useRef<string | null>(null);
@@ -3044,6 +3145,7 @@ export default function GameClient() {
           if (isGameState(saved)) {
             setGame(saved);
             setStarted(true);
+            setInitialHealthInput(String(saved.initialHealth));
             safeWriteLocalStorage(SAVE_KEY, JSON.stringify(saved));
             restored = true;
           } else {
@@ -3064,6 +3166,7 @@ export default function GameClient() {
                 if (isGameState(migrated)) {
                   setGame(migrated);
                   setStarted(true);
+                  setInitialHealthInput(String(migrated.initialHealth));
                   safeWriteLocalStorage(
                     SAVE_KEY,
                     JSON.stringify(migrated),
@@ -3325,12 +3428,12 @@ export default function GameClient() {
     return () => window.cancelAnimationFrame(focusFrame);
   }, [game.players]);
 
-  const trapDiscoverFocus = useCallback(
+  const trapModalFocus = useCallback(
     (event: ReactKeyboardEvent<HTMLDivElement>) => {
       if (event.key !== "Tab") return;
       const focusable = Array.from(
-        event.currentTarget.querySelectorAll<HTMLButtonElement>(
-          "button:not([disabled])",
+        event.currentTarget.querySelectorAll<HTMLElement>(
+          'button:not([disabled]), input:not([disabled]), select:not([disabled]), textarea:not([disabled]), [href], [tabindex]:not([tabindex="-1"])',
         ),
       );
       if (focusable.length === 0) return;
@@ -3356,6 +3459,8 @@ export default function GameClient() {
     game.phase === "combat" &&
     battle !== null &&
     combatIntroCompletedBattle !== battle;
+  const pageModalOpen =
+    (loaded && !started) || showRestart || game.phase === "gameOver";
   const introOpponent = battle
     ? combatIntroOpponent(battle, game.humanPlayerId)
     : null;
@@ -4078,11 +4183,19 @@ export default function GameClient() {
     send,
   ]);
 
-  const startFreshGame = useCallback(() => {
+  const configuredInitialHealth = useMemo(
+    () => parseInitialHealthInput(initialHealthInput),
+    [initialHealthInput],
+  );
+
+  const startConfiguredGame = useCallback((seed: number) => {
+    if (configuredInitialHealth === null) {
+      return;
+    }
     clearBattlePlaybackTimer();
     clearCombatIntroTimer();
     clearTavernSpellCastFeedback();
-    const next = createGame(newSeed());
+    const next = createGame(seed, configuredInitialHealth);
     safeWriteLocalStorage(SAVE_KEY, JSON.stringify(next));
     gameRef.current = next;
     setGame(next);
@@ -4101,6 +4214,7 @@ export default function GameClient() {
     setRecruitPresentationQueue([]);
     setCombatIntroCompletedBattle(null);
     clearCombatRewardFeedback();
+    restartReturnFocusRef.current = null;
     magneticFocusTargetRef.current = null;
     preCombatHandIdsRef.current = null;
   }, [
@@ -4108,7 +4222,40 @@ export default function GameClient() {
     clearTavernSpellCastFeedback,
     clearCombatIntroTimer,
     clearCombatRewardFeedback,
+    configuredInitialHealth,
   ]);
+
+  const startInitialGame = useCallback(() => {
+    startConfiguredGame(gameRef.current.seed);
+  }, [startConfiguredGame]);
+
+  const startFreshGame = useCallback(() => {
+    startConfiguredGame(newSeed());
+  }, [startConfiguredGame]);
+
+  const openRestartDialog = useCallback(() => {
+    restartReturnFocusRef.current =
+      document.activeElement instanceof HTMLElement
+        ? document.activeElement
+        : null;
+    setInitialHealthInput(String(gameRef.current.initialHealth));
+    setShowRestart(true);
+  }, []);
+
+  const closeRestartDialog = useCallback(() => {
+    const returnTarget = restartReturnFocusRef.current;
+    restartReturnFocusRef.current = null;
+    setShowRestart(false);
+    window.requestAnimationFrame(() => {
+      if (returnTarget?.isConnected) {
+        returnTarget.focus();
+        return;
+      }
+      document
+        .querySelector<HTMLElement>('[data-testid="play-again"]')
+        ?.focus();
+    });
+  }, []);
 
   const deploySelected = useCallback(
     (boardIndex?: number) => {
@@ -5527,7 +5674,7 @@ export default function GameClient() {
     >
       <header
         className="top-hud"
-        inert={interactionLocked || combatIntroActive}
+        inert={interactionLocked || combatIntroActive || pageModalOpen}
       >
         <div className="brand">
           酒馆战棋 · 单机版
@@ -5680,7 +5827,7 @@ export default function GameClient() {
             type="button"
             className="action-button secondary"
             disabled={interactionLocked}
-            onClick={() => setShowRestart(true)}
+            onClick={openRestartDialog}
           >
             重开
           </button>
@@ -5709,7 +5856,7 @@ export default function GameClient() {
 
       <div
         className="main-grid"
-        inert={modalInteractionLocked || combatIntroActive}
+        inert={modalInteractionLocked || combatIntroActive || pageModalOpen}
       >
         <section className="play-column" aria-label="游戏区域">
           <section
@@ -7740,7 +7887,7 @@ export default function GameClient() {
           aria-labelledby="minion-choice-title"
           aria-describedby="minion-choice-description"
           data-testid="fearless-foodie-dialog"
-          onKeyDown={trapDiscoverFocus}
+          onKeyDown={trapModalFocus}
         >
           <div className="modal minion-choice-modal">
             <span className="discover-kicker">抉择 · 随从</span>
@@ -7831,7 +7978,7 @@ export default function GameClient() {
           aria-labelledby="spellcraft-choice-title"
           aria-describedby="spellcraft-choice-description"
           data-testid="escape-eruption-dialog"
-          onKeyDown={trapDiscoverFocus}
+          onKeyDown={trapModalFocus}
         >
           <div className="modal tavern-spell-choice-modal">
             <span className="discover-kicker">抉择 · 塑造法术</span>
@@ -7899,7 +8046,7 @@ export default function GameClient() {
           aria-labelledby="tavern-spell-choice-title"
           aria-describedby="tavern-spell-choice-description"
           data-testid="time-management-dialog"
-          onKeyDown={trapDiscoverFocus}
+          onKeyDown={trapModalFocus}
         >
           <div className="modal tavern-spell-choice-modal">
             <span className="discover-kicker">抉择</span>
@@ -7967,7 +8114,7 @@ export default function GameClient() {
           aria-labelledby="hero-power-choice-title"
           aria-describedby="hero-power-choice-description"
           data-testid="hero-power-choice-dialog"
-          onKeyDown={trapDiscoverFocus}
+          onKeyDown={trapModalFocus}
         >
           <div className="modal hero-power-choice-modal">
             <span className="discover-kicker">发现 · 英雄技能</span>
@@ -8029,7 +8176,7 @@ export default function GameClient() {
             discoverInteraction.destination.kind
           }
           data-testid="discover-dialog"
-          onKeyDown={trapDiscoverFocus}
+          onKeyDown={trapModalFocus}
         >
           <div className="modal discover-modal">
             <span className="discover-kicker">发现</span>
@@ -8112,11 +8259,24 @@ export default function GameClient() {
       )}
 
       {!started && loaded && (
-        <div className="overlay" role="dialog" aria-modal="true">
-          <div className="modal">
+        <div
+          className="overlay"
+          role="dialog"
+          aria-modal="true"
+          aria-labelledby="start-game-title"
+          aria-describedby="start-game-description"
+          onKeyDown={trapModalFocus}
+        >
+          <form
+            className="modal"
+            onSubmit={(event) => {
+              event.preventDefault();
+              startInitialGame();
+            }}
+          >
             <span className="modal-kicker">非官方本地单人版本</span>
-            <h1>酒馆战棋 · 单机版</h1>
-            <p>
+            <h1 id="start-game-title">酒馆战棋 · 单机版</h1>
+            <p id="start-game-description">
               你将与 7 名 AI 对战。没有回合倒计时，由你决定何时结束招募并进入战斗。
             </p>
             <div className="modal-features">
@@ -8127,49 +8287,85 @@ export default function GameClient() {
               <span>三连奖励与发现</span>
               <span>磁力吸附</span>
             </div>
+            <InitialHealthControl
+              value={initialHealthInput}
+              onChange={setInitialHealthInput}
+              onConfirm={startInitialGame}
+              inputTestId="initial-health-input"
+              autoFocus
+            />
             <button
-              type="button"
+              type="submit"
               className="action-button primary"
               data-testid="start-game"
-              onClick={() => {
-                safeWriteLocalStorage(SAVE_KEY, JSON.stringify(game));
-                setStarted(true);
-              }}
+              disabled={configuredInitialHealth === null}
             >
               开始新局
             </button>
-          </div>
+          </form>
         </div>
       )}
 
       {showRestart && (
-        <div className="overlay" role="dialog" aria-modal="true">
-          <div className="modal">
-            <h2>重新开始本局？</h2>
-            <p>当前进度会被新的八人战局覆盖。</p>
+        <div
+          className="overlay"
+          role="dialog"
+          aria-modal="true"
+          aria-labelledby="restart-game-title"
+          aria-describedby="restart-game-description"
+          onKeyDown={(event) => {
+            trapModalFocus(event);
+            if (event.key === "Escape") {
+              closeRestartDialog();
+            }
+          }}
+        >
+          <form
+            className="modal"
+            onSubmit={(event) => {
+              event.preventDefault();
+              startFreshGame();
+            }}
+          >
+            <h2 id="restart-game-title">设置并重新开始？</h2>
+            <p id="restart-game-description">
+              当前进度会被新的八人战局覆盖，你可以先调整所有玩家的初始生命值。
+            </p>
+            <InitialHealthControl
+              value={initialHealthInput}
+              onChange={setInitialHealthInput}
+              onConfirm={startFreshGame}
+              inputTestId="restart-initial-health-input"
+              autoFocus
+            />
             <div className="modal-actions">
               <button
                 type="button"
                 className="action-button secondary"
-                onClick={() => setShowRestart(false)}
+                onClick={closeRestartDialog}
               >
                 取消
               </button>
               <button
-                type="button"
+                type="submit"
                 className="action-button danger"
                 data-testid="confirm-restart"
-                onClick={startFreshGame}
+                disabled={configuredInitialHealth === null}
               >
                 重开本局
               </button>
             </div>
-          </div>
+          </form>
         </div>
       )}
 
       {game.phase === "gameOver" && !showRestart && (
-        <div className="overlay" role="dialog" aria-modal="true">
+        <div
+          className="overlay"
+          role="dialog"
+          aria-modal="true"
+          onKeyDown={trapModalFocus}
+        >
           <div className="modal">
             <span className="modal-kicker">
               {game.winnerId === game.humanPlayerId ? "酒馆战棋胜利" : "战局结束"}
@@ -8186,9 +8382,9 @@ export default function GameClient() {
               type="button"
               className="action-button primary"
               data-testid="play-again"
-              onClick={startFreshGame}
+              onClick={openRestartDialog}
             >
-              再来一局
+              设置下一局
             </button>
           </div>
         </div>
