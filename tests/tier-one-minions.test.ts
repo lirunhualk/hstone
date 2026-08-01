@@ -18,6 +18,7 @@ import {
 } from "../lib/game/content.ts";
 import {
   LEGACY_SCHEMA_11_CONTENT_VERSION_V18,
+  LEGACY_SCHEMA_11_CONTENT_VERSION_V37,
   normalizePersistedGameState,
 } from "../lib/game/save.ts";
 
@@ -703,6 +704,103 @@ test("Crimson Survivor also completes from a combat-only Attack buff", () => {
   assert.ok(combatOnlyBuff?.minion);
   assert.equal(combatOnlyBuff.minion.attack, 6);
   assert.equal(combatOnlyBuff.minion.divineShield, true);
+  const combatEvents = state.lastBattle?.events ?? [];
+  const shieldBreaks = combatEvents.filter(
+    (event) =>
+      event.type === "shieldBroken" &&
+      event.targetInstanceId === "combat-survivor",
+  );
+  assert.equal(shieldBreaks.length, 1);
+  assert.ok(
+    combatEvents.some(
+      (event) =>
+        event.type === "damage" &&
+        event.targetInstanceId === "combat-survivor" &&
+        event.index > shieldBreaks[0].index,
+    ),
+  );
+  assert.equal(
+    combatEvents.filter(
+      (event) =>
+        event.type === "buff" &&
+        event.targetInstanceId === "combat-survivor" &&
+        event.message.includes("达到6点攻击力"),
+    ).length,
+    0,
+  );
+});
+
+test("Crimson Survivor does not regain Divine Shield after it breaks in combat", () => {
+  let state = createGame(0x7172);
+  const player = humanPlayer(state);
+  const template = player.shop[0];
+  assert.ok(template);
+  player.board = [
+    definitionMinion(template, "BG35_814", "single-shield-survivor", {
+      attack: 6,
+      health: 10,
+      divineShield: false,
+    }),
+  ];
+  keepOneIdleOpponent(state, [
+    definitionMinion(template, "BG26_135", "single-shield-target", {
+      attack: 1,
+      health: 30,
+    }),
+  ]);
+
+  state = gameReducer(state, { type: "END_TURN" });
+  const events = state.lastBattle?.events ?? [];
+  const shieldBreaks = events.filter(
+    (event) =>
+      event.type === "shieldBroken" &&
+      event.targetInstanceId === "single-shield-survivor",
+  );
+  assert.equal(shieldBreaks.length, 1);
+  assert.ok(
+    events.some(
+      (event) =>
+        event.type === "damage" &&
+        event.targetInstanceId === "single-shield-survivor" &&
+        event.index > shieldBreaks[0].index,
+    ),
+  );
+  assert.equal(
+    events.filter(
+      (event) =>
+        event.type === "buff" &&
+        event.targetInstanceId === "single-shield-survivor" &&
+        event.message.includes("达到6点攻击力"),
+    ).length,
+    0,
+  );
+});
+
+test("v37 saves preserve Crimson Survivor's consumed Divine Shield", () => {
+  const state = createGame(0x7173);
+  const player = humanPlayer(state);
+  const template = player.shop[0];
+  assert.ok(template);
+  player.board = [
+    definitionMinion(template, "BG35_814", "saved-consumed-survivor", {
+      attack: 6,
+      divineShield: false,
+      effectCounters: { conditionalKeywordTriggered: 1 },
+    }),
+  ];
+  state.contentVersion = LEGACY_SCHEMA_11_CONTENT_VERSION_V37;
+
+  const restored = normalizePersistedGameState(
+    JSON.parse(JSON.stringify(state)),
+  ) as GameState | null;
+  assert.ok(restored);
+  const restoredSurvivor = humanPlayer(restored).board[0];
+  assert.equal(restoredSurvivor?.divineShield, false);
+  assert.equal(
+    restoredSurvivor?.effectCounters
+      ?.conditionalKeywordTriggered,
+    1,
+  );
 });
 
 test("v18 saves migrate Tier 1 counters and discounts without losing persistent history", () => {
@@ -758,4 +856,9 @@ test("v18 saves migrate Tier 1 counters and discounts without losing persistent 
   );
   assert.equal(migratedPlayer.board[1]?.effectSupport, "complete");
   assert.equal(migratedPlayer.board[1]?.divineShield, true);
+  assert.equal(
+    migratedPlayer.board[1]?.effectCounters
+      ?.conditionalKeywordTriggered,
+    1,
+  );
 });

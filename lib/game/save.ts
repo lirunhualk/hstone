@@ -362,8 +362,18 @@ function refreshMinionSupport(
     typeof value.attack === "number" &&
     value.attack >= definition.conditionalKeyword.attackAtLeast
   ) {
-    value.divineShield = true;
-    value.temporaryDivineShield = false;
+    const counters = isRecord(value.effectCounters)
+      ? value.effectCounters
+      : {};
+    value.effectCounters = counters;
+    const alreadyTriggered =
+      typeof counters.conditionalKeywordTriggered === "number" &&
+      counters.conditionalKeywordTriggered > 0;
+    if (!alreadyTriggered) {
+      counters.conditionalKeywordTriggered = 1;
+      value.divineShield = true;
+      value.temporaryDivineShield = false;
+    }
   }
   if (definition.stealth === true) {
     value.stealth = true;

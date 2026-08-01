@@ -241,6 +241,8 @@ const CRIMSON_SURVIVOR_DEFINITION_ID = "BG35_814" as const;
 const DEMON_FODDER_DEFINITION_ID = "live-demon-fodder-token" as const;
 const PERIODIC_TURN_COUNTER = "periodicEndOfTurn";
 const PURCHASE_PROGRESS_COUNTER = "cardPurchases";
+const CONDITIONAL_KEYWORD_TRIGGERED_COUNTER =
+  "conditionalKeywordTriggered";
 const GOLD_SPEND_PROGRESS_COUNTER = "goldSpendProgress";
 const DYNAMIC_END_OF_TURN_ATTACK_COUNTER = "dynamicEndOfTurnAttack";
 const DYNAMIC_END_OF_TURN_HEALTH_COUNTER = "dynamicEndOfTurnHealth";
@@ -742,8 +744,12 @@ function refreshDynamicMinionDescription(
   }
   if (
     minion.definitionId === CRIMSON_SURVIVOR_DEFINITION_ID &&
-    minion.divineShield &&
-    minion.attack >= 6
+    (effectCounter(
+      minion,
+      CONDITIONAL_KEYWORD_TRIGGERED_COUNTER,
+      0,
+    ) > 0 ||
+      (minion.divineShield && minion.attack >= 6))
   ) {
     minion.description =
       "一旦本随从的攻击力达到6点，获得圣盾。（已完成！）";
@@ -1841,11 +1847,23 @@ function reconcileConditionalMinion(
 ): boolean {
   const effect =
     getMinionDefinition(minion.definitionId).conditionalKeyword;
-  const gainedDivineShield =
+  const shouldTrigger =
     effect?.keyword === "divineShield" &&
     minion.attack >= effect.attackAtLeast &&
+    effectCounter(
+      minion,
+      CONDITIONAL_KEYWORD_TRIGGERED_COUNTER,
+      0,
+    ) <= 0;
+  const gainedDivineShield =
+    shouldTrigger &&
     !minion.divineShield;
-  if (gainedDivineShield) {
+  if (shouldTrigger) {
+    setEffectCounter(
+      minion,
+      CONDITIONAL_KEYWORD_TRIGGERED_COUNTER,
+      1,
+    );
     minion.divineShield = true;
     minion.temporaryDivineShield = false;
   }
