@@ -20,6 +20,9 @@ export type EffectSupport = "complete" | "partial";
 
 export type TavernTier = 1 | 2 | 3 | 4 | 5 | 6;
 
+/** Tier 7 minions are effect-generated and never unlock a Tavern upgrade. */
+export type MinionTier = TavernTier | 7;
+
 export type TierParity = "odd" | "even";
 
 export type EffectTarget =
@@ -45,6 +48,8 @@ export interface BuffEffect {
   /** Restrict eligible friendly minions by their printed Tavern Tier. */
   tierParity?: TierParity;
   taunt?: boolean;
+  /** Golden sources repeat the complete buff event instead of doubling stats. */
+  goldenMode?: "repeat";
 }
 
 export interface BuffKeywordEffect {
@@ -95,6 +100,13 @@ export interface GainFreeRefreshesEffect {
 
 export interface GainTavernSpellEffect {
   kind: "gainTavernSpell";
+  definitionId: string;
+  count: number;
+  goldenMode?: "doubleCount";
+}
+
+export interface GainGeneratedSpellEffect {
+  kind: "gainGeneratedSpell";
   definitionId: string;
   count: number;
   goldenMode?: "doubleCount";
@@ -185,6 +197,78 @@ export interface SummonRandomDeathrattleEffect {
   count: number;
 }
 
+export interface SummonRandomMinionEffect {
+  kind: "summonRandomMinion";
+  filter: {
+    tribe: Tribe;
+  };
+  setAttack: number;
+  setHealth: number;
+  /** Golden sources keep the summoned minion non-Golden and double set stats. */
+  goldenMode?: "doubleSetStats";
+}
+
+export interface CastTavernSpellOnAdjacentEffect {
+  kind: "castTavernSpellOnAdjacent";
+  definitionId: string;
+  /** Golden sources cast once on each surviving original neighbor. */
+  goldenMode?: "allAdjacent";
+}
+
+/** Deathrattle payload used by Rylak Metalhead. */
+export interface TriggerAdjacentBattlecriesEffect {
+  kind: "triggerAdjacentBattlecries";
+  /** Golden Rylak triggers both surviving original neighbors. */
+  goldenMode?: "allAdjacent";
+}
+
+/** Avenge reward used by Deathly Striker; gained cards remember this source. */
+export interface GainLinkedRandomMinionEffect {
+  kind: "gainLinkedRandomMinion";
+  tribe: Tribe;
+  count: number;
+  goldenMode?: "doubleCount";
+}
+
+/** Summons this source's still-linked hand cards as combat-only copies. */
+export interface SummonLinkedHandMinionsEffect {
+  kind: "summonLinkedHandMinions";
+}
+
+/** Summons the exact combat snapshots destroyed by this Stitched Salvager. */
+export interface SummonStitchedSalvagerCopiesEffect {
+  kind: "summonStitchedSalvagerCopies";
+}
+
+export interface BuffThenDamageFriendlyEffect {
+  kind: "buffThenDamageFriendly";
+  attack: number;
+  health: number;
+  damage: number;
+  /** Restrict each pulse to minions matching at least one listed tribe. */
+  tribes?: readonly Tribe[];
+  /** Exclude the source when it is still present on the Recruit board. */
+  otherOnly?: boolean;
+  /** Number of complete buff-then-damage pulses for a regular source. */
+  pulses?: number;
+  /** Golden sources resolve twice the configured number of complete pulses. */
+  goldenMode?: "repeat";
+}
+
+/** Combat-only Deathrattle payload used by Leeroy the Reckless. */
+export interface DestroyKillerEffect {
+  kind: "destroyKiller";
+}
+
+export interface BuffOtherFriendlyTribeByFamilyPlayedEffect {
+  kind: "buffOtherFriendlyTribeByFamilyPlayed";
+  family: "mrrglton";
+  tribe: Tribe;
+  attack: number;
+  health: number;
+  goldenMode?: "doubleStats";
+}
+
 export interface GetRandomMinionEffect {
   kind: "getRandomMinion";
   count: number;
@@ -194,7 +278,7 @@ export interface GetRandomMinionEffect {
     battlecry?: true;
     exactTier?: TavernTier;
   };
-  maximumTier: "ownerTavern";
+  maximumTier: "ownerTavern" | TavernTier;
   source: "sharedPool";
   goldenMode?: "doubleCount";
 }
@@ -214,6 +298,19 @@ export interface RallyBuffEffect {
   attack: number;
   health: number;
   goldenMode?: "doubleStats";
+}
+
+export interface RallyBuffOneFriendlyPerTribeEffect {
+  kind: "buffOneFriendlyPerTribe";
+  attack: number;
+  health: number;
+  permanent: true;
+  goldenMode?: "repeat";
+}
+
+export interface RallyDamageTargetAndAdjacentEffect {
+  kind: "damageTargetAndAdjacent";
+  goldenMode?: "bothAdjacent";
 }
 
 export interface RallySummonFromHandEffect {
@@ -273,6 +370,8 @@ export type RallyEffect =
   | GainRandomTavernSpellEffect
   | CastTavernSpellEffect
   | RallyBuffEffect
+  | RallyBuffOneFriendlyPerTribeEffect
+  | RallyDamageTargetAndAdjacentEffect
   | RallySummonFromHandEffect
   | RallyRemoveTargetKeywordsEffect
   | RallyGainTargetAttackEffect
@@ -346,6 +445,20 @@ export interface ImproveBallersEffect {
   health: number;
 }
 
+export interface ImproveElementalStatGrantsEffect {
+  kind: "improveElementalStatGrants";
+  attack: number;
+  health: number;
+}
+
+export interface BuffFriendlyMechsByMagnetizationsEffect {
+  kind: "buffFriendlyMechsByMagnetizations";
+  /** Base combat-only Attack granted by each Deathrattle pulse. */
+  attack: number;
+  /** Additional Attack for every successful Magnetization this game. */
+  attackPerMagnetization: number;
+}
+
 export interface BuffTavernEffect {
   kind: "buffTavern";
   attack: number;
@@ -390,6 +503,20 @@ export interface MakeSelfGoldenEffect {
   kind: "makeSelfGolden";
 }
 
+export interface BuffSelfByPlayerSpellHistoryEffect {
+  kind: "buffSelfByPlayerSpellHistory";
+  attack: number;
+  health: number;
+  spellsPerUpgrade: number;
+}
+
+export interface ImproveTavernSpellAuraThisTurnEffect {
+  kind: "improveTavernSpellAuraThisTurn";
+  cardsRequired: number;
+  attack: number;
+  health: number;
+}
+
 export type MinionEffect =
   | BuffEffect
   | SummonEffect
@@ -398,6 +525,7 @@ export type MinionEffect =
   | GainNextTurnGoldEffect
   | GainFreeRefreshesEffect
   | GainTavernSpellEffect
+  | GainGeneratedSpellEffect
   | GainRandomTavernSpellEffect
   | CastTavernSpellEffect
   | BuffRandomHandMinionEffect
@@ -411,6 +539,14 @@ export type MinionEffect =
   | GainMissingHealthEffect
   | ResummonMechsEffect
   | SummonRandomDeathrattleEffect
+  | SummonRandomMinionEffect
+  | CastTavernSpellOnAdjacentEffect
+  | TriggerAdjacentBattlecriesEffect
+  | SummonLinkedHandMinionsEffect
+  | SummonStitchedSalvagerCopiesEffect
+  | BuffThenDamageFriendlyEffect
+  | DestroyKillerEffect
+  | BuffOtherFriendlyTribeByFamilyPlayedEffect
   | GetRandomMinionEffect
   | GrantKeywordEffect
   | DamageAllMinionsEffect
@@ -420,13 +556,17 @@ export type MinionEffect =
   | ApplyBloodGemsToTribeEffect
   | ImproveTavernSpellBuffsEffect
   | ImproveBallersEffect
+  | ImproveElementalStatGrantsEffect
+  | BuffFriendlyMechsByMagnetizationsEffect
   | BuffTavernEffect
   | BuffTavernTypeEffect
   | ImproveUndeadArmyEffect
   | ConsumeRandomShopMinionEffect
   | QueueDemonFodderEffect
   | DiscountNextTavernSpellEffect
-  | MakeSelfGoldenEffect;
+  | MakeSelfGoldenEffect
+  | BuffSelfByPlayerSpellHistoryEffect
+  | ImproveTavernSpellAuraThisTurnEffect;
 
 export interface TargetedBuffBattlecry {
   kind: "targetedBuff";
@@ -445,6 +585,16 @@ export interface DiscoverMinionBattlecry {
   kind: "discoverMinion";
   tribe: Tribe;
   requiresOtherTribe?: Tribe;
+  /** Resolve this after the chosen card enters hand and Triples are checked. */
+  damageHeroByDiscoveredTier?: true;
+  /** Still present choices when the hand is full; the chosen card is burned. */
+  allowHandOverflow?: true;
+  goldenMode: "repeat";
+}
+
+export interface DiscoverTavernSpellBattlecry {
+  kind: "discoverTavernSpell";
+  /** Tavern Spell discoveries are repeated for Golden copies and Battlecry doublers. */
   goldenMode: "repeat";
 }
 
@@ -455,10 +605,27 @@ export interface TargetedDiscoverMagnetizeBattlecry {
   goldenMode: "repeat";
 }
 
+export interface DestroyFriendlyAndCopyBattlecry {
+  kind: "destroyFriendlyAndCopy";
+  targetTribe: Tribe;
+  copies: number;
+  goldenMode: "doubleCopies";
+}
+
+export interface MakeFriendlyGoldenBattlecry {
+  kind: "makeFriendlyGolden";
+  maximumTier: TavernTier;
+  targets: number;
+  goldenMode: "doubleTargets";
+}
+
 export type InteractiveBattlecry =
   | TargetedBuffBattlecry
   | DiscoverMinionBattlecry
-  | TargetedDiscoverMagnetizeBattlecry;
+  | DiscoverTavernSpellBattlecry
+  | TargetedDiscoverMagnetizeBattlecry
+  | DestroyFriendlyAndCopyBattlecry
+  | MakeFriendlyGoldenBattlecry;
 
 export interface FriendlyTribeTrigger {
   tribe: Tribe;
@@ -477,6 +644,10 @@ export interface FriendlyTribeTrigger {
   damageEnemy?: number;
   damageTarget?: "random" | "highestHealth";
   grantShield?: boolean;
+  /** Grants the summoned minion this observer's Attack and maximum Health. */
+  giveSourceMaximumStats?: boolean;
+  maximumTriggersPerCombat?: number;
+  goldenMode?: "doubleStats";
 }
 
 export interface FriendlyDamagedTrigger {
@@ -523,6 +694,7 @@ export interface FriendlyCombatDeathTrigger {
 
 export type AvengeEffect =
   | GainRandomGeneratedMinionEffect
+  | GainLinkedRandomMinionEffect
   | GainTavernSpellEffect
   | SummonEffect
   | ApplyBloodGemsToTribeEffect;
@@ -541,6 +713,36 @@ export interface CardPlayedFilter {
 export interface CardPlayedTrigger {
   filter: CardPlayedFilter;
   effects: readonly MinionEffect[];
+  /** Some after-play observers, unlike ordinary board watchers, see themselves. */
+  includeSource?: boolean;
+}
+
+export interface BuffRandomOtherPirateAfterCardAddedTrigger {
+  kind: "buffRandomOtherPirate";
+  attack: number;
+  health: number;
+  /** Golden Pirates repeat the ordinary pulse so each pulse chooses a target. */
+  goldenMode?: "repeat";
+}
+
+export interface BuffWarbandAfterTribeCardAddedTrigger {
+  kind: "buffWarbandAfterTribeCardAdded";
+  tribe: Tribe;
+  attack: number;
+  health: number;
+  goldenTargetAttack: number;
+  goldenTargetHealth: number;
+  goldenMode?: "doubleStats";
+}
+
+export type CardAddedToHandTrigger =
+  | BuffRandomOtherPirateAfterCardAddedTrigger
+  | BuffWarbandAfterTribeCardAddedTrigger;
+
+export interface MinionConsumedTrigger {
+  tavernAttackThisTurn: number;
+  tavernHealthThisTurn: number;
+  goldenMode?: "doubleStats";
 }
 
 export interface GoldSpentThresholdTrigger {
@@ -638,6 +840,20 @@ export interface ApplyBloodGemToAllPerBonusKeywordEffect {
   goldenMode?: "doubleCount";
 }
 
+export interface GainUpgradingMagneticSatellitesEffect {
+  kind: "gainUpgradingMagneticSatellites";
+  definitionId: string;
+  count: number;
+  attack: number;
+  health: number;
+  goldenMode?: "doubleStats";
+}
+
+export interface GiveStatsToLeftmostHandMinionEffect {
+  kind: "giveStatsToLeftmostHandMinion";
+  goldenMode?: "doubleStats";
+}
+
 export type EndOfTurnEffect =
   | MenagerieEndOfTurnEffect
   | BuffEndOfTurnEffect
@@ -655,10 +871,47 @@ export type EndOfTurnEffect =
   | GainRandomOrAllMinionEffect
   | DynamicWarbandEndOfTurnEffect
   | LeftmostTribeRepeatPerCardPlayedEffect
-  | ApplyBloodGemToAllPerBonusKeywordEffect;
+  | ApplyBloodGemToAllPerBonusKeywordEffect
+  | GainUpgradingMagneticSatellitesEffect
+  | GiveStatsToLeftmostHandMinionEffect;
 
 export interface CardPurchaseMilestoneEffect {
   purchases: number;
+  attack: number;
+  health: number;
+  goldenMode?: "doubleStats";
+}
+
+export interface MinionPurchaseStatsEffect {
+  timesPerTurn: number;
+  attack: number;
+  health: number;
+  statMultiplier: number;
+  goldenStatMultiplier: number;
+}
+
+export interface TavernSpellPurchaseTrigger {
+  timesPerTurn: number;
+  tokenDefinitionId: string;
+  goldenMode?: "doubleLimit";
+}
+
+export interface FriendlyHealthGainTrigger {
+  tribe: Tribe;
+  otherOnly?: boolean;
+  attackPerHealth: number;
+  goldenMode?: "doubleStats";
+}
+
+export interface FriendlyAttackGainTrigger {
+  tribe: Tribe;
+  otherOnly?: boolean;
+  health: number;
+  goldenMode?: "doubleStats";
+}
+
+export interface BattlecryTriggeredTrigger {
+  tribe: Tribe;
   attack: number;
   health: number;
   goldenMode?: "doubleStats";
@@ -704,6 +957,12 @@ export interface StartOfCombatGrowingTribeBuffEffect {
   goldenMode?: "doubleStats";
 }
 
+/** Stores and destroys the printed neighbor(s) for Stitched Salvager. */
+export interface StartOfCombatStitchedSalvagerEffect {
+  kind: "destroyNeighborsForStitchedSalvager";
+  goldenMode?: "adjacent";
+}
+
 export type StartOfCombatEffect =
   | BuffEffect
   | GrantShieldEffect
@@ -711,7 +970,8 @@ export type StartOfCombatEffect =
   | StartOfCombatGainHighestHandAttackEffect
   | StartOfCombatGainAllHandMinionStatsEffect
   | StartOfCombatSummonHighestAttackHandTribeEffect
-  | StartOfCombatGrowingTribeBuffEffect;
+  | StartOfCombatGrowingTribeBuffEffect
+  | StartOfCombatStitchedSalvagerEffect;
 
 export interface CombatEnchantmentRetentionEffect {
   target: "self" | "adjacentFriendlyTribe";
@@ -735,8 +995,18 @@ export interface MagneticSpec {
   targetTribes: readonly Tribe[];
 }
 
+export interface CopyOtherMagnetizationEffect {
+  copies: number;
+  goldenMode: "doubleCopies";
+}
+
 export interface SpellcraftSpec {
   definitionId: string;
+  /** Exact-tier rewards whose tier advances at each end-of-turn pulse. */
+  evolvingRewardTier?: {
+    initialTier: TavernTier;
+    maximumTier: TavernTier;
+  };
 }
 
 export interface BloodGemImproveOrGainChoice {
@@ -745,6 +1015,82 @@ export interface BloodGemImproveOrGainChoice {
   health: number;
   count: number;
   goldenMode?: "doubleValues";
+}
+
+export interface TavernSpellBuffChoice {
+  kind: "tavernSpellBuff";
+  attack: number;
+  health: number;
+  goldenMode?: "doubleValues";
+}
+
+export interface BeastKeywordBuffChoice {
+  kind: "beastKeywordBuff";
+  rebornAttack: number;
+  rebornHealth: number;
+  windfuryAttack: number;
+  windfuryHealth: number;
+  goldenMode?: "doubleValues";
+}
+
+export type MinionOnPlayChoice =
+  | BloodGemImproveOrGainChoice
+  | TavernSpellBuffChoice
+  | BeastKeywordBuffChoice;
+
+export interface HeroDamagedTrigger {
+  /** Permanent Health granted to this observer after the damage is rewound. */
+  health?: number;
+  /** Temporary stats granted to every current and later Tavern minion this turn. */
+  tavernAttackThisTurn?: number;
+  tavernHealthThisTurn?: number;
+}
+
+export interface HealthRefreshSpec {
+  count: number;
+  healthCost: number;
+  goldenMode?: "doubleCount";
+}
+
+export interface SellDiscoverSpec {
+  initialTier: TavernTier;
+  maximumTier: TavernTier;
+  discoveries: number;
+  goldenMode?: "doubleCount";
+}
+
+export interface TavernSpellBuffAura {
+  attack: number;
+  health: number;
+}
+
+export interface TavernSpellHistoryBuff {
+  attack: number;
+  health: number;
+}
+
+export interface AfterSpellCastEffect {
+  attack: number;
+  health: number;
+}
+
+export interface AfterPlayerSpellCastTrigger {
+  kind: "consumeRandomShopMinion";
+  spellsRequired: number;
+  goldenMode?: "doubleStats";
+}
+
+export interface SelfAttackGainTrigger {
+  health: number;
+  goldenMode?: "repeat";
+}
+
+export interface SpellcraftPermanentOnSelf {
+  castsPerTurn: number;
+}
+
+export interface CopySpellcraftOnSelf {
+  count: number;
 }
 
 export interface BloodGemFromHandAura {
@@ -758,6 +1104,12 @@ export interface AfterBloodGemCastOnSelfEffect {
   goldenMode?: "doubleCount";
 }
 
+export interface AfterTargetedSpellCastEffect {
+  kind: "gainVenomous";
+  /** Golden Pufferquil keeps Venomous instead of losing it next Recruit. */
+  goldenMode: "permanent";
+}
+
 export interface MinionDefinition {
   id: string;
   /** Hearthstone CardID used only to locate the familiar card artwork. */
@@ -765,7 +1117,7 @@ export interface MinionDefinition {
   /** Real premium CardID when the Golden card has distinct artwork. */
   goldenCardId?: string;
   name: string;
-  tier: TavernTier;
+  tier: MinionTier;
   /** Primary type retained for the current single-type engine compatibility. */
   tribe: Tribe;
   /** Printed minion types. Empty means the card is typeless. */
@@ -798,10 +1150,21 @@ export interface MinionDefinition {
   afterFriendlyPlayed?: FriendlyTribeTrigger;
   afterCardPlayed?: CardPlayedTrigger;
   inHandAfterCardPlayed?: CardPlayedTrigger;
+  /** Fires once after a card successfully enters this player's hand. */
+  afterCardAddedToHand?: CardAddedToHandTrigger;
+  /** Fires after each real consume, including sequential multi-consume effects. */
+  afterMinionConsumed?: MinionConsumedTrigger;
   afterGoldSpent?: GoldSpentThresholdTrigger;
   afterFriendlySummoned?: FriendlyTribeTrigger;
+  /** Permanently buffs the warband whenever a real summon attempt finds no board space. */
+  onFriendlySummonOverflow?: {
+    attack: number;
+    health: number;
+  };
   afterFriendlyDamaged?: FriendlyDamagedTrigger;
   afterFriendlyDealsDamage?: FriendlyDamageDealtTrigger;
+  /** Recruit-phase hero damage is rewound once, then every observer grows. */
+  afterHeroDamaged?: HeroDamagedTrigger;
   afterFriendlyDied?: FriendlyDeathTrigger;
   afterFriendlyCombatDied?: FriendlyCombatDeathTrigger;
   afterFriendlyAttacks?: readonly FriendlyAttackTriggerEffect[];
@@ -816,19 +1179,57 @@ export interface MinionDefinition {
   rally?: readonly RallyEffect[];
   endOfTurn?: EndOfTurnEffect;
   afterCardPurchased?: CardPurchaseMilestoneEffect;
+  /** Applies directly to the bought minion before any resulting Triple is formed. */
+  afterMinionPurchased?: MinionPurchaseStatsEffect;
+  /** Fires only after a Tavern Spell is successfully bought from the shop. */
+  afterTavernSpellPurchased?: TavernSpellPurchaseTrigger;
+  /** Fires after another friendly board minion actually gains positive Health. */
+  afterFriendlyGainsHealth?: FriendlyHealthGainTrigger;
+  /** Fires once after another friendly board minion actually gains positive Attack. */
+  afterFriendlyGainsAttack?: FriendlyAttackGainTrigger;
+  /** Fires once after each Battlecry pulse actually finishes resolving. */
+  afterBattlecryTriggered?: BattlecryTriggeredTrigger;
   conditionalKeyword?: ConditionalKeywordEffect;
+  /** Fires once for each positive Attack-gain event caused by another source. */
+  afterSelfGainsAttack?: SelfAttackGainTrigger;
   afterSold?: readonly MinionEffect[];
   afterFriendlySold?: readonly MinionEffect[];
   afterMagnetized?: readonly MinionEffect[];
+  /** Copies the complete Magnetic source onto this host without another pool return. */
+  copyOtherMagnetization?: CopyOtherMagnetizationEffect;
   aura?: StatAura;
   magnetic?: MagneticSpec;
   spellcraft?: SpellcraftSpec;
   /** A non-Battlecry choice that resolves only when this minion is played. */
-  onPlayChoice?: BloodGemImproveOrGainChoice;
+  onPlayChoice?: MinionOnPlayChoice;
+  /** Refreshes paid with Health before ordinary Gold refreshes are considered. */
+  healthRefreshesPerTurn?: HealthRefreshSpec;
+  /** Discover whose exact Tier advances while this card ends a turn in play. */
+  sellDiscover?: SellDiscoverSpec;
   /** Extra full pulses for a Blood Gem played from hand. */
   bloodGemFromHandAura?: BloodGemFromHandAura;
   /** Observer invoked after each real Blood Gem pulse lands on this minion. */
   afterBloodGemCastOnSelf?: AfterBloodGemCastOnSelfEffect;
+  /** Observer invoked after each real targeted spell cast resolves on this minion. */
+  afterTargetedSpellCast?: AfterTargetedSpellCastEffect;
+  /** Live aura added to every stat grant made by a Tavern Spell. */
+  tavernSpellBuffAura?: TavernSpellBuffAura;
+  /** Dynamic stats per Tavern Spell actually cast during this game. */
+  tavernSpellHistoryBuff?: TavernSpellHistoryBuff;
+  /** Observer invoked after every actual spell-cast pulse. */
+  afterSpellCast?: AfterSpellCastEffect;
+  /** Observer invoked only when this player is the spell's caster. */
+  afterPlayerSpellCast?: AfterPlayerSpellCastTrigger;
+  /** Number of targeted Spellcraft hand cards made permanent each turn. */
+  spellcraftPermanentOnSelf?: SpellcraftPermanentOnSelf;
+  /** Once each turn, copy a Spellcraft hand card used on this source. */
+  copySpellcraftOnSelf?: CopySpellcraftOnSelf;
+  /** Extra casts for a spell whose explicit target is a friendly minion. */
+  friendlyTargetSpellExtraCasts?: number;
+  /** Extra complete casts for each Bounty while this source is alive. */
+  bountyExtraCasts?: number;
+  /** Generated apprentice text: cast the Tavern Spell stored on this instance. */
+  battlecryCastsTaughtTavernSpell?: boolean;
   /** Additional times each Tavern Spell is cast while this source is alive in combat. */
   combatTavernSpellExtraCasts?: number;
   extraBattlecries?: number;
@@ -842,6 +1243,10 @@ export interface MinionDefinition {
   /** A generated Fodder feeds itself while offered instead of entering the pool. */
   shopFodder?: boolean;
   collectible?: boolean;
+  /** Some generated cards have no Golden form and can never form a Triple. */
+  canTriple?: boolean;
+  /** This minion may replace one or more missing copies in a mixed triple. */
+  tripleWildcardFor?: Tribe;
 }
 
 /**
@@ -861,7 +1266,7 @@ export interface MinionInstance {
   definitionId: string;
   cardId: string;
   name: string;
-  tier: TavernTier;
+  tier: MinionTier;
   tribe: Tribe;
   tribes: Tribe[];
   associatedTribes: Tribe[];
@@ -888,20 +1293,39 @@ export interface MinionInstance {
   astralAutomatonSummoned?: boolean;
   /** Friendly deaths observed while this Ancient Soul was held in hand. */
   ancientSoulFriendlyDeaths?: number;
+  /** Stable source identities retained when Deathly Strikers form a Triple. */
+  deathlyStrikerLineageIds?: string[];
+  /** Deathly Striker source identities that generated this hand card. */
+  deathlyStrikerCreatorIds?: string[];
   /** JSON-safe progress for card-specific counters such as "every 3 turns". */
   effectCounters?: Record<string, number>;
+  /** Tavern Spell taught to a generated Magicfin Apprentice. */
+  taughtTavernSpellDefinitionId?: string;
   /** Total permanent stats on this minion that came specifically from Blood Gems. */
   bloodGemAttack: number;
   bloodGemHealth: number;
+  /**
+   * Blood Gem stats hidden by a later fixed-stat effect. They remain part of
+   * the transferable Blood Gem ledger, but no longer contribute to the
+   * minion's visible stats when those Gems are moved away.
+   */
+  suppressedBloodGemAttack?: number;
+  suppressedBloodGemHealth?: number;
   /** Spellcraft enchantments remain for combat, then expire next Recruit phase. */
   temporaryAttack: number;
   temporaryHealth: number;
   temporaryTaunt: boolean;
   temporaryDivineShield: boolean;
+  /** Venomous granted only through the next combat, cleared next Recruit. */
+  temporaryVenomous?: boolean;
   /** Temporary "Deathrattle: summon a 3/2 Crab" effects from Crab Rider. */
   temporaryCrabDeathrattles: number;
   /** Temporary Golden Crab Rider deathrattles that summon one 6/4 Crab. */
   temporaryGoldenCrabDeathrattles?: number;
+  /** Permanent Crab Rider deathrattles retained after the Recruit turn. */
+  crabDeathrattles?: number;
+  /** Permanent Golden Crab Rider deathrattles retained after the Recruit turn. */
+  goldenCrabDeathrattles?: number;
   /** A hand minion cannot be played before this Recruit round. */
   playableFromRound?: number;
   /** Stir the Graveyard destroys this minion if it is played through this round. */
@@ -916,6 +1340,11 @@ export interface MinionInstance {
    * regular purchased minion, 3 for a golden minion, and 0 for combat tokens.
    */
   poolCopies: number;
+  /**
+   * Exact shared-pool ownership for mixed-identity triples. Omitted when every
+   * represented copy has the visible minion's definition ID.
+   */
+  poolCopiesByDefinitionId?: Record<string, number>;
   /**
    * Wisdomball overflow is not in the pool while offered, but becomes one
    * returnable shared-pool copy if the player acquires it.
@@ -956,15 +1385,18 @@ export interface TripleRewardSpellInstance extends MinionInstance {
   kind: "tripleReward";
   cardId: "TB_BaconShop_Triples_01";
   definitionId: "triple-reward";
+  tier: TavernTier;
 }
 
 export type SpellFamily =
   | "bloodGem"
   | "tavern"
   | "spellcraft"
+  | "generated"
   | "coin";
 
 export type BloodGemBonusKeyword =
+  | "tauntForQuilboar"
   | "rebornForQuilboar"
   | "divineShieldForQuilboar";
 
@@ -991,6 +1423,7 @@ export interface ConsolationCoinSpellInstance {
 
 export type SpellcraftEffect =
   | "crabRider"
+  | "slimyShield"
   | "anglersLure"
   | "glowingCrown"
   | "sickRiffs"
@@ -998,9 +1431,25 @@ export type SpellcraftEffect =
   | "escapeEruption"
   | "evolvingStrategy"
   | "meditation"
-  | "rimeOrReason";
+  | "rimeOrReason"
+  | "sirensSong"
+  | "jailerStickerLesser"
+  | "jailerStickerGreater"
+  | "ophidianStaff"
+  | "chillmereMosaic"
+  | "doubleStitch"
+  | "tokenOfOldGods"
+  | "darkmoonPrizeDiscover"
+  | "darkmoonTrainingSession"
+  | "darkmoonBuyTheHolyLight"
+  | "darkmoonBananas"
+  | "darkmoonTopShelf"
+  | "darkmoonRepeatCustomer"
+  | "darkmoonAllThatGlitters"
+  | "darkmoonMindflayerGoggles"
+  | "darkmoonReservePrices";
 
-export type SpellcraftTarget = "none" | "friendly";
+export type SpellcraftTarget = "none" | "friendly" | "shop";
 
 export interface SpellcraftDefinition {
   id: string;
@@ -1009,10 +1458,14 @@ export interface SpellcraftDefinition {
   name: string;
   description: string;
   goldenDescription?: string;
-  /** Tavern Tier of the active Naga that normally generates this spell. */
-  sourceTier: TavernTier;
+  /** Tier of the active Naga that normally generates this spell. */
+  sourceTier: MinionTier;
   effect: SpellcraftEffect;
   target: SpellcraftTarget;
+  /** Generated ordinary spells share the targeting/casting UI but are not Spellcraft. */
+  spellFamily?: "spellcraft" | "generated";
+  /** False for tokens such as Slimy Shield that random Spellcraft cannot create. */
+  randomlyGeneratable?: boolean;
 }
 
 export interface SpellcraftSpellInstance {
@@ -1022,10 +1475,12 @@ export interface SpellcraftSpellInstance {
   cardId: string;
   name: string;
   description: string;
-  spellFamily: "spellcraft";
+  spellFamily: "spellcraft" | "generated";
   target: SpellcraftTarget;
   /** Missing on older saves means the ordinary x1 version. */
   effectMultiplier?: number;
+  /** Exact reward Tier snapshotted when an evolving Spellcraft was granted. */
+  rewardTier?: TavernTier;
 }
 
 export type TavernSpellEffect =
@@ -1093,7 +1548,10 @@ export type TavernSpellEffect =
   | "perfectVision"
   | "knockoffWisdomball"
   | "eyesOfTheEarthMother"
-  | "lostStaffOfHamuul";
+  | "lostStaffOfHamuul"
+  | "goldenizer"
+  | "goldenArrow"
+  | "mirrorLens";
 
 export type TavernSpellTarget = "none" | "friendly" | "anyMinion";
 
@@ -1132,7 +1590,19 @@ export type HeroPowerEffect =
   | "upgradeDiscount"
   | "freeRefreshAtTurnStart"
   | "gainGoldAfterUpgrade"
-  | "buffCombatSummons";
+  | "buffCombatSummons"
+  | "bonusStartingHealth"
+  | "goldAfterSellNextTurn"
+  | "twoGoldMinionRefresh"
+  | "freezeEndTurnSmallerTavern"
+  | "extraDragonOnRefresh"
+  | "upgradeDiscountAfterElementals"
+  | "piratePurchaseRefund"
+  | "tavernCoinAfterThreeMinions"
+  | "freeFourthTavernSpell"
+  | "growingTavernSpellBuff"
+  | "buffAllCombatMinionsAttack"
+  | "buffLeftmostCombatKeywords";
 
 export interface HeroPowerDefinition {
   id: string;
@@ -1140,7 +1610,21 @@ export interface HeroPowerDefinition {
   name: string;
   description: string;
   effect: HeroPowerEffect;
+  activation: "passive" | "active";
+  /** False for start-of-game powers that cannot be acquired mid-game. */
+  identityEligible?: boolean;
 }
+
+export interface HeroDefinition {
+  id: string;
+  cardId: string;
+  name: string;
+  heroPowerId: string;
+  /** At least one associated type must be active for this hero to be offered. */
+  associatedTribes?: readonly Tribe[];
+}
+
+export type TrinketTier = "lesser" | "greater";
 
 export type HandCardInstance =
   | BoardMinionInstance
@@ -1172,21 +1656,26 @@ export type HelpfulRefreshKind =
   | "tavernBuff"
   | "majorityTribe"
   | "highTier"
+  | "tierSeven"
   | "allSame"
   | "utility"
   | "allSpells";
 
 export interface PendingSpellcraftGrant {
   sourceInstanceId: string;
+  /** Trinket-backed Spellcraft uses its owned definition instead of a board source. */
+  sourceTrinketDefinitionId?: string;
   definitionId: string;
   golden: boolean;
   round: number;
+  /** Exact reward Tier retained while a full hand delays materialization. */
+  rewardTier?: TavernTier;
 }
 
 export interface PendingCardPlayedEvent {
   sourceInstanceId: string;
   cardKind: "minion" | "tavernSpell" | "other";
-  tier?: TavernTier;
+  tier?: MinionTier;
   tribe?: Tribe;
   tribes: Tribe[];
 }
@@ -1201,6 +1690,26 @@ export interface PlayerState {
   alive: boolean;
   /** Null is the local game's neutral starting power. */
   heroPowerId: string | null;
+  /** Per-power progress, reset whenever the current Hero Power changes. */
+  heroPowerCounters: Record<string, number>;
+  /** Selected lobby hero; legacy saves may resume without one. */
+  heroId: string | null;
+  /** Persistent Lesser and Greater Trinkets bought this game. */
+  trinketIds: string[];
+  /** Per-Trinket periodic progress, keyed by definition ID. */
+  trinketCounters: Record<string, number>;
+  /** Same-turn Tavern Spell discount granted by Reserve Prices. */
+  darkmoonReservePricesDiscount?: number;
+  /** Tickatus Tag rewards queued behind another modal interaction. */
+  pendingTickatusTagPrizes?: number;
+  /** Minion choices remembered by persistent Trinkets such as Pocket Factory. */
+  trinketSelections: Record<string, string>;
+  /** Mystery Cube replacements deferred behind an earlier start-of-turn choice. */
+  pendingMysteryCubeReplacementIds: string[];
+  /** System rewards wait here instead of disappearing when the hand is full. */
+  pendingSystemSpellIds: string[];
+  /** Remaining free Tavern Spell purchases granted this turn. */
+  freeTavernSpellPurchases: number;
   tavernTier: TavernTier;
   gold: number;
   board: BoardMinionInstance[];
@@ -1227,10 +1736,20 @@ export interface PlayerState {
   /** Gold reduction retained until the next Gold-cost Tavern Spell purchase. */
   nextTavernSpellDiscount: number;
   tavernSpellsCastThisTurn: number;
+  /** Tavern Spells actually cast across the complete game. */
+  tavernSpellsCast: number;
+  /** Spells actually cast by this player across the complete game. */
+  playerSpellsCast: number;
+  /** Battlecries actually triggered for this player across the complete game. */
+  battlecriesTriggered?: number;
+  /** Permanent extra Hero Power triggers accumulated from Yogg's wheel. */
+  heroPowerExtraTriggers?: number;
   /** Every successfully played hand card this Recruit turn. */
   cardsPlayedThisTurn: number;
   /** Gold actually deducted during this Recruit turn. */
   goldSpentThisTurn: number;
+  /** Mama and Papa Mrrglton cards successfully played during this game. */
+  mrrgltonsPlayed: number;
   /** A played card whose interactive effect has not finished resolving yet. */
   pendingCardPlayed: PendingCardPlayedEvent | null;
   /** Most recently cast Tavern Spell; generated copies do not consume its pool. */
@@ -1245,6 +1764,8 @@ export interface PlayerState {
   /** Recruit-turn economy and persistent Tavern Spell counters. */
   maxGold: number;
   pendingNextTurnGold: number;
+  /** Nozdormu's one non-stacking free Refresh for the current Recruit turn. */
+  heroRefreshAvailable: boolean;
   freeRefreshes: number;
   /** Remaining successful manual Refreshes replaced by Wisdomball pages. */
   helpfulRefreshes: number;
@@ -1252,6 +1773,9 @@ export interface PlayerState {
   lastHelpfulRefreshKind: HelpfulRefreshKind | null;
   tavernMinionAttackBonus: number;
   tavernMinionHealthBonus: number;
+  /** Tavern-wide temporary bonus, cleared at the next Recruit phase. */
+  tavernMinionAttackBonusThisTurn: number;
+  tavernMinionHealthBonusThisTurn: number;
   nextCombatAttackBonus: number;
   nextCombatHealthBonus: number;
   nextCombatSetEnemyHealthToOne: number;
@@ -1282,6 +1806,13 @@ export interface PlayerState {
   beetleHealthBonus: number;
   ballerAttackBonus: number;
   ballerHealthBonus: number;
+  /** Extra stats appended once to every stat-grant packet from an Elemental. */
+  elementalGrantAttackBonus: number;
+  elementalGrantHealthBonus: number;
+  /** Deathrattle abilities actually triggered for this player this game. */
+  deathrattlesTriggered: number;
+  /** Successful Magnetic attachments performed by this player this game. */
+  magnetizationsThisGame: number;
   deepBlueBonus: number;
   /** Permanent "wherever they are" stats granted by Slaughter. */
   undeadArmyAttackBonus: number;
@@ -1348,6 +1879,8 @@ export interface BattleEvent {
     | "rallyFromHand"
     | "startOfCombatFromHand"
     | "inHandStartOfCombat"
+    | "deathlyStrikerFromHand"
+    | "stitchedSalvagerCopy"
     | "beetle"
     | "spellcraft";
   removedKeywords?: RallyRemovedKeyword[];
@@ -1372,6 +1905,25 @@ export interface PendingTargetInteraction extends PendingInteractionBase {
   attack: number;
   health: number;
   repetitions: number;
+  /** The repeated target resolution is a Battlecry pulse. */
+  battlecry?: true;
+  /** Number of actual Battlecry triggers represented by all effect repetitions. */
+  battlecryTriggerCount?: number;
+  grantKeywords?: Array<"reborn" | "windfury">;
+  resolution?:
+    | { kind: "buff" }
+    | {
+        kind: "destroyFriendlyAndCopy";
+        copies: number;
+      }
+    | {
+        kind: "castTaughtTavernSpell";
+        definitionId: string;
+      }
+    | {
+        kind: "makeGolden";
+        maximumTier: TavernTier;
+      };
 }
 
 export interface PendingMagnetizeTargetInteraction
@@ -1380,13 +1932,19 @@ export interface PendingMagnetizeTargetInteraction
   optionInstanceIds: string[];
   filter: DiscoverFilter;
   remainingDiscoveries: number;
+  /** The chained Magnetize discovery was started by a Battlecry. */
+  battlecry?: true;
+  /** Effect repetitions that belong to one actual Battlecry trigger. */
+  battlecryEffectRepetitionsPerTrigger?: number;
 }
 
 export interface DiscoverFilter {
-  exactTier?: TavernTier;
+  exactTier?: MinionTier;
   maximumTier?: TavernTier;
   tribe?: Tribe;
   ability?: "battlecry" | "deathrattle";
+  /** Excludes typeless minions while still allowing dual-type and All minions. */
+  requiresMinionType?: boolean;
 }
 
 export type DiscoverDestination =
@@ -1394,8 +1952,33 @@ export type DiscoverDestination =
       kind: "hand";
       playableFromRound?: number;
       destroyAfterPlayThroughRound?: number;
+      /** A full hand burns the selected card but does not cancel the choice. */
+      allowOverflow?: boolean;
     }
-  | { kind: "magnetize"; targetInstanceId: string };
+  | { kind: "magnetize"; targetInstanceId: string }
+  | { kind: "transform"; targetInstanceId: string }
+  | {
+      kind: "customUndeadFirst";
+      sourceTrinketDefinitionId: string;
+    }
+  | {
+      kind: "customUndeadSecond";
+      sourceTrinketDefinitionId: string;
+      firstComponentDefinitionId: string;
+    };
+
+export type DiscoverSelectionEffect =
+  | { kind: "damageHeroBySelectedTier" }
+  | { kind: "makeGolden" }
+  | {
+      kind: "rememberTrinketMinion";
+      trinketDefinitionId: string;
+    }
+  | {
+      kind: "setStats";
+      attack: number;
+      health: number;
+    };
 
 export interface PendingDiscoverInteraction extends PendingInteractionBase {
   kind: "discover";
@@ -1403,8 +1986,35 @@ export interface PendingDiscoverInteraction extends PendingInteractionBase {
   filter: DiscoverFilter;
   remainingDiscoveries: number;
   destination: DiscoverDestination;
+  /** Retained after a source leaves play so the UI can name the effect. */
+  sourceDefinitionId?: string;
+  selectionEffect?: DiscoverSelectionEffect;
   /** Optional action completed only after the final chained discovery. */
-  completionSource?: "tavernSpellCast";
+  completionSource?:
+    | "tavernSpellCast"
+    | "tripleRewardCast"
+    | "generatedSpellCast";
+  /** Each selected discovery completes one Battlecry pulse. */
+  battlecry?: true;
+  /** Effect repetitions that belong to one actual Battlecry trigger. */
+  battlecryEffectRepetitionsPerTrigger?: number;
+  /** New saves defer every repeated Tavern Spell cast until its Discover resolves. */
+  remainingCastCompletions?: number;
+  /** Only the first deferred cast came from the player's hand. */
+  firstCastFromHandPending?: boolean;
+}
+
+export interface PendingTavernSpellDiscoverInteraction
+  extends PendingInteractionBase {
+  kind: "tavernSpellDiscover";
+  options: TavernSpellInstance[];
+  maximumTier: TavernTier;
+  remainingDiscoveries: number;
+  sourceDefinitionId?: string;
+  /** Each selected Tavern Spell completes one Battlecry pulse. */
+  battlecry?: true;
+  /** Effect repetitions that belong to one actual Battlecry trigger. */
+  battlecryEffectRepetitionsPerTrigger?: number;
 }
 
 export type TavernSpellChoiceId =
@@ -1428,6 +2038,8 @@ export interface PendingSpellcraftChoiceInteraction
   definitionId: string;
   optionIds: SpellcraftChoiceId[];
   effectMultiplier?: number;
+  /** New saves defer repeated cast observers until the player chooses a branch. */
+  castCompletions?: number;
 }
 
 export interface PendingHeroPowerChoiceInteraction
@@ -1435,13 +2047,50 @@ export interface PendingHeroPowerChoiceInteraction
   kind: "heroPowerChoice";
   definitionId: string;
   optionIds: string[];
+  /** Missing on old saves means Unmasked Identity, a Tavern Spell. */
+  completionSource?: "tavernSpellCast" | "generatedSpellCast";
+  /** Additional generated-spell casts waiting on their own Hero Power choice. */
+  remainingChoices?: number;
+}
+
+export interface PendingDarkmoonPrizeDiscoverInteraction
+  extends PendingInteractionBase {
+  kind: "darkmoonPrizeDiscover";
+  options: SpellcraftSpellInstance[];
+  remainingDiscoveries: number;
+  completionSource?: "generatedSpellCast";
+}
+
+export interface PendingHeroChoiceInteraction
+  extends PendingInteractionBase {
+  kind: "heroChoice";
+  optionIds: string[];
+}
+
+export interface PendingTrinketChoiceInteraction
+  extends PendingInteractionBase {
+  kind: "trinketChoice";
+  trinketTier: TrinketTier;
+  optionIds: string[];
+  /** A delayed or free choice replaces this exact owned Trinket slot. */
+  replaceTrinketId?: string;
+  /** An owned source allows this offer to add another raw Trinket of the tier. */
+  additionalTrinketSourceId?: string;
 }
 
 export type MinionChoiceId =
   | "BG30_123t"
   | "BG30_123t2"
   | "BG30_123_Gt"
-  | "BG30_123_Gt2";
+  | "BG30_123_Gt2"
+  | "BG32_237t"
+  | "BG32_237t2"
+  | "BG32_237_Gt"
+  | "BG32_237_Gt2"
+  | "BG27_084t"
+  | "BG27_084t2"
+  | "BG27_084_Gt"
+  | "BG27_084_Gt2";
 
 export interface PendingMinionChoiceInteraction
   extends PendingInteractionBase {
@@ -1455,9 +2104,13 @@ export type PendingInteraction =
   | PendingTargetInteraction
   | PendingMagnetizeTargetInteraction
   | PendingDiscoverInteraction
+  | PendingTavernSpellDiscoverInteraction
   | PendingTavernSpellChoiceInteraction
   | PendingSpellcraftChoiceInteraction
   | PendingHeroPowerChoiceInteraction
+  | PendingDarkmoonPrizeDiscoverInteraction
+  | PendingHeroChoiceInteraction
+  | PendingTrinketChoiceInteraction
   | PendingMinionChoiceInteraction;
 
 export type BattleResult = "win" | "loss" | "tie";
@@ -1507,6 +2160,10 @@ export interface GameState {
   contentVersion: string;
   /** Shared starting Health selected before this eight-player lobby began. */
   initialHealth: number;
+  /** New games use official-style lobby systems; migrated runs stay legacy. */
+  lobbySystemsEnabled: boolean;
+  /** One game-wide Anomaly selected before the first Recruit turn. */
+  systemEventId: string | null;
   seed: number;
   rngState: number;
   nextInstanceId: number;
@@ -1522,6 +2179,8 @@ export interface GameState {
   /** Tavern Spells reserved in shops use their own tier-weighted shared pool. */
   spellPool: Record<string, number>;
   pendingInteraction: PendingInteraction | null;
+  /** Players whose end-step or combat triples wait for the next Recruit. */
+  deferredTriplePlayerIds: PlayerId[];
   /** The human player's most recently resolved battle. */
   lastBattle: BattleSummary | null;
   /**
@@ -1590,7 +2249,7 @@ export interface RecruitBloodGemPulseResolution {
   targetInstanceId: string;
   attackDelta: number;
   healthDelta: number;
-  gainedKeywords: Array<"divineShield" | "reborn">;
+  gainedKeywords: Array<"taunt" | "divineShield" | "reborn">;
   targetBefore: BoardMinionInstance;
   targetAfter: BoardMinionInstance;
 }
@@ -1602,4 +2261,6 @@ export interface GameActionTrace {
 export interface GameTransition {
   state: GameState;
   trace: GameActionTrace;
+  /** True only when the action passed every engine legality check. */
+  accepted: boolean;
 }

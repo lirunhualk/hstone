@@ -1,0 +1,4614 @@
+{
+  "schemaVersion": 1,
+  "source": {
+    "patch": "36.0.3",
+    "build": 247416,
+    "locale": "zhCN",
+    "cutoffDate": "2026-08-02",
+    "officialCardLibrary": {
+      "url": "https://hearthstone.blizzard.com/en-us/api/cards?gameMode=battlegrounds&bgCardType=trinket&pageSize=450",
+      "sha256": "F5BCBCCFA352F9A6568E05D4DBC4C919F586279BFBCE2305227BB9CCF0A9C565"
+    },
+    "hearthstoneJson": {
+      "url": "https://api.hearthstonejson.com/v1/247416/zhCN/cards.json",
+      "sha256": "5E48186C2E1702B474088958978D560026A6CDC3990F181CAB790D42A7727013"
+    }
+  },
+  "counts": {
+    "officialTrinkets": 213,
+    "duosExcluded": 9,
+    "soloTrinkets": 204,
+    "byTier": {
+      "lesser": 98,
+      "greater": 106
+    }
+  },
+  "legacyLocalIdByCardId": {
+    "BG30_MagicItem_414": "lesser-trinket-kodo-leather-pouch",
+    "BG30_MagicItem_414t": "greater-trinket-kodo-leather-pouch",
+    "BG30_MagicItem_435": "lesser-trinket-goldenizer-supply",
+    "BG30_MagicItem_705": "lesser-trinket-oilcan",
+    "BG30_MagicItem_847": "lesser-trinket-goblin-wallet",
+    "BG30_MagicItem_986": "greater-trinket-calming-candle",
+    "BG30_MagicItem_996": "greater-trinket-bobs-tip-jar",
+    "BG32_MagicItem_700": "greater-trinket-magic-mushroom"
+  },
+  "excludedDuos": [
+    {
+      "cardId": "BGDUO_MagicItem_001",
+      "dbfId": 117932,
+      "name": "携手同线",
+      "tier": "lesser",
+      "sourceSlug": "117932-common-thread"
+    },
+    {
+      "cardId": "BGDUO_MagicItem_002",
+      "dbfId": 117933,
+      "name": "古加尔标签",
+      "tier": "greater",
+      "sourceSlug": "117933-chogall-sticker"
+    },
+    {
+      "cardId": "BGDUO_MagicItem_003",
+      "dbfId": 117934,
+      "name": "召唤之球",
+      "tier": "lesser",
+      "sourceSlug": "117934-summoning-sphere"
+    },
+    {
+      "cardId": "BGDUO_MagicItem_005",
+      "dbfId": 117936,
+      "name": "瓶子标签",
+      "tier": "lesser",
+      "sourceSlug": "117936-bottle-sticker"
+    },
+    {
+      "cardId": "BGDUO_MagicItem_006",
+      "dbfId": 117937,
+      "name": "魔法路标",
+      "tier": "greater",
+      "sourceSlug": "117937-magic-road-sign"
+    },
+    {
+      "cardId": "BGDUO_MagicItem_007",
+      "dbfId": 117938,
+      "name": "兽人指挥肖像",
+      "tier": "lesser",
+      "sourceSlug": "117938-orc-estra-portrait"
+    },
+    {
+      "cardId": "BGDUO_MagicItem_008",
+      "dbfId": 117939,
+      "name": "搬家纸箱",
+      "tier": "greater",
+      "sourceSlug": "117939-moveout-box"
+    },
+    {
+      "cardId": "BGDUO_MagicItem_010",
+      "dbfId": 117941,
+      "name": "强能魔镜",
+      "tier": "lesser",
+      "sourceSlug": "117941-empowered-mirror"
+    },
+    {
+      "cardId": "BGDUO_MagicItem_010t",
+      "dbfId": 117942,
+      "name": "强能魔镜",
+      "tier": "greater",
+      "sourceSlug": "117942-empowered-mirror"
+    }
+  ],
+  "relatedCards": {
+    "mirrorLens": {
+      "cardId": "BG35_MagicItem_817t",
+      "dbfId": 130853,
+      "name": "复映透镜",
+      "cost": 0,
+      "description": "选择一个等级3或以下的随从，获取一张该随从的原始版复制。"
+    }
+  },
+  "timewarpCostTwoMinions": {
+    "lesser": [
+      {
+        "cardId": "BG34_Giant_008",
+        "dbfId": 126286,
+        "goldenCardId": "BG34_Giant_008_G",
+        "goldenDbfId": 127330,
+        "name": "时空扭曲先知",
+        "tier": 3,
+        "cost": 2,
+        "attack": 8,
+        "health": 8,
+        "goldenAttack": 16,
+        "goldenHealth": 16,
+        "races": [
+          "DEMON",
+          "NAGA"
+        ],
+        "associatedRaces": [],
+        "mechanics": [
+          "TRIGGER_VISUAL"
+        ],
+        "referencedTags": [],
+        "elite": false,
+        "description": "每回合中，有两张酒馆法术的消耗减少（2）。（还剩2张！）",
+        "goldenDescription": "每回合中，有四张酒馆法术的消耗减少（2）。（还剩4张！）"
+      },
+      {
+        "cardId": "BG34_Giant_024",
+        "dbfId": 126491,
+        "goldenCardId": "BG34_Giant_024_G",
+        "goldenDbfId": 127356,
+        "name": "时空扭曲黏冻大肚怪",
+        "tier": 3,
+        "cost": 2,
+        "attack": 5,
+        "health": 6,
+        "goldenAttack": 10,
+        "goldenHealth": 12,
+        "races": [
+          "UNDEAD"
+        ],
+        "associatedRaces": [],
+        "mechanics": [
+          "TRIGGER_VISUAL"
+        ],
+        "referencedTags": [],
+        "elite": false,
+        "description": "在一个友方随从复生后，使你的随从永久获得+2/+2。",
+        "goldenDescription": "在一个友方随从复生后，使你的随从永久获得+4/+4。"
+      },
+      {
+        "cardId": "BG34_Giant_027",
+        "dbfId": 126494,
+        "goldenCardId": "BG34_Giant_027_G",
+        "goldenDbfId": 127397,
+        "name": "时空扭曲帝国之手",
+        "tier": 3,
+        "cost": 2,
+        "attack": 8,
+        "health": 8,
+        "goldenAttack": 16,
+        "goldenHealth": 16,
+        "races": [],
+        "associatedRaces": [],
+        "mechanics": [
+          "TRIGGER_VISUAL"
+        ],
+        "referencedTags": [],
+        "elite": false,
+        "description": "每当一个友方随从受到攻击时，使其永久获得+8攻击力。",
+        "goldenDescription": "每当一个友方随从受到攻击时，使其永久获得+16攻击力。"
+      },
+      {
+        "cardId": "BG34_Giant_038",
+        "dbfId": 126521,
+        "goldenCardId": "BG34_Giant_038_G",
+        "goldenDbfId": 127359,
+        "name": "时空扭曲伊莉斯",
+        "tier": 3,
+        "cost": 2,
+        "attack": 6,
+        "health": 7,
+        "goldenAttack": 12,
+        "goldenHealth": 14,
+        "races": [],
+        "associatedRaces": [],
+        "mechanics": [
+          "TRIGGER_VISUAL"
+        ],
+        "referencedTags": [
+          "BACON_REFRESH_TOOLTIP"
+        ],
+        "elite": true,
+        "description": "在你刷新5次后，\n使酒馆中等级最高的随从变为金色。（还剩5次！）",
+        "goldenDescription": "在你刷新5次后，使酒馆中等级最高的两个随从变为金色。（还剩5次！）"
+      },
+      {
+        "cardId": "BG34_Giant_064",
+        "dbfId": 126754,
+        "goldenCardId": "BG34_Giant_064_G",
+        "goldenDbfId": 127334,
+        "name": "时空扭曲雏龙走私商",
+        "tier": 3,
+        "cost": 2,
+        "attack": 3,
+        "health": 8,
+        "goldenAttack": 6,
+        "goldenHealth": 16,
+        "races": [],
+        "associatedRaces": [
+          "DRAGON"
+        ],
+        "mechanics": [
+          "TRIGGER_VISUAL"
+        ],
+        "referencedTags": [],
+        "elite": false,
+        "description": "每当一个友方随从获得攻击力，使其获得+3生命值。",
+        "goldenDescription": "每当一个友方随从获得攻击力，使其获得+6生命值。"
+      },
+      {
+        "cardId": "BG34_Giant_065",
+        "dbfId": 126755,
+        "goldenCardId": "BG34_Giant_065_G",
+        "goldenDbfId": 127333,
+        "name": "时空扭曲低保真飞龙",
+        "tier": 3,
+        "cost": 2,
+        "attack": 10,
+        "health": 10,
+        "goldenAttack": 20,
+        "goldenHealth": 20,
+        "races": [
+          "DRAGON"
+        ],
+        "associatedRaces": [],
+        "mechanics": [
+          "END_OF_TURN_TRIGGER"
+        ],
+        "referencedTags": [],
+        "elite": false,
+        "description": "在你的回合结束时，使你攻击力低于本随从的随从获得+2攻击力。然后依此法检定并获得生命值。",
+        "goldenDescription": "在你的回合结束时，使你攻击力低于本随从的随从获得+4攻击力。然后依此法检定并获得生命值。"
+      },
+      {
+        "cardId": "BG34_Giant_067",
+        "dbfId": 126757,
+        "goldenCardId": "BG34_Giant_067_G",
+        "goldenDbfId": 127336,
+        "name": "时空扭曲商贩元素",
+        "tier": 3,
+        "cost": 2,
+        "attack": 8,
+        "health": 8,
+        "goldenAttack": 16,
+        "goldenHealth": 16,
+        "races": [
+          "ELEMENTAL"
+        ],
+        "associatedRaces": [],
+        "mechanics": [
+          "END_OF_TURN_TRIGGER"
+        ],
+        "referencedTags": [],
+        "elite": false,
+        "description": "在你的回合结束时，获取一张商贩元素。",
+        "goldenDescription": "在你的回合结束时，获取2张商贩元素。"
+      },
+      {
+        "cardId": "BG34_Giant_068",
+        "dbfId": 127127,
+        "goldenCardId": "BG34_Giant_068_G",
+        "goldenDbfId": 127339,
+        "name": "时空扭曲齿械保镖",
+        "tier": 3,
+        "cost": 2,
+        "attack": 5,
+        "health": 10,
+        "goldenAttack": 10,
+        "goldenHealth": 20,
+        "races": [
+          "MECHANICAL"
+        ],
+        "associatedRaces": [],
+        "mechanics": [
+          "BACON_RALLY",
+          "DIVINE_SHIELD"
+        ],
+        "referencedTags": [],
+        "elite": false,
+        "description": "圣盾。进击：使一个不同的友方随从永久获得圣盾。",
+        "goldenDescription": "圣盾。进击：使2个不同的友方随从永久获得圣盾。"
+      },
+      {
+        "cardId": "BG34_Giant_069",
+        "dbfId": 127096,
+        "goldenCardId": "BG34_Giant_069_G",
+        "goldenDbfId": 127352,
+        "name": "时空扭曲吹笛人",
+        "tier": 3,
+        "cost": 2,
+        "attack": 2,
+        "health": 8,
+        "goldenAttack": 4,
+        "goldenHealth": 16,
+        "races": [
+          "QUILBOAR"
+        ],
+        "associatedRaces": [],
+        "mechanics": [
+          "TRIGGER_VISUAL"
+        ],
+        "referencedTags": [
+          "BACON_BLOOD_GEM_TOOLTIP"
+        ],
+        "elite": false,
+        "description": "每当本随从受到伤害，在本局对战中，你的鲜血宝石使随从额外获得+1攻击力。（每场战斗限3次。）",
+        "goldenDescription": "每当本随从受到伤害，在本局对战中，你的鲜血宝石使随从额外获得+2攻击力。（每场战斗限3次。）"
+      },
+      {
+        "cardId": "BG34_Giant_072",
+        "dbfId": 127129,
+        "goldenCardId": "BG34_Giant_072_G",
+        "goldenDbfId": 127342,
+        "name": "时空扭曲弹跳鱼",
+        "tier": 3,
+        "cost": 2,
+        "attack": 5,
+        "health": 6,
+        "goldenAttack": 10,
+        "goldenHealth": 12,
+        "races": [
+          "MURLOC"
+        ],
+        "associatedRaces": [],
+        "mechanics": [
+          "TRIGGER_VISUAL"
+        ],
+        "referencedTags": [],
+        "elite": false,
+        "description": "在你出售一个等级2的随从后，随机获取一张等级1的随从牌。",
+        "goldenDescription": "在你出售一个等级2的随从后，随机获取两张等级1的随从牌。"
+      },
+      {
+        "cardId": "BG34_Giant_082",
+        "dbfId": 126762,
+        "goldenCardId": "BG34_Giant_082_G",
+        "goldenDbfId": 127354,
+        "name": "时空扭曲回收师",
+        "tier": 3,
+        "cost": 2,
+        "attack": 2,
+        "health": 7,
+        "goldenAttack": 4,
+        "goldenHealth": 14,
+        "races": [
+          "UNDEAD"
+        ],
+        "associatedRaces": [],
+        "mechanics": [
+          "AVENGE"
+        ],
+        "referencedTags": [],
+        "elite": false,
+        "description": "复仇（4）：你的铸币上限提高（1）枚。",
+        "goldenDescription": "复仇（4）：你的铸币上限提高（2）枚。"
+      },
+      {
+        "cardId": "BG34_Giant_204",
+        "dbfId": 127132,
+        "goldenCardId": "BG34_Giant_204_G",
+        "goldenDbfId": 127554,
+        "name": "时空扭曲匪贼",
+        "tier": 3,
+        "cost": 2,
+        "attack": 4,
+        "health": 3,
+        "goldenAttack": 8,
+        "goldenHealth": 6,
+        "races": [
+          "UNDEAD"
+        ],
+        "associatedRaces": [],
+        "mechanics": [
+          "DEATHRATTLE",
+          "REBORN",
+          "TAUNT"
+        ],
+        "referencedTags": [],
+        "elite": false,
+        "description": "嘲讽。复生。亡语：获取一张酒馆币。",
+        "goldenDescription": "嘲讽。复生。亡语：获取2张酒馆币。"
+      },
+      {
+        "cardId": "BG34_Giant_208",
+        "dbfId": 127182,
+        "goldenCardId": "BG34_Giant_208_G",
+        "goldenDbfId": 127347,
+        "name": "时空扭曲帕格",
+        "tier": 3,
+        "cost": 2,
+        "attack": 8,
+        "health": 6,
+        "goldenAttack": 16,
+        "goldenHealth": 12,
+        "races": [
+          "PIRATE"
+        ],
+        "associatedRaces": [],
+        "mechanics": [
+          "TRIGGER_VISUAL"
+        ],
+        "referencedTags": [],
+        "elite": true,
+        "description": "每场战斗一次：当本随从攻击并消灭一个随从时，获取一份三连奖励。",
+        "goldenDescription": "每场战斗一次：当本随从攻击并消灭一个随从时，获取2份三连奖励。"
+      },
+      {
+        "cardId": "BG34_Giant_210",
+        "dbfId": 127247,
+        "goldenCardId": "BG34_Giant_210_G",
+        "goldenDbfId": 127348,
+        "name": "时空扭曲滩头指挥官",
+        "tier": 3,
+        "cost": 2,
+        "attack": 5,
+        "health": 5,
+        "goldenAttack": 10,
+        "goldenHealth": 10,
+        "races": [
+          "NAGA"
+        ],
+        "associatedRaces": [],
+        "mechanics": [
+          "BACON_SPELLCRAFT_ID",
+          "TRIGGER_VISUAL"
+        ],
+        "referencedTags": [],
+        "elite": false,
+        "description": "塑造法术：每有一个友方纳迦，使一个随从获得+2/+2。",
+        "goldenDescription": "塑造法术：每有一个友方纳迦，使一个随从获得+4/+4。"
+      },
+      {
+        "cardId": "BG34_Giant_211",
+        "dbfId": 127249,
+        "goldenCardId": "BG34_Giant_211_G",
+        "goldenDbfId": 127349,
+        "name": "时空扭曲帕什玛",
+        "tier": 3,
+        "cost": 2,
+        "attack": 9,
+        "health": 10,
+        "goldenAttack": 18,
+        "goldenHealth": 20,
+        "races": [
+          "NAGA"
+        ],
+        "associatedRaces": [],
+        "mechanics": [
+          "AVENGE"
+        ],
+        "referencedTags": [
+          "BACON_SPELLCRAFT_ID"
+        ],
+        "elite": true,
+        "description": "复仇（3）：随机获取塑造法术的法术牌和酒馆法术牌各一张。",
+        "goldenDescription": "复仇（3）：随机获取塑造法术的法术牌和酒馆法术牌各2张。"
+      },
+      {
+        "cardId": "BG34_Giant_302",
+        "dbfId": 127517,
+        "goldenCardId": "BG34_Giant_302_G",
+        "goldenDbfId": 127557,
+        "name": "时空扭曲旋翼机",
+        "tier": 3,
+        "cost": 2,
+        "attack": 4,
+        "health": 6,
+        "goldenAttack": 8,
+        "goldenHealth": 12,
+        "races": [
+          "MECHANICAL"
+        ],
+        "associatedRaces": [],
+        "mechanics": [
+          "AVENGE",
+          "DIVINE_SHIELD"
+        ],
+        "referencedTags": [],
+        "elite": false,
+        "description": "圣盾。复仇（3）：随机获取一张机械牌。",
+        "goldenDescription": "圣盾。复仇（3）：随机获取2张机械牌。"
+      },
+      {
+        "cardId": "BG34_Giant_304",
+        "dbfId": 127562,
+        "goldenCardId": "BG34_Giant_304_G",
+        "goldenDbfId": 127563,
+        "name": "时空扭曲工兵",
+        "tier": 3,
+        "cost": 2,
+        "attack": 10,
+        "health": 6,
+        "goldenAttack": 20,
+        "goldenHealth": 12,
+        "races": [
+          "NAGA"
+        ],
+        "associatedRaces": [],
+        "mechanics": [
+          "DEATHRATTLE",
+          "TAUNT"
+        ],
+        "referencedTags": [
+          "BACON_SPELLCRAFT_ID"
+        ],
+        "elite": false,
+        "description": "嘲讽。亡语：获取一张恶鳞套餐。",
+        "goldenDescription": "嘲讽。亡语：获取2张恶鳞套餐。"
+      },
+      {
+        "cardId": "BG34_Giant_305",
+        "dbfId": 127430,
+        "goldenCardId": "BG34_Giant_305_G",
+        "goldenDbfId": 127432,
+        "name": "时空扭曲地卜师",
+        "tier": 3,
+        "cost": 2,
+        "attack": 2,
+        "health": 9,
+        "goldenAttack": 4,
+        "goldenHealth": 18,
+        "races": [
+          "QUILBOAR"
+        ],
+        "associatedRaces": [],
+        "mechanics": [
+          "AVENGE"
+        ],
+        "referencedTags": [
+          "BACON_BLOOD_GEM_TOOLTIP"
+        ],
+        "elite": false,
+        "description": "复仇（5）：获取一张鲜血宝石。在本局对战中，你的鲜血宝石使随从额外获得+1/+1。",
+        "goldenDescription": "复仇（5）：获取一张鲜血宝石。在本局对战中，你的鲜血宝石使随从额外获得+2/+2。"
+      },
+      {
+        "cardId": "BG34_Giant_306",
+        "dbfId": 127431,
+        "goldenCardId": "BG34_Giant_306_G",
+        "goldenDbfId": 127433,
+        "name": "时空扭曲爵士乐手",
+        "tier": 3,
+        "cost": 2,
+        "attack": 5,
+        "health": 3,
+        "goldenAttack": 10,
+        "goldenHealth": 6,
+        "races": [
+          "QUILBOAR"
+        ],
+        "associatedRaces": [],
+        "mechanics": [
+          "DEATHRATTLE"
+        ],
+        "referencedTags": [
+          "BACON_BLOOD_GEM_TOOLTIP"
+        ],
+        "elite": false,
+        "description": "亡语：在本局对战中，你的鲜血宝石会额外获得+2生命值。",
+        "goldenDescription": "亡语：在本局对战中，你的鲜血宝石会额外获得+4生命值。"
+      },
+      {
+        "cardId": "BG34_Giant_310",
+        "dbfId": 127560,
+        "goldenCardId": "BG34_Giant_310_G",
+        "goldenDbfId": 127561,
+        "name": "时空扭曲哀歌者",
+        "tier": 3,
+        "cost": 2,
+        "attack": 3,
+        "health": 5,
+        "goldenAttack": 6,
+        "goldenHealth": 10,
+        "races": [
+          "MURLOC"
+        ],
+        "associatedRaces": [],
+        "mechanics": [
+          "TRIGGER_VISUAL"
+        ],
+        "referencedTags": [],
+        "elite": false,
+        "description": "在你的回合结束时，使你手牌中和场上的随从获得+2/+1。",
+        "goldenDescription": "在你的回合结束时，使你手牌中和场上的随从获得+4/+2。"
+      },
+      {
+        "cardId": "BG34_Giant_332",
+        "dbfId": 127446,
+        "goldenCardId": "BG34_Giant_332_G",
+        "goldenDbfId": 127566,
+        "name": "时空扭曲入殓师",
+        "tier": 3,
+        "cost": 2,
+        "attack": 10,
+        "health": 10,
+        "goldenAttack": 20,
+        "goldenHealth": 20,
+        "races": [
+          "UNDEAD"
+        ],
+        "associatedRaces": [],
+        "mechanics": [
+          "TRIGGER_VISUAL"
+        ],
+        "referencedTags": [],
+        "elite": false,
+        "description": "每回合中，你召唤的一个随从获得复生。（还剩1个！）",
+        "goldenDescription": "每回合中，你召唤的两个随从获得复生。（还剩2个！）"
+      },
+      {
+        "cardId": "BG34_Giant_582",
+        "dbfId": 127719,
+        "goldenCardId": "BG34_Giant_582_G",
+        "goldenDbfId": 127720,
+        "name": "时空扭曲孢子蝠",
+        "tier": 3,
+        "cost": 2,
+        "attack": 9,
+        "health": 2,
+        "goldenAttack": 18,
+        "goldenHealth": 4,
+        "races": [
+          "BEAST"
+        ],
+        "associatedRaces": [],
+        "mechanics": [
+          "DEATHRATTLE",
+          "TAUNT"
+        ],
+        "referencedTags": [],
+        "elite": false,
+        "description": "嘲讽。亡语：随机获取一张消耗为（2）或以上的酒馆法术牌。",
+        "goldenDescription": "嘲讽。亡语：随机获取2张消耗为（2）或以上的酒馆法术牌。"
+      },
+      {
+        "cardId": "BG34_Giant_590",
+        "dbfId": 127735,
+        "goldenCardId": "BG34_Giant_590_G",
+        "goldenDbfId": 127736,
+        "name": "时空扭曲烂肠",
+        "tier": 3,
+        "cost": 2,
+        "attack": 7,
+        "health": 3,
+        "goldenAttack": 14,
+        "goldenHealth": 6,
+        "races": [
+          "UNDEAD"
+        ],
+        "associatedRaces": [],
+        "mechanics": [
+          "DEATHRATTLE"
+        ],
+        "referencedTags": [],
+        "elite": true,
+        "description": "亡语：召唤并获取一个随机亡灵造物。",
+        "goldenDescription": "亡语：召唤并获取2个随机亡灵造物。"
+      },
+      {
+        "cardId": "BG34_Giant_602",
+        "dbfId": 127790,
+        "goldenCardId": "BG34_Giant_602_G",
+        "goldenDbfId": 127791,
+        "name": "时空扭曲的雷",
+        "tier": 3,
+        "cost": 2,
+        "attack": 3,
+        "health": 5,
+        "goldenAttack": 6,
+        "goldenHealth": 10,
+        "races": [],
+        "associatedRaces": [],
+        "mechanics": [
+          "TRIGGER_VISUAL"
+        ],
+        "referencedTags": [],
+        "elite": true,
+        "description": "在你的回合开始时，获取你的英雄技能对应的伙伴。",
+        "goldenDescription": "在你的回合开始时，获取你的英雄技能对应的伙伴的2张复制。"
+      },
+      {
+        "cardId": "BG34_Giant_603",
+        "dbfId": 127792,
+        "goldenCardId": "BG34_Giant_603_G",
+        "goldenDbfId": 127793,
+        "name": "时空扭曲护灯人",
+        "tier": 3,
+        "cost": 2,
+        "attack": 7,
+        "health": 5,
+        "goldenAttack": 14,
+        "goldenHealth": 10,
+        "races": [],
+        "associatedRaces": [],
+        "mechanics": [
+          "END_OF_TURN_TRIGGER"
+        ],
+        "referencedTags": [],
+        "elite": false,
+        "description": "在你的回合结束时，\n随机获取2张能使随从获得属性值的酒馆法术牌。",
+        "goldenDescription": "在你的回合结束时，\n随机获取4张能使随从获得属性值的酒馆法术牌。"
+      }
+    ],
+    "greater": [
+      {
+        "cardId": "BG34_Giant_015",
+        "dbfId": 126349,
+        "goldenCardId": "BG34_Giant_015_G",
+        "goldenDbfId": 127370,
+        "name": "时空扭曲钩尾",
+        "tier": 5,
+        "cost": 2,
+        "attack": 6,
+        "health": 12,
+        "goldenAttack": 12,
+        "goldenHealth": 24,
+        "races": [
+          "DRAGON",
+          "PIRATE"
+        ],
+        "associatedRaces": [],
+        "mechanics": [
+          "TRIGGER_VISUAL"
+        ],
+        "referencedTags": [],
+        "elite": true,
+        "description": "每当你施放一个酒馆法术，使你的随从获得+2/+2。",
+        "goldenDescription": "每当你施放一个\n酒馆法术，使你的随从获得+2/+2，触发两次。"
+      },
+      {
+        "cardId": "BG34_Giant_021",
+        "dbfId": 126488,
+        "goldenCardId": "BG34_Giant_021_G",
+        "goldenDbfId": 127387,
+        "name": "时空扭曲希尔梵",
+        "tier": 5,
+        "cost": 2,
+        "attack": 7,
+        "health": 10,
+        "goldenAttack": 14,
+        "goldenHealth": 20,
+        "races": [
+          "PIRATE"
+        ],
+        "associatedRaces": [],
+        "mechanics": [
+          "END_OF_TURN_TRIGGER"
+        ],
+        "referencedTags": [],
+        "elite": false,
+        "description": "在你的回合结束时，使相邻的随从获得+8/+8。每有一个友方金色随从，重复一次。",
+        "goldenDescription": "在你的回合结束时，使相邻的随从获得+16/+16。每有一个友方金色随从，重复一次。"
+      },
+      {
+        "cardId": "BG34_Giant_032",
+        "dbfId": 126514,
+        "goldenCardId": "BG34_Giant_032_G",
+        "goldenDbfId": 127377,
+        "name": "时空扭曲诺米",
+        "tier": 5,
+        "cost": 2,
+        "attack": 10,
+        "health": 10,
+        "goldenAttack": 20,
+        "goldenHealth": 20,
+        "races": [],
+        "associatedRaces": [
+          "ELEMENTAL"
+        ],
+        "mechanics": [
+          "TRIGGER_VISUAL"
+        ],
+        "referencedTags": [],
+        "elite": true,
+        "description": "在你使用一张元素牌后，使酒馆中的随从在本局对战中获得+4/+3。",
+        "goldenDescription": "在你使用一张元素牌后，使酒馆中的随从在本局对战中获得+8/+6。"
+      },
+      {
+        "cardId": "BG34_Giant_034",
+        "dbfId": 126516,
+        "goldenCardId": "BG34_Giant_034_G",
+        "goldenDbfId": 127396,
+        "name": "时空扭曲恶鬼",
+        "tier": 5,
+        "cost": 2,
+        "attack": 10,
+        "health": 6,
+        "goldenAttack": 20,
+        "goldenHealth": 12,
+        "races": [
+          "UNDEAD"
+        ],
+        "associatedRaces": [],
+        "mechanics": [
+          "DEATHRATTLE"
+        ],
+        "referencedTags": [],
+        "elite": false,
+        "description": "亡语：在本局对战中，你的酒馆法术使随从额外获得+2/+2。",
+        "goldenDescription": "亡语：在本局对战中，你的酒馆法术使随从额外获得+4/+4。"
+      },
+      {
+        "cardId": "BG34_Giant_042",
+        "dbfId": 126525,
+        "goldenCardId": "BG34_Giant_042_G",
+        "goldenDbfId": 127363,
+        "name": "时空扭曲变色龙",
+        "tier": 5,
+        "cost": 2,
+        "attack": 6,
+        "health": 15,
+        "goldenAttack": 12,
+        "goldenHealth": 30,
+        "races": [
+          "BEAST"
+        ],
+        "associatedRaces": [],
+        "mechanics": [
+          "TRIGGER_VISUAL"
+        ],
+        "referencedTags": [],
+        "elite": false,
+        "description": "战斗开始时：变形成为本随从左边的随从的复制。",
+        "goldenDescription": "战斗开始时：变形成为本随从左边的随从的金色复制。"
+      },
+      {
+        "cardId": "BG34_Giant_088",
+        "dbfId": 127133,
+        "goldenCardId": "BG34_Giant_088_G",
+        "goldenDbfId": 127369,
+        "name": "时空扭曲增强幼龙",
+        "tier": 5,
+        "cost": 2,
+        "attack": 6,
+        "health": 6,
+        "goldenAttack": 12,
+        "goldenHealth": 12,
+        "races": [
+          "DRAGON"
+        ],
+        "associatedRaces": [],
+        "mechanics": [
+          "START_OF_COMBAT",
+          "TRIGGER_VISUAL"
+        ],
+        "referencedTags": [],
+        "elite": false,
+        "description": "战斗开始时：使你的随从获得+5/+5。在你的回合结束时，提升此效果。",
+        "goldenDescription": "战斗开始时：使你的随从获得+10/+10。在你的回合结束时，提升此效果。"
+      },
+      {
+        "cardId": "BG34_Giant_102",
+        "dbfId": 126974,
+        "goldenCardId": "BG34_Giant_102_G",
+        "goldenDbfId": 127392,
+        "name": "时空扭曲狂棍野猪人",
+        "tier": 5,
+        "cost": 2,
+        "attack": 7,
+        "health": 14,
+        "goldenAttack": 14,
+        "goldenHealth": 28,
+        "races": [
+          "QUILBOAR"
+        ],
+        "associatedRaces": [],
+        "mechanics": [
+          "BACON_RALLY",
+          "WINDFURY"
+        ],
+        "referencedTags": [
+          "BACON_BLOOD_GEM_TOOLTIP"
+        ],
+        "elite": false,
+        "description": "风怒。进击：本随从对你的所有其他随从各使用2张永久的鲜血宝石。",
+        "goldenDescription": "风怒。进击：本随从对你的所有其他随从各使用4张永久的鲜血宝石。"
+      },
+      {
+        "cardId": "BG34_Giant_105",
+        "dbfId": 128114,
+        "goldenCardId": "BG34_Giant_105_G",
+        "goldenDbfId": 128115,
+        "name": "时空扭曲套索牛仔",
+        "tier": 5,
+        "cost": 2,
+        "attack": 7,
+        "health": 5,
+        "goldenAttack": 14,
+        "goldenHealth": 10,
+        "races": [
+          "QUILBOAR"
+        ],
+        "associatedRaces": [],
+        "mechanics": [
+          "TRIGGER_VISUAL"
+        ],
+        "referencedTags": [
+          "BACON_BLOOD_GEM_TOOLTIP"
+        ],
+        "elite": false,
+        "description": "在你对本随从使用一张鲜血宝石后，施放鲜血宝石弹幕。",
+        "goldenDescription": "在你对本随从使用\n一张鲜血宝石后，施放鲜血宝石弹幕，触发两次。"
+      },
+      {
+        "cardId": "BG34_Giant_120",
+        "dbfId": 127739,
+        "goldenCardId": "BG34_Giant_120_G",
+        "goldenDbfId": 127741,
+        "name": "时空扭曲解译者",
+        "tier": 5,
+        "cost": 2,
+        "attack": 6,
+        "health": 8,
+        "goldenAttack": 12,
+        "goldenHealth": 16,
+        "races": [
+          "MECHANICAL"
+        ],
+        "associatedRaces": [],
+        "mechanics": [
+          "TRIGGER_VISUAL"
+        ],
+        "referencedTags": [
+          "MAGNETIC"
+        ],
+        "elite": false,
+        "description": "每当你使用或磁力吸附一个机械时，使你的机械获得+3/+3。",
+        "goldenDescription": "每当你使用或磁力吸附一个机械时，使你的机械获得+6/+6。"
+      },
+      {
+        "cardId": "BG34_Giant_205",
+        "dbfId": 127168,
+        "goldenCardId": "BG34_Giant_205_G",
+        "goldenDbfId": 127399,
+        "name": "时空扭曲娜拉",
+        "tier": 5,
+        "cost": 2,
+        "attack": 12,
+        "health": 12,
+        "goldenAttack": 24,
+        "goldenHealth": 24,
+        "races": [],
+        "associatedRaces": [],
+        "mechanics": [
+          "TRIGGER_VISUAL"
+        ],
+        "referencedTags": [],
+        "elite": true,
+        "description": "每当你施放一个法术，使每个类型的各一个友方随从获得+4/+3。",
+        "goldenDescription": "每当你施放一个法术，使每个类型的各一个友方随从获得+8/+6。"
+      },
+      {
+        "cardId": "BG34_Giant_311",
+        "dbfId": 127567,
+        "goldenCardId": "BG34_Giant_311_G",
+        "goldenDbfId": 127577,
+        "name": "时空扭曲破坏魔",
+        "tier": 5,
+        "cost": 2,
+        "attack": 4,
+        "health": 2,
+        "goldenAttack": 8,
+        "goldenHealth": 4,
+        "races": [
+          "DEMON"
+        ],
+        "associatedRaces": [],
+        "mechanics": [
+          "TRIGGER_VISUAL"
+        ],
+        "referencedTags": [],
+        "elite": false,
+        "description": "每当一个随从被吞食，本随从获得其属性值。",
+        "goldenDescription": "每当一个随从被吞食，本随从获得其双倍属性值。"
+      },
+      {
+        "cardId": "BG34_Giant_313",
+        "dbfId": 127780,
+        "goldenCardId": "BG34_Giant_313_G",
+        "goldenDbfId": 127867,
+        "name": "时空扭曲基尔加丹",
+        "tier": 5,
+        "cost": 2,
+        "attack": 7,
+        "health": 7,
+        "goldenAttack": 14,
+        "goldenHealth": 14,
+        "races": [
+          "DEMON"
+        ],
+        "associatedRaces": [],
+        "mechanics": [
+          "TRIGGER_VISUAL"
+        ],
+        "referencedTags": [
+          "BACON_REFRESH_TOOLTIP"
+        ],
+        "elite": true,
+        "description": "每当酒馆刷新，酒馆额外提供两个具有+7/+7的恶魔。（每回合都会升级！）",
+        "goldenDescription": "每当酒馆刷新，酒馆额外提供两个具有+14/+14的恶魔。（每回合都会升级！）"
+      },
+      {
+        "cardId": "BG34_Giant_317",
+        "dbfId": 127798,
+        "goldenCardId": "BG34_Giant_317_G",
+        "goldenDbfId": 127802,
+        "name": "时空扭曲远行者",
+        "tier": 5,
+        "cost": 2,
+        "attack": 6,
+        "health": 12,
+        "goldenAttack": 12,
+        "goldenHealth": 24,
+        "races": [
+          "MURLOC"
+        ],
+        "associatedRaces": [],
+        "mechanics": [
+          "DIVINE_SHIELD",
+          "TAUNT",
+          "TRIGGER_VISUAL"
+        ],
+        "referencedTags": [],
+        "elite": false,
+        "description": "嘲讽。圣盾。在本随从获得属性值后，还会使你手牌中最左边的两张随从牌获得属性值。",
+        "goldenDescription": "嘲讽。圣盾。在本随从获得属性值后，还会使你手牌中最左边的两张随从牌获得双倍属性值。"
+      },
+      {
+        "cardId": "BG34_Giant_319",
+        "dbfId": 127800,
+        "goldenCardId": "BG34_Giant_319_G",
+        "goldenDbfId": 127805,
+        "name": "时空扭曲鱼人画家",
+        "tier": 5,
+        "cost": 2,
+        "attack": 4,
+        "health": 9,
+        "goldenAttack": 8,
+        "goldenHealth": 18,
+        "races": [
+          "MURLOC"
+        ],
+        "associatedRaces": [],
+        "mechanics": [
+          "END_OF_TURN_TRIGGER",
+          "TRIGGER_VISUAL"
+        ],
+        "referencedTags": [],
+        "elite": false,
+        "description": "在你的回合结束时，使相邻的随从获得+3/+2。在你使用一张等级3或以下的牌后提升此效果。",
+        "goldenDescription": "在你的回合结束时，使相邻的随从获得+6/+4。在你使用一张等级3或以下的牌后提升此效果。"
+      },
+      {
+        "cardId": "BG34_Giant_321",
+        "dbfId": 127498,
+        "goldenCardId": "BG34_Giant_321_G",
+        "goldenDbfId": 127500,
+        "name": "时空扭曲合唱鱼人",
+        "tier": 5,
+        "cost": 2,
+        "attack": 8,
+        "health": 8,
+        "goldenAttack": 16,
+        "goldenHealth": 16,
+        "races": [
+          "MURLOC"
+        ],
+        "associatedRaces": [],
+        "mechanics": [
+          "START_OF_COMBAT",
+          "TRIGGER_VISUAL"
+        ],
+        "referencedTags": [],
+        "elite": false,
+        "description": "战斗开始时：使相邻的鱼人获得你手牌中所有随从牌的属性值。",
+        "goldenDescription": "战斗开始时：使相邻的鱼人获得你手牌中所有随从牌的属性值，触发两次。"
+      },
+      {
+        "cardId": "BG34_Giant_323",
+        "dbfId": 127807,
+        "goldenCardId": "BG34_Giant_323_G",
+        "goldenDbfId": 127808,
+        "name": "时空扭曲秘书",
+        "tier": 5,
+        "cost": 2,
+        "attack": 5,
+        "health": 11,
+        "goldenAttack": 10,
+        "goldenHealth": 22,
+        "races": [
+          "NAGA"
+        ],
+        "associatedRaces": [],
+        "mechanics": [
+          "TRIGGER_VISUAL"
+        ],
+        "referencedTags": [
+          "BACON_SPELLCRAFT_ID"
+        ],
+        "elite": false,
+        "description": "在你施放2个塑造法术的法术后，随机获取一张酒馆法术牌。（还剩2个！）",
+        "goldenDescription": "在你施放2个塑造法术的法术后，随机获取两张酒馆法术牌。（还剩2个！）"
+      },
+      {
+        "cardId": "BG34_Giant_327",
+        "dbfId": 127508,
+        "goldenCardId": "BG34_Giant_327_G",
+        "goldenDbfId": 127509,
+        "name": "时空扭曲佩吉",
+        "tier": 5,
+        "cost": 2,
+        "attack": 9,
+        "health": 5,
+        "goldenAttack": 18,
+        "goldenHealth": 10,
+        "races": [
+          "PIRATE"
+        ],
+        "associatedRaces": [],
+        "mechanics": [
+          "TRIGGER_VISUAL"
+        ],
+        "referencedTags": [],
+        "elite": true,
+        "description": "每当一张卡牌被置入你的手牌，使你的海盗获得+1/+1。",
+        "goldenDescription": "每当一张卡牌\n被置入你的手牌，使你的海盗\n获得+1/+1，触发两次。"
+      },
+      {
+        "cardId": "BG34_Giant_335",
+        "dbfId": 127501,
+        "goldenCardId": "BG34_Giant_335_G",
+        "goldenDbfId": 127502,
+        "name": "时空扭曲西塔尔",
+        "tier": 5,
+        "cost": 2,
+        "attack": 8,
+        "health": 8,
+        "goldenAttack": 16,
+        "goldenHealth": 16,
+        "races": [
+          "ALL"
+        ],
+        "associatedRaces": [],
+        "mechanics": [
+          "TRIGGER_VISUAL"
+        ],
+        "referencedTags": [],
+        "elite": true,
+        "description": "在你使用没有类型的随从牌后，使每个类型的各一个友方随从获得+6/+6。",
+        "goldenDescription": "在你使用没有类型的随从牌后，使每个类型的各一个友方随从获得+12/+12。"
+      },
+      {
+        "cardId": "BG34_Giant_336",
+        "dbfId": 127884,
+        "goldenCardId": "BG34_Giant_336_G",
+        "goldenDbfId": 127945,
+        "name": "时空扭曲融合怪",
+        "tier": 5,
+        "cost": 2,
+        "attack": 7,
+        "health": 9,
+        "goldenAttack": 14,
+        "goldenHealth": 18,
+        "races": [
+          "ALL"
+        ],
+        "associatedRaces": [],
+        "mechanics": [
+          "TRIGGER_VISUAL"
+        ],
+        "referencedTags": [],
+        "elite": false,
+        "description": "在你使用一张随从牌后，在本局对战中使酒馆中该类型的随从获得+4/+4。",
+        "goldenDescription": "在你使用一张随从牌后，在本局对战中使酒馆中该类型的随从获得+4/+4，\n触发两次。"
+      },
+      {
+        "cardId": "BG34_Giant_362",
+        "dbfId": 128111,
+        "goldenCardId": "BG34_Giant_362_G",
+        "goldenDbfId": 128113,
+        "name": "时空扭曲戈德林",
+        "tier": 5,
+        "cost": 2,
+        "attack": 6,
+        "health": 6,
+        "goldenAttack": 12,
+        "goldenHealth": 12,
+        "races": [
+          "BEAST"
+        ],
+        "associatedRaces": [],
+        "mechanics": [
+          "DEATHRATTLE"
+        ],
+        "referencedTags": [],
+        "elite": true,
+        "description": "亡语：在本局对战中，你的野兽拥有+4/+4（无论它们在哪）。",
+        "goldenDescription": "亡语：在本局对战中，你的野兽拥有+8/+8（无论它们在哪）。"
+      },
+      {
+        "cardId": "BG34_Giant_370",
+        "dbfId": 128211,
+        "goldenCardId": "BG34_Giant_370_G",
+        "goldenDbfId": 128212,
+        "name": "时空扭曲陆行鸟",
+        "tier": 5,
+        "cost": 2,
+        "attack": 8,
+        "health": 4,
+        "goldenAttack": 16,
+        "goldenHealth": 8,
+        "races": [
+          "BEAST"
+        ],
+        "associatedRaces": [],
+        "mechanics": [
+          "START_OF_COMBAT",
+          "TRIGGER_VISUAL"
+        ],
+        "referencedTags": [
+          "DEATHRATTLE"
+        ],
+        "elite": false,
+        "description": "战斗开始时：触发所有友方亡语。",
+        "goldenDescription": "战斗开始时：\n触发所有友方亡语，触发两次。"
+      },
+      {
+        "cardId": "BG34_Giant_376",
+        "dbfId": 128213,
+        "goldenCardId": "BG34_Giant_376_G",
+        "goldenDbfId": 128214,
+        "name": "时空扭曲戴欧斯",
+        "tier": 5,
+        "cost": 2,
+        "attack": 6,
+        "health": 10,
+        "goldenAttack": 12,
+        "goldenHealth": 20,
+        "races": [],
+        "associatedRaces": [],
+        "mechanics": [
+          "AURA"
+        ],
+        "referencedTags": [
+          "BATTLECRY",
+          "BACON_RALLY",
+          "DEATHRATTLE"
+        ],
+        "elite": true,
+        "description": "你的战吼，亡语和进击会触发两次。",
+        "goldenDescription": "你的战吼，亡语和进击会触发三次。"
+      },
+      {
+        "cardId": "BG34_Giant_599",
+        "dbfId": 127778,
+        "goldenCardId": "BG34_Giant_599_G",
+        "goldenDbfId": 127779,
+        "name": "时空扭曲飓风机甲",
+        "tier": 5,
+        "cost": 2,
+        "attack": 7,
+        "health": 5,
+        "goldenAttack": 14,
+        "goldenHealth": 10,
+        "races": [
+          "MECHANICAL"
+        ],
+        "associatedRaces": [],
+        "mechanics": [
+          "START_OF_COMBAT",
+          "TRIGGER_VISUAL"
+        ],
+        "referencedTags": [
+          "DEATHRATTLE"
+        ],
+        "elite": false,
+        "description": "战斗开始时：复制你最左边的两个亡语（其他飓风机甲的除外）。",
+        "goldenDescription": "战斗开始时：复制你最左边的两个亡语，复制两次（其他飓风机甲的除外）。"
+      },
+      {
+        "cardId": "BG34_Giant_608",
+        "dbfId": 127877,
+        "goldenCardId": "BG34_Giant_608_G",
+        "goldenDbfId": 127878,
+        "name": "时空扭曲小野猪",
+        "tier": 5,
+        "cost": 2,
+        "attack": 5,
+        "health": 5,
+        "goldenAttack": 10,
+        "goldenHealth": 10,
+        "races": [
+          "QUILBOAR"
+        ],
+        "associatedRaces": [],
+        "mechanics": [
+          "DEATHRATTLE",
+          "REBORN"
+        ],
+        "referencedTags": [
+          "BACON_BLOOD_GEM_TOOLTIP"
+        ],
+        "elite": false,
+        "description": "复生。亡语：本随从对你的所有野猪人各使用3张鲜血宝石。",
+        "goldenDescription": "复生。亡语：本随从对你的所有野猪人各使用6张鲜血宝石。"
+      },
+      {
+        "cardId": "BG34_Giant_609",
+        "dbfId": 128044,
+        "goldenCardId": "BG34_Giant_609_G",
+        "goldenDbfId": 128048,
+        "name": "时空扭曲食尸卡布拉",
+        "tier": 5,
+        "cost": 2,
+        "attack": 6,
+        "health": 15,
+        "goldenAttack": 12,
+        "goldenHealth": 30,
+        "races": [
+          "UNDEAD",
+          "BEAST"
+        ],
+        "associatedRaces": [],
+        "mechanics": [
+          "TRIGGER_VISUAL"
+        ],
+        "referencedTags": [
+          "DEATHRATTLE"
+        ],
+        "elite": true,
+        "description": "在你触发一个亡语后，使你的随从永久获得+3/+2。",
+        "goldenDescription": "在你触发一个亡语后，使你的随从永久获得+6/+4。"
+      },
+      {
+        "cardId": "BG34_Giant_610",
+        "dbfId": 128049,
+        "goldenCardId": "BG34_Giant_610_G",
+        "goldenDbfId": 128050,
+        "name": "时空扭曲电荷金刚",
+        "tier": 5,
+        "cost": 2,
+        "attack": 9,
+        "health": 9,
+        "goldenAttack": 18,
+        "goldenHealth": 18,
+        "races": [
+          "MECHANICAL"
+        ],
+        "associatedRaces": [],
+        "mechanics": [
+          "TRIGGER_VISUAL"
+        ],
+        "referencedTags": [
+          "MAGNETIC"
+        ],
+        "elite": true,
+        "description": "在你施放2个酒馆法术后，为你的所有机械磁力吸附一个4/4的卫星。（还剩2个！）",
+        "goldenDescription": "在你施放2个酒馆法术后，为你的所有机械磁力吸附一个4/4的卫星，触发两次。（还剩2个！）"
+      },
+      {
+        "cardId": "BG34_Giant_618",
+        "dbfId": 128177,
+        "goldenCardId": "BG34_Giant_618_G",
+        "goldenDbfId": 128178,
+        "name": "时空扭曲看管者",
+        "tier": 5,
+        "cost": 2,
+        "attack": 5,
+        "health": 5,
+        "goldenAttack": 10,
+        "goldenHealth": 10,
+        "races": [
+          "UNDEAD"
+        ],
+        "associatedRaces": [],
+        "mechanics": [
+          "DEATHRATTLE"
+        ],
+        "referencedTags": [],
+        "elite": false,
+        "description": "亡语：召唤五个1/1的骷髅。每有一个放不下的骷髅，使你的亡灵在本局对战中\n获得+1攻击力（无论它们在哪）。",
+        "goldenDescription": "亡语：召唤十个1/1的骷髅。每有一个放不下的骷髅，使你的亡灵在本局对战中\n获得+1攻击力（无论它们在哪）。"
+      },
+      {
+        "cardId": "BG34_Giant_619",
+        "dbfId": 128343,
+        "goldenCardId": "BG34_Giant_619_G",
+        "goldenDbfId": 128344,
+        "name": "时空扭曲驼鹿",
+        "tier": 5,
+        "cost": 2,
+        "attack": 8,
+        "health": 2,
+        "goldenAttack": 16,
+        "goldenHealth": 4,
+        "races": [
+          "BEAST"
+        ],
+        "associatedRaces": [],
+        "mechanics": [
+          "DEATHRATTLE"
+        ],
+        "referencedTags": [],
+        "elite": false,
+        "description": "亡语：召唤并获取来自一个随机对手的战队的一个随从。",
+        "goldenDescription": "亡语：召唤并获取来自一个随机对手的战队的一个随从，\n触发两次。"
+      },
+      {
+        "cardId": "BG34_Giant_656",
+        "dbfId": 128172,
+        "goldenCardId": "BG34_Giant_656_G",
+        "goldenDbfId": 128173,
+        "name": "时空扭曲滑油机器人",
+        "tier": 5,
+        "cost": 2,
+        "attack": 6,
+        "health": 12,
+        "goldenAttack": 12,
+        "goldenHealth": 24,
+        "races": [
+          "MECHANICAL"
+        ],
+        "associatedRaces": [],
+        "mechanics": [
+          "DIVINE_SHIELD",
+          "TRIGGER_VISUAL"
+        ],
+        "referencedTags": [],
+        "elite": false,
+        "description": "圣盾。在一个友方随从失去圣盾后，使你的随从永久获得+3/+3。",
+        "goldenDescription": "圣盾。在一个友方随从失去圣盾后，使你的随从永久获得+6/+6。"
+      },
+      {
+        "cardId": "BG34_Giant_678",
+        "dbfId": 129103,
+        "goldenCardId": "BG34_Giant_678_G",
+        "goldenDbfId": 129104,
+        "name": "时空扭曲熔岩潜伏者",
+        "tier": 5,
+        "cost": 2,
+        "attack": 8,
+        "health": 9,
+        "goldenAttack": 16,
+        "goldenHealth": 18,
+        "races": [
+          "NAGA"
+        ],
+        "associatedRaces": [],
+        "mechanics": [
+          "TRIGGER_VISUAL"
+        ],
+        "referencedTags": [
+          "BACON_SPELLCRAFT_ID"
+        ],
+        "elite": false,
+        "description": "在你从手牌中对一个随从施放塑造法术的法术后，还会对本随从施放一张永久的复制。（每回合两次。）",
+        "goldenDescription": "在你从手牌中对一个随从施放塑造法术的法术后，还会对本随从施放2张永久的复制。（每回合两次。）"
+      },
+      {
+        "cardId": "BG34_Giant_686",
+        "dbfId": 129105,
+        "goldenCardId": "BG34_Giant_686_G",
+        "goldenDbfId": 129107,
+        "name": "时空扭曲旋流",
+        "tier": 5,
+        "cost": 2,
+        "attack": 9,
+        "health": 9,
+        "goldenAttack": 18,
+        "goldenHealth": 18,
+        "races": [
+          "ELEMENTAL"
+        ],
+        "associatedRaces": [],
+        "mechanics": [
+          "AURA"
+        ],
+        "referencedTags": [],
+        "elite": false,
+        "description": "在本局对战中，你的元素使随从额外获得+3/+3。",
+        "goldenDescription": "在本局对战中，你的元素使随从额外获得+6/+6。"
+      },
+      {
+        "cardId": "BG34_Giant_687",
+        "dbfId": 129578,
+        "goldenCardId": "BG34_Giant_687_G",
+        "goldenDbfId": 129579,
+        "name": "时空扭曲巢穴群居虫",
+        "tier": 5,
+        "cost": 2,
+        "attack": 7,
+        "health": 7,
+        "goldenAttack": 14,
+        "goldenHealth": 14,
+        "races": [
+          "BEAST"
+        ],
+        "associatedRaces": [],
+        "mechanics": [
+          "BATTLECRY",
+          "BACON_RALLY",
+          "DEATHRATTLE"
+        ],
+        "referencedTags": [],
+        "elite": false,
+        "description": "战吼，亡语，进击：在本局对战中，你的甲虫拥有+2/+2。召唤一只2/2的甲虫。",
+        "goldenDescription": "战吼，亡语，进击：在本局对战中，你的甲虫拥有+4/+4。召唤两只2/2的甲虫。"
+      },
+      {
+        "cardId": "BG34_Giant_777",
+        "dbfId": 127710,
+        "goldenCardId": "BG34_Giant_777_G",
+        "goldenDbfId": 127809,
+        "name": "时空扭曲巨怪",
+        "tier": 5,
+        "cost": 2,
+        "attack": 9,
+        "health": 11,
+        "goldenAttack": 18,
+        "goldenHealth": 22,
+        "races": [
+          "ELEMENTAL"
+        ],
+        "associatedRaces": [],
+        "mechanics": [
+          "TAUNT",
+          "TRIGGER_VISUAL"
+        ],
+        "referencedTags": [],
+        "elite": false,
+        "description": "嘲讽。在你购买一个元素后，获得其\n属性值。",
+        "goldenDescription": "嘲讽。在你购买一个元素后，获得其双倍属性值。"
+      },
+      {
+        "cardId": "BG34_PreMadeChamp_004",
+        "dbfId": 126548,
+        "goldenCardId": "BG34_PreMadeChamp_004_G",
+        "goldenDbfId": 127362,
+        "name": "时空扭曲丛林狮王",
+        "tier": 5,
+        "cost": 2,
+        "attack": 8,
+        "health": 12,
+        "goldenAttack": 16,
+        "goldenHealth": 24,
+        "races": [
+          "BEAST"
+        ],
+        "associatedRaces": [],
+        "mechanics": [
+          "STEALTH",
+          "TRIGGER_VISUAL"
+        ],
+        "referencedTags": [],
+        "elite": false,
+        "description": "潜行。在你召唤一只野兽后，使其获得+4/+3。在你施放一个法术后提升。",
+        "goldenDescription": "潜行。在你召唤一只野兽后，使其获得+8/+6。在你施放一个法术后提升。"
+      },
+      {
+        "cardId": "BG34_PreMadeChamp_013",
+        "dbfId": 126560,
+        "goldenCardId": "BG34_PreMadeChamp_013_G",
+        "goldenDbfId": 127365,
+        "name": "时空扭曲小鬼渗透者",
+        "tier": 5,
+        "cost": 2,
+        "attack": 13,
+        "health": 7,
+        "goldenAttack": 26,
+        "goldenHealth": 14,
+        "races": [
+          "DEMON"
+        ],
+        "associatedRaces": [],
+        "mechanics": [
+          "TRIGGER_VISUAL"
+        ],
+        "referencedTags": [],
+        "elite": false,
+        "description": "在你花掉8枚铸币后，使酒馆中的随从在本局对战中获得+3/+3。（还剩8枚！）",
+        "goldenDescription": "在你花掉8枚铸币后，使酒馆中的随从在本局对战中获得+6/+6。（还剩8枚！）"
+      },
+      {
+        "cardId": "BG34_PreMadeChamp_020",
+        "dbfId": 126563,
+        "goldenCardId": "BG34_PreMadeChamp_020_G",
+        "goldenDbfId": 127367,
+        "name": "时空扭曲暮喉龙",
+        "tier": 5,
+        "cost": 2,
+        "attack": 6,
+        "health": 14,
+        "goldenAttack": 12,
+        "goldenHealth": 28,
+        "races": [
+          "DRAGON"
+        ],
+        "associatedRaces": [],
+        "mechanics": [
+          "AVENGE"
+        ],
+        "referencedTags": [],
+        "elite": false,
+        "description": "复仇（1）：使你的龙获得+6/+4。",
+        "goldenDescription": "复仇（1）：使你的龙获得+12/+8。"
+      },
+      {
+        "cardId": "BG34_PreMadeChamp_032",
+        "dbfId": 127647,
+        "goldenCardId": "BG34_PreMadeChamp_032_G",
+        "goldenDbfId": 127712,
+        "name": "时空扭曲基材元素",
+        "tier": 5,
+        "cost": 2,
+        "attack": 8,
+        "health": 8,
+        "goldenAttack": 16,
+        "goldenHealth": 16,
+        "races": [
+          "ELEMENTAL"
+        ],
+        "associatedRaces": [],
+        "mechanics": [
+          "DIVINE_SHIELD",
+          "END_OF_TURN_TRIGGER"
+        ],
+        "referencedTags": [],
+        "elite": false,
+        "description": "圣盾。在你的回合结束时，获取一张寒热骤变。",
+        "goldenDescription": "圣盾。在你的回合结束时，获取2张\n寒热骤变。"
+      },
+      {
+        "cardId": "BG34_PreMadeChamp_049",
+        "dbfId": 126574,
+        "goldenCardId": "BG34_PreMadeChamp_049_G",
+        "goldenDbfId": 127383,
+        "name": "时空扭曲惊涛鱼人",
+        "tier": 5,
+        "cost": 2,
+        "attack": 6,
+        "health": 14,
+        "goldenAttack": 12,
+        "goldenHealth": 28,
+        "races": [
+          "MURLOC"
+        ],
+        "associatedRaces": [],
+        "mechanics": [
+          "TRIGGER_VISUAL"
+        ],
+        "referencedTags": [],
+        "elite": false,
+        "description": "在你使用一张鱼人牌后，使你手牌中和场上的随从获得+2/+2。",
+        "goldenDescription": "在你使用一张鱼人牌后，使你手牌中和场上的随从获得+4/+4。"
+      },
+      {
+        "cardId": "BG34_PreMadeChamp_065",
+        "dbfId": 126578,
+        "goldenCardId": "BG34_PreMadeChamp_065_G",
+        "goldenDbfId": 127421,
+        "name": "时空扭曲劫掠者",
+        "tier": 5,
+        "cost": 2,
+        "attack": 14,
+        "health": 6,
+        "goldenAttack": 28,
+        "goldenHealth": 12,
+        "races": [
+          "PIRATE"
+        ],
+        "associatedRaces": [],
+        "mechanics": [
+          "TRIGGER_VISUAL"
+        ],
+        "referencedTags": [],
+        "elite": false,
+        "description": "在你使用一张等级4或以上的牌后，使你的海盗获得+3/+2。",
+        "goldenDescription": "在你使用一张等级4或以上的牌后，使你的海盗获得+3/+2，触发两次。"
+      },
+      {
+        "cardId": "BG34_PreMadeChamp_083",
+        "dbfId": 126584,
+        "goldenCardId": "BG34_PreMadeChamp_083_G",
+        "goldenDbfId": 127394,
+        "name": "时空扭曲阿努巴拉克",
+        "tier": 5,
+        "cost": 2,
+        "attack": 12,
+        "health": 8,
+        "goldenAttack": 24,
+        "goldenHealth": 16,
+        "races": [
+          "UNDEAD"
+        ],
+        "associatedRaces": [],
+        "mechanics": [
+          "TRIGGER_VISUAL"
+        ],
+        "referencedTags": [],
+        "elite": true,
+        "description": "在你使用一张亡灵牌后，在本局对战中，你的亡灵额外拥有+3攻击力。",
+        "goldenDescription": "在你使用一张亡灵牌后，在本局对战中，你的亡灵额外拥有+6攻击力。"
+      },
+      {
+        "cardId": "BG34_PreMadeChamp_200",
+        "dbfId": 127293,
+        "goldenCardId": "BG34_PreMadeChamp_200_G",
+        "goldenDbfId": 127440,
+        "name": "时空扭曲百夫长",
+        "tier": 5,
+        "cost": 2,
+        "attack": 8,
+        "health": 8,
+        "goldenAttack": 16,
+        "goldenHealth": 16,
+        "races": [
+          "DRAGON"
+        ],
+        "associatedRaces": [],
+        "mechanics": [
+          "TRIGGER_VISUAL"
+        ],
+        "referencedTags": [],
+        "elite": false,
+        "description": "在你施放一个酒馆法术后，额外获取它的一张复制。（每回合限3次。）",
+        "goldenDescription": "在你施放一个酒馆法术后，额外获取它的2张复制。（每回合限3次。）"
+      }
+    ]
+  },
+  "trinkets": [
+    {
+      "id": "lesser-trinket-bg30-magicitem-301",
+      "cardId": "BG30_MagicItem_301",
+      "dbfId": 111388,
+      "name": "永恒肖像",
+      "tier": "lesser",
+      "cost": 6,
+      "description": "获取一张永恒骑士。战斗开始时：使你的永恒骑士获得嘲讽和复生。",
+      "associatedTribes": [
+        "UNDEAD"
+      ],
+      "relatedCardIds": [
+        "BG25_008"
+      ],
+      "sourceSlug": "111388-eternal-portrait"
+    },
+    {
+      "id": "lesser-trinket-bg30-magicitem-303",
+      "cardId": "BG30_MagicItem_303",
+      "dbfId": 111403,
+      "name": "自动机肖像",
+      "tier": "lesser",
+      "cost": 1,
+      "description": "战斗开始时：当你有空位时，召唤一个星元自动机。",
+      "associatedTribes": [
+        "MECHANICAL"
+      ],
+      "relatedCardIds": [
+        "BG_TTN_401"
+      ],
+      "sourceSlug": "111403-automaton-portrait"
+    },
+    {
+      "id": "lesser-trinket-bg30-magicitem-410",
+      "cardId": "BG30_MagicItem_410",
+      "dbfId": 111512,
+      "name": "鬃尖笔墨套装",
+      "tier": "lesser",
+      "cost": 0,
+      "description": "复仇（3）：在本局对战中，你的鲜血宝石使随从额外获得+1生命值。",
+      "associatedTribes": [
+        "QUILBOAR"
+      ],
+      "relatedCardIds": [],
+      "sourceSlug": "111512-quilligraphy-set"
+    },
+    {
+      "id": "lesser-trinket-bg30-magicitem-411",
+      "cardId": "BG30_MagicItem_411",
+      "dbfId": 111514,
+      "name": "猪猪储蓄罐",
+      "tier": "lesser",
+      "cost": 0,
+      "description": "战斗开始时：\n使你的野猪人获得“亡语：获取2张鲜血宝石。”",
+      "associatedTribes": [
+        "QUILBOAR"
+      ],
+      "relatedCardIds": [],
+      "sourceSlug": "111514-hoggy-bank"
+    },
+    {
+      "id": "lesser-trinket-bg30-magicitem-416",
+      "cardId": "BG30_MagicItem_416",
+      "dbfId": 111556,
+      "name": "古神信物",
+      "tier": "lesser",
+      "cost": 2,
+      "description": "塑造法术：选择一个随从，将其变形成为你另选的高一级的随从。",
+      "associatedTribes": [],
+      "relatedCardIds": [
+        "BG30_MagicItem_416t"
+      ],
+      "sourceSlug": "111556-token-of-the-old-gods"
+    },
+    {
+      "id": "lesser-trinket-bg30-magicitem-420",
+      "cardId": "BG30_MagicItem_420",
+      "dbfId": 111609,
+      "name": "麦迪文之书",
+      "tier": "lesser",
+      "cost": 1,
+      "description": "发现一张\n酒馆法术牌。在每个回合开始时，再发现一张。",
+      "associatedTribes": [],
+      "relatedCardIds": [],
+      "sourceSlug": "111609-book-of-medivh"
+    },
+    {
+      "id": "lesser-trinket-bg30-magicitem-422",
+      "cardId": "BG30_MagicItem_422",
+      "dbfId": 111664,
+      "name": "游学者卷轴",
+      "tier": "lesser",
+      "cost": 0,
+      "description": "每当你对一个随从施放法术时，使其获得+4/+4。",
+      "associatedTribes": [
+        "NAGA"
+      ],
+      "relatedCardIds": [],
+      "sourceSlug": "111664-lorewalker-scroll"
+    },
+    {
+      "id": "lesser-trinket-bg30-magicitem-423",
+      "cardId": "BG30_MagicItem_423",
+      "dbfId": 111999,
+      "name": "旅店老板的酒杯",
+      "tier": "lesser",
+      "cost": 2,
+      "description": "每当酒馆刷新时，会额外提供一个更高等级的随从。",
+      "associatedTribes": [],
+      "relatedCardIds": [],
+      "sourceSlug": "111999-innkeepers-stein"
+    },
+    {
+      "id": "lesser-trinket-bg30-magicitem-425",
+      "cardId": "BG30_MagicItem_425",
+      "dbfId": 112001,
+      "name": "艾泽拉斯星球仪",
+      "tier": "lesser",
+      "cost": 0,
+      "description": "每两个回合，在回合开始时获得2枚铸币并发现一个等级6的随从。（还剩2回合！）",
+      "associatedTribes": [],
+      "relatedCardIds": [],
+      "sourceSlug": "112001-azeroth-model-globe"
+    },
+    {
+      "id": "lesser-trinket-bg30-magicitem-426",
+      "cardId": "BG30_MagicItem_426",
+      "dbfId": 112002,
+      "name": "多彩罗盘",
+      "tier": "lesser",
+      "cost": 2,
+      "description": "随机获取一张与你战队相符类型的随从牌。在每个回合开始时，再获取一张。",
+      "associatedTribes": [],
+      "relatedCardIds": [],
+      "sourceSlug": "112002-colorful-compass"
+    },
+    {
+      "id": "lesser-trinket-bg30-magicitem-430",
+      "cardId": "BG30_MagicItem_430",
+      "dbfId": 112079,
+      "name": "摇滚音乐盒",
+      "tier": "lesser",
+      "cost": 1,
+      "description": "随机获取一张\n战吼随从牌。在每个回合开始时，再获取一张。",
+      "associatedTribes": [],
+      "relatedCardIds": [],
+      "sourceSlug": "112079-rockin-music-box"
+    },
+    {
+      "id": "lesser-trinket-bg30-magicitem-434",
+      "cardId": "BG30_MagicItem_434",
+      "dbfId": 112855,
+      "name": "大教堂模型",
+      "tier": "lesser",
+      "cost": 3,
+      "description": "每个回合你的第一个法术会额外施放一次。",
+      "associatedTribes": [
+        "NAGA"
+      ],
+      "relatedCardIds": [],
+      "sourceSlug": "112855-replica-cathedral"
+    },
+    {
+      "id": "lesser-trinket-goldenizer-supply",
+      "cardId": "BG30_MagicItem_435",
+      "dbfId": 112082,
+      "name": "点金补给",
+      "tier": "lesser",
+      "cost": 0,
+      "description": "每3个回合，在回合结束时，获取一张点金术。（还剩3回合！）",
+      "associatedTribes": [],
+      "relatedCardIds": [
+        "BG26_813t"
+      ],
+      "sourceSlug": "112082-goldenizer-supply"
+    },
+    {
+      "id": "lesser-trinket-bg30-magicitem-437",
+      "cardId": "BG30_MagicItem_437",
+      "dbfId": 112080,
+      "name": "天灾之杖",
+      "tier": "lesser",
+      "cost": 3,
+      "description": "复仇（5）：\n随机使一个友方亡灵获得复生。",
+      "associatedTribes": [
+        "UNDEAD"
+      ],
+      "relatedCardIds": [],
+      "sourceSlug": "112080-staff-of-the-scourge"
+    },
+    {
+      "id": "lesser-trinket-bg30-magicitem-544",
+      "cardId": "BG30_MagicItem_544",
+      "dbfId": 112392,
+      "name": "诺米标签",
+      "tier": "lesser",
+      "cost": 1,
+      "description": "在你使用一张元素牌后，使酒馆中的元素在本局对战中获得+2/+2。",
+      "associatedTribes": [
+        "ELEMENTAL"
+      ],
+      "relatedCardIds": [],
+      "sourceSlug": "112392-nomi-sticker"
+    },
+    {
+      "id": "lesser-trinket-bg30-magicitem-547",
+      "cardId": "BG30_MagicItem_547",
+      "dbfId": 112399,
+      "name": "舒适的棺椁",
+      "tier": "lesser",
+      "cost": 3,
+      "description": "在你施放一个酒馆\n法术后，你的亡灵在本局对战中拥有+1攻击力\n（无论它们在哪）。",
+      "associatedTribes": [
+        "UNDEAD"
+      ],
+      "relatedCardIds": [],
+      "sourceSlug": "112399-comfy-coffin"
+    },
+    {
+      "id": "lesser-trinket-bg30-magicitem-700",
+      "cardId": "BG30_MagicItem_700",
+      "dbfId": 117794,
+      "name": "死亡护命匣",
+      "tier": "lesser",
+      "cost": 0,
+      "description": "发现一个亡语随从。每场战斗中你的第一个亡语额外触发一次。",
+      "associatedTribes": [
+        "BEAST",
+        "UNDEAD"
+      ],
+      "relatedCardIds": [],
+      "sourceSlug": "117794-deathly-phylactery"
+    },
+    {
+      "id": "lesser-trinket-bg30-magicitem-703",
+      "cardId": "BG30_MagicItem_703",
+      "dbfId": 117801,
+      "name": "神秘魔方",
+      "tier": "lesser",
+      "cost": 5,
+      "description": "免费从2个新的小型饰品中选择一个以替换本饰品。在每个回合开始时，重复此效果。",
+      "associatedTribes": [],
+      "relatedCardIds": [],
+      "sourceSlug": "117801-mystery-cube"
+    },
+    {
+      "id": "lesser-trinket-oilcan",
+      "cardId": "BG30_MagicItem_705",
+      "dbfId": 117854,
+      "name": "调酒机器人的油壶",
+      "tier": "lesser",
+      "cost": 2,
+      "description": "升级酒馆所需的铸币减少（3）枚。在每个回合开始时，重复此效果。",
+      "associatedTribes": [],
+      "relatedCardIds": [],
+      "sourceSlug": "117854-bartend-o-trons-oilcan"
+    },
+    {
+      "id": "lesser-trinket-bg30-magicitem-706",
+      "cardId": "BG30_MagicItem_706",
+      "dbfId": 117857,
+      "name": "映像吊坠",
+      "tier": "lesser",
+      "cost": 6,
+      "description": "获取一个随机友方随从的一张原始版复制。在每个回合开始时，重复此效果。",
+      "associatedTribes": [],
+      "relatedCardIds": [],
+      "sourceSlug": "117857-reflective-pendant"
+    },
+    {
+      "id": "lesser-trinket-bg30-magicitem-707",
+      "cardId": "BG30_MagicItem_707",
+      "dbfId": 117860,
+      "name": "提克特斯标签",
+      "tier": "lesser",
+      "cost": 3,
+      "description": "发现一个等级3的暗月奖品。每三个回合，在回合开始时，重复此效果。（还剩3回合！）",
+      "associatedTribes": [],
+      "relatedCardIds": [],
+      "sourceSlug": "117860-tickatus-sticker"
+    },
+    {
+      "id": "lesser-trinket-bg30-magicitem-713",
+      "cardId": "BG30_MagicItem_713",
+      "dbfId": 117906,
+      "name": "泣血之心",
+      "tier": "lesser",
+      "cost": 1,
+      "description": "在8个友方随从\n死亡后，随机获取一张亡灵牌。（还剩8个！）",
+      "associatedTribes": [
+        "UNDEAD"
+      ],
+      "relatedCardIds": [],
+      "sourceSlug": "117906-bleeding-heart"
+    },
+    {
+      "id": "lesser-trinket-bg30-magicitem-804",
+      "cardId": "BG30_MagicItem_804",
+      "dbfId": 110957,
+      "name": "古老的许愿叉骨",
+      "tier": "lesser",
+      "cost": 2,
+      "description": "你的英雄技能会触发两次。",
+      "associatedTribes": [],
+      "relatedCardIds": [],
+      "sourceSlug": "110957-ancient-wishbone"
+    },
+    {
+      "id": "lesser-trinket-bg30-magicitem-821",
+      "cardId": "BG30_MagicItem_821",
+      "dbfId": 110966,
+      "name": "鱼的肖像",
+      "tier": "lesser",
+      "cost": 0,
+      "description": "获取一张恩佐斯的鱼。",
+      "associatedTribes": [
+        "BEAST",
+        "UNDEAD"
+      ],
+      "relatedCardIds": [
+        "TB_BaconShop_HP_105t"
+      ],
+      "sourceSlug": "110966-fish-portrait"
+    },
+    {
+      "id": "lesser-trinket-bg30-magicitem-841",
+      "cardId": "BG30_MagicItem_841",
+      "dbfId": 111092,
+      "name": "辐光护手",
+      "tier": "lesser",
+      "cost": 1,
+      "description": "酒馆中的随从拥有+3/+3。酒馆中始终会有7张牌。",
+      "associatedTribes": [
+        "DEMON"
+      ],
+      "relatedCardIds": [],
+      "sourceSlug": "111092-glowing-gauntlet"
+    },
+    {
+      "id": "lesser-trinket-goblin-wallet",
+      "cardId": "BG30_MagicItem_847",
+      "dbfId": 111448,
+      "name": "地精钱包",
+      "tier": "lesser",
+      "cost": 1,
+      "description": "在每个回合\n结束时，你的铸币上限提高1枚。",
+      "associatedTribes": [],
+      "relatedCardIds": [],
+      "sourceSlug": "111448-goblin-wallet"
+    },
+    {
+      "id": "lesser-trinket-bg30-magicitem-868",
+      "cardId": "BG30_MagicItem_868",
+      "dbfId": 110975,
+      "name": "回溯者肖像",
+      "tier": "lesser",
+      "cost": 1,
+      "description": "获取一张灵魂回溯者和一张愤怒编织者。你的灵魂回溯者还会获得攻击力。",
+      "associatedTribes": [
+        "DEMON"
+      ],
+      "relatedCardIds": [
+        "BG26_174"
+      ],
+      "sourceSlug": "110975-rewinder-portrait"
+    },
+    {
+      "id": "lesser-trinket-bg30-magicitem-888",
+      "cardId": "BG30_MagicItem_888",
+      "dbfId": 112895,
+      "name": "纪念品货架",
+      "tier": "lesser",
+      "cost": 0,
+      "description": "当你购买大型饰品时，本饰品变形成为它的复制。",
+      "associatedTribes": [],
+      "relatedCardIds": [],
+      "sourceSlug": "112895-souvenir-stand"
+    },
+    {
+      "id": "lesser-trinket-bg30-magicitem-891",
+      "cardId": "BG30_MagicItem_891",
+      "dbfId": 112991,
+      "name": "旅途兑换券",
+      "tier": "lesser",
+      "cost": 1,
+      "description": "2回合后，选择一个大型饰品并购买以替换本饰品。（还剩2回合！）",
+      "associatedTribes": [],
+      "relatedCardIds": [],
+      "sourceSlug": "112991-trip-vouchers"
+    },
+    {
+      "id": "lesser-trinket-bg30-magicitem-900",
+      "cardId": "BG30_MagicItem_900",
+      "dbfId": 110985,
+      "name": "滑翔龙翼",
+      "tier": "lesser",
+      "cost": 1,
+      "description": "每当你使用一张牌时，使一条友方的龙获得+4/+4。",
+      "associatedTribes": [
+        "DRAGON"
+      ],
+      "relatedCardIds": [],
+      "sourceSlug": "110985-dragonwing-glider"
+    },
+    {
+      "id": "lesser-trinket-bg30-magicitem-902",
+      "cardId": "BG30_MagicItem_902",
+      "dbfId": 111401,
+      "name": "神圣重槌",
+      "tier": "lesser",
+      "cost": 1,
+      "description": "战斗开始时：使你最左边和最右边的随从获得圣盾。",
+      "associatedTribes": [
+        "DRAGON"
+      ],
+      "relatedCardIds": [],
+      "sourceSlug": "111401-holy-mallet"
+    },
+    {
+      "id": "lesser-trinket-bg30-magicitem-914",
+      "cardId": "BG30_MagicItem_914",
+      "dbfId": 110991,
+      "name": "鱼人语实用手册",
+      "tier": "lesser",
+      "cost": 1,
+      "description": "在你使用一张随从牌后，使你手牌中最左边的随从牌获得+3/+3。",
+      "associatedTribes": [
+        "MURLOC"
+      ],
+      "relatedCardIds": [],
+      "sourceSlug": "110991-nerglish-phrasebook"
+    },
+    {
+      "id": "lesser-trinket-bg30-magicitem-917",
+      "cardId": "BG30_MagicItem_917",
+      "dbfId": 111557,
+      "name": "锈蚀的三叉戟",
+      "tier": "lesser",
+      "cost": 1,
+      "description": "战斗开始时：使你的纳迦获得“亡语：随机获取一张塑造法术的法术牌。”",
+      "associatedTribes": [
+        "NAGA"
+      ],
+      "relatedCardIds": [],
+      "sourceSlug": "111557-rusty-trident"
+    },
+    {
+      "id": "lesser-trinket-bg30-magicitem-924",
+      "cardId": "BG30_MagicItem_924",
+      "dbfId": 110993,
+      "name": "藏宝海湾美酒",
+      "tier": "lesser",
+      "cost": 1,
+      "description": "每当你花费铸币时，使一个友方海盗获得+4/+3。",
+      "associatedTribes": [
+        "PIRATE"
+      ],
+      "relatedCardIds": [],
+      "sourceSlug": "110993-booty-bay-brew"
+    },
+    {
+      "id": "lesser-trinket-bg30-magicitem-931",
+      "cardId": "BG30_MagicItem_931",
+      "dbfId": 111408,
+      "name": "幸运猫咪",
+      "tier": "lesser",
+      "cost": 1,
+      "description": "在7个友方随从死亡后，\n随机获取一张野兽牌。（还剩7个！）",
+      "associatedTribes": [
+        "BEAST"
+      ],
+      "relatedCardIds": [],
+      "sourceSlug": "111408-lucky-tabby"
+    },
+    {
+      "id": "lesser-trinket-bg30-magicitem-973",
+      "cardId": "BG30_MagicItem_973",
+      "dbfId": 111962,
+      "name": "随从诱饵",
+      "tier": "lesser",
+      "cost": 1,
+      "description": "每当酒馆刷新时，总会额外提供2个\n与你战队相符类型的随从。",
+      "associatedTribes": [],
+      "relatedCardIds": [],
+      "sourceSlug": "111962-minion-bait"
+    },
+    {
+      "id": "lesser-trinket-bg30-magicitem-981",
+      "cardId": "BG30_MagicItem_981",
+      "dbfId": 112850,
+      "name": "达拉然之眼",
+      "tier": "lesser",
+      "cost": 4,
+      "description": "每当一个没有类型的友方随从死亡时，随机获取一张酒馆法术牌。",
+      "associatedTribes": [],
+      "relatedCardIds": [],
+      "sourceSlug": "112850-the-eye-of-dalaran"
+    },
+    {
+      "id": "lesser-trinket-bg30-magicitem-988",
+      "cardId": "BG30_MagicItem_988",
+      "dbfId": 112013,
+      "name": "野猪之神标签",
+      "tier": "lesser",
+      "cost": 1,
+      "description": "获取3张鲜血宝石。你的鲜血宝石使随从额外获得+2/+1。",
+      "associatedTribes": [
+        "QUILBOAR"
+      ],
+      "relatedCardIds": [],
+      "sourceSlug": "112013-great-boar-sticker"
+    },
+    {
+      "id": "lesser-trinket-bg30-magicitem-994",
+      "cardId": "BG30_MagicItem_994",
+      "dbfId": 113104,
+      "name": "尤格糕点",
+      "tier": "lesser",
+      "cost": 5,
+      "description": "转动尤格-萨隆\n的命运之轮。在每个回合开始时，再次转动。",
+      "associatedTribes": [],
+      "relatedCardIds": [],
+      "sourceSlug": "113104-yogg-tastic-pastry"
+    },
+    {
+      "id": "lesser-trinket-bg30-magicitem-998",
+      "cardId": "BG30_MagicItem_998",
+      "dbfId": 113101,
+      "name": "鲍勃摇头玩偶",
+      "tier": "lesser",
+      "cost": 0,
+      "description": "获得2枚铸币。酒馆中不会再提供等级1和等级2的牌。",
+      "associatedTribes": [],
+      "relatedCardIds": [],
+      "sourceSlug": "113101-bob-blehead"
+    },
+    {
+      "id": "lesser-trinket-bg32-magicitem-170",
+      "cardId": "BG32_MagicItem_170",
+      "dbfId": 120864,
+      "name": "法术扳手",
+      "tier": "lesser",
+      "cost": 2,
+      "description": "在你使用一张磁力随从牌后，随机获取一张酒馆法术牌。",
+      "associatedTribes": [
+        "MECHANICAL"
+      ],
+      "relatedCardIds": [],
+      "sourceSlug": "120864-spell-powered-wrench"
+    },
+    {
+      "id": "lesser-trinket-bg32-magicitem-271",
+      "cardId": "BG32_MagicItem_271",
+      "dbfId": 121120,
+      "name": "华丽的时钟",
+      "tier": "lesser",
+      "cost": 0,
+      "description": "获得2枚铸币。在下个回合购买你的大型饰品，而非第9回合。",
+      "associatedTribes": [],
+      "relatedCardIds": [],
+      "sourceSlug": "121120-ornate-clock"
+    },
+    {
+      "id": "lesser-trinket-bg32-magicitem-276",
+      "cardId": "BG32_MagicItem_276",
+      "dbfId": 121121,
+      "name": "神秘墓碑",
+      "tier": "lesser",
+      "cost": 1,
+      "description": "在每个回合结束时，你的亡灵在本局对战中拥有+2攻击力（无论它们在哪）。",
+      "associatedTribes": [
+        "UNDEAD"
+      ],
+      "relatedCardIds": [],
+      "sourceSlug": "121121-enigmatic-headstone"
+    },
+    {
+      "id": "lesser-trinket-bg32-magicitem-300",
+      "cardId": "BG32_MagicItem_300",
+      "dbfId": 120827,
+      "name": "普崔塞德标签",
+      "tier": "lesser",
+      "cost": 2,
+      "description": "制造一个自定义的亡灵。每2个回合，在回合开始时，重复此效果。（还剩2个回合！）",
+      "associatedTribes": [
+        "UNDEAD"
+      ],
+      "relatedCardIds": [],
+      "sourceSlug": "120827-putricide-sticker"
+    },
+    {
+      "id": "lesser-trinket-bg32-magicitem-350",
+      "cardId": "BG32_MagicItem_350",
+      "dbfId": 111387,
+      "name": "黄金残片",
+      "tier": "lesser",
+      "cost": 4,
+      "description": "当你拥有15枚铸币时，随机获取一张等级5的金色随从牌。（每局对战限一次）",
+      "associatedTribes": [
+        "PIRATE"
+      ],
+      "relatedCardIds": [],
+      "sourceSlug": "111387-splinter-of-aurum"
+    },
+    {
+      "id": "lesser-trinket-bg32-magicitem-360",
+      "cardId": "BG32_MagicItem_360",
+      "dbfId": 120137,
+      "name": "怨毒熏香",
+      "tier": "lesser",
+      "cost": 3,
+      "description": "战斗开始时：使你最左边和最右边的亡灵获得复生。",
+      "associatedTribes": [
+        "UNDEAD"
+      ],
+      "relatedCardIds": [],
+      "sourceSlug": "120137-baleful-incense"
+    },
+    {
+      "id": "lesser-trinket-bg32-magicitem-361",
+      "cardId": "BG32_MagicItem_361",
+      "dbfId": 111399,
+      "name": "口袋工厂",
+      "tier": "lesser",
+      "cost": 6,
+      "description": "发现一张等级4的具有类型的随从牌。在每个回合开始时，再获取一张它的复制。",
+      "associatedTribes": [],
+      "relatedCardIds": [],
+      "sourceSlug": "111399-portable-factory"
+    },
+    {
+      "id": "lesser-trinket-bg32-magicitem-400",
+      "cardId": "BG32_MagicItem_400",
+      "dbfId": 111427,
+      "name": "异变神龛",
+      "tier": "lesser",
+      "cost": 0,
+      "description": "随机将你的\n所有随从变形成为等级4的随从。",
+      "associatedTribes": [],
+      "relatedCardIds": [],
+      "sourceSlug": "111427-shrine-of-evolution"
+    },
+    {
+      "id": "lesser-trinket-bg32-magicitem-416",
+      "cardId": "BG32_MagicItem_416",
+      "dbfId": 121037,
+      "name": "战鼓",
+      "tier": "lesser",
+      "cost": 2,
+      "description": "每回合中，有一个战吼会额外触发两次。（还剩1个！）",
+      "associatedTribes": [
+        "DRAGON"
+      ],
+      "relatedCardIds": [],
+      "sourceSlug": "121037-war-drum"
+    },
+    {
+      "id": "lesser-trinket-bg32-magicitem-428",
+      "cardId": "BG32_MagicItem_428",
+      "dbfId": 112075,
+      "name": "磨损的藏宝图",
+      "tier": "lesser",
+      "cost": 0,
+      "description": "两回合后，获得10枚铸币。（每局对战限一次）",
+      "associatedTribes": [],
+      "relatedCardIds": [],
+      "sourceSlug": "112075-worn-treasure-map"
+    },
+    {
+      "id": "lesser-trinket-bg32-magicitem-803",
+      "cardId": "BG32_MagicItem_803",
+      "dbfId": 120152,
+      "name": "金刚鹦鹉肖像",
+      "tier": "lesser",
+      "cost": 2,
+      "description": "获取一张巨大的金刚鹦鹉。你的巨大的金刚鹦鹉还会触发你的最左边的战吼。",
+      "associatedTribes": [
+        "BEAST"
+      ],
+      "relatedCardIds": [
+        "BGS_078"
+      ],
+      "sourceSlug": "120152-macaw-portrait"
+    },
+    {
+      "id": "lesser-trinket-bg32-magicitem-808",
+      "cardId": "BG32_MagicItem_808",
+      "dbfId": 120146,
+      "name": "血缚耳环",
+      "tier": "lesser",
+      "cost": 0,
+      "description": "在你施放4个法术后，本饰品对你的所有随从各使用一张鲜血宝石。（还剩4个！）",
+      "associatedTribes": [
+        "QUILBOAR"
+      ],
+      "relatedCardIds": [],
+      "sourceSlug": "120146-bloodbound-earrings"
+    },
+    {
+      "id": "lesser-trinket-bg32-magicitem-817",
+      "cardId": "BG32_MagicItem_817",
+      "dbfId": 120154,
+      "name": "伦德尔标签",
+      "tier": "lesser",
+      "cost": 0,
+      "description": "偷取酒馆中\n等级最高的牌。在每个回合结束时，重复此效果。",
+      "associatedTribes": [],
+      "relatedCardIds": [],
+      "sourceSlug": "120154-rendle-sticker"
+    },
+    {
+      "id": "lesser-trinket-bg32-magicitem-821",
+      "cardId": "BG32_MagicItem_821",
+      "dbfId": 120698,
+      "name": "朝圣小鬼标签",
+      "tier": "lesser",
+      "cost": 2,
+      "description": "每回合中，有一张恶魔牌可用生命值购买，而非铸币。（还剩1张！）",
+      "associatedTribes": [
+        "DEMON"
+      ],
+      "relatedCardIds": [],
+      "sourceSlug": "120698-pilgrimp-sticker"
+    },
+    {
+      "id": "lesser-trinket-bg32-magicitem-822",
+      "cardId": "BG32_MagicItem_822",
+      "dbfId": 121033,
+      "name": "集市标签",
+      "tier": "lesser",
+      "cost": 0,
+      "description": "每回合中，有一张酒馆法术牌可用生命值购买，而非铸币。（还剩1张！）",
+      "associatedTribes": [
+        "DEMON"
+      ],
+      "relatedCardIds": [],
+      "sourceSlug": "121033-bazaar-sticker"
+    },
+    {
+      "id": "lesser-trinket-bg32-magicitem-830",
+      "cardId": "BG32_MagicItem_830",
+      "dbfId": 121062,
+      "name": "邪能元素肖像",
+      "tier": "lesser",
+      "cost": 2,
+      "description": "获取一张邪能元素。你的邪能元素使随从额外获得+2/+2。",
+      "associatedTribes": [
+        "DEMON",
+        "ELEMENTAL"
+      ],
+      "relatedCardIds": [
+        "BG25_041"
+      ],
+      "sourceSlug": "121062-felemental-portrait"
+    },
+    {
+      "id": "lesser-trinket-bg32-magicitem-831",
+      "cardId": "BG32_MagicItem_831",
+      "dbfId": 120800,
+      "name": "商贩元素肖像",
+      "tier": "lesser",
+      "cost": 5,
+      "description": "获取一张商贩元素。在每个回合开始时，再获取一张。",
+      "associatedTribes": [
+        "ELEMENTAL"
+      ],
+      "relatedCardIds": [
+        "BGS_115"
+      ],
+      "sourceSlug": "120800-sellemental-portrait"
+    },
+    {
+      "id": "lesser-trinket-bg32-magicitem-844",
+      "cardId": "BG32_MagicItem_844",
+      "dbfId": 111109,
+      "name": "牺牲祭坛",
+      "tier": "lesser",
+      "cost": 1,
+      "description": "移除你的所有随从。每移除一个随从，获得3枚铸币。",
+      "associatedTribes": [],
+      "relatedCardIds": [],
+      "sourceSlug": "111109-sacrificial-altar"
+    },
+    {
+      "id": "lesser-trinket-bg32-magicitem-858",
+      "cardId": "BG32_MagicItem_858",
+      "dbfId": 120139,
+      "name": "探险者的望远镜",
+      "tier": "lesser",
+      "cost": 1,
+      "description": "随机获取三张等级4的随从牌。",
+      "associatedTribes": [],
+      "relatedCardIds": [],
+      "sourceSlug": "120139-explorers-binoculars"
+    },
+    {
+      "id": "lesser-trinket-bg32-magicitem-860",
+      "cardId": "BG32_MagicItem_860",
+      "dbfId": 120760,
+      "name": "甲虫之戒",
+      "tier": "lesser",
+      "cost": 0,
+      "description": "复仇（5）：召唤一只2/2的甲虫，使其获得嘲讽。",
+      "associatedTribes": [
+        "BEAST"
+      ],
+      "relatedCardIds": [],
+      "sourceSlug": "120760-beetle-band"
+    },
+    {
+      "id": "lesser-trinket-bg32-magicitem-893",
+      "cardId": "BG32_MagicItem_893",
+      "dbfId": 121140,
+      "name": "蓝鳃脚蹼",
+      "tier": "lesser",
+      "cost": 2,
+      "description": "在你施放一个酒馆法术后，使你手牌和战队中最左边的随从获得+3/+3。",
+      "associatedTribes": [
+        "MURLOC"
+      ],
+      "relatedCardIds": [],
+      "sourceSlug": "121140-bluegill-flippers"
+    },
+    {
+      "id": "lesser-trinket-bg32-magicitem-894",
+      "cardId": "BG32_MagicItem_894",
+      "dbfId": 121141,
+      "name": "祝福肖像",
+      "tier": "lesser",
+      "cost": 0,
+      "description": "获取一张自然祝福。在每个回合开始时，再获取一张。你的自然祝福还会影响手牌中的随从牌。",
+      "associatedTribes": [
+        "MURLOC"
+      ],
+      "relatedCardIds": [
+        "BG28_845"
+      ],
+      "sourceSlug": "121141-blessing-portrait"
+    },
+    {
+      "id": "lesser-trinket-bg32-magicitem-930",
+      "cardId": "BG32_MagicItem_930",
+      "dbfId": 120610,
+      "name": "古风卷轴",
+      "tier": "lesser",
+      "cost": 3,
+      "description": "在你施放7个法术后，随机获取一张纳迦牌。（还剩7个！）",
+      "associatedTribes": [
+        "NAGA"
+      ],
+      "relatedCardIds": [],
+      "sourceSlug": "120610-archaic-scroll"
+    },
+    {
+      "id": "lesser-trinket-bg32-magicitem-931",
+      "cardId": "BG32_MagicItem_931",
+      "dbfId": 120617,
+      "name": "艾萨拉的雕像",
+      "tier": "lesser",
+      "cost": 2,
+      "description": "随机获取3张塑造法术的法术牌。在每个回合开始时，再获取3张。",
+      "associatedTribes": [
+        "NAGA"
+      ],
+      "relatedCardIds": [],
+      "sourceSlug": "120617-azsharan-statuette"
+    },
+    {
+      "id": "lesser-trinket-bg32-magicitem-951",
+      "cardId": "BG32_MagicItem_951",
+      "dbfId": 120809,
+      "name": "黄金吊坠",
+      "tier": "lesser",
+      "cost": 1,
+      "description": "随机使一个等级4或以下的友方随从变为金色。在每个回合开始时，重复此效果。",
+      "associatedTribes": [
+        "PIRATE"
+      ],
+      "relatedCardIds": [],
+      "sourceSlug": "120809-gold-pendant"
+    },
+    {
+      "id": "lesser-trinket-bg32-magicitem-957",
+      "cardId": "BG32_MagicItem_957",
+      "dbfId": 121036,
+      "name": "诈骗犯肖像",
+      "tier": "lesser",
+      "cost": 6,
+      "description": "获取一张\n金币诈骗犯。每回合你购买的第一个海盗免费。",
+      "associatedTribes": [
+        "PIRATE"
+      ],
+      "relatedCardIds": [
+        "BG31_826"
+      ],
+      "sourceSlug": "121036-grifter-portrait"
+    },
+    {
+      "id": "lesser-trinket-bg35-magicitem-150",
+      "cardId": "BG35_MagicItem_150",
+      "dbfId": 131276,
+      "name": "被诅咒的水晶",
+      "tier": "lesser",
+      "cost": 2,
+      "description": "在酒馆刷新后，在本回合中使酒馆中的随从获得+3/+3。",
+      "associatedTribes": [
+        "DEMON"
+      ],
+      "relatedCardIds": [],
+      "sourceSlug": "131276-cursed-crystal"
+    },
+    {
+      "id": "lesser-trinket-bg35-magicitem-151",
+      "cardId": "BG35_MagicItem_151",
+      "dbfId": 131278,
+      "name": "亵渎者肖像",
+      "tier": "lesser",
+      "cost": 1,
+      "description": "获取一张林地亵渎者。酒馆中的恶魔饲料拥有+4/+4。",
+      "associatedTribes": [
+        "DEMON"
+      ],
+      "relatedCardIds": [
+        "BG35_151"
+      ],
+      "sourceSlug": "131278-defiler-portrait"
+    },
+    {
+      "id": "lesser-trinket-bg35-magicitem-152",
+      "cardId": "BG35_MagicItem_152",
+      "dbfId": 131280,
+      "name": "恶魔挂毯",
+      "tier": "lesser",
+      "cost": 1,
+      "description": "在你刷新4次后，酒馆中等级最高的随从改为消耗生命值，而非铸币。（还剩4次！）",
+      "associatedTribes": [
+        "DEMON"
+      ],
+      "relatedCardIds": [],
+      "sourceSlug": "131280-demonic-tapestry"
+    },
+    {
+      "id": "lesser-trinket-bg35-magicitem-300",
+      "cardId": "BG35_MagicItem_300",
+      "dbfId": 130875,
+      "name": "铜制线圈",
+      "tier": "lesser",
+      "cost": 1,
+      "description": "每当你磁力吸附一个随从时，使其获得+1/+1并提升此效果。",
+      "associatedTribes": [
+        "MECHANICAL"
+      ],
+      "relatedCardIds": [],
+      "sourceSlug": "130875-copper-coil"
+    },
+    {
+      "id": "lesser-trinket-bg35-magicitem-301",
+      "cardId": "BG35_MagicItem_301",
+      "dbfId": 130879,
+      "name": "废铁回收机标签",
+      "tier": "lesser",
+      "cost": 4,
+      "description": "随机获取一张磁力机械牌。在每个回合开始时，再获取\n一张。",
+      "associatedTribes": [
+        "MECHANICAL"
+      ],
+      "relatedCardIds": [],
+      "sourceSlug": "130879-scraper-sticker"
+    },
+    {
+      "id": "lesser-trinket-bg35-magicitem-302",
+      "cardId": "BG35_MagicItem_302",
+      "dbfId": 130880,
+      "name": "积雷标签",
+      "tier": "lesser",
+      "cost": 0,
+      "description": "在8个友方随从\n死亡后，随机获取一张机械牌。（还剩8个！）",
+      "associatedTribes": [
+        "MECHANICAL"
+      ],
+      "relatedCardIds": [],
+      "sourceSlug": "130880-stormcoil-sticker"
+    },
+    {
+      "id": "lesser-trinket-bg35-magicitem-305",
+      "cardId": "BG35_MagicItem_305",
+      "dbfId": 131137,
+      "name": "螺号肖像",
+      "tier": "lesser",
+      "cost": 5,
+      "description": "获取一张克隆螺号。每2个回合，在回合开始时，重复此效果。（还剩2回合！）",
+      "associatedTribes": [
+        "MURLOC"
+      ],
+      "relatedCardIds": [
+        "BG28_601"
+      ],
+      "sourceSlug": "131137-conch-portrait"
+    },
+    {
+      "id": "lesser-trinket-bg35-magicitem-306",
+      "cardId": "BG35_MagicItem_306",
+      "dbfId": 131135,
+      "name": "典狱长标签",
+      "tier": "lesser",
+      "cost": 3,
+      "description": "塑造法术：消灭一个友方亡灵以随机获取一张亡灵牌。",
+      "associatedTribes": [
+        "UNDEAD"
+      ],
+      "relatedCardIds": [
+        "BG35_MagicItem_306t"
+      ],
+      "sourceSlug": "131135-jailer-sticker"
+    },
+    {
+      "id": "lesser-trinket-bg35-magicitem-309",
+      "cardId": "BG35_MagicItem_309",
+      "dbfId": 131296,
+      "name": "厄戈尔标签",
+      "tier": "lesser",
+      "cost": 6,
+      "description": "获取一张莫格顿大妈或莫格顿老爹。在每个回合开始时，重复此效果。",
+      "associatedTribes": [
+        "MURLOC"
+      ],
+      "relatedCardIds": [
+        "BG35_140"
+      ],
+      "sourceSlug": "131296-errgl-sticker"
+    },
+    {
+      "id": "lesser-trinket-bg35-magicitem-430",
+      "cardId": "BG35_MagicItem_430",
+      "dbfId": 130900,
+      "name": "废料铁匠肖像",
+      "tier": "lesser",
+      "cost": 0,
+      "description": "获取一张刺鬃废料铁匠。在一个友方嘲讽随从死亡后，对你的废料铁匠使用一张永久的鲜血宝石。",
+      "associatedTribes": [
+        "QUILBOAR"
+      ],
+      "relatedCardIds": [
+        "BG24_707"
+      ],
+      "sourceSlug": "130900-scrapsmith-portrait"
+    },
+    {
+      "id": "lesser-trinket-bg35-magicitem-434",
+      "cardId": "BG35_MagicItem_434",
+      "dbfId": 130904,
+      "name": "珠宝盒",
+      "tier": "lesser",
+      "cost": 0,
+      "description": "获取一张能使野猪人获得嘲讽，圣盾或复生的鲜血宝石。在每个回合开始时，重复此效果。",
+      "associatedTribes": [
+        "QUILBOAR"
+      ],
+      "relatedCardIds": [],
+      "sourceSlug": "130904-jewelry-box"
+    },
+    {
+      "id": "lesser-trinket-bg35-magicitem-801",
+      "cardId": "BG35_MagicItem_801",
+      "dbfId": 130028,
+      "name": "副厨师长标签",
+      "tier": "lesser",
+      "cost": 2,
+      "description": "每个回合你可以额外使用一次英雄技能。在你使用英雄技能后，获得（1）枚铸币。",
+      "associatedTribes": [],
+      "relatedCardIds": [],
+      "sourceSlug": "130028-sous-chef-sticker"
+    },
+    {
+      "id": "lesser-trinket-bg35-magicitem-803",
+      "cardId": "BG35_MagicItem_803",
+      "dbfId": 130097,
+      "name": "麦克斯韦标签",
+      "tier": "lesser",
+      "cost": 3,
+      "description": "获取一张你的英雄技能对应的伙伴。",
+      "associatedTribes": [],
+      "relatedCardIds": [],
+      "sourceSlug": "130097-maxwell-sticker"
+    },
+    {
+      "id": "lesser-trinket-bg35-magicitem-814",
+      "cardId": "BG35_MagicItem_814",
+      "dbfId": 130832,
+      "name": "满当当的钱包",
+      "tier": "lesser",
+      "cost": 0,
+      "description": "当你升至等级6时，获得12枚铸币。",
+      "associatedTribes": [],
+      "relatedCardIds": [],
+      "sourceSlug": "130832-stuffed-coin-purse"
+    },
+    {
+      "id": "lesser-trinket-bg35-magicitem-815",
+      "cardId": "BG35_MagicItem_815",
+      "dbfId": 130833,
+      "name": "魔术师的高帽",
+      "tier": "lesser",
+      "cost": 2,
+      "description": "获取等级1，2和3的随从牌各两张。",
+      "associatedTribes": [],
+      "relatedCardIds": [],
+      "sourceSlug": "130833-magicians-top-hat"
+    },
+    {
+      "id": "lesser-trinket-bg35-magicitem-816",
+      "cardId": "BG35_MagicItem_816",
+      "dbfId": 130834,
+      "name": "未知宝珠",
+      "tier": "lesser",
+      "cost": 0,
+      "description": "随机获取一项小型\n饰品。",
+      "associatedTribes": [],
+      "relatedCardIds": [],
+      "sourceSlug": "130834-orb-of-the-unknown"
+    },
+    {
+      "id": "lesser-trinket-bg35-magicitem-817",
+      "cardId": "BG35_MagicItem_817",
+      "dbfId": 130835,
+      "name": "镜匣",
+      "tier": "lesser",
+      "cost": 3,
+      "description": "获取一张复映透镜。每2个回合，在回合开始时，重复此效果。（还剩2回合！）",
+      "associatedTribes": [],
+      "relatedCardIds": [
+        "BG35_MagicItem_817t"
+      ],
+      "sourceSlug": "130835-lens-case"
+    },
+    {
+      "id": "lesser-trinket-bg35-magicitem-818",
+      "cardId": "BG35_MagicItem_818",
+      "dbfId": 130836,
+      "name": "神秘宝珠",
+      "tier": "lesser",
+      "cost": 0,
+      "description": "获得8枚铸币。\n你的下一件饰品为小型饰品。",
+      "associatedTribes": [],
+      "relatedCardIds": [],
+      "sourceSlug": "130836-mysterious-orb"
+    },
+    {
+      "id": "lesser-trinket-bg35-magicitem-821",
+      "cardId": "BG35_MagicItem_821",
+      "dbfId": 130839,
+      "name": "万花筒",
+      "tier": "lesser",
+      "cost": 1,
+      "description": "发现一张等级7的随从牌。将其锁入你的手牌2回合。",
+      "associatedTribes": [],
+      "relatedCardIds": [],
+      "sourceSlug": "130839-kaleidoscope"
+    },
+    {
+      "id": "lesser-trinket-bg35-magicitem-823",
+      "cardId": "BG35_MagicItem_823",
+      "dbfId": 130841,
+      "name": "老旧的烛台",
+      "tier": "lesser",
+      "cost": 2,
+      "description": "发现一张来自小型时空扭曲的消耗为2的随从牌。",
+      "associatedTribes": [],
+      "relatedCardIds": [],
+      "sourceSlug": "130841-timeworn-candelabra"
+    },
+    {
+      "id": "lesser-trinket-bg35-magicitem-834",
+      "cardId": "BG35_MagicItem_834",
+      "dbfId": 131312,
+      "name": "双头飞龙肖像",
+      "tier": "lesser",
+      "cost": 4,
+      "description": "获取一张重金属双头飞龙。战斗开始时：触发你的重金属双头飞龙的亡语。",
+      "associatedTribes": [
+        "BEAST"
+      ],
+      "relatedCardIds": [
+        "BG26_801"
+      ],
+      "sourceSlug": "131312-rylak-portrait"
+    },
+    {
+      "id": "lesser-trinket-bg35-magicitem-840",
+      "cardId": "BG35_MagicItem_840",
+      "dbfId": 130886,
+      "name": "多彩之泪",
+      "tier": "lesser",
+      "cost": 2,
+      "description": "随机获取一张\n多彩幼龙。在每个回合开始时，重复此效果。",
+      "associatedTribes": [
+        "DRAGON"
+      ],
+      "relatedCardIds": [],
+      "sourceSlug": "130886-chromatic-tear"
+    },
+    {
+      "id": "lesser-trinket-bg35-magicitem-850",
+      "cardId": "BG35_MagicItem_850",
+      "dbfId": 130888,
+      "name": "袋中旋风",
+      "tier": "lesser",
+      "cost": 0,
+      "description": "施放乘借东风。在每个回合开始时，再施放一次。",
+      "associatedTribes": [
+        "ELEMENTAL"
+      ],
+      "relatedCardIds": [
+        "BG34_444"
+      ],
+      "sourceSlug": "130888-pocket-cyclone"
+    },
+    {
+      "id": "lesser-trinket-bg35-magicitem-851",
+      "cardId": "BG35_MagicItem_851",
+      "dbfId": 130889,
+      "name": "水车",
+      "tier": "lesser",
+      "cost": 1,
+      "description": "在你使用一张元素牌后，随机获取一张酒馆法术牌。（每回合两次。）",
+      "associatedTribes": [
+        "ELEMENTAL"
+      ],
+      "relatedCardIds": [],
+      "sourceSlug": "130889-water-wheel"
+    },
+    {
+      "id": "lesser-trinket-bg35-magicitem-870",
+      "cardId": "BG35_MagicItem_870",
+      "dbfId": 130876,
+      "name": "跳蛙骑士肖像",
+      "tier": "lesser",
+      "cost": 1,
+      "description": "获取一张时空扭曲跳蛙骑士。",
+      "associatedTribes": [
+        "BEAST"
+      ],
+      "relatedCardIds": [
+        "BG34_Giant_031"
+      ],
+      "sourceSlug": "130876-leapfrogger-portrait"
+    },
+    {
+      "id": "lesser-trinket-bg35-magicitem-871",
+      "cardId": "BG35_MagicItem_871",
+      "dbfId": 130877,
+      "name": "熊妈妈标签",
+      "tier": "lesser",
+      "cost": 0,
+      "description": "每当你召唤一只野兽，使其获得+5/+5。",
+      "associatedTribes": [
+        "BEAST"
+      ],
+      "relatedCardIds": [],
+      "sourceSlug": "130877-mama-bear-sticker"
+    },
+    {
+      "id": "lesser-trinket-bg35-magicitem-872",
+      "cardId": "BG35_MagicItem_872",
+      "dbfId": 130908,
+      "name": "蛇首之杖",
+      "tier": "lesser",
+      "cost": 3,
+      "description": "塑造法术：使一只野兽获得+2/+2和\n复生。",
+      "associatedTribes": [
+        "BEAST"
+      ],
+      "relatedCardIds": [
+        "BG35_MagicItem_872t"
+      ],
+      "sourceSlug": "130908-ophidian-staff"
+    },
+    {
+      "id": "lesser-trinket-bg35-magicitem-890",
+      "cardId": "BG35_MagicItem_890",
+      "dbfId": 130890,
+      "name": "沉没的船锚",
+      "tier": "lesser",
+      "cost": 6,
+      "description": "随机获取2张悬赏令。在每个回合开始时，重复此\n效果。",
+      "associatedTribes": [
+        "PIRATE"
+      ],
+      "relatedCardIds": [],
+      "sourceSlug": "130890-sunken-anchor"
+    },
+    {
+      "id": "lesser-trinket-bg35-magicitem-920",
+      "cardId": "BG35_MagicItem_920",
+      "dbfId": 130898,
+      "name": "泡泡王冠",
+      "tier": "lesser",
+      "cost": 0,
+      "description": "一旦你施放了12个法术，你的酒馆法术使随从额外获得+4/+4。（还剩12个！）",
+      "associatedTribes": [
+        "NAGA"
+      ],
+      "relatedCardIds": [],
+      "sourceSlug": "130898-bubble-crown"
+    },
+    {
+      "id": "lesser-trinket-bg35-magicitem-921",
+      "cardId": "BG35_MagicItem_921",
+      "dbfId": 130980,
+      "name": "贝壳项链",
+      "tier": "lesser",
+      "cost": 0,
+      "description": "使随从获得属性值的酒馆法术消耗的铸币减少（2）枚。",
+      "associatedTribes": [
+        "NAGA"
+      ],
+      "relatedCardIds": [],
+      "sourceSlug": "130980-cowrie-necklace"
+    },
+    {
+      "id": "lesser-trinket-bg35-magicitem-922",
+      "cardId": "BG35_MagicItem_922",
+      "dbfId": 130899,
+      "name": "赶潮纳迦肖像",
+      "tier": "lesser",
+      "cost": 4,
+      "description": "获取一张赶潮纳迦。在战斗中，在你施放一个法术后，获取一张该法术的复制。（每场战斗3次。）",
+      "associatedTribes": [
+        "NAGA"
+      ],
+      "relatedCardIds": [
+        "BG34_920"
+      ],
+      "sourceSlug": "130899-tide-raiser-portrait"
+    },
+    {
+      "id": "lesser-trinket-bg35-magicitem-931",
+      "cardId": "BG35_MagicItem_931",
+      "dbfId": 131003,
+      "name": "转录打字机",
+      "tier": "lesser",
+      "cost": 2,
+      "description": "获取你购买的下2个随从的各一张额外复制。（还剩2个！）",
+      "associatedTribes": [],
+      "relatedCardIds": [],
+      "sourceSlug": "131003-transcribing-typewriter"
+    },
+    {
+      "id": "greater-trinket-bg30-magicitem-310",
+      "cardId": "BG30_MagicItem_310",
+      "dbfId": 112102,
+      "name": "瑞文戴尔肖像",
+      "tier": "greater",
+      "cost": 2,
+      "description": "获取一张提图斯·瑞文戴尔。战斗开始时：使你的提图斯·瑞文戴尔的生命值翻倍。",
+      "associatedTribes": [
+        "BEAST",
+        "UNDEAD"
+      ],
+      "relatedCardIds": [
+        "BG25_354"
+      ],
+      "sourceSlug": "112102-rivendare-portrait"
+    },
+    {
+      "id": "greater-trinket-bg30-magicitem-403",
+      "cardId": "BG30_MagicItem_403",
+      "dbfId": 111488,
+      "name": "铁炉堡锻砧",
+      "tier": "greater",
+      "cost": 4,
+      "description": "战斗开始时：使你没有类型的随从的属性值变为三倍。",
+      "associatedTribes": [],
+      "relatedCardIds": [],
+      "sourceSlug": "111488-ironforge-anvil"
+    },
+    {
+      "id": "greater-trinket-bg30-magicitem-406",
+      "cardId": "BG30_MagicItem_406",
+      "dbfId": 111502,
+      "name": "屠夫钩镰",
+      "tier": "greater",
+      "cost": 3,
+      "description": "获取一张宰割。在每个回合开始时，再获取一张。",
+      "associatedTribes": [
+        "UNDEAD"
+      ],
+      "relatedCardIds": [
+        "BG28_604"
+      ],
+      "sourceSlug": "111502-butchers-sickle"
+    },
+    {
+      "id": "greater-trinket-bg30-magicitem-410t2",
+      "cardId": "BG30_MagicItem_410t2",
+      "dbfId": 115253,
+      "name": "鬃尖笔墨套装",
+      "tier": "greater",
+      "cost": 1,
+      "description": "复仇（4）：在本局对战中，你的鲜血宝石使随从额外获得+1/+1。",
+      "associatedTribes": [
+        "QUILBOAR"
+      ],
+      "relatedCardIds": [],
+      "sourceSlug": "115253-quilligraphy-set"
+    },
+    {
+      "id": "greater-trinket-bg30-magicitem-418",
+      "cardId": "BG30_MagicItem_418",
+      "dbfId": 111607,
+      "name": "铜须肖像",
+      "tier": "greater",
+      "cost": 2,
+      "description": "获取一张布莱恩·铜须和一张随机战吼随从牌。你的布莱恩·铜须视为鱼人和龙。",
+      "associatedTribes": [
+        "DRAGON",
+        "MURLOC"
+      ],
+      "relatedCardIds": [
+        "BG_LOE_077"
+      ],
+      "sourceSlug": "111607-bronzebeard-portrait"
+    },
+    {
+      "id": "greater-trinket-bg30-magicitem-420t",
+      "cardId": "BG30_MagicItem_420t",
+      "dbfId": 115230,
+      "name": "麦迪文之书",
+      "tier": "greater",
+      "cost": 2,
+      "description": "发现2张\n酒馆法术牌。在每个回合开始时，再发现2张。",
+      "associatedTribes": [],
+      "relatedCardIds": [],
+      "sourceSlug": "115230-book-of-medivh"
+    },
+    {
+      "id": "greater-trinket-bg30-magicitem-422t",
+      "cardId": "BG30_MagicItem_422t",
+      "dbfId": 117416,
+      "name": "游学者卷轴",
+      "tier": "greater",
+      "cost": 0,
+      "description": "每当你对一个随从施放法术时，使其获得+10/+10。",
+      "associatedTribes": [
+        "NAGA"
+      ],
+      "relatedCardIds": [],
+      "sourceSlug": "117416-lorewalker-scroll"
+    },
+    {
+      "id": "greater-trinket-bg30-magicitem-426t",
+      "cardId": "BG30_MagicItem_426t",
+      "dbfId": 115250,
+      "name": "多彩罗盘",
+      "tier": "greater",
+      "cost": 2,
+      "description": "随机获取2张与你战队相符类型的随从牌。在每个回合开始时，再获取2张。",
+      "associatedTribes": [],
+      "relatedCardIds": [],
+      "sourceSlug": "115250-colorful-compass"
+    },
+    {
+      "id": "greater-trinket-bg30-magicitem-439",
+      "cardId": "BG30_MagicItem_439",
+      "dbfId": 112990,
+      "name": "新潮眼罩",
+      "tier": "greater",
+      "cost": 7,
+      "description": "你只需2个复制即可将海盗变为金色。",
+      "associatedTribes": [
+        "PIRATE"
+      ],
+      "relatedCardIds": [],
+      "sourceSlug": "112990-designer-eyepatch"
+    },
+    {
+      "id": "greater-trinket-bg30-magicitem-442",
+      "cardId": "BG30_MagicItem_442",
+      "dbfId": 113096,
+      "name": "鲜血魔像标签",
+      "tier": "greater",
+      "cost": 5,
+      "description": "每当一个友方野猪人死亡，召唤一个属性值等同于其鲜血宝石加成的魔像。",
+      "associatedTribes": [
+        "QUILBOAR"
+      ],
+      "relatedCardIds": [],
+      "sourceSlug": "113096-blood-golem-sticker"
+    },
+    {
+      "id": "greater-trinket-bg30-magicitem-540",
+      "cardId": "BG30_MagicItem_540",
+      "dbfId": 112381,
+      "name": "猛猿标签",
+      "tier": "greater",
+      "cost": 5,
+      "description": "在战斗中，在你召唤一只野兽后，使其攻击力翻倍。",
+      "associatedTribes": [
+        "BEAST"
+      ],
+      "relatedCardIds": [],
+      "sourceSlug": "112381-slamma-sticker"
+    },
+    {
+      "id": "greater-trinket-bg30-magicitem-541",
+      "cardId": "BG30_MagicItem_541",
+      "dbfId": 112382,
+      "name": "虚空坠饰",
+      "tier": "greater",
+      "cost": 5,
+      "description": "酒馆中的随从拥有+2/+2。你的英雄在战斗之外每受到3次伤害后提升。（还剩3次！）",
+      "associatedTribes": [
+        "DEMON"
+      ],
+      "relatedCardIds": [],
+      "sourceSlug": "112382-nether-pendant"
+    },
+    {
+      "id": "greater-trinket-bg30-magicitem-544t",
+      "cardId": "BG30_MagicItem_544t",
+      "dbfId": 115235,
+      "name": "诺米标签",
+      "tier": "greater",
+      "cost": 4,
+      "description": "在你使用一张元素牌后，使酒馆中的元素在本局对战中获得+5/+5。",
+      "associatedTribes": [
+        "ELEMENTAL"
+      ],
+      "relatedCardIds": [],
+      "sourceSlug": "115235-nomi-sticker"
+    },
+    {
+      "id": "greater-trinket-bg30-magicitem-545",
+      "cardId": "BG30_MagicItem_545",
+      "dbfId": 112397,
+      "name": "冰箱磁贴",
+      "tier": "greater",
+      "cost": 4,
+      "description": "复仇（3）：随机获取一张磁力随从牌。",
+      "associatedTribes": [
+        "MECHANICAL"
+      ],
+      "relatedCardIds": [],
+      "sourceSlug": "112397-fridge-magnet"
+    },
+    {
+      "id": "greater-trinket-bg30-magicitem-546",
+      "cardId": "BG30_MagicItem_546",
+      "dbfId": 112398,
+      "name": "罐装宝石",
+      "tier": "greater",
+      "cost": 0,
+      "description": "每场战斗中，在2个友方随从攻击后，本饰品对你的所有野猪人各使用一张鲜血宝石。（还剩2个！）",
+      "associatedTribes": [
+        "QUILBOAR"
+      ],
+      "relatedCardIds": [],
+      "sourceSlug": "112398-jar-o-gems"
+    },
+    {
+      "id": "greater-trinket-bg30-magicitem-547t",
+      "cardId": "BG30_MagicItem_547t",
+      "dbfId": 115226,
+      "name": "舒适的棺椁",
+      "tier": "greater",
+      "cost": 4,
+      "description": "在你施放一个酒馆\n法术后，你的亡灵在本局对战中拥有+2攻击力\n（无论它们在哪）。",
+      "associatedTribes": [
+        "UNDEAD"
+      ],
+      "relatedCardIds": [],
+      "sourceSlug": "115226-comfy-coffin"
+    },
+    {
+      "id": "greater-trinket-bg30-magicitem-555",
+      "cardId": "BG30_MagicItem_555",
+      "dbfId": 117905,
+      "name": "惊喜肖像",
+      "tier": "greater",
+      "cost": 5,
+      "description": "获取一张惊喜元素。（在你意想不到的时候会出现更多……）",
+      "associatedTribes": [
+        "ELEMENTAL"
+      ],
+      "relatedCardIds": [
+        "BG26_175"
+      ],
+      "sourceSlug": "117905-surprise-portrait"
+    },
+    {
+      "id": "greater-trinket-bg30-magicitem-701",
+      "cardId": "BG30_MagicItem_701",
+      "dbfId": 117795,
+      "name": "萨格拉斯之眼",
+      "tier": "greater",
+      "cost": 5,
+      "description": "你每购买四张牌，第四张牌会消耗生命值，而非铸币。（还剩3张！）",
+      "associatedTribes": [
+        "DEMON"
+      ],
+      "relatedCardIds": [],
+      "sourceSlug": "117795-the-eye-of-sargeras"
+    },
+    {
+      "id": "greater-trinket-bg30-magicitem-801",
+      "cardId": "BG30_MagicItem_801",
+      "dbfId": 110928,
+      "name": "罪碑标签",
+      "tier": "greater",
+      "cost": 3,
+      "description": "每回合中，在你前2次发现卡牌时，额外获取一张复制。（还剩2次！）",
+      "associatedTribes": [],
+      "relatedCardIds": [],
+      "sourceSlug": "110928-sinstone-sticker"
+    },
+    {
+      "id": "greater-trinket-bg30-magicitem-828",
+      "cardId": "BG30_MagicItem_828",
+      "dbfId": 114212,
+      "name": "沙锤手肖像",
+      "tier": "greater",
+      "cost": 5,
+      "description": "获取一张热情沙锤手。你的热情沙锤手会额外获取一张法术牌的复制。",
+      "associatedTribes": [
+        "NAGA"
+      ],
+      "relatedCardIds": [
+        "BG26_505"
+      ],
+      "sourceSlug": "114212-shaker-portrait"
+    },
+    {
+      "id": "greater-trinket-bg30-magicitem-864",
+      "cardId": "BG30_MagicItem_864",
+      "dbfId": 110972,
+      "name": "吉尔尼斯带刺玫瑰",
+      "tier": "greater",
+      "cost": 1,
+      "description": "复仇（3）：使你的随从永久获得+4/+5并对其造成1点伤害。",
+      "associatedTribes": [
+        "BEAST"
+      ],
+      "relatedCardIds": [],
+      "sourceSlug": "110972-gilnean-thorned-rose"
+    },
+    {
+      "id": "greater-trinket-bg30-magicitem-876",
+      "cardId": "BG30_MagicItem_876",
+      "dbfId": 111207,
+      "name": "操纵者肖像",
+      "tier": "greater",
+      "cost": 1,
+      "description": "获取一张\n无面操纵者。",
+      "associatedTribes": [],
+      "relatedCardIds": [
+        "BG_EX1_564"
+      ],
+      "sourceSlug": "111207-manipulator-portrait"
+    },
+    {
+      "id": "greater-trinket-bg30-magicitem-879t",
+      "cardId": "BG30_MagicItem_879t",
+      "dbfId": 115236,
+      "name": "达拉然奶酪轮",
+      "tier": "greater",
+      "cost": 1,
+      "description": "酒馆中的随从拥有+2/+2。你每刷新4次后提升。（还剩4次！）",
+      "associatedTribes": [
+        "DEMON"
+      ],
+      "relatedCardIds": [],
+      "sourceSlug": "115236-dalaran-cheese-wheel"
+    },
+    {
+      "id": "greater-trinket-bg30-magicitem-886",
+      "cardId": "BG30_MagicItem_886",
+      "dbfId": 110967,
+      "name": "强固之盾",
+      "tier": "greater",
+      "cost": 3,
+      "description": "每当你召唤一个随从时，使其获得圣盾。（每场战斗限5次。）",
+      "associatedTribes": [
+        "UNDEAD"
+      ],
+      "relatedCardIds": [],
+      "sourceSlug": "110967-reinforced-shield"
+    },
+    {
+      "id": "greater-trinket-bg30-magicitem-914t",
+      "cardId": "BG30_MagicItem_914t",
+      "dbfId": 115237,
+      "name": "鱼人语实用手册",
+      "tier": "greater",
+      "cost": 1,
+      "description": "在你使用一张随从牌后，使你手牌中最左边的随从牌获得+6/+6。",
+      "associatedTribes": [
+        "MURLOC"
+      ],
+      "relatedCardIds": [],
+      "sourceSlug": "115237-nerglish-phrasebook"
+    },
+    {
+      "id": "greater-trinket-bg30-magicitem-919",
+      "cardId": "BG30_MagicItem_919",
+      "dbfId": 117797,
+      "name": "纳沙塔尔明信片",
+      "tier": "greater",
+      "cost": 6,
+      "description": "在你使用一张纳迦牌后，随机获取一张塑造法术的法术牌。",
+      "associatedTribes": [
+        "NAGA"
+      ],
+      "relatedCardIds": [],
+      "sourceSlug": "117797-nazjatar-postcard"
+    },
+    {
+      "id": "greater-trinket-bg30-magicitem-920",
+      "cardId": "BG30_MagicItem_920",
+      "dbfId": 111400,
+      "name": "恶鳞寿司卷",
+      "tier": "greater",
+      "cost": 5,
+      "description": "获取一张恶鳞套餐。每个回合中，你的前两个塑造法术的法术额外施放一次。（还剩2个！）",
+      "associatedTribes": [
+        "NAGA"
+      ],
+      "relatedCardIds": [
+        "BG28_606"
+      ],
+      "sourceSlug": "111400-spitescale-sushi-roll"
+    },
+    {
+      "id": "greater-trinket-bg30-magicitem-924t",
+      "cardId": "BG30_MagicItem_924t",
+      "dbfId": 115245,
+      "name": "藏宝海湾美酒",
+      "tier": "greater",
+      "cost": 0,
+      "description": "每当你花费铸币时，使一个友方海盗获得+6/+7。",
+      "associatedTribes": [
+        "PIRATE"
+      ],
+      "relatedCardIds": [],
+      "sourceSlug": "115245-booty-bay-brew"
+    },
+    {
+      "id": "greater-trinket-bg30-magicitem-942",
+      "cardId": "BG30_MagicItem_942",
+      "dbfId": 117855,
+      "name": "机械加拉克苏斯标签",
+      "tier": "greater",
+      "cost": 3,
+      "description": "随机获取2张磁力机械-恶魔牌。在每个回合开始时，再获取2张。",
+      "associatedTribes": [
+        "DEMON",
+        "MECHANICAL"
+      ],
+      "relatedCardIds": [],
+      "sourceSlug": "117855-mecha-jaraxxus-sticker"
+    },
+    {
+      "id": "greater-trinket-bg30-magicitem-943",
+      "cardId": "BG30_MagicItem_943",
+      "dbfId": 117856,
+      "name": "测绘员肖像",
+      "tier": "greater",
+      "cost": 1,
+      "description": "获取一张热气球测绘员。从你手牌中使用的鲜血宝石使随从额外获得+6/+6。",
+      "associatedTribes": [
+        "QUILBOAR"
+      ],
+      "relatedCardIds": [
+        "BG30_121"
+      ],
+      "sourceSlug": "117856-surveyor-portrait"
+    },
+    {
+      "id": "greater-trinket-bg30-magicitem-944",
+      "cardId": "BG30_MagicItem_944",
+      "dbfId": 117858,
+      "name": "救赎者肖像",
+      "tier": "greater",
+      "cost": 1,
+      "description": "获取一张救赎者娜拉。你的救赎者娜拉使随从额外获得+4/+4。",
+      "associatedTribes": [],
+      "relatedCardIds": [
+        "BG28_551"
+      ],
+      "sourceSlug": "117858-redeemer-portrait"
+    },
+    {
+      "id": "greater-trinket-bg30-magicitem-951",
+      "cardId": "BG30_MagicItem_951",
+      "dbfId": 111499,
+      "name": "熔岩提灯",
+      "tier": "greater",
+      "cost": 3,
+      "description": "在你出售5个随从后，随机获取\n一张元素牌。（还剩5个！）",
+      "associatedTribes": [
+        "ELEMENTAL"
+      ],
+      "relatedCardIds": [],
+      "sourceSlug": "111499-lava-lamp"
+    },
+    {
+      "id": "greater-trinket-bg30-magicitem-987",
+      "cardId": "BG30_MagicItem_987",
+      "dbfId": 112011,
+      "name": "民谣歌手肖像",
+      "tier": "greater",
+      "cost": 0,
+      "description": "获取一张苦情民谣歌手。在每个回合开始时，再获取一张。你的苦情民谣歌手还会使随从获得攻击力。",
+      "associatedTribes": [
+        "PIRATE"
+      ],
+      "relatedCardIds": [
+        "BG26_814"
+      ],
+      "sourceSlug": "112011-balladist-portrait"
+    },
+    {
+      "id": "greater-trinket-bg30-magicitem-988t",
+      "cardId": "BG30_MagicItem_988t",
+      "dbfId": 115225,
+      "name": "野猪之神标签",
+      "tier": "greater",
+      "cost": 2,
+      "description": "获取5张鲜血宝石。你的鲜血宝石使随从额外获得+3/+3。",
+      "associatedTribes": [
+        "QUILBOAR"
+      ],
+      "relatedCardIds": [],
+      "sourceSlug": "115225-great-boar-sticker"
+    },
+    {
+      "id": "greater-trinket-bg30-magicitem-989t",
+      "cardId": "BG30_MagicItem_989t",
+      "dbfId": 117157,
+      "name": "艺匠之瓮",
+      "tier": "greater",
+      "cost": 0,
+      "description": "你的亡灵拥有+15攻击力。",
+      "associatedTribes": [
+        "UNDEAD"
+      ],
+      "relatedCardIds": [],
+      "sourceSlug": "117157-artisanal-urn"
+    },
+    {
+      "id": "greater-trinket-bg30-magicitem-993",
+      "cardId": "BG30_MagicItem_993",
+      "dbfId": 113103,
+      "name": "帕格的鱼竿",
+      "tier": "greater",
+      "cost": 4,
+      "description": "随机获取一张等级7的随从牌。在每个回合开始时，再获取一张。",
+      "associatedTribes": [],
+      "relatedCardIds": [],
+      "sourceSlug": "113103-pagles-fishing-rod"
+    },
+    {
+      "id": "greater-trinket-bg30-magicitem-995",
+      "cardId": "BG30_MagicItem_995",
+      "dbfId": 112411,
+      "name": "青铜龙时钟",
+      "tier": "greater",
+      "cost": 5,
+      "description": "战斗开始时：使你的每个随从获得等同于其攻击力的一半的生命值。",
+      "associatedTribes": [
+        "DRAGON"
+      ],
+      "relatedCardIds": [],
+      "sourceSlug": "112411-bronze-timepiece"
+    },
+    {
+      "id": "greater-trinket-bobs-tip-jar",
+      "cardId": "BG30_MagicItem_996",
+      "dbfId": 112988,
+      "name": "鲍勃的小费罐",
+      "tier": "greater",
+      "cost": 0,
+      "description": "获得4枚铸币。你的铸币上限提高4枚。",
+      "associatedTribes": [],
+      "relatedCardIds": [],
+      "sourceSlug": "112988-bobs-tip-jar"
+    },
+    {
+      "id": "greater-trinket-bg30-magicitem-999",
+      "cardId": "BG30_MagicItem_999",
+      "dbfId": 113102,
+      "name": "玄奥的法术书",
+      "tier": "greater",
+      "cost": 3,
+      "description": "在你花掉7枚铸币后，施放闪亮的戒指。（还剩7枚！）",
+      "associatedTribes": [
+        "NAGA"
+      ],
+      "relatedCardIds": [
+        "BG28_168"
+      ],
+      "sourceSlug": "113102-fancy-spellbook"
+    },
+    {
+      "id": "greater-trinket-bg31-magicitem-903",
+      "cardId": "BG31_MagicItem_903",
+      "dbfId": 120155,
+      "name": "智慧之球补给",
+      "tier": "greater",
+      "cost": 2,
+      "description": "获取一张冒牌的智慧之球。在每个回合开始时，重复此\n效果。",
+      "associatedTribes": [],
+      "relatedCardIds": [
+        "BG30_802"
+      ],
+      "sourceSlug": "120155-wisdomball-supply"
+    },
+    {
+      "id": "greater-trinket-bg32-magicitem-172",
+      "cardId": "BG32_MagicItem_172",
+      "dbfId": 120866,
+      "name": "砰砰的怪物肖像",
+      "tier": "greater",
+      "cost": 2,
+      "description": "获取一张\n砰砰博士的怪物。在每个回合开始时，再获取一张。",
+      "associatedTribes": [
+        "MECHANICAL"
+      ],
+      "relatedCardIds": [
+        "BG31_176"
+      ],
+      "sourceSlug": "120866-booms-monster-portrait"
+    },
+    {
+      "id": "greater-trinket-bg32-magicitem-200",
+      "cardId": "BG32_MagicItem_200",
+      "dbfId": 120932,
+      "name": "全能辅食",
+      "tier": "greater",
+      "cost": 0,
+      "description": "每当一只友方野兽攻击时，使其获得+2攻击力并永久提升此效果。",
+      "associatedTribes": [
+        "BEAST"
+      ],
+      "relatedCardIds": [],
+      "sourceSlug": "120932-all-purpose-kibble"
+    },
+    {
+      "id": "greater-trinket-bg32-magicitem-232",
+      "cardId": "BG32_MagicItem_232",
+      "dbfId": 120939,
+      "name": "鲨鱼火炮",
+      "tier": "greater",
+      "cost": 0,
+      "description": "在你花掉10枚铸币后，使你的海盗获得+1/+1并提升此效果。（还剩10枚！）",
+      "associatedTribes": [
+        "PIRATE"
+      ],
+      "relatedCardIds": [],
+      "sourceSlug": "120939-shark-cannon"
+    },
+    {
+      "id": "greater-trinket-bg32-magicitem-270t",
+      "cardId": "BG32_MagicItem_270t",
+      "dbfId": 121041,
+      "name": "邪恶魔典",
+      "tier": "greater",
+      "cost": 5,
+      "description": "复仇（4）：你的酒馆法术在本局对战中使随从额外获得+1/+1。",
+      "associatedTribes": [
+        "UNDEAD"
+      ],
+      "relatedCardIds": [],
+      "sourceSlug": "121041-wicked-tome"
+    },
+    {
+      "id": "greater-trinket-bg32-magicitem-283",
+      "cardId": "BG32_MagicItem_283",
+      "dbfId": 121130,
+      "name": "女沙皇肖像",
+      "tier": "greater",
+      "cost": 3,
+      "description": "获取一张蓄能女沙皇。你的蓄能女沙皇还会使随从获得生命值。",
+      "associatedTribes": [
+        "MECHANICAL"
+      ],
+      "relatedCardIds": [
+        "BG28_741"
+      ],
+      "sourceSlug": "121130-czarina-portrait"
+    },
+    {
+      "id": "greater-trinket-bg32-magicitem-284",
+      "cardId": "BG32_MagicItem_284",
+      "dbfId": 121132,
+      "name": "阿格姆标签",
+      "tier": "greater",
+      "cost": 0,
+      "description": "在你的回合结束时，本饰品对每个类型的各一个友方随从使用7张鲜血宝石。",
+      "associatedTribes": [
+        "QUILBOAR"
+      ],
+      "relatedCardIds": [],
+      "sourceSlug": "121132-aggem-sticker"
+    },
+    {
+      "id": "greater-trinket-bg32-magicitem-301",
+      "cardId": "BG32_MagicItem_301",
+      "dbfId": 120942,
+      "name": "低音提琴鱼人肖像",
+      "tier": "greater",
+      "cost": 1,
+      "description": "获取一张低音提琴鱼人。在战斗中，在你召唤一个鱼人后，使其获得圣盾。",
+      "associatedTribes": [
+        "MURLOC"
+      ],
+      "relatedCardIds": [
+        "BG26_350"
+      ],
+      "sourceSlug": "120942-bassgill-portrait"
+    },
+    {
+      "id": "greater-trinket-bg32-magicitem-306",
+      "cardId": "BG32_MagicItem_306",
+      "dbfId": 120926,
+      "name": "先锋标签",
+      "tier": "greater",
+      "cost": 3,
+      "description": "战斗开始时：触发所有友方亡语。",
+      "associatedTribes": [
+        "BEAST"
+      ],
+      "relatedCardIds": [],
+      "sourceSlug": "120926-herald-sticker"
+    },
+    {
+      "id": "greater-trinket-bg32-magicitem-361t",
+      "cardId": "BG32_MagicItem_361t",
+      "dbfId": 120925,
+      "name": "口袋工厂",
+      "tier": "greater",
+      "cost": 0,
+      "description": "发现一张等级5的具有类型的随从牌。在每个回合开始时，再获取一张它的复制。",
+      "associatedTribes": [],
+      "relatedCardIds": [],
+      "sourceSlug": "120925-portable-factory"
+    },
+    {
+      "id": "greater-trinket-bg32-magicitem-362t",
+      "cardId": "BG32_MagicItem_362t",
+      "dbfId": 121684,
+      "name": "旅店老板的炉火",
+      "tier": "greater",
+      "cost": 0,
+      "description": "发现两张等级6的随从牌。将其属性值变为30/30。",
+      "associatedTribes": [],
+      "relatedCardIds": [],
+      "sourceSlug": "121684-innkeepers-hearth"
+    },
+    {
+      "id": "greater-trinket-bg32-magicitem-363",
+      "cardId": "BG32_MagicItem_363",
+      "dbfId": 120870,
+      "name": "精灵龙鳞",
+      "tier": "greater",
+      "cost": 3,
+      "description": "每当一条友方的龙攻击时，使其获得圣盾。（每场战斗限3次。）",
+      "associatedTribes": [
+        "DRAGON"
+      ],
+      "relatedCardIds": [],
+      "sourceSlug": "120870-faerie-dragon-scale"
+    },
+    {
+      "id": "greater-trinket-bg32-magicitem-364",
+      "cardId": "BG32_MagicItem_364",
+      "dbfId": 120875,
+      "name": "诗心龙肖像",
+      "tier": "greater",
+      "cost": 4,
+      "description": "获取一张时空扭曲诗心龙。",
+      "associatedTribes": [
+        "DRAGON"
+      ],
+      "relatedCardIds": [
+        "BG34_Giant_314"
+      ],
+      "sourceSlug": "120875-poet-portrait"
+    },
+    {
+      "id": "greater-trinket-bg32-magicitem-366",
+      "cardId": "BG32_MagicItem_366",
+      "dbfId": 120928,
+      "name": "引路蜡烛",
+      "tier": "greater",
+      "cost": 1,
+      "description": "每个回合中，你的前两次刷新只会包含等级6的牌。（还剩2次！）",
+      "associatedTribes": [],
+      "relatedCardIds": [],
+      "sourceSlug": "120928-guiding-candle"
+    },
+    {
+      "id": "greater-trinket-bg32-magicitem-367",
+      "cardId": "BG32_MagicItem_367",
+      "dbfId": 120873,
+      "name": "鬼魅标签",
+      "tier": "greater",
+      "cost": 3,
+      "description": "你的回合结束效果额外触发一次。",
+      "associatedTribes": [],
+      "relatedCardIds": [],
+      "sourceSlug": "120873-ghastly-sticker"
+    },
+    {
+      "id": "greater-trinket-bg32-magicitem-801t",
+      "cardId": "BG32_MagicItem_801t",
+      "dbfId": 120160,
+      "name": "森林之心",
+      "tier": "greater",
+      "cost": 4,
+      "description": "你的酒馆法术使随从额外获得+1/+1。在你从手牌施放6个酒馆法术后，提升此效果。（还剩6个！）",
+      "associatedTribes": [
+        "PIRATE",
+        "NAGA"
+      ],
+      "relatedCardIds": [],
+      "sourceSlug": "120160-heart-of-the-forest"
+    },
+    {
+      "id": "greater-trinket-bg32-magicitem-807",
+      "cardId": "BG32_MagicItem_807",
+      "dbfId": 120145,
+      "name": "馆长标签",
+      "tier": "greater",
+      "cost": 4,
+      "description": "获取一张金色混合体和一张10/10并具有烈毒的融合怪。",
+      "associatedTribes": [],
+      "relatedCardIds": [
+        "TB_BaconShop_HERO_33_Buddy_G"
+      ],
+      "sourceSlug": "120145-curator-sticker"
+    },
+    {
+      "id": "greater-trinket-bg32-magicitem-808t",
+      "cardId": "BG32_MagicItem_808t",
+      "dbfId": 121038,
+      "name": "血缚耳环",
+      "tier": "greater",
+      "cost": 6,
+      "description": "在你施放5个法术后，本饰品对你的所有随从各使用两张鲜血宝石。（还剩5个！）",
+      "associatedTribes": [
+        "QUILBOAR"
+      ],
+      "relatedCardIds": [],
+      "sourceSlug": "121038-bloodbound-earrings"
+    },
+    {
+      "id": "greater-trinket-bg32-magicitem-860t",
+      "cardId": "BG32_MagicItem_860t",
+      "dbfId": 121182,
+      "name": "甲虫之戒",
+      "tier": "greater",
+      "cost": 5,
+      "description": "复仇（7）：召唤两只2/2的甲虫，使其获得嘲讽。",
+      "associatedTribes": [
+        "BEAST"
+      ],
+      "relatedCardIds": [],
+      "sourceSlug": "121182-beetle-band"
+    },
+    {
+      "id": "greater-trinket-bg32-magicitem-888",
+      "cardId": "BG32_MagicItem_888",
+      "dbfId": 120705,
+      "name": "回收标签",
+      "tier": "greater",
+      "cost": 3,
+      "description": "在你使用一张元素牌后，获得一次免费的刷新。",
+      "associatedTribes": [
+        "ELEMENTAL"
+      ],
+      "relatedCardIds": [],
+      "sourceSlug": "120705-recycling-sticker"
+    },
+    {
+      "id": "greater-trinket-bg32-magicitem-901",
+      "cardId": "BG32_MagicItem_901",
+      "dbfId": 120159,
+      "name": "镀金罗盘",
+      "tier": "greater",
+      "cost": 0,
+      "description": "使你购买的下一个与你战队相符类型的随从变为金色。获得5次免费的刷新。",
+      "associatedTribes": [],
+      "relatedCardIds": [],
+      "sourceSlug": "120159-gold-plated-compass"
+    },
+    {
+      "id": "greater-trinket-bg32-magicitem-922",
+      "cardId": "BG32_MagicItem_922",
+      "dbfId": 120619,
+      "name": "魅音排箫",
+      "tier": "greater",
+      "cost": 4,
+      "description": "在每个回合结束时，使你最左边的随从获得+3/+3。在你施放一个法术后，提升此效果。",
+      "associatedTribes": [
+        "NAGA"
+      ],
+      "relatedCardIds": [],
+      "sourceSlug": "120619-charming-panpipes"
+    },
+    {
+      "id": "greater-trinket-bg32-magicitem-926",
+      "cardId": "BG32_MagicItem_926",
+      "dbfId": 121111,
+      "name": "摩戈尔肖像",
+      "tier": "greater",
+      "cost": 1,
+      "description": "获取一张潮汐先知摩戈尔。",
+      "associatedTribes": [
+        "MURLOC"
+      ],
+      "relatedCardIds": [
+        "BG27_513"
+      ],
+      "sourceSlug": "121111-morgl-portrait"
+    },
+    {
+      "id": "greater-trinket-bg32-magicitem-998",
+      "cardId": "BG32_MagicItem_998",
+      "dbfId": 121114,
+      "name": "巨怪肖像",
+      "tier": "greater",
+      "cost": 2,
+      "description": "获取一张奥术巨怪。",
+      "associatedTribes": [
+        "ELEMENTAL"
+      ],
+      "relatedCardIds": [
+        "BG31_360"
+      ],
+      "sourceSlug": "121114-behemoth-portrait"
+    },
+    {
+      "id": "greater-trinket-bg35-magicitem-151t",
+      "cardId": "BG35_MagicItem_151t",
+      "dbfId": 131277,
+      "name": "亵渎者肖像",
+      "tier": "greater",
+      "cost": 1,
+      "description": "获取一张林地亵渎者。酒馆中的恶魔饲料拥有+15/+15。",
+      "associatedTribes": [
+        "DEMON"
+      ],
+      "relatedCardIds": [
+        "BG35_151"
+      ],
+      "sourceSlug": "131277-defiler-portrait"
+    },
+    {
+      "id": "greater-trinket-bg35-magicitem-154",
+      "cardId": "BG35_MagicItem_154",
+      "dbfId": 131282,
+      "name": "乌祖尔标签",
+      "tier": "greater",
+      "cost": 0,
+      "description": "在你使用一张恶魔牌后，使另一个友方恶魔吞食酒馆中的一个随从并获得其属性值。",
+      "associatedTribes": [
+        "DEMON"
+      ],
+      "relatedCardIds": [],
+      "sourceSlug": "131282-urzul-sticker"
+    },
+    {
+      "id": "greater-trinket-bg35-magicitem-156",
+      "cardId": "BG35_MagicItem_156",
+      "dbfId": 131284,
+      "name": "魔焰肖像",
+      "tier": "greater",
+      "cost": 6,
+      "description": "获取一张魔焰执行者。每当你的魔焰执行者触发其效果时，还会使其相邻的随从获得等量的属性值。",
+      "associatedTribes": [
+        "DEMON",
+        "ELEMENTAL"
+      ],
+      "relatedCardIds": [
+        "BG34_500"
+      ],
+      "sourceSlug": "131284-flaming-portrait"
+    },
+    {
+      "id": "greater-trinket-bg35-magicitem-300t",
+      "cardId": "BG35_MagicItem_300t",
+      "dbfId": 130878,
+      "name": "铜制线圈",
+      "tier": "greater",
+      "cost": 3,
+      "description": "每当你磁力吸附一个随从时，使其获得+3/+2并提升此效果。",
+      "associatedTribes": [
+        "MECHANICAL"
+      ],
+      "relatedCardIds": [],
+      "sourceSlug": "130878-copper-coil"
+    },
+    {
+      "id": "greater-trinket-bg35-magicitem-431t",
+      "cardId": "BG35_MagicItem_431t",
+      "dbfId": 130902,
+      "name": "棘刺肩铠",
+      "tier": "greater",
+      "cost": 1,
+      "description": "在你触发一个亡语后，直到下一场战斗，你的鲜血宝石使随从额外获得+2/+1。",
+      "associatedTribes": [
+        "QUILBOAR"
+      ],
+      "relatedCardIds": [],
+      "sourceSlug": "130902-thornspike-pauldron"
+    },
+    {
+      "id": "greater-trinket-bg35-magicitem-432",
+      "cardId": "BG35_MagicItem_432",
+      "dbfId": 130906,
+      "name": "鲜血坠饰",
+      "tier": "greater",
+      "cost": 3,
+      "description": "在你触发一个亡语后，本饰品随机对3个友方随从各使用一张永久的鲜血宝石。",
+      "associatedTribes": [
+        "QUILBOAR"
+      ],
+      "relatedCardIds": [],
+      "sourceSlug": "130906-blood-amulet"
+    },
+    {
+      "id": "greater-trinket-bg35-magicitem-435",
+      "cardId": "BG35_MagicItem_435",
+      "dbfId": 131275,
+      "name": "血缚之戒",
+      "tier": "greater",
+      "cost": 0,
+      "description": "在你从手牌中使用一张鲜血宝石后，本饰品对你具有圣盾的随从各使用一张鲜血宝石。",
+      "associatedTribes": [
+        "QUILBOAR"
+      ],
+      "relatedCardIds": [],
+      "sourceSlug": "131275-bloodbound-ring"
+    },
+    {
+      "id": "greater-trinket-bg35-magicitem-700",
+      "cardId": "BG35_MagicItem_700",
+      "dbfId": 130895,
+      "name": "荒羽尘掸",
+      "tier": "greater",
+      "cost": 1,
+      "description": "在你召唤6只野兽后，随机获取一张野兽牌。（还剩6只！）",
+      "associatedTribes": [
+        "BEAST"
+      ],
+      "relatedCardIds": [],
+      "sourceSlug": "130895-wildfeather-duster"
+    },
+    {
+      "id": "greater-trinket-bg35-magicitem-701",
+      "cardId": "BG35_MagicItem_701",
+      "dbfId": 130896,
+      "name": "獠牙脚链",
+      "tier": "greater",
+      "cost": 5,
+      "description": "战斗开始时：在本场战斗中，你的野兽拥有+1/+1。在你召唤一只野兽后，永久提升此效果。",
+      "associatedTribes": [
+        "BEAST"
+      ],
+      "relatedCardIds": [],
+      "sourceSlug": "130896-fang-anklet"
+    },
+    {
+      "id": "greater-trinket-bg35-magicitem-710",
+      "cardId": "BG35_MagicItem_710",
+      "dbfId": 130892,
+      "name": "迷你船模",
+      "tier": "greater",
+      "cost": 3,
+      "description": "在你施放一个酒馆法术后，使你的海盗获得+2/+2。",
+      "associatedTribes": [
+        "PIRATE"
+      ],
+      "relatedCardIds": [],
+      "sourceSlug": "130892-miniature-ship"
+    },
+    {
+      "id": "greater-trinket-bg35-magicitem-711",
+      "cardId": "BG35_MagicItem_711",
+      "dbfId": 130893,
+      "name": "防护戒指",
+      "tier": "greater",
+      "cost": 3,
+      "description": "战斗开始时：随机使4个友方海盗获得圣盾。",
+      "associatedTribes": [
+        "PIRATE"
+      ],
+      "relatedCardIds": [],
+      "sourceSlug": "130893-protective-ring"
+    },
+    {
+      "id": "greater-trinket-bg35-magicitem-712",
+      "cardId": "BG35_MagicItem_712",
+      "dbfId": 130891,
+      "name": "私掠者肖像",
+      "tier": "greater",
+      "cost": 5,
+      "description": "获取一张骄傲的私掠者和随机2张悬赏令。在每个回合开始时，再获取2张悬赏令。",
+      "associatedTribes": [
+        "PIRATE"
+      ],
+      "relatedCardIds": [
+        "BG33_825"
+      ],
+      "sourceSlug": "130891-privateer-portrait"
+    },
+    {
+      "id": "greater-trinket-bg35-magicitem-713",
+      "cardId": "BG35_MagicItem_713",
+      "dbfId": 130894,
+      "name": "结实的撬棍",
+      "tier": "greater",
+      "cost": 0,
+      "description": "每当你获取一张海盗牌，使你最左边的随从获得+12/+12。",
+      "associatedTribes": [
+        "PIRATE"
+      ],
+      "relatedCardIds": [],
+      "sourceSlug": "130894-trusty-crowbar"
+    },
+    {
+      "id": "greater-trinket-bg35-magicitem-714",
+      "cardId": "BG35_MagicItem_714",
+      "dbfId": 131001,
+      "name": "火药桶",
+      "tier": "greater",
+      "cost": 4,
+      "description": "战斗开始时：使3个友方海盗获得“亡语：召唤一个1/1的空中海盗，使其获得本随从的攻击力并使其立即发起攻击。”",
+      "associatedTribes": [
+        "PIRATE"
+      ],
+      "relatedCardIds": [],
+      "sourceSlug": "131001-powder-keg"
+    },
+    {
+      "id": "greater-trinket-bg35-magicitem-731",
+      "cardId": "BG35_MagicItem_731",
+      "dbfId": 131131,
+      "name": "死亡之触苹果",
+      "tier": "greater",
+      "cost": 4,
+      "description": "在一个友方亡灵\n复生后，使其获得复生。（每回合限3次。）",
+      "associatedTribes": [
+        "UNDEAD"
+      ],
+      "relatedCardIds": [],
+      "sourceSlug": "131131-deathtouch-apple"
+    },
+    {
+      "id": "greater-trinket-bg35-magicitem-732",
+      "cardId": "BG35_MagicItem_732",
+      "dbfId": 131132,
+      "name": "灵魂酵罐",
+      "tier": "greater",
+      "cost": 3,
+      "description": "战斗开始时：消灭你最左边的3个随从。在你的最后一个随从死亡后，再次召唤消灭的随从。",
+      "associatedTribes": [
+        "UNDEAD"
+      ],
+      "relatedCardIds": [],
+      "sourceSlug": "131132-soul-fermenter"
+    },
+    {
+      "id": "greater-trinket-bg35-magicitem-733",
+      "cardId": "BG35_MagicItem_733",
+      "dbfId": 131133,
+      "name": "典狱长标签",
+      "tier": "greater",
+      "cost": 2,
+      "description": "塑造法术：消灭一个友方亡灵以随机获取2张亡灵牌。",
+      "associatedTribes": [
+        "UNDEAD"
+      ],
+      "relatedCardIds": [
+        "BG35_MagicItem_733t"
+      ],
+      "sourceSlug": "131133-jailer-sticker"
+    },
+    {
+      "id": "greater-trinket-bg35-magicitem-740",
+      "cardId": "BG35_MagicItem_740",
+      "dbfId": 131138,
+      "name": "飞天魔像肖像",
+      "tier": "greater",
+      "cost": 3,
+      "description": "获取一张坠落的飞天魔像。战斗开始时：使你的随从获得“亡语：使你的随从永久获得+2/+2。”",
+      "associatedTribes": [
+        "MECHANICAL"
+      ],
+      "relatedCardIds": [
+        "BG35_342"
+      ],
+      "sourceSlug": "131138-sky-golem-portrait"
+    },
+    {
+      "id": "greater-trinket-bg35-magicitem-741",
+      "cardId": "BG35_MagicItem_741",
+      "dbfId": 131139,
+      "name": "B-Box拳手肖像",
+      "tier": "greater",
+      "cost": 5,
+      "description": "获取一张极性B-Box拳手。",
+      "associatedTribes": [
+        "MECHANICAL"
+      ],
+      "relatedCardIds": [
+        "BG26_149"
+      ],
+      "sourceSlug": "131139-beatboxer-portrait"
+    },
+    {
+      "id": "greater-trinket-bg35-magicitem-742",
+      "cardId": "BG35_MagicItem_742",
+      "dbfId": 131140,
+      "name": "手风琴机器人肖像",
+      "tier": "greater",
+      "cost": 5,
+      "description": "在每个回合结束时，对你最左边和最右边的机械各磁力吸附一个手风琴机器人。",
+      "associatedTribes": [
+        "MECHANICAL"
+      ],
+      "relatedCardIds": [
+        "BG26_147"
+      ],
+      "sourceSlug": "131140-accord-o-tron-portrait"
+    },
+    {
+      "id": "greater-trinket-bg35-magicitem-743",
+      "cardId": "BG35_MagicItem_743",
+      "dbfId": 131141,
+      "name": "电极吸附器",
+      "tier": "greater",
+      "cost": 5,
+      "description": "磁力机械牌消耗的铸币为（2）枚。每当酒馆刷新时，总会额外提供一个磁力机械。",
+      "associatedTribes": [
+        "MECHANICAL"
+      ],
+      "relatedCardIds": [],
+      "sourceSlug": "131141-electrode-attractor"
+    },
+    {
+      "id": "greater-trinket-bg35-magicitem-750",
+      "cardId": "BG35_MagicItem_750",
+      "dbfId": 131303,
+      "name": "魔鳍标签",
+      "tier": "greater",
+      "cost": 4,
+      "description": "在你购买一个酒馆法术后，获取一张1/1的鱼人并教会它该法术。（每回合2次。）",
+      "associatedTribes": [
+        "MURLOC"
+      ],
+      "relatedCardIds": [
+        "BG33_890t"
+      ],
+      "sourceSlug": "131303-magicfin-sticker"
+    },
+    {
+      "id": "greater-trinket-bg35-magicitem-752",
+      "cardId": "BG35_MagicItem_752",
+      "dbfId": 131305,
+      "name": "小瞎眼标签",
+      "tier": "greater",
+      "cost": 4,
+      "description": "在你的回合结束时，触发你最左边和最右边的随从的\n战吼。",
+      "associatedTribes": [
+        "MURLOC"
+      ],
+      "relatedCardIds": [],
+      "sourceSlug": "131305-young-murk-eye-sticker"
+    },
+    {
+      "id": "greater-trinket-bg35-magicitem-753",
+      "cardId": "BG35_MagicItem_753",
+      "dbfId": 131306,
+      "name": "奔波尔霸标签",
+      "tier": "greater",
+      "cost": 2,
+      "description": "在每个回合结束时，使你最左边的两个随从获得+1/+1。（在本局对战中你每触发一个战吼都会提升！）",
+      "associatedTribes": [
+        "MURLOC"
+      ],
+      "relatedCardIds": [],
+      "sourceSlug": "131306-murky-sticker"
+    },
+    {
+      "id": "greater-trinket-bg35-magicitem-754",
+      "cardId": "BG35_MagicItem_754",
+      "dbfId": 131307,
+      "name": "戏剧鱼人标签",
+      "tier": "greater",
+      "cost": 5,
+      "description": "战斗开始时：使你的鱼人获得你手牌中攻击力最高的随从牌的攻击力。",
+      "associatedTribes": [
+        "MURLOC"
+      ],
+      "relatedCardIds": [],
+      "sourceSlug": "131307-dramaloc-sticker"
+    },
+    {
+      "id": "greater-trinket-bg35-magicitem-755",
+      "cardId": "BG35_MagicItem_755",
+      "dbfId": 131308,
+      "name": "切米尔拼贴画",
+      "tier": "greater",
+      "cost": 5,
+      "description": "塑造法术：刷新酒馆，使其中变为战吼随从牌。这些牌的消耗为（1）。",
+      "associatedTribes": [
+        "DRAGON",
+        "MURLOC"
+      ],
+      "relatedCardIds": [
+        "BG35_MagicItem_755t"
+      ],
+      "sourceSlug": "131308-chillmere-mosaic"
+    },
+    {
+      "id": "greater-trinket-bg35-magicitem-803t",
+      "cardId": "BG35_MagicItem_803t",
+      "dbfId": 130098,
+      "name": "麦克斯韦标签",
+      "tier": "greater",
+      "cost": 4,
+      "description": "获取一张你的英雄技能对应的金色伙伴。",
+      "associatedTribes": [],
+      "relatedCardIds": [],
+      "sourceSlug": "130098-maxwell-sticker"
+    },
+    {
+      "id": "greater-trinket-bg35-magicitem-812",
+      "cardId": "BG35_MagicItem_812",
+      "dbfId": 130830,
+      "name": "腐蚀秘典",
+      "tier": "greater",
+      "cost": 2,
+      "description": "获取一张三连奖品。每当你即将获取三连奖励时，改为获取三连奖品。",
+      "associatedTribes": [],
+      "relatedCardIds": [
+        "BG35_MagicItem_812t"
+      ],
+      "sourceSlug": "130830-corrupted-tome"
+    },
+    {
+      "id": "greater-trinket-bg35-magicitem-816t",
+      "cardId": "BG35_MagicItem_816t",
+      "dbfId": 131328,
+      "name": "未知宝珠",
+      "tier": "greater",
+      "cost": 0,
+      "description": "随机获取一项大型饰品和4枚铸币。",
+      "associatedTribes": [],
+      "relatedCardIds": [],
+      "sourceSlug": "131328-orb-of-the-unknown"
+    },
+    {
+      "id": "greater-trinket-bg35-magicitem-820",
+      "cardId": "BG35_MagicItem_820",
+      "dbfId": 130838,
+      "name": "安全徽章",
+      "tier": "greater",
+      "cost": 0,
+      "description": "施放寒冰屏障。获得5枚铸币。",
+      "associatedTribes": [],
+      "relatedCardIds": [
+        "TB_Bacon_Secrets_12"
+      ],
+      "sourceSlug": "130838-safety-patch"
+    },
+    {
+      "id": "greater-trinket-bg35-magicitem-821t",
+      "cardId": "BG35_MagicItem_821t",
+      "dbfId": 131309,
+      "name": "万花筒",
+      "tier": "greater",
+      "cost": 0,
+      "description": "发现一张等级7的金色随从牌。将其锁入你的手牌2\n回合。",
+      "associatedTribes": [],
+      "relatedCardIds": [],
+      "sourceSlug": "131309-kaleidoscope"
+    },
+    {
+      "id": "greater-trinket-bg35-magicitem-823t",
+      "cardId": "BG35_MagicItem_823t",
+      "dbfId": 130868,
+      "name": "老旧的烛台",
+      "tier": "greater",
+      "cost": 0,
+      "description": "发现一张来自大型时空扭曲的消耗为2的随从牌。",
+      "associatedTribes": [],
+      "relatedCardIds": [],
+      "sourceSlug": "130868-timeworn-candelabra"
+    },
+    {
+      "id": "greater-trinket-bg35-magicitem-838",
+      "cardId": "BG35_MagicItem_838",
+      "dbfId": 131314,
+      "name": "双线缝针",
+      "tier": "greater",
+      "cost": 1,
+      "description": "塑造法术：选择一个友方随从，使其属性值翻倍，并将其锁入你的手牌1个回合。",
+      "associatedTribes": [],
+      "relatedCardIds": [
+        "BG35_MagicItem_838t"
+      ],
+      "sourceSlug": "131314-double-stitch-needle"
+    },
+    {
+      "id": "greater-trinket-bg35-magicitem-840t",
+      "cardId": "BG35_MagicItem_840t",
+      "dbfId": 130977,
+      "name": "多彩之泪",
+      "tier": "greater",
+      "cost": 1,
+      "description": "随机获取2张多彩幼龙。在你使用7张战吼随从牌后，重复此效果。（还剩7张！）",
+      "associatedTribes": [
+        "DRAGON"
+      ],
+      "relatedCardIds": [],
+      "sourceSlug": "130977-chromatic-tear"
+    },
+    {
+      "id": "greater-trinket-bg35-magicitem-850t",
+      "cardId": "BG35_MagicItem_850t",
+      "dbfId": 131329,
+      "name": "袋中旋风",
+      "tier": "greater",
+      "cost": 1,
+      "description": "施放乘借东风，触发四次。在每个回合开始时，再施放\n两次。",
+      "associatedTribes": [
+        "ELEMENTAL"
+      ],
+      "relatedCardIds": [
+        "BG34_444"
+      ],
+      "sourceSlug": "131329-pocket-cyclone"
+    },
+    {
+      "id": "greater-trinket-bg35-magicitem-861",
+      "cardId": "BG35_MagicItem_861",
+      "dbfId": 130873,
+      "name": "投球手肖像",
+      "tier": "greater",
+      "cost": 5,
+      "description": "获取一张寒热骤变。在你使用10张元素牌后，重复此效果。（还剩10张！）",
+      "associatedTribes": [
+        "ELEMENTAL"
+      ],
+      "relatedCardIds": [
+        "BG31_819"
+      ],
+      "sourceSlug": "130873-baller-portrait"
+    },
+    {
+      "id": "greater-trinket-bg35-magicitem-862",
+      "cardId": "BG35_MagicItem_862",
+      "dbfId": 130874,
+      "name": "爆燃余烬",
+      "tier": "greater",
+      "cost": 6,
+      "description": "在你刷新后，使酒馆中生命值最高的随从属性值翻倍。",
+      "associatedTribes": [
+        "ELEMENTAL"
+      ],
+      "relatedCardIds": [],
+      "sourceSlug": "130874-upstart-embers"
+    },
+    {
+      "id": "greater-trinket-bg35-magicitem-863",
+      "cardId": "BG35_MagicItem_863",
+      "dbfId": 131000,
+      "name": "雪崩标签",
+      "tier": "greater",
+      "cost": 1,
+      "description": "获取一张累叠雪崩。在你出售4个随从后，重复此效果。（还剩4个！）",
+      "associatedTribes": [
+        "ELEMENTAL"
+      ],
+      "relatedCardIds": [
+        "BG33_899"
+      ],
+      "sourceSlug": "131000-avalanche-sticker"
+    },
+    {
+      "id": "greater-trinket-bg35-magicitem-923",
+      "cardId": "BG35_MagicItem_923",
+      "dbfId": 130865,
+      "name": "魔力丝带",
+      "tier": "greater",
+      "cost": 4,
+      "description": "每当你施放一个法术，使你的随从永久获得+1/+1。（战斗中改为+2/+2！）",
+      "associatedTribes": [
+        "NAGA"
+      ],
+      "relatedCardIds": [],
+      "sourceSlug": "130865-bewitched-ribbon"
+    },
+    {
+      "id": "greater-trinket-bg35-magicitem-924",
+      "cardId": "BG35_MagicItem_924",
+      "dbfId": 130907,
+      "name": "碎地者肖像",
+      "tier": "greater",
+      "cost": 3,
+      "description": "获取一张碎地者。你的碎地者还会使其左边的随从获得属性值。",
+      "associatedTribes": [
+        "NAGA"
+      ],
+      "relatedCardIds": [
+        "BG31_035"
+      ],
+      "sourceSlug": "130907-groundbreaker-portrait"
+    },
+    {
+      "id": "greater-trinket-bg35-magicitem-925",
+      "cardId": "BG35_MagicItem_925",
+      "dbfId": 130981,
+      "name": "珊瑚长矛",
+      "tier": "greater",
+      "cost": 4,
+      "description": "每当你施放塑造法术的法术时，施放暴风城之力。",
+      "associatedTribes": [
+        "NAGA"
+      ],
+      "relatedCardIds": [
+        "BG35_951"
+      ],
+      "sourceSlug": "130981-coral-spear"
+    },
+    {
+      "id": "greater-trinket-bg35-magicitem-930",
+      "cardId": "BG35_MagicItem_930",
+      "dbfId": 131002,
+      "name": "战队口哨",
+      "tier": "greater",
+      "cost": 2,
+      "description": "获得一次免费的刷新，其中会包含你的战队随从的原始版复制。",
+      "associatedTribes": [],
+      "relatedCardIds": [],
+      "sourceSlug": "131002-warband-whistle"
+    },
+    {
+      "id": "greater-trinket-bg35-magicitem-931t",
+      "cardId": "BG35_MagicItem_931t",
+      "dbfId": 131325,
+      "name": "转录打字机",
+      "tier": "greater",
+      "cost": 4,
+      "description": "获取你购买的下4个随从的各一张额外复制。（还剩4个！）",
+      "associatedTribes": [],
+      "relatedCardIds": [],
+      "sourceSlug": "131325-transcribing-typewriter"
+    }
+  ]
+}

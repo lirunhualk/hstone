@@ -239,7 +239,9 @@ function buildSnapshot(cards) {
     `expected ${EXPECTED_COUNTS.soloPoolMinions} Solo minions, got ${solo.length}`,
   );
 
-  const tierSeven = solo.filter((card) => card.techLevel === 7);
+  const tierSeven = solo
+    .filter((card) => card.techLevel === 7)
+    .sort((left, right) => left.id.localeCompare(right.id, "en"));
   expect(
     tierSeven.length === EXPECTED_COUNTS.tierSevenExcluded,
     `expected ${EXPECTED_COUNTS.tierSevenExcluded} Solo Tier 7 minions, got ${tierSeven.length}`,
@@ -276,9 +278,13 @@ function buildSnapshot(cards) {
   );
 
   const normalizedMinions = tavern.map(normalizeMinion);
+  const normalizedTierSevenMinions = tierSeven.map(normalizeMinion);
   validateUnique(normalizedMinions, "id");
   validateUnique(normalizedMinions, "dbfId");
   validateUnique(normalizedMinions, "premiumDbfId");
+  validateUnique(normalizedTierSevenMinions, "id");
+  validateUnique(normalizedTierSevenMinions, "dbfId");
+  validateUnique(normalizedTierSevenMinions, "premiumDbfId");
 
   const taggedSpells = cards.filter(
     (card) => card.isBattlegroundsPoolSpell === true,
@@ -347,6 +353,7 @@ function buildSnapshot(cards) {
     counts: EXPECTED_COUNTS,
     tavernSpellCounts: EXPECTED_TAVERN_SPELL_COUNTS,
     minions: normalizedMinions,
+    tierSevenMinions: normalizedTierSevenMinions,
     tavernSpells: normalizedTavernSpells,
   };
 }

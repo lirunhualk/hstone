@@ -991,13 +991,24 @@ test("Golden Windfury Seabed Recruiter re-evaluates each cast and triggers comba
       card.kind === "minion" &&
       card.definitionId === candidateId,
   );
-  assert.equal(gainedMurlocs.length, 2);
+  assert.equal(gainedMurlocs.length, 4);
   assert.equal(
-    gainedMurlocs.filter((minion) => minion.golden).length,
+    gainedMurlocs.some((minion) => minion.golden),
+    false,
+  );
+
+  const recruit = gameReducer(combat, { type: "CONTINUE" });
+  const recruitMurlocs = humanPlayer(recruit).hand.filter(
+    (card): card is BoardMinionInstance =>
+      card.kind === "minion" && card.definitionId === candidateId,
+  );
+  assert.equal(recruitMurlocs.length, 2);
+  assert.equal(
+    recruitMurlocs.filter((minion) => minion.golden).length,
     1,
   );
   assert.equal(
-    gainedMurlocs.filter((minion) => !minion.golden).length,
+    recruitMurlocs.filter((minion) => !minion.golden).length,
     1,
   );
 });
@@ -1104,7 +1115,7 @@ test("Seabed Recruiter grants a consolation Coin when Chef's Choice has no candi
   );
 });
 
-test("Seabed Recruiter's Chef's Choice resolves an immediate shared-pool triple", () => {
+test("Seabed Recruiter's Chef's Choice triple waits for Recruit", () => {
   const state = createGame(5235);
   enableMurlocLobby(state);
   const human = humanPlayer(state);
@@ -1146,10 +1157,18 @@ test("Seabed Recruiter's Chef's Choice resolves an immediate shared-pool triple"
       card.kind === "minion" &&
       card.definitionId === candidateId,
   );
-  assert.equal(matching.length, 1);
-  assert.equal(matching[0].golden, true);
-  assert.equal(matching[0].poolCopies, 3);
+  assert.equal(matching.length, 3);
+  assert.equal(matching.some((minion) => minion.golden), false);
   assert.equal(combat.pool[candidateId], 0);
+
+  const recruit = gameReducer(combat, { type: "CONTINUE" });
+  const combined = humanPlayer(recruit).hand.filter(
+    (card): card is BoardMinionInstance =>
+      card.kind === "minion" && card.definitionId === candidateId,
+  );
+  assert.equal(combined.length, 1);
+  assert.equal(combined[0].golden, true);
+  assert.equal(combined[0].poolCopies, 3);
 });
 
 test("AI Seabed Recruiter gains the card without leaking its hidden identity into combat events", () => {

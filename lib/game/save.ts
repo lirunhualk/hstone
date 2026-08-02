@@ -1,5 +1,6 @@
 import {
   CURRENT_ROSTER_VERSION,
+  TRIBE_NAMES,
   getMinionDefinition,
 } from "./content.ts";
 import {
@@ -11,6 +12,27 @@ import {
   DEFAULT_INITIAL_HEALTH,
   isValidInitialHealth,
 } from "./setup.ts";
+import {
+  HERO_POWER_COUNTER_KEYS,
+  createInitialHeroPowerCounters,
+  isHeroDefinitionId,
+  isHeroPowerDefinitionId,
+} from "./hero-powers.ts";
+import {
+  GREATER_TRINKET_ROUND,
+  LESSER_TRINKET_ROUND,
+  areOwnedTrinketDefinitionIdsValid,
+  getTrinketAliasKind,
+  getTrinketDefinition,
+  isSystemEventDefinitionId,
+  isSystemTavernSpellDefinitionId,
+  isTrinketDefinitionId,
+  trinketCanBeOfferedWithHeroPower,
+} from "./lobby-systems.ts";
+import {
+  areTrinketOfferCandidatesValid,
+  type TrinketOfferBoardUnit,
+} from "./trinket-offers.ts";
 import type {
   TavernSpellDefinition,
   TavernSpellInstance,
@@ -76,11 +98,550 @@ export const LEGACY_SCHEMA_11_CONTENT_VERSION_V36 =
   "battlegrounds-36.0.3-247416-v36";
 export const LEGACY_SCHEMA_11_CONTENT_VERSION_V37 =
   "battlegrounds-36.0.3-247416-v37";
+export const LEGACY_SCHEMA_11_CONTENT_VERSION_V38 =
+  "battlegrounds-36.0.3-247416-v38";
+export const LEGACY_SCHEMA_11_CONTENT_VERSION_V39 =
+  "battlegrounds-36.0.3-247416-v39";
+export const LEGACY_SCHEMA_11_CONTENT_VERSION_V40 =
+  "battlegrounds-36.0.3-247416-v40";
+export const LEGACY_SCHEMA_11_CONTENT_VERSION_V41 =
+  "battlegrounds-36.0.3-247416-v41";
+export const LEGACY_SCHEMA_11_CONTENT_VERSION_V42 =
+  "battlegrounds-36.0.3-247416-v42";
+export const LEGACY_SCHEMA_11_CONTENT_VERSION_V43 =
+  "battlegrounds-36.0.3-247416-v43";
+export const LEGACY_SCHEMA_11_CONTENT_VERSION_V44 =
+  "battlegrounds-36.0.3-247416-v44";
+export const LEGACY_SCHEMA_11_CONTENT_VERSION_V45 =
+  "battlegrounds-36.0.3-247416-v45";
+export const LEGACY_SCHEMA_11_CONTENT_VERSION_V46 =
+  "battlegrounds-36.0.3-247416-v46";
+export const LEGACY_SCHEMA_11_CONTENT_VERSION_V47 =
+  "battlegrounds-36.0.3-247416-v47";
+export const LEGACY_SCHEMA_11_CONTENT_VERSION_V48 =
+  "battlegrounds-36.0.3-247416-v48";
+export const LEGACY_SCHEMA_11_CONTENT_VERSION_V49 =
+  "battlegrounds-36.0.3-247416-v49";
 
 const SPELL_POOL_COPIES_BY_TIER = [0, 5, 7, 9, 11, 7, 5] as const;
+const HERO_POWER_COUNTER_KEY_SET = new Set<string>(
+  Object.values(HERO_POWER_COUNTER_KEYS),
+);
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return value !== null && typeof value === "object";
+}
+
+function isTribe(value: unknown): value is Tribe {
+  return typeof value === "string" && Object.hasOwn(TRIBE_NAMES, value);
+}
+
+function isTrinketOfferBoardUnit(
+  value: unknown,
+): value is TrinketOfferBoardUnit {
+  return (
+    isRecord(value) &&
+    isTribe(value.tribe) &&
+    Array.isArray(value.tribes) &&
+    value.tribes.every(isTribe)
+  );
+}
+
+function migrateLegacyLobbySystems(
+  value: Record<string, unknown>,
+): boolean {
+  if (
+    !Array.isArray(value.players) ||
+    !value.players.every(isRecord)
+  ) {
+    return false;
+  }
+  value.lobbySystemsEnabled = false;
+  value.systemEventId = null;
+  if (
+    isRecord(value.pendingInteraction) &&
+    (value.pendingInteraction.kind === "heroChoice" ||
+      value.pendingInteraction.kind === "trinketChoice")
+  ) {
+    value.pendingInteraction = null;
+  }
+  for (const player of value.players) {
+    if (!Array.isArray(player.hand)) {
+      return false;
+    }
+    player.hand = player.hand.filter(
+      (card) =>
+        !isRecord(card) ||
+        typeof card.definitionId !== "string" ||
+        !isSystemTavernSpellDefinitionId(card.definitionId),
+    );
+    player.heroId = null;
+    player.heroPowerCounters = {};
+    player.trinketIds = [];
+    player.trinketCounters = {};
+    player.trinketSelections = {};
+    player.pendingMysteryCubeReplacementIds = [];
+    player.pendingSystemSpellIds = [];
+    player.freeTavernSpellPurchases = 0;
+    player.heroRefreshAvailable = false;
+  }
+  return true;
+}
+
+function repairTrinketSelections(
+  value: Record<string, unknown>,
+): boolean {
+  if (!Array.isArray(value.players)) {
+    return false;
+  }
+  for (const player of value.players) {
+    if (!isRecord(player)) {
+      return false;
+    }
+    if (player.trinketSelections === undefined) {
+      player.trinketSelections = {};
+    }
+    if (
+      !isRecord(player.trinketSelections) ||
+      Array.isArray(player.trinketSelections)
+    ) {
+      return false;
+    }
+  }
+  return true;
+}
+
+function repairPendingMysteryCubeReplacements(
+  value: Record<string, unknown>,
+): boolean {
+  if (!Array.isArray(value.players)) {
+    return false;
+  }
+  for (const player of value.players) {
+    if (!isRecord(player)) {
+      return false;
+    }
+    if (player.pendingMysteryCubeReplacementIds === undefined) {
+      player.pendingMysteryCubeReplacementIds = [];
+    }
+  }
+  return true;
+}
+
+function isMysteryCubeTrinketSlotId(id: string): boolean {
+  return (
+    getTrinketAliasKind(id) === "mysteryCubeReplacement" ||
+    getTrinketDefinition(id).cardId === "BG30_MagicItem_703"
+  );
+}
+
+function repairHeroPowerCounters(
+  value: Record<string, unknown>,
+): boolean {
+  if (!Array.isArray(value.players)) {
+    return false;
+  }
+  for (const player of value.players) {
+    if (!isRecord(player)) {
+      return false;
+    }
+    if (player.heroPowerCounters === undefined) {
+      player.heroPowerCounters = createInitialHeroPowerCounters(
+        typeof player.heroPowerId === "string" &&
+          isHeroPowerDefinitionId(player.heroPowerId)
+          ? player.heroPowerId
+          : null,
+      );
+      continue;
+    }
+    if (
+      !isRecord(player.heroPowerCounters) ||
+      Array.isArray(player.heroPowerCounters) ||
+      !Object.entries(player.heroPowerCounters).every(
+        ([definitionId, count]) =>
+          HERO_POWER_COUNTER_KEY_SET.has(definitionId) &&
+          typeof count === "number" &&
+          Number.isInteger(count) &&
+          count >= 0,
+      )
+    ) {
+      return false;
+    }
+    const expectedCounters = createInitialHeroPowerCounters(
+      typeof player.heroPowerId === "string" &&
+        isHeroPowerDefinitionId(player.heroPowerId)
+        ? player.heroPowerId
+        : null,
+    );
+    if (
+      Object.keys(player.heroPowerCounters).some(
+        (key) => !(key in expectedCounters),
+      )
+    ) {
+      return false;
+    }
+    for (const [key, fallback] of Object.entries(expectedCounters)) {
+      if (player.heroPowerCounters[key] === undefined) {
+        player.heroPowerCounters[key] = fallback;
+      }
+    }
+  }
+  return true;
+}
+
+function repairHeroRefreshAvailability(
+  value: Record<string, unknown>,
+): boolean {
+  if (!Array.isArray(value.players)) {
+    return false;
+  }
+  for (const player of value.players) {
+    if (!isRecord(player)) {
+      return false;
+    }
+    if (typeof player.heroRefreshAvailable === "boolean") {
+      continue;
+    }
+    if (player.heroRefreshAvailable !== undefined) {
+      return false;
+    }
+    const isNozdormu =
+      player.heroPowerId === "hero-power-see-the-future";
+    const savedFreeRefreshes =
+      typeof player.freeRefreshes === "number" &&
+      Number.isInteger(player.freeRefreshes) &&
+      player.freeRefreshes >= 0
+        ? player.freeRefreshes
+        : 0;
+    player.heroRefreshAvailable =
+      isNozdormu && (value.round === 1 || savedFreeRefreshes > 0);
+    if (isNozdormu && savedFreeRefreshes > 0) {
+      player.freeRefreshes = savedFreeRefreshes - 1;
+    }
+  }
+  return true;
+}
+
+function repairStaleLobbyInteraction(
+  value: Record<string, unknown>,
+): boolean {
+  const pending = value.pendingInteraction;
+  if (
+    !isRecord(pending) ||
+    (pending.kind !== "heroChoice" && pending.kind !== "trinketChoice")
+  ) {
+    return true;
+  }
+  if (!Array.isArray(value.players)) {
+    return false;
+  }
+  const player = value.players.find(
+    (candidate) =>
+      isRecord(candidate) &&
+      candidate.id === pending.playerId,
+  );
+  if (!isRecord(player)) {
+    return false;
+  }
+  if (value.lobbySystemsEnabled !== true || player.isHuman !== true) {
+    value.pendingInteraction = null;
+    return true;
+  }
+  if (pending.kind === "heroChoice") {
+    if (
+      !Array.isArray(pending.optionIds) ||
+      pending.optionIds.length !== 4 ||
+      new Set(pending.optionIds).size !== pending.optionIds.length ||
+      !pending.optionIds.every(
+        (definitionId) =>
+          typeof definitionId === "string" &&
+          isHeroDefinitionId(definitionId),
+      )
+    ) {
+      return false;
+    }
+    if (
+      player.heroId !== null ||
+      value.phase !== "recruit" ||
+      value.round !== 1
+    ) {
+      value.pendingInteraction = null;
+    }
+    return true;
+  }
+  const replacementId = pending.replaceTrinketId;
+  const additionalTrinketSourceId = pending.additionalTrinketSourceId;
+  const isMysteryCubeReplacement =
+    typeof replacementId === "string" &&
+    Array.isArray(player.trinketIds) &&
+    player.trinketIds.includes(replacementId) &&
+    isTrinketDefinitionId(replacementId) &&
+    isMysteryCubeTrinketSlotId(replacementId) &&
+    pending.trinketTier === "lesser";
+  const expectedOptionCount = isMysteryCubeReplacement ? 2 : 4;
+  const eligibleHeroPowerId =
+    typeof player.heroPowerId === "string" &&
+    isHeroPowerDefinitionId(player.heroPowerId)
+      ? player.heroPowerId
+      : null;
+  if (
+    (pending.trinketTier !== "lesser" &&
+      pending.trinketTier !== "greater") ||
+    !Array.isArray(pending.optionIds) ||
+    !pending.optionIds.every(
+      (definitionId) =>
+        typeof definitionId === "string" &&
+        isTrinketDefinitionId(definitionId) &&
+        getTrinketAliasKind(definitionId) === null &&
+        trinketCanBeOfferedWithHeroPower(
+          getTrinketDefinition(definitionId),
+          eligibleHeroPowerId,
+        ),
+    ) ||
+    !Array.isArray(player.board) ||
+    !player.board.every(isTrinketOfferBoardUnit) ||
+    !Array.isArray(value.activeTribes) ||
+    !value.activeTribes.every(isTribe) ||
+    !areTrinketOfferCandidatesValid({
+      tier: pending.trinketTier,
+      candidates: pending.optionIds.map(getTrinketDefinition),
+      board: player.board,
+      activeTribes: value.activeTribes,
+      count: expectedOptionCount,
+    })
+  ) {
+    return false;
+  }
+  if (!Array.isArray(player.trinketIds)) {
+    return false;
+  }
+  const ownsRawTier = player.trinketIds.some(
+    (definitionId) => {
+      if (
+        typeof definitionId !== "string" ||
+        !isTrinketDefinitionId(definitionId)
+      ) {
+        return false;
+      }
+      const aliasKind = getTrinketAliasKind(definitionId);
+      return (
+        (aliasKind === null || aliasKind === "mysteryCubeReplacement") &&
+        getTrinketDefinition(definitionId).tier === pending.trinketTier
+      );
+    },
+  );
+  const trinketCounters = isRecord(player.trinketCounters)
+    ? player.trinketCounters
+    : null;
+  const isTripVouchersReplacement =
+    typeof replacementId === "string" &&
+    player.trinketIds.includes(replacementId) &&
+    isTrinketDefinitionId(replacementId) &&
+    getTrinketDefinition(replacementId).cardId === "BG30_MagicItem_891" &&
+    trinketCounters !== null &&
+    typeof trinketCounters[replacementId] === "number" &&
+    trinketCounters[replacementId] >= 2 &&
+    pending.trinketTier === "greater" &&
+    value.round === LESSER_TRINKET_ROUND + 2;
+  if (
+    replacementId !== undefined &&
+    !isTripVouchersReplacement &&
+    !isMysteryCubeReplacement
+  ) {
+    return false;
+  }
+  if (isMysteryCubeReplacement) {
+    const ownedCardIds = new Set(
+      player.trinketIds
+        .filter(
+          (definitionId): definitionId is string =>
+            typeof definitionId === "string" &&
+            isTrinketDefinitionId(definitionId),
+        )
+        .map((definitionId) => getTrinketDefinition(definitionId).cardId),
+    );
+    if (
+      additionalTrinketSourceId !== undefined ||
+      pending.optionIds.some((definitionId) => {
+        const cardId = getTrinketDefinition(definitionId).cardId;
+        return cardId === "BG30_MagicItem_703" || ownedCardIds.has(cardId);
+      })
+    ) {
+      return false;
+    }
+  }
+  const isMysteriousOrbAdditional =
+    typeof additionalTrinketSourceId === "string" &&
+    replacementId === undefined &&
+    player.trinketIds.includes(additionalTrinketSourceId) &&
+    isTrinketDefinitionId(additionalTrinketSourceId) &&
+    getTrinketDefinition(additionalTrinketSourceId).cardId ===
+      "BG35_MagicItem_818" &&
+    trinketCounters !== null &&
+    trinketCounters[additionalTrinketSourceId] === 1 &&
+    pending.trinketTier === "lesser" &&
+    value.round === GREATER_TRINKET_ROUND &&
+    pending.optionIds.every(
+      (definitionId) =>
+        !(player.trinketIds as unknown[]).includes(definitionId),
+    );
+  if (
+    additionalTrinketSourceId !== undefined &&
+    !isMysteriousOrbAdditional
+  ) {
+    return false;
+  }
+  const hasDueOrnateClock =
+    pending.trinketTier === "greater" &&
+    value.round === LESSER_TRINKET_ROUND + 1 &&
+    trinketCounters !== null &&
+    player.trinketIds.some(
+      (definitionId) =>
+        typeof definitionId === "string" &&
+        isTrinketDefinitionId(definitionId) &&
+        getTrinketDefinition(definitionId).cardId ===
+          "BG32_MagicItem_271" &&
+        typeof trinketCounters[definitionId] === "number" &&
+        trinketCounters[definitionId] >= 1,
+    );
+  const isRegularOffer =
+    replacementId === undefined &&
+    additionalTrinketSourceId === undefined &&
+    ((pending.trinketTier === "lesser" &&
+      value.round === LESSER_TRINKET_ROUND) ||
+      (pending.trinketTier === "greater" &&
+        (value.round === GREATER_TRINKET_ROUND ||
+          hasDueOrnateClock)));
+  if (
+    (!isTripVouchersReplacement &&
+      !isMysteryCubeReplacement &&
+      !isMysteriousOrbAdditional &&
+      ownsRawTier) ||
+    value.phase !== "recruit" ||
+    (!isTripVouchersReplacement &&
+      !isMysteryCubeReplacement &&
+      !isMysteriousOrbAdditional &&
+      !isRegularOffer)
+  ) {
+    value.pendingInteraction = null;
+  }
+  return true;
+}
+
+function hasValidLobbySystemPlayerState(value: unknown): boolean {
+  if (!isRecord(value)) {
+    return false;
+  }
+  if (
+    value.heroId !== null &&
+    (typeof value.heroId !== "string" ||
+      !isHeroDefinitionId(value.heroId))
+  ) {
+    return false;
+  }
+  if (
+    value.heroPowerId !== null &&
+    (typeof value.heroPowerId !== "string" ||
+      !isHeroPowerDefinitionId(value.heroPowerId))
+  ) {
+    return false;
+  }
+  if (
+    !isRecord(value.heroPowerCounters) ||
+    Array.isArray(value.heroPowerCounters) ||
+    !Object.entries(value.heroPowerCounters).every(
+      ([definitionId, count]) =>
+        HERO_POWER_COUNTER_KEY_SET.has(definitionId) &&
+        typeof count === "number" &&
+        Number.isInteger(count) &&
+        count >= 0,
+    )
+  ) {
+    return false;
+  }
+  const trinketIds = value.trinketIds;
+  if (
+    !Array.isArray(trinketIds) ||
+    !areOwnedTrinketDefinitionIdsValid(trinketIds)
+  ) {
+    return false;
+  }
+  const normalizedTrinketIds = trinketIds as string[];
+  if (
+    !isRecord(value.trinketCounters) ||
+    Array.isArray(value.trinketCounters) ||
+    !Object.entries(value.trinketCounters).every(
+      ([definitionId, count]) =>
+        normalizedTrinketIds.includes(definitionId) &&
+        typeof count === "number" &&
+        Number.isInteger(count) &&
+        count >= 0,
+    )
+  ) {
+    return false;
+  }
+  if (
+    !isRecord(value.trinketSelections) ||
+    Array.isArray(value.trinketSelections) ||
+    !Object.entries(value.trinketSelections).every(
+      ([definitionId, selectedMinionDefinitionId]) => {
+        if (
+          !normalizedTrinketIds.includes(definitionId) ||
+          typeof selectedMinionDefinitionId !== "string"
+        ) {
+          return false;
+        }
+        try {
+          getMinionDefinition(selectedMinionDefinitionId);
+          return true;
+        } catch {
+          return false;
+        }
+      },
+    )
+  ) {
+    return false;
+  }
+  if (
+    !Array.isArray(value.pendingMysteryCubeReplacementIds) ||
+    new Set(value.pendingMysteryCubeReplacementIds).size !==
+      value.pendingMysteryCubeReplacementIds.length ||
+    !value.pendingMysteryCubeReplacementIds.every(
+      (definitionId) =>
+        typeof definitionId === "string" &&
+        normalizedTrinketIds.includes(definitionId) &&
+        isTrinketDefinitionId(definitionId) &&
+        isMysteryCubeTrinketSlotId(definitionId),
+    )
+  ) {
+    return false;
+  }
+  return (
+    Array.isArray(value.pendingSystemSpellIds) &&
+    value.pendingSystemSpellIds.every(
+      (definitionId) =>
+        typeof definitionId === "string" &&
+        isSystemTavernSpellDefinitionId(definitionId),
+    ) &&
+    typeof value.freeTavernSpellPurchases === "number" &&
+    Number.isInteger(value.freeTavernSpellPurchases) &&
+    value.freeTavernSpellPurchases >= 0 &&
+    typeof value.heroRefreshAvailable === "boolean"
+  );
+}
+
+function hasValidLobbySystemState(
+  value: Record<string, unknown>,
+): boolean {
+  return (
+    typeof value.lobbySystemsEnabled === "boolean" &&
+    (value.lobbySystemsEnabled
+      ? typeof value.systemEventId === "string" &&
+        isSystemEventDefinitionId(value.systemEventId)
+      : value.systemEventId === null) &&
+    Array.isArray(value.players) &&
+    value.players.every(hasValidLobbySystemPlayerState)
+  );
 }
 
 function repairInitialHealth(value: Record<string, unknown>): boolean {
@@ -121,6 +682,7 @@ function repairGhostHandSnapshots(
           card.kind !== "minion" ||
           card.poolCopies !== 0 ||
           card.poolCopiesOnPurchase !== undefined ||
+          card.poolCopiesByDefinitionId !== undefined ||
           !Array.isArray(card.attachments) ||
           !card.attachments.every(hasZeroAttachmentPoolOwnership),
       )
@@ -129,6 +691,275 @@ function repairGhostHandSnapshots(
     }
   }
   return true;
+}
+
+function hasValidPoolOwnershipMap(card: unknown): boolean {
+  if (!isRecord(card) || card.kind !== "minion") {
+    return true;
+  }
+  const ownership = card.poolCopiesByDefinitionId;
+  if (ownership === undefined) {
+    return true;
+  }
+  if (!isRecord(ownership) || Array.isArray(ownership)) {
+    return false;
+  }
+  let total = 0;
+  for (const [definitionId, copies] of Object.entries(ownership)) {
+    try {
+      getMinionDefinition(definitionId);
+    } catch {
+      return false;
+    }
+    if (
+      typeof copies !== "number" ||
+      !Number.isInteger(copies) ||
+      copies < 0
+    ) {
+      return false;
+    }
+    total += copies;
+  }
+  return (
+    typeof card.poolCopies === "number" &&
+    Number.isInteger(card.poolCopies) &&
+    card.poolCopies >= 0 &&
+    total === card.poolCopies
+  );
+}
+
+function hasValidOptionalUniqueStringArray(value: unknown): boolean {
+  return (
+    value === undefined ||
+    (Array.isArray(value) &&
+      value.length > 0 &&
+      value.every(
+        (entry) => typeof entry === "string" && entry.length > 0,
+      ) &&
+      new Set(value).size === value.length)
+  );
+}
+
+function repairSpellcraftRewardTier(value: unknown): void {
+  if (!isRecord(value) || value.rewardTier === undefined) {
+    return;
+  }
+  if (
+    typeof value.rewardTier !== "number" ||
+    !Number.isInteger(value.rewardTier) ||
+    value.rewardTier < 1 ||
+    value.rewardTier > 6
+  ) {
+    delete value.rewardTier;
+  }
+}
+
+function repairMinionEffectCounters(value: unknown): void {
+  if (!isRecord(value) || value.kind !== "minion") {
+    return;
+  }
+  const counters = isRecord(value.effectCounters)
+    ? value.effectCounters
+    : {};
+  value.effectCounters = counters;
+  const repairInteger = (
+    key: string,
+    fallback: number,
+    minimum: number,
+    maximum = Number.POSITIVE_INFINITY,
+  ): void => {
+    const current = counters[key];
+    counters[key] =
+      typeof current === "number" &&
+      Number.isInteger(current) &&
+      current >= minimum &&
+      current <= maximum
+        ? current
+        : fallback;
+  };
+  if (value.definitionId === "BG28_633") {
+    repairInteger("playerSpellProgress", 0, 0, 2);
+  } else if (value.definitionId === "BG35_895") {
+    repairInteger("tavernSpellAuraCardsPlayedThisTurn", 0, 0, 1);
+    repairInteger("tavernSpellAuraAttackBonusThisTurn", 0, 0);
+    repairInteger("tavernSpellAuraHealthBonusThisTurn", 0, 0);
+  } else if (value.definitionId === "BG31_920") {
+    repairInteger("evolvingSpellcraftRewardTier", 1, 1, 6);
+  } else if (value.definitionId === "BG33_891") {
+    repairInteger(
+      "tavernSpellPurchasesObservedThisTurn",
+      0,
+      0,
+      value.golden === true ? 2 : 1,
+    );
+  } else if (value.definitionId === "BG34_950") {
+    repairInteger("stoneAgeSlabPurchaseUsedThisTurn", 0, 0, 1);
+  }
+}
+
+function repairTaughtTavernSpell(value: unknown): void {
+  if (
+    !isRecord(value) ||
+    value.kind !== "minion" ||
+    typeof value.definitionId !== "string"
+  ) {
+    return;
+  }
+  let definition: ReturnType<typeof getMinionDefinition>;
+  try {
+    definition = getMinionDefinition(value.definitionId);
+  } catch {
+    delete value.taughtTavernSpellDefinitionId;
+    return;
+  }
+  const printedDescription =
+    value.golden === true
+      ? (definition.goldenDescription ?? definition.description)
+      : definition.description;
+  if (!definition.battlecryCastsTaughtTavernSpell) {
+    delete value.taughtTavernSpellDefinitionId;
+    return;
+  }
+  if (typeof value.taughtTavernSpellDefinitionId !== "string") {
+    delete value.taughtTavernSpellDefinitionId;
+    value.description = printedDescription;
+    return;
+  }
+  try {
+    const taught = getTavernSpellDefinition(
+      value.taughtTavernSpellDefinitionId,
+    );
+    value.description =
+      `战吼：施放“${taught.name}”。（${taught.description}）`;
+  } catch {
+    delete value.taughtTavernSpellDefinitionId;
+    value.description = printedDescription;
+  }
+}
+
+function repairSuppressedBloodGemStats(value: unknown): boolean {
+  if (Array.isArray(value)) {
+    return value.every(repairSuppressedBloodGemStats);
+  }
+  if (!isRecord(value)) {
+    return true;
+  }
+  if (value.kind === "minion" || value.kind === "tripleReward") {
+    for (const [suppressedField, totalField] of [
+      ["suppressedBloodGemAttack", "bloodGemAttack"],
+      ["suppressedBloodGemHealth", "bloodGemHealth"],
+    ] as const) {
+      if (value[suppressedField] === undefined) {
+        value[suppressedField] = 0;
+      }
+      const suppressed = value[suppressedField];
+      const total = value[totalField];
+      if (
+        typeof suppressed !== "number" ||
+        !Number.isFinite(suppressed) ||
+        suppressed < 0 ||
+        typeof total !== "number" ||
+        !Number.isFinite(total) ||
+        total < 0 ||
+        suppressed > total
+      ) {
+        return false;
+      }
+    }
+  }
+  return Object.values(value).every(repairSuppressedBloodGemStats);
+}
+
+function repairV42State(value: Record<string, unknown>): boolean {
+  if (!Array.isArray(value.players)) {
+    return false;
+  }
+  for (const player of value.players) {
+    if (!isRecord(player)) {
+      return false;
+    }
+    for (const field of [
+      "mrrgltonsPlayed",
+      "tavernMinionAttackBonusThisTurn",
+      "tavernMinionHealthBonusThisTurn",
+      "playerSpellsCast",
+      "battlecriesTriggered",
+      "heroPowerExtraTriggers",
+      "darkmoonReservePricesDiscount",
+      "pendingTickatusTagPrizes",
+      "elementalGrantAttackBonus",
+      "elementalGrantHealthBonus",
+      "deathrattlesTriggered",
+      "magnetizationsThisGame",
+    ] as const) {
+      if (player[field] === undefined) {
+        player[field] = 0;
+      }
+      if (
+        typeof player[field] !== "number" ||
+        !Number.isInteger(player[field]) ||
+        player[field] < 0
+      ) {
+        return false;
+      }
+    }
+    for (const zone of ["board", "hand", "ghostHand", "shop"] as const) {
+      const cards = player[zone];
+      if (!Array.isArray(cards) || !cards.every(hasValidPoolOwnershipMap)) {
+        return false;
+      }
+      for (const card of cards) {
+        if (
+          isRecord(card) &&
+          (!hasValidOptionalUniqueStringArray(
+            card.deathlyStrikerLineageIds,
+          ) ||
+            !hasValidOptionalUniqueStringArray(
+              card.deathlyStrikerCreatorIds,
+            ))
+        ) {
+          return false;
+        }
+        repairSpellcraftRewardTier(card);
+        repairMinionEffectCounters(card);
+        repairTaughtTavernSpell(card);
+      }
+    }
+    if (Array.isArray(player.pendingSpellcraft)) {
+      for (const pending of player.pendingSpellcraft) {
+        repairSpellcraftRewardTier(pending);
+      }
+    }
+  }
+  const playerIds = value.players
+    .filter(isRecord)
+    .map((player) => player.id)
+    .filter((id): id is string => typeof id === "string");
+  if (value.deferredTriplePlayerIds === undefined) {
+    value.deferredTriplePlayerIds =
+      value.phase === "combat"
+        ? value.players
+            .filter(
+              (player): player is Record<string, unknown> =>
+                isRecord(player) &&
+                player.alive === true &&
+                typeof player.id === "string",
+            )
+            .map((player) => player.id as string)
+        : [];
+  }
+  if (
+    !Array.isArray(value.deferredTriplePlayerIds) ||
+    value.deferredTriplePlayerIds.some(
+      (playerId) =>
+        typeof playerId !== "string" || !playerIds.includes(playerId),
+    ) ||
+    new Set(value.deferredTriplePlayerIds).size !==
+      value.deferredTriplePlayerIds.length
+  ) {
+    return false;
+  }
+  return repairSuppressedBloodGemStats(value);
 }
 
 function migrateBloodGemBarrageState(
@@ -357,6 +1188,18 @@ function refreshMinionSupport(
     value.effectCounters = {};
     value.temporaryGoldenCrabDeathrattles = 0;
   }
+  value.crabDeathrattles =
+    typeof value.crabDeathrattles === "number"
+      ? value.crabDeathrattles
+      : 0;
+  value.goldenCrabDeathrattles =
+    typeof value.goldenCrabDeathrattles === "number"
+      ? value.goldenCrabDeathrattles
+      : 0;
+  value.temporaryVenomous =
+    typeof value.temporaryVenomous === "boolean"
+      ? value.temporaryVenomous
+      : false;
   if (
     definition.conditionalKeyword?.keyword === "divineShield" &&
     typeof value.attack === "number" &&
@@ -408,6 +1251,36 @@ function refreshMinionSupport(
       `${growingStartOfCombat.attack * scale + attackBonus}/+` +
       `${growingStartOfCombat.health * scale + healthBonus}。` +
       "在你施放一个酒馆法术后永久提升此效果。";
+  }
+  const upgradingSatellites = definition.endOfTurn;
+  if (
+    upgradingSatellites?.kind ===
+    "gainUpgradingMagneticSatellites"
+  ) {
+    const counters = isRecord(value.effectCounters)
+      ? value.effectCounters
+      : {};
+    value.effectCounters = counters;
+    const attackBonus =
+      typeof counters.magneticSatelliteAttackBonus === "number"
+        ? counters.magneticSatelliteAttackBonus
+        : 0;
+    const healthBonus =
+      typeof counters.magneticSatelliteHealthBonus === "number"
+        ? counters.magneticSatelliteHealthBonus
+        : 0;
+    counters.magneticSatelliteAttackBonus = attackBonus;
+    counters.magneticSatelliteHealthBonus = healthBonus;
+    const scale =
+      value.golden === true &&
+      upgradingSatellites.goldenMode === "doubleStats"
+        ? 2
+        : 1;
+    value.description =
+      `在你的回合结束时，获取两张` +
+      `${upgradingSatellites.attack * scale + attackBonus}/` +
+      `${upgradingSatellites.health * scale + healthBonus}的磁力卫星` +
+      "并提升此效果。";
   }
   const growingSummon = definition.afterFriendlySummoned;
   if (growingSummon?.permanentAttackGrowth !== undefined) {
@@ -525,6 +1398,10 @@ function refreshSchema8Minions(value: unknown): void {
     value.temporaryDivineShield =
       typeof value.temporaryDivineShield === "boolean"
         ? value.temporaryDivineShield
+        : false;
+    value.temporaryVenomous =
+      typeof value.temporaryVenomous === "boolean"
+        ? value.temporaryVenomous
         : false;
     value.temporaryCrabDeathrattles =
       typeof value.temporaryCrabDeathrattles === "number"
@@ -1044,6 +1921,7 @@ export function migrateSchema10GameState(value: unknown): unknown {
       player.helpfulRefreshes = 0;
       player.lastHelpfulRefreshKind = null;
       player.tavernTierBuffs = [];
+      player.tavernSpellsCast = 0;
       migrateBeetleBonusState(player);
       migrateBloodGemBarrageState(player);
 
@@ -1083,6 +1961,10 @@ export function migrateSchema10GameState(value: unknown): unknown {
       ) {
         player.spellOnlyRefreshActive = false;
       }
+    }
+
+    if (!migrateLegacyLobbySystems(migrated)) {
+      return null;
     }
 
     migrated.version = 11;
@@ -1126,7 +2008,19 @@ export function migrateSchema11GameState(value: unknown): unknown {
       value.contentVersion !== LEGACY_SCHEMA_11_CONTENT_VERSION_V34 &&
       value.contentVersion !== LEGACY_SCHEMA_11_CONTENT_VERSION_V35 &&
       value.contentVersion !== LEGACY_SCHEMA_11_CONTENT_VERSION_V36 &&
-      value.contentVersion !== LEGACY_SCHEMA_11_CONTENT_VERSION_V37) ||
+      value.contentVersion !== LEGACY_SCHEMA_11_CONTENT_VERSION_V37 &&
+      value.contentVersion !== LEGACY_SCHEMA_11_CONTENT_VERSION_V38 &&
+      value.contentVersion !== LEGACY_SCHEMA_11_CONTENT_VERSION_V39 &&
+      value.contentVersion !== LEGACY_SCHEMA_11_CONTENT_VERSION_V40 &&
+      value.contentVersion !== LEGACY_SCHEMA_11_CONTENT_VERSION_V41 &&
+      value.contentVersion !== LEGACY_SCHEMA_11_CONTENT_VERSION_V42 &&
+      value.contentVersion !== LEGACY_SCHEMA_11_CONTENT_VERSION_V43 &&
+      value.contentVersion !== LEGACY_SCHEMA_11_CONTENT_VERSION_V44 &&
+      value.contentVersion !== LEGACY_SCHEMA_11_CONTENT_VERSION_V45 &&
+      value.contentVersion !== LEGACY_SCHEMA_11_CONTENT_VERSION_V46 &&
+      value.contentVersion !== LEGACY_SCHEMA_11_CONTENT_VERSION_V47 &&
+      value.contentVersion !== LEGACY_SCHEMA_11_CONTENT_VERSION_V48 &&
+      value.contentVersion !== LEGACY_SCHEMA_11_CONTENT_VERSION_V49) ||
     !Array.isArray(value.players)
   ) {
     return null;
@@ -1153,6 +2047,18 @@ export function migrateSchema11GameState(value: unknown): unknown {
       LEGACY_SCHEMA_11_CONTENT_VERSION_V35,
       LEGACY_SCHEMA_11_CONTENT_VERSION_V36,
       LEGACY_SCHEMA_11_CONTENT_VERSION_V37,
+      LEGACY_SCHEMA_11_CONTENT_VERSION_V38,
+      LEGACY_SCHEMA_11_CONTENT_VERSION_V39,
+      LEGACY_SCHEMA_11_CONTENT_VERSION_V40,
+      LEGACY_SCHEMA_11_CONTENT_VERSION_V41,
+      LEGACY_SCHEMA_11_CONTENT_VERSION_V42,
+      LEGACY_SCHEMA_11_CONTENT_VERSION_V43,
+      LEGACY_SCHEMA_11_CONTENT_VERSION_V44,
+      LEGACY_SCHEMA_11_CONTENT_VERSION_V45,
+      LEGACY_SCHEMA_11_CONTENT_VERSION_V46,
+      LEGACY_SCHEMA_11_CONTENT_VERSION_V47,
+      LEGACY_SCHEMA_11_CONTENT_VERSION_V48,
+      LEGACY_SCHEMA_11_CONTENT_VERSION_V49,
     ].includes(value.contentVersion as string);
     const preserveCurrentFields = [
       LEGACY_SCHEMA_11_CONTENT_VERSION_V19,
@@ -1174,14 +2080,67 @@ export function migrateSchema11GameState(value: unknown): unknown {
       LEGACY_SCHEMA_11_CONTENT_VERSION_V35,
       LEGACY_SCHEMA_11_CONTENT_VERSION_V36,
       LEGACY_SCHEMA_11_CONTENT_VERSION_V37,
+      LEGACY_SCHEMA_11_CONTENT_VERSION_V38,
+      LEGACY_SCHEMA_11_CONTENT_VERSION_V39,
+      LEGACY_SCHEMA_11_CONTENT_VERSION_V40,
+      LEGACY_SCHEMA_11_CONTENT_VERSION_V41,
+      LEGACY_SCHEMA_11_CONTENT_VERSION_V42,
+      LEGACY_SCHEMA_11_CONTENT_VERSION_V43,
+      LEGACY_SCHEMA_11_CONTENT_VERSION_V44,
+      LEGACY_SCHEMA_11_CONTENT_VERSION_V45,
+      LEGACY_SCHEMA_11_CONTENT_VERSION_V46,
+      LEGACY_SCHEMA_11_CONTENT_VERSION_V47,
+      LEGACY_SCHEMA_11_CONTENT_VERSION_V48,
+      LEGACY_SCHEMA_11_CONTENT_VERSION_V49,
     ].includes(value.contentVersion as string);
     const preserveTavernTierBuffs =
       value.contentVersion === LEGACY_SCHEMA_11_CONTENT_VERSION_V35 ||
       value.contentVersion === LEGACY_SCHEMA_11_CONTENT_VERSION_V36 ||
-      value.contentVersion === LEGACY_SCHEMA_11_CONTENT_VERSION_V37;
+      value.contentVersion === LEGACY_SCHEMA_11_CONTENT_VERSION_V37 ||
+      value.contentVersion === LEGACY_SCHEMA_11_CONTENT_VERSION_V38 ||
+      value.contentVersion === LEGACY_SCHEMA_11_CONTENT_VERSION_V39 ||
+      value.contentVersion === LEGACY_SCHEMA_11_CONTENT_VERSION_V40 ||
+      value.contentVersion === LEGACY_SCHEMA_11_CONTENT_VERSION_V41 ||
+      value.contentVersion === LEGACY_SCHEMA_11_CONTENT_VERSION_V42 ||
+      value.contentVersion === LEGACY_SCHEMA_11_CONTENT_VERSION_V43 ||
+      value.contentVersion === LEGACY_SCHEMA_11_CONTENT_VERSION_V44 ||
+      value.contentVersion === LEGACY_SCHEMA_11_CONTENT_VERSION_V45 ||
+      value.contentVersion === LEGACY_SCHEMA_11_CONTENT_VERSION_V46 ||
+      value.contentVersion === LEGACY_SCHEMA_11_CONTENT_VERSION_V47 ||
+      value.contentVersion === LEGACY_SCHEMA_11_CONTENT_VERSION_V48 ||
+      value.contentVersion === LEGACY_SCHEMA_11_CONTENT_VERSION_V49;
     const preservePendingSpellcraft =
       value.contentVersion === LEGACY_SCHEMA_11_CONTENT_VERSION_V17 ||
       preservePersistentFields;
+    const preserveTavernSpellHistory =
+      value.contentVersion === LEGACY_SCHEMA_11_CONTENT_VERSION_V39 ||
+      value.contentVersion === LEGACY_SCHEMA_11_CONTENT_VERSION_V40 ||
+      value.contentVersion === LEGACY_SCHEMA_11_CONTENT_VERSION_V41 ||
+      value.contentVersion === LEGACY_SCHEMA_11_CONTENT_VERSION_V42 ||
+      value.contentVersion === LEGACY_SCHEMA_11_CONTENT_VERSION_V43 ||
+      value.contentVersion === LEGACY_SCHEMA_11_CONTENT_VERSION_V44 ||
+      value.contentVersion === LEGACY_SCHEMA_11_CONTENT_VERSION_V45 ||
+      value.contentVersion === LEGACY_SCHEMA_11_CONTENT_VERSION_V46 ||
+      value.contentVersion === LEGACY_SCHEMA_11_CONTENT_VERSION_V47 ||
+      value.contentVersion === LEGACY_SCHEMA_11_CONTENT_VERSION_V48 ||
+      value.contentVersion === LEGACY_SCHEMA_11_CONTENT_VERSION_V49;
+    const preserveLobbySystems =
+      value.contentVersion === LEGACY_SCHEMA_11_CONTENT_VERSION_V40 ||
+      value.contentVersion === LEGACY_SCHEMA_11_CONTENT_VERSION_V41 ||
+      value.contentVersion === LEGACY_SCHEMA_11_CONTENT_VERSION_V42 ||
+      value.contentVersion === LEGACY_SCHEMA_11_CONTENT_VERSION_V43 ||
+      value.contentVersion === LEGACY_SCHEMA_11_CONTENT_VERSION_V44 ||
+      value.contentVersion === LEGACY_SCHEMA_11_CONTENT_VERSION_V45 ||
+      value.contentVersion === LEGACY_SCHEMA_11_CONTENT_VERSION_V46 ||
+      value.contentVersion === LEGACY_SCHEMA_11_CONTENT_VERSION_V47 ||
+      value.contentVersion === LEGACY_SCHEMA_11_CONTENT_VERSION_V48 ||
+      value.contentVersion === LEGACY_SCHEMA_11_CONTENT_VERSION_V49;
+    const preservePlayerSpellHistory =
+      value.contentVersion === LEGACY_SCHEMA_11_CONTENT_VERSION_V45 ||
+      value.contentVersion === LEGACY_SCHEMA_11_CONTENT_VERSION_V46 ||
+      value.contentVersion === LEGACY_SCHEMA_11_CONTENT_VERSION_V47 ||
+      value.contentVersion === LEGACY_SCHEMA_11_CONTENT_VERSION_V48 ||
+      value.contentVersion === LEGACY_SCHEMA_11_CONTENT_VERSION_V49;
     const migrated: unknown = JSON.parse(JSON.stringify(value));
     if (
       !isRecord(migrated) ||
@@ -1204,9 +2163,38 @@ export function migrateSchema11GameState(value: unknown): unknown {
       }
       player.cardsPlayedThisTurn = 0;
       player.goldSpentThisTurn = 0;
+      player.mrrgltonsPlayed = 0;
+      player.tavernMinionAttackBonusThisTurn = 0;
+      player.tavernMinionHealthBonusThisTurn = 0;
       player.pendingCardPlayed = null;
+      const lastTavernSpellDefinitionId =
+        player.lastTavernSpellDefinitionId;
       player.lastTavernSpellDefinitionId = null;
+      if (
+        preserveTavernSpellHistory &&
+        typeof lastTavernSpellDefinitionId === "string"
+      ) {
+        try {
+          getTavernSpellDefinition(lastTavernSpellDefinitionId);
+          player.lastTavernSpellDefinitionId =
+            lastTavernSpellDefinitionId;
+        } catch {
+          // Invalid legacy identifiers are dropped so copy-last-spell effects
+          // cannot crash after the save is resumed.
+        }
+      }
       player.pendingTavernSpellDefinitionId = null;
+      player.tavernSpellsCast =
+        preserveTavernSpellHistory &&
+        typeof player.tavernSpellsCast === "number"
+          ? Math.max(0, Math.floor(player.tavernSpellsCast))
+          : 0;
+      player.playerSpellsCast =
+        preservePlayerSpellHistory &&
+        typeof player.playerSpellsCast === "number" &&
+        Number.isFinite(player.playerSpellsCast)
+          ? Math.max(0, Math.floor(player.playerSpellsCast))
+          : 0;
       player.demonFodderRefreshQueue = [];
       player.tavernTierBuffs =
         preserveTavernTierBuffs &&
@@ -1217,8 +2205,10 @@ export function migrateSchema11GameState(value: unknown): unknown {
       migrateBloodGemBarrageState(player);
     }
     if (
+      (!preserveLobbySystems && !migrateLegacyLobbySystems(migrated)) ||
       !repairInitialHealth(migrated) ||
-      !repairHumanScoutingReports(migrated)
+      !repairHumanScoutingReports(migrated) ||
+      !repairV42State(migrated)
     ) {
       return null;
     }
@@ -1294,15 +2284,29 @@ export function normalizePersistedGameState(value: unknown): unknown {
   ) {
     return repairInitialHealth(value) &&
       repairGhostHandSnapshots(value) &&
+      repairV42State(value) &&
       repairSpellPool(value) &&
-      repairHumanScoutingReports(value)
+      repairHumanScoutingReports(value) &&
+      repairHeroPowerCounters(value) &&
+      repairHeroRefreshAvailability(value) &&
+      repairTrinketSelections(value) &&
+      repairPendingMysteryCubeReplacements(value) &&
+      repairStaleLobbyInteraction(value) &&
+      hasValidLobbySystemState(value)
       ? value
       : null;
   }
   const migrated = migrateLegacyGameState(value);
   return isRecord(migrated) &&
     repairInitialHealth(migrated) &&
-    repairGhostHandSnapshots(migrated)
+    repairGhostHandSnapshots(migrated) &&
+    repairV42State(migrated) &&
+    repairHeroPowerCounters(migrated) &&
+    repairHeroRefreshAvailability(migrated) &&
+    repairTrinketSelections(migrated) &&
+    repairPendingMysteryCubeReplacements(migrated) &&
+    repairStaleLobbyInteraction(migrated) &&
+    hasValidLobbySystemState(migrated)
     ? migrated
     : null;
 }

@@ -822,12 +822,13 @@ test("a Reborn Charmwing keeps its printed maximum Health for Rally", () => {
   );
 });
 
-test("Ring Warden casts Shiny Ring before its own attack damage", () => {
+test("Ring Warden casts Shiny Ring before damage and owns Bruiser growth events", () => {
   const warden = definitionMinion("BG34_921", "ring-warden");
   const filler = inertMinion("ring-filler");
+  const bruiser = definitionMinion("BG35_921", "ring-bruiser");
   const { battle } = runCombat(
     0x8340,
-    [warden, filler],
+    [warden, filler, bruiser],
     [wall("ring-wall", 6)],
   );
   const window = strikeWindow(battle, warden.instanceId);
@@ -846,7 +847,8 @@ test("Ring Warden casts Shiny Ring before its own attack damage", () => {
       .filter(
         (event) =>
           event.type === "buff" &&
-          event.actorInstanceId === warden.instanceId,
+          event.actorInstanceId === warden.instanceId &&
+          event.targetInstanceId !== bruiser.instanceId,
       )
       .map((event) => [
         event.targetInstanceId,
@@ -857,6 +859,17 @@ test("Ring Warden casts Shiny Ring before its own attack damage", () => {
       [warden.instanceId, 1, 1],
       [filler.instanceId, 1, 1],
     ],
+  );
+  const bruiserGrowth = window.find(
+    (event) =>
+      event.type === "buff" &&
+      event.targetInstanceId === bruiser.instanceId &&
+      event.message.includes("深渊打手"),
+  );
+  assert.equal(bruiserGrowth?.actorInstanceId, warden.instanceId);
+  assert.deepEqual(
+    [bruiserGrowth?.attackDelta, bruiserGrowth?.healthDelta],
+    [1, 1],
   );
 });
 
@@ -1013,7 +1026,7 @@ test("v29 saves migrate through v31 while preserving current fields and excludin
   assert.equal(migrated.contentVersion, CURRENT_ROSTER_VERSION);
   assert.equal(
     CURRENT_ROSTER_VERSION,
-    "battlegrounds-36.0.3-247416-v38",
+    "battlegrounds-36.0.3-247416-v50",
   );
   const saved = humanPlayer(migrated).board[0];
   assert.equal(saved.effectSupport, "complete");

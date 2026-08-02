@@ -561,6 +561,115 @@ test("a full-board Golden Hungry Forager spends its two summons across separate 
   );
 });
 
+test("a hand Murloc can be pulled only once per combat across multiple Hungry Foragers", () => {
+  const state = createGame(0x5d00d);
+  const human = humanPlayer(state);
+  const firstForager = definitionMinion(
+    "BG27_556",
+    "shared-pull-first-forager",
+    { attack: 0, health: 1 },
+  );
+  const secondForager = definitionMinion(
+    "BG27_556",
+    "shared-pull-second-forager",
+    { attack: 0, health: 1 },
+  );
+  const handMurloc = definitionMinion(
+    "BG34_638t",
+    "shared-pull-hand-murloc",
+    {
+      tribe: "murloc",
+      tribes: ["murloc"],
+      attack: 29,
+      health: 1,
+    },
+  );
+  human.board = [
+    firstForager,
+    secondForager,
+    ...Array.from({ length: 4 }, (_, index) =>
+      filler(`shared-pull-filler-${index}`, { health: 1 }),
+    ),
+  ];
+  human.hand = [handMurloc];
+  isolateTwoPlayerBattle(state, [
+    enemyWall("shared-pull-wall"),
+  ]);
+
+  const firstCombat = gameReducer(state, { type: "END_TURN" });
+  const firstBattle = firstCombat.lastBattle;
+  assert.ok(firstBattle);
+  const firstSourceSummons = foragerSummons(
+    firstBattle.events,
+    firstForager.instanceId,
+  );
+  const repeatedSummons = foragerSummons(
+    firstBattle.events,
+    secondForager.instanceId,
+  );
+  const [firstSummon] = firstSourceSummons;
+  const sourceInstanceIds = new Set([
+    firstForager.instanceId,
+    secondForager.instanceId,
+  ]);
+  const startEvents = firstBattle.events.filter(
+    (event) =>
+      event.type === "startOfCombat" &&
+      sourceInstanceIds.has(event.actorInstanceId ?? ""),
+  );
+  const firstSummonedDeath = firstBattle.events.find(
+    (event) =>
+      event.type === "death" &&
+      event.actorInstanceId === firstSummon?.targetInstanceId,
+  );
+
+  assert.ok(firstSummon);
+  assert.ok(firstSummonedDeath);
+  assert.equal(startEvents.length, 2);
+  assert.ok(
+    startEvents.every(
+      (event) => event.index < firstSummonedDeath.index,
+    ),
+  );
+  assert.equal(
+    firstSourceSummons.length + repeatedSummons.length,
+    1,
+  );
+  assert.equal(repeatedSummons.length, 0);
+  assert.deepEqual(
+    humanPlayer(firstCombat).hand.map((card) => card.instanceId),
+    [handMurloc.instanceId],
+  );
+
+  const nextRecruit = gameReducer(firstCombat, { type: "CONTINUE" });
+  isolateTwoPlayerBattle(nextRecruit, [
+    enemyWall("shared-pull-next-wall"),
+  ]);
+  const secondCombat = gameReducer(nextRecruit, { type: "END_TURN" });
+  const secondBattle = secondCombat.lastBattle;
+  assert.ok(secondBattle);
+  const secondRoundSummons = [
+    ...foragerSummons(
+      secondBattle.events,
+      firstForager.instanceId,
+    ),
+    ...foragerSummons(
+      secondBattle.events,
+      secondForager.instanceId,
+    ),
+  ];
+  assert.equal(secondRoundSummons.length, 1);
+  assert.notEqual(
+    secondRoundSummons[0].targetInstanceId,
+    firstSummon.targetInstanceId,
+  );
+  assert.ok(
+    humanPlayer(secondCombat).hand.some(
+      (card) => card.instanceId === handMurloc.instanceId,
+    ),
+  );
+});
+
 test("a full board delays Hungry Forager until a slot opens and the queue survives its source", () => {
   const state = createGame(0x5d004);
   const human = humanPlayer(state);
@@ -1119,7 +1228,7 @@ test("v27 saves migrate through v31 with refreshed Golden Forager metadata and n
 
   assert.equal(
     CURRENT_ROSTER_VERSION,
-    "battlegrounds-36.0.3-247416-v38",
+    "battlegrounds-36.0.3-247416-v50",
   );
   assert.equal(
     migratedState.contentVersion,

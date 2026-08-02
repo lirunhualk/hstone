@@ -9,10 +9,12 @@ import {
   gameReducer,
   getLegalSpellcraftTargetIds,
   getLegalTavernSpellTargetIds,
+  getRefreshCost,
   getSpellcraftDefinition,
   getTavernSpellPurchaseQuote,
   getTavernSpellDefinition,
   getUpgradeCost,
+  minionHasTribe,
   tavernSpellIsAvailable,
   type BloodGemSpellInstance,
   type BoardMinionInstance,
@@ -26,6 +28,7 @@ import {
 import {
   CURRENT_ROSTER_VERSION,
   MINION_DEFINITIONS,
+  TIER_SEVEN_MINION_DEFINITIONS,
   getMinionDefinition,
 } from "../lib/game/content.ts";
 import {
@@ -862,37 +865,16 @@ test("the playable Tavern Spell pool covers all five current Solo Tier 6 spells"
   }
 });
 
-test("Tavern Spell support metadata exposes the three bounded local approximations", () => {
+test("every playable Tavern Spell exposes complete printed behavior", () => {
   const partial = TAVERN_SPELL_DEFINITIONS.filter(
     (definition) => definition.effectSupport === "partial",
   );
-  assert.deepEqual(
-    partial.map((definition) => definition.cardId).sort(),
-    ["BG30_802", "BG30_804", "EBG_Spell_037"],
-  );
-  assert.match(
-    getTavernSpellDefinition(
-      "tavern-spell-careful-mutation",
-    ).implementationNote ?? "",
-    /6星目标/u,
-  );
-  assert.match(
-    getTavernSpellDefinition(
-      "tavern-spell-unmasked-identity",
-    ).implementationNote ?? "",
-    /4个已完整支持的英雄技能/u,
-  );
-  assert.match(
-    getTavernSpellDefinition(
-      "tavern-spell-knockoff-wisdomball",
-    ).implementationNote ?? "",
-    /7星随从页面/u,
-  );
+  assert.deepEqual(partial, []);
   assert.equal(
     TAVERN_SPELL_DEFINITIONS.filter(
       (definition) => definition.effectSupport === "complete",
     ).length,
-    62,
+    65,
   );
 });
 
@@ -914,7 +896,7 @@ test("Rime or Reason uses the exact 30 stat-granting Tavern Spell card IDs", () 
   );
 });
 
-test("the pinned pool exposes all nine ordinary Spellcraft definitions", () => {
+test("the pinned pool exposes all ten ordinary Spellcraft definitions", () => {
   const expected = [
     [
       "spellcraft-crab-rider",
@@ -988,6 +970,14 @@ test("the pinned pool exposes all nine ordinary Spellcraft definitions", () => {
       "meditation",
       "none",
     ],
+    [
+      "spellcraft-sirens-song",
+      "BG27_514t",
+      7,
+      "海妖之歌",
+      "sirensSong",
+      "shop",
+    ],
   ] as const;
 
   assert.equal(SPELLCRAFT_DEFINITIONS.length, expected.length);
@@ -1006,6 +996,17 @@ test("the pinned pool exposes all nine ordinary Spellcraft definitions", () => {
     assert.equal(definition.effect, effect);
     assert.equal(definition.target, target);
   }
+  const sirensSong = getSpellcraftDefinition("spellcraft-sirens-song");
+  assert.equal(sirensSong.goldenCardId, "BG27_514_Gt");
+  assert.equal(
+    sirensSong.description,
+    "选择酒馆中的一个随从（海巫扎尔吉拉除外），获取一张复制。",
+  );
+  assert.equal(
+    sirensSong.goldenDescription,
+    "选择酒馆中的一个随从（海巫扎尔吉拉除外），获取2张复制。",
+  );
+  assert.equal(sirensSong.randomlyGeneratable, false);
 });
 
 test("playable Tavern Spell text removes client-only dynamic branches", () => {
@@ -1838,7 +1839,6 @@ test("Careful Mutation preserves final stats while replacing identity and pool o
   for (const definitionId of Object.keys(state.pool)) {
     state.pool[definitionId] = 0;
   }
-  state.pool.BG26_175 = 1;
   const mutation = tavernSpell(
     "tavern-spell-careful-mutation",
     "tier-six-mutation",
@@ -1857,10 +1857,14 @@ test("Careful Mutation preserves final stats while replacing identity and pool o
     targetInstanceId: "tier-six-mutation-target",
   });
   player = humanPlayer(state);
-  assert.equal(player.board[0].definitionId, "BG26_175");
-  assert.equal(player.board[0].tier, 6);
+  assert.equal(player.board[0].tier, 7);
+  assert.ok(
+    TIER_SEVEN_MINION_DEFINITIONS.some(
+      (definition) => definition.id === player.board[0].definitionId,
+    ),
+  );
+  assert.equal(player.board[0].poolCopies, 0);
   assert.equal(state.pool.BG33_885, 1);
-  assert.equal(state.pool.BG26_175, 0);
 
   let shopState = createGame(0x71811);
   let shopPlayer = humanPlayer(shopState);
@@ -4433,6 +4437,34 @@ test("Saloon's Finest fills all seven Tavern slots at Tier 6", () => {
   assert.equal(player.shop.length, 0);
 });
 
+test("Saloon's Finest triggers Ysera's extra Dragon after its spell-only Refresh", () => {
+  let state = createGameWithTribes(["dragon"], 0x7512);
+  let player = humanPlayer(state);
+  player.heroPowerId = "hero-power-dream-portal";
+  player.heroPowerCounters = {};
+  player.tavernTier = 5;
+  player.hand = [
+    tavernSpell(
+      "tavern-spell-saloons-finest",
+      "ysera-saloons-finest",
+    ),
+  ];
+
+  state = gameReducer(state, {
+    type: "CAST_TAVERN_SPELL",
+    cardInstanceId: "ysera-saloons-finest",
+  });
+  player = humanPlayer(state);
+  const spellOffers = [
+    ...(player.spellShop ? [player.spellShop] : []),
+    ...player.additionalSpellShop,
+  ];
+  assert.equal(player.spellOnlyRefreshActive, true);
+  assert.equal(spellOffers.length, 6);
+  assert.equal(player.shop.length, 1);
+  assert.ok(minionHasTribe(player.shop[0], "dragon"));
+});
+
 test("Knockoff Wisdomball grants exactly two paid helpful Refreshes and never creates an empty Tavern", () => {
   let state = createGame(0x7520);
   let player = humanPlayer(state);
@@ -4512,7 +4544,9 @@ test("Knockoff Wisdomball grants exactly two paid helpful Refreshes and never cr
     exhaustedPlayer.shop.every(
       (minion) =>
         minion.poolCopies === 0 &&
-        minion.poolCopiesOnPurchase === 1,
+        (minion.tier === 7
+          ? minion.poolCopiesOnPurchase === undefined
+          : minion.poolCopiesOnPurchase === 1),
     ),
     "Wisdomball overflow must not expand the finite shared pool",
   );
@@ -4532,7 +4566,7 @@ test("Knockoff Wisdomball grants exactly two paid helpful Refreshes and never cr
       card.instanceId === claimedOffer.instanceId,
   );
   assert.ok(claimedMinion);
-  assert.equal(claimedMinion.poolCopies, 1);
+  assert.equal(claimedMinion.poolCopies, claimedMinion.tier === 7 ? 0 : 1);
   assert.equal(claimedMinion.poolCopiesOnPurchase, undefined);
   claimedPlayer.hand = [];
   claimedPlayer.board = [claimedMinion];
@@ -4540,7 +4574,10 @@ test("Knockoff Wisdomball grants exactly two paid helpful Refreshes and never cr
     type: "SELL_MINION",
     boardIndex: 0,
   });
-  assert.equal(claimed.pool[claimedMinion.definitionId], 1);
+  assert.equal(
+    claimed.pool[claimedMinion.definitionId] ?? 0,
+    claimedMinion.tier === 7 ? 0 : 1,
+  );
 
   exhaustedPlayer.gold = 1;
   exhausted = gameReducer(exhausted, { type: "REFRESH_SHOP" });
@@ -4550,7 +4587,7 @@ test("Knockoff Wisdomball grants exactly two paid helpful Refreshes and never cr
   );
 });
 
-test("Wisdomball uses plain warband copies, a full Legendary page, and enough copies for a triple", () => {
+test("Wisdomball uses plain warband copies, complete Tier 7 and Legendary pages, and enough copies for a triple", () => {
   let firstCopyPoolBefore = 0;
   let secondCopyPoolBefore = 0;
   const copied = gameWithHelpfulRefresh(
@@ -4611,6 +4648,18 @@ test("Wisdomball uses plain warband copies, a full Legendary page, and enough co
         getMinionDefinition(minion.definitionId).legendary === true,
     ),
   );
+
+  const tierSeven = gameWithHelpfulRefresh(
+    "tierSeven",
+    (_state, player) => {
+      player.board = [];
+      player.hand = [];
+    },
+  );
+  const tierSevenShop = humanPlayer(tierSeven).shop;
+  assert.equal(tierSevenShop.length, 7);
+  assert.ok(tierSevenShop.every((minion) => minion.tier === 7));
+  assert.ok(tierSevenShop.every((minion) => minion.poolCopies === 0));
 
   let triplePoolBefore = 0;
   const triple = gameWithHelpfulRefresh(
@@ -4782,19 +4831,32 @@ test("Hamuul's Lost Staff replaces the full Tavern with the chosen minion type",
   assert.deepEqual(exhaustedPlayer.additionalSpellShop, []);
 });
 
-test("Unmasked Identity exposes only the four implemented powers and resolves exactly once", () => {
-  assert.deepEqual(
-    new Set(HERO_POWER_DEFINITIONS.map((definition) => definition.effect)),
-    new Set([
-      "upgradeDiscount",
-      "freeRefreshAtTurnStart",
-      "gainGoldAfterUpgrade",
-      "buffCombatSummons",
-    ]),
+test("Unmasked Identity offers three unique eligible powers and resets replacement counters", () => {
+  const identityEligiblePowerIds = new Set<string>(
+    HERO_POWER_DEFINITIONS.filter(
+      (definition) =>
+        !("identityEligible" in definition) ||
+        definition.identityEligible !== false,
+    ).map((definition) => definition.id),
+  );
+  assert.ok(identityEligiblePowerIds.size > 4);
+  assert.equal(
+    identityEligiblePowerIds.has("hero-power-all-patched-up"),
+    false,
   );
   let state = createGame(0x7511);
   let player = humanPlayer(state);
-  player.heroPowerId = HERO_POWER_DEFINITIONS[0].id;
+  const originalHeroPowerId = HERO_POWER_DEFINITIONS[0].id;
+  player.heroPowerId = originalHeroPowerId;
+  player.heroPowerCounters = {
+    smartSavingsGold: 7,
+    chenvaalaElementals: 2,
+    kaelthasMinions: 2,
+    taethelanSpells: 3,
+    rakanishuTurns: 12,
+    rakanishuBonus: 3,
+    staleCounter: 99,
+  };
   player.hand = [
     tavernSpell(
       "tavern-spell-unmasked-identity",
@@ -4812,10 +4874,9 @@ test("Unmasked Identity exposes only the four implemented powers and resolves ex
   assert.ok(
     pending.optionIds.every(
       (optionId) =>
-        optionId !== player.heroPowerId &&
-        HERO_POWER_DEFINITIONS.some(
-          (definition) => definition.id === optionId,
-        ),
+        optionId !== originalHeroPowerId &&
+        optionId !== "hero-power-all-patched-up" &&
+        identityEligiblePowerIds.has(optionId),
     ),
   );
   const invalid = gameReducer(state, {
@@ -4825,7 +4886,28 @@ test("Unmasked Identity exposes only the four implemented powers and resolves ex
   });
   assert.equal(invalid, state);
 
-  const chosenId = pending.optionIds[0];
+  const counterBearingEffects = new Set<string>([
+    "goldAfterSellNextTurn",
+    "upgradeDiscountAfterElementals",
+    "tavernCoinAfterThreeMinions",
+    "freeFourthTavernSpell",
+    "growingTavernSpellBuff",
+  ]);
+  const chosenId = pending.optionIds.find((optionId) => {
+    const definition = HERO_POWER_DEFINITIONS.find(
+      (candidate) => candidate.id === optionId,
+    );
+    return (
+      definition !== undefined &&
+      counterBearingEffects.has(definition.effect)
+    );
+  });
+  assert.ok(chosenId, "the fixed seed must offer a counter-bearing power");
+  const chosenDefinition = HERO_POWER_DEFINITIONS.find(
+    (definition) => definition.id === chosenId,
+  );
+  assert.ok(chosenDefinition);
+  const replacementRound = state.round;
   state = gameReducer(state, {
     type: "RESOLVE_INTERACTION",
     interactionId: pending.interactionId,
@@ -4835,6 +4917,82 @@ test("Unmasked Identity exposes only the four implemented powers and resolves ex
   assert.equal(player.heroPowerId, chosenId);
   assert.equal(state.pendingInteraction, null);
   assert.equal(player.tavernSpellsCastThisTurn, 1);
+  let expectedCounters: Record<string, number> = {};
+  switch (chosenDefinition.effect) {
+    case "goldAfterSellNextTurn":
+      expectedCounters = { smartSavingsGold: 0 };
+      break;
+    case "upgradeDiscountAfterElementals":
+      expectedCounters = { chenvaalaElementals: 0 };
+      break;
+    case "tavernCoinAfterThreeMinions":
+      expectedCounters = { kaelthasMinions: 0 };
+      break;
+    case "freeFourthTavernSpell":
+      expectedCounters = { taethelanSpells: 0 };
+      break;
+    case "growingTavernSpellBuff":
+      expectedCounters = {
+        rakanishuTurns:
+          (Math.floor(Math.max(1, replacementRound) / 4) + 1) * 4,
+        rakanishuBonus: 1,
+      };
+      break;
+  }
+  assert.deepEqual(player.heroPowerCounters, expectedCounters);
+});
+
+test("Unmasked Identity grants Nozdormu's free Refresh starting next turn, not immediately", () => {
+  let state: GameState | null = null;
+  for (let seed = 1; seed <= 512; seed += 1) {
+    const candidate = createGame(seed, 999);
+    const candidatePlayer = humanPlayer(candidate);
+    candidatePlayer.heroPowerId = "hero-power-experienced-bartender";
+    candidatePlayer.heroPowerCounters = {};
+    candidatePlayer.heroRefreshAvailable = false;
+    candidatePlayer.freeRefreshes = 0;
+    candidatePlayer.helpfulRefreshes = 0;
+    candidatePlayer.hand = [
+      tavernSpell(
+        "tavern-spell-unmasked-identity",
+        `nozdormu-identity-${seed}`,
+      ),
+    ];
+    const offered = gameReducer(candidate, {
+      type: "CAST_TAVERN_SPELL",
+      cardInstanceId: `nozdormu-identity-${seed}`,
+    });
+    if (
+      offered.pendingInteraction?.kind === "heroPowerChoice" &&
+      offered.pendingInteraction.optionIds.includes(
+        "hero-power-see-the-future",
+      )
+    ) {
+      state = offered;
+      break;
+    }
+  }
+  assert.ok(state, "a deterministic seed must offer Nozdormu's Hero Power");
+  const pending = state.pendingInteraction;
+  assert.ok(pending?.kind === "heroPowerChoice");
+
+  state = gameReducer(state, {
+    type: "RESOLVE_INTERACTION",
+    interactionId: pending.interactionId,
+    optionInstanceId: "hero-power-see-the-future",
+  });
+  let player = humanPlayer(state);
+  assert.equal(player.heroPowerId, "hero-power-see-the-future");
+  assert.equal(player.heroRefreshAvailable, false);
+  assert.equal(getRefreshCost(state, player.id), 1);
+
+  state = gameReducer(state, { type: "END_TURN" });
+  assert.equal(state.phase, "combat");
+  state = gameReducer(state, { type: "CONTINUE" });
+  player = humanPlayer(state);
+  assert.equal(state.round, 2);
+  assert.equal(player.heroRefreshAvailable, true);
+  assert.equal(getRefreshCost(state, player.id), 0);
 });
 
 test("the restricted Hero Power pool applies upgrade, economy, refresh, and combat-summon effects", () => {
@@ -4869,7 +5027,8 @@ test("the restricted Hero Power pool applies upgrade, economy, refresh, and comb
   ]);
   state = gameReducer(state, { type: "END_TURN" });
   state = gameReducer(state, { type: "CONTINUE" });
-  assert.equal(humanPlayer(state).freeRefreshes, 1);
+  assert.equal(humanPlayer(state).heroRefreshAvailable, true);
+  assert.equal(humanPlayer(state).freeRefreshes, 0);
 
   player = humanPlayer(state);
   player.heroPowerId = "hero-power-sprout-it-out";
@@ -4980,11 +5139,13 @@ test("schema 10 saves migrate the complete Tier 6 spell pool to schema 11", () =
     delete (legacyPlayer as Record<string, unknown>).helpfulRefreshes;
     delete (legacyPlayer as Record<string, unknown>)
       .lastHelpfulRefreshKind;
+    delete (legacyPlayer as Record<string, unknown>).tavernSpellsCast;
   }
 
   const migrated = migrateSchema10GameState(legacy);
   assertMigratedSchema11(migrated);
   const migratedPlayer = humanPlayer(migrated);
+  assert.equal(migratedPlayer.tavernSpellsCast, 0);
   assert.equal(migratedPlayer.board[0].effectSupport, "complete");
   const migratedHandCard = migratedPlayer.hand[0];
   assert.equal(

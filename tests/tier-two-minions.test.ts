@@ -5,6 +5,7 @@ import {
   createGame,
   gameReducer,
   getTavernSpellDefinition,
+  type BloodGemSpellInstance,
   type BoardMinionInstance,
   type GameState,
   type PlayerState,
@@ -89,6 +90,18 @@ function tavernSpell(
   };
 }
 
+function bloodGem(instanceId: string): BloodGemSpellInstance {
+  return {
+    kind: "bloodGem",
+    instanceId,
+    definitionId: "blood-gem",
+    cardId: "BG20_GEM",
+    name: "鲜血宝石",
+    description: "使一个友方随从获得+1/+1。",
+    spellFamily: "bloodGem",
+  };
+}
+
 function minionsInHand(player: PlayerState): BoardMinionInstance[] {
   return player.hand.filter(
     (card): card is BoardMinionInstance => card.kind === "minion",
@@ -160,6 +173,7 @@ function handStatsById(
 }
 
 const COMPLETE_TIER_TWO_CARD_IDS = [
+  "BG21_018",
   "BG26_501",
   "BG29_300",
   "BG32_170",
@@ -171,6 +185,239 @@ test("the Tier 2 batch is explicitly marked complete", () => {
       getMinionDefinition(definitionId).effectSupport,
       "complete",
       `${definitionId} must not advertise full support before its whole text works`,
+    );
+  }
+  assert.deepEqual(getMinionDefinition("BG21_018").afterSelfGainsAttack, {
+    health: 1,
+    goldenMode: "repeat",
+  });
+  assert.equal(
+    getMinionDefinition("BG21_018").goldenDescription,
+    "每当本随从通过其他来源获得攻击力时，获得+1生命值，触发两次。",
+  );
+});
+
+test("挑衅的船工每次从其他来源获得攻击力时获得生命值，金色触发两次", () => {
+  for (const [index, golden] of [false, true].entries()) {
+    let state = createGame(0xf1f0 + index);
+    let player = humanPlayer(state);
+    const swabbie = definitionMinion("BG21_018", `deck-swabbie-${golden}`, {
+      golden,
+      attack: golden ? 4 : 2,
+      health: golden ? 10 : 5,
+    });
+    player.board = [swabbie];
+    player.hand = [
+      tavernSpell("tavern-spell-pointy-arrow", `swabbie-arrow-a-${golden}`),
+      tavernSpell("tavern-spell-pointy-arrow", `swabbie-arrow-b-${golden}`),
+      tavernSpell("tavern-spell-fortify", `swabbie-fortify-${golden}`),
+    ];
+
+    for (const cardInstanceId of [
+      `swabbie-arrow-a-${golden}`,
+      `swabbie-arrow-b-${golden}`,
+      `swabbie-fortify-${golden}`,
+    ]) {
+      state = gameReducer(state, {
+        type: "CAST_TAVERN_SPELL",
+        cardInstanceId,
+        targetInstanceId: swabbie.instanceId,
+      });
+    }
+
+    player = humanPlayer(state);
+    const buffed = player.board.find(
+      (minion) => minion.instanceId === swabbie.instanceId,
+    );
+    assert.ok(buffed);
+    assert.deepEqual(
+      [buffed.attack, buffed.health],
+      golden ? [12, 17] : [10, 10],
+    );
+  }
+});
+
+test("挑衅的船工会响应鲜血宝石的混合增益且每颗只触发一次", () => {
+  for (const [index, golden] of [false, true].entries()) {
+    let state = createGame(0xf1f2 + index);
+    let player = humanPlayer(state);
+    const swabbie = definitionMinion("BG21_018", `gem-swabbie-${golden}`, {
+      golden,
+      attack: golden ? 4 : 2,
+      health: golden ? 10 : 5,
+    });
+    player.board = [swabbie];
+    player.hand = [bloodGem(`swabbie-gem-${golden}`)];
+
+    state = gameReducer(state, {
+      type: "CAST_BLOOD_GEM",
+      cardInstanceId: `swabbie-gem-${golden}`,
+      targetInstanceId: swabbie.instanceId,
+    });
+    player = humanPlayer(state);
+    const buffed = player.board.find(
+      (minion) => minion.instanceId === swabbie.instanceId,
+    );
+    assert.ok(buffed);
+    assert.deepEqual(
+      [buffed.attack, buffed.health],
+      golden ? [5, 13] : [3, 7],
+    );
+  }
+});
+
+test("鲍勃酒馆里的挑衅的船工被加攻时也会触发生命值", () => {
+  for (const [index, golden] of [false, true].entries()) {
+    let state = createGame(0xf1f4 + index);
+    let player = humanPlayer(state);
+    const swabbie = definitionMinion("BG21_018", `shop-swabbie-${golden}`, {
+      golden,
+      attack: golden ? 4 : 2,
+      health: golden ? 10 : 5,
+    });
+    player.board = [];
+    player.shop = [swabbie];
+    player.hand = [
+      tavernSpell("tavern-spell-pointy-arrow", `shop-arrow-${golden}`),
+    ];
+
+    state = gameReducer(state, {
+      type: "CAST_TAVERN_SPELL",
+      cardInstanceId: `shop-arrow-${golden}`,
+      targetInstanceId: swabbie.instanceId,
+    });
+    player = humanPlayer(state);
+    const buffed = player.shop.find(
+      (minion) => minion.instanceId === swabbie.instanceId,
+    );
+    assert.ok(buffed);
+    assert.deepEqual(
+      [buffed.attack, buffed.health],
+      golden ? [8, 12] : [6, 6],
+    );
+  }
+});
+
+test("金色时空船长钩尾的两次加攻会让挑衅的船工触发两次", () => {
+  let state = createGame(0xf1f6);
+  let player = humanPlayer(state);
+  const swabbie = definitionMinion("BG21_018", "hooktail-swabbie");
+  const hooktail = definitionMinion("BG27_005", "golden-hooktail", {
+    golden: true,
+    attack: getMinionDefinition("BG27_005").attack * 2,
+    health: getMinionDefinition("BG27_005").health * 2,
+  });
+  player.board = [swabbie, hooktail];
+  player.hand = [
+    tavernSpell("tavern-spell-fortify", "hooktail-trigger-spell"),
+  ];
+
+  state = gameReducer(state, {
+    type: "CAST_TAVERN_SPELL",
+    cardInstanceId: "hooktail-trigger-spell",
+    targetInstanceId: hooktail.instanceId,
+  });
+  player = humanPlayer(state);
+  const buffed = player.board.find(
+    (minion) => minion.instanceId === swabbie.instanceId,
+  );
+  assert.ok(buffed);
+  assert.deepEqual([buffed.attack, buffed.health], [4, 7]);
+});
+
+test("重复的回合结束加攻会逐次触发挑衅的船工", () => {
+  let state = createGame(0xf1f7);
+  const player = humanPlayer(state);
+  const swabbie = definitionMinion("BG21_018", "repeated-eot-swabbie");
+  player.board = [
+    swabbie,
+    definitionMinion("BG35_701", "repeated-eot-pirate"),
+  ];
+  player.cardsPlayedThisTurn = 2;
+  keepOnlyOneOpponent(state, [
+    definitionMinion("BG35_801", "repeated-eot-wall", {
+      attack: 0,
+      health: 100,
+    }),
+  ]);
+
+  state = gameReducer(state, { type: "END_TURN" });
+  const buffed = humanPlayer(state).board.find(
+    (minion) => minion.instanceId === swabbie.instanceId,
+  );
+  assert.ok(buffed);
+  assert.deepEqual([buffed.attack, buffed.health], [8, 17]);
+});
+
+test("挑衅的船工的战斗攻击增益会触发生命值且不会写回招募阶段", () => {
+  for (const [index, golden] of [false, true].entries()) {
+    let state = createGame(0xf1f4 + index);
+    const player = humanPlayer(state);
+    const swabbie = definitionMinion("BG21_018", `combat-swabbie-${golden}`, {
+      golden,
+      attack: golden ? 4 : 2,
+      health: golden ? 10 : 5,
+    });
+    player.board = [swabbie];
+    player.nextCombatAttackBonus = 1;
+    player.nextCombatDoubleLeftmostAttack = [{ attack: 0, health: 0 }];
+    keepOnlyOneOpponent(state, [
+      definitionMinion("BG35_801", `combat-swabbie-wall-${golden}`, {
+        attack: 1,
+        health: 30,
+      }),
+    ]);
+
+    state = gameReducer(state, { type: "END_TURN" });
+    const initial = state.lastBattle?.initialBoards[state.humanPlayerId]?.find(
+      (minion) => minion.instanceId === swabbie.instanceId,
+    );
+    assert.ok(initial);
+    assert.deepEqual(
+      [initial.attack, initial.health],
+      golden ? [4, 10] : [2, 5],
+    );
+    const combatBuff = state.lastBattle?.events.find(
+      (event) =>
+        event.type === "buff" &&
+        event.targetInstanceId === swabbie.instanceId &&
+        event.message.includes("转瞬活力"),
+    );
+    assert.ok(combatBuff?.minion);
+    assert.deepEqual(
+      [
+        combatBuff.attackDelta,
+        combatBuff.healthDelta,
+        combatBuff.minion.attack,
+        combatBuff.minion.health,
+      ],
+      golden ? [1, 2, 5, 12] : [1, 1, 3, 6],
+    );
+    const doubled = state.lastBattle?.events.find(
+      (event) =>
+        event.type === "buff" &&
+        event.targetInstanceId === swabbie.instanceId &&
+        event.message.includes("诺兹多姆的子嗣"),
+    );
+    assert.ok(doubled?.minion);
+    assert.deepEqual(
+      [
+        doubled.attackDelta,
+        doubled.healthDelta,
+        doubled.minion.attack,
+        doubled.minion.health,
+      ],
+      golden ? [5, 2, 10, 14] : [3, 1, 6, 7],
+    );
+
+    state = gameReducer(state, { type: "CONTINUE" });
+    const persistent = humanPlayer(state).board.find(
+      (minion) => minion.instanceId === swabbie.instanceId,
+    );
+    assert.ok(persistent);
+    assert.deepEqual(
+      [persistent.attack, persistent.health],
+      golden ? [4, 10] : [2, 5],
     );
   }
 });

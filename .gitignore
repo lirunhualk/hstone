@@ -9,6 +9,10 @@ __pycache__/
 # Distribution / packaging
 .Python
 build/
+# The root Vite Sites integration is source code, not a build artifact.
+!/build/
+/build/*
+!/build/sites-vite-plugin.ts
 develop-eggs/
 dist/
 downloads/

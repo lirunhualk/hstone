@@ -300,19 +300,19 @@ test("keeps nested attachment contributions additive and visible", () => {
   );
 });
 
-test("propagates partial rules support and attachment card text to the host", () => {
+test("propagates complete rules support and attachment card text to the host", () => {
   const state = createGame(4012);
   const human = humanPlayer(state);
-  const target = definitionMinion("BG29_611", "partial-host");
-  const source = definitionMinion("BG35_341", "partial-source");
-  assert.equal(source.effectSupport, "partial");
+  const target = definitionMinion("BG29_611", "complete-host");
+  const source = definitionMinion("BG35_341", "complete-source");
+  assert.equal(source.effectSupport, "complete");
   human.board = [target];
   human.hand = [source];
 
   const next = gameReducer(state, magneticAction(source, target));
   const host = humanPlayer(next).board[0];
-  assert.equal(host.effectSupport, "partial");
-  assert.equal(host.attachments[0].effectSupport, "partial");
+  assert.equal(host.effectSupport, "complete");
+  assert.equal(host.attachments[0].effectSupport, "complete");
   assert.equal(host.attachments[0].description, source.description);
 });
 
@@ -871,7 +871,7 @@ test("Scrap Scraper gains a pooled Magnetic Mech in combat and keeps it after Co
   );
 });
 
-test("Golden Scrap Scraper with Golden Titus resolves six independent gains", () => {
+test("Golden Scrap Scraper defers six Titus gains into two Recruit triples", () => {
   const state = createGame(4021);
   const human = humanPlayer(state);
   human.tavernTier = 1;
@@ -916,9 +916,21 @@ test("Golden Scrap Scraper with Golden Titus resolves six independent gains", ()
     true,
   );
   assert.equal(next.pool.BG26_146, 0);
-  assert.equal(nextHuman.hand.length, 2);
+  assert.equal(nextHuman.hand.length, 6);
   assert.equal(
     nextHuman.hand.every(
+      (card) =>
+        card.kind === "minion" &&
+        card.definitionId === "BG26_146" &&
+        !card.golden,
+    ),
+    true,
+  );
+  const recruit = gameReducer(next, { type: "CONTINUE" });
+  const recruitHuman = humanPlayer(recruit);
+  assert.equal(recruitHuman.hand.length, 2);
+  assert.equal(
+    recruitHuman.hand.every(
       (card) =>
         card.kind === "minion" &&
         card.definitionId === "BG26_146" &&
@@ -1017,7 +1029,7 @@ test("Scrap Scraper does not touch the pool when the hand is already full", () =
   assert.equal(events[0].minion, undefined);
 });
 
-test("Scrap Scraper resolves triples between Titus gain attempts to free hand space", () => {
+test("Scrap Scraper does not free hand space until its deferred Recruit triple", () => {
   const state = createGame(4024);
   const human = humanPlayer(state);
   human.tavernTier = 1;
@@ -1060,22 +1072,29 @@ test("Scrap Scraper resolves triples between Titus gain attempts to free hand sp
     ) ?? [];
   assert.deepEqual(
     events.map((event) => event.cardGainResult),
-    ["added", "added"],
+    ["added", "handFull"],
   );
-  assert.equal(next.pool.BG26_146, 0);
-  assert.equal(nextHuman.hand.length, 9);
-  const magnetics = nextHuman.hand.filter(
+  assert.equal(next.pool.BG26_146, 1);
+  assert.equal(nextHuman.hand.length, 10);
+  const combatMagnetics = nextHuman.hand.filter(
     (card): card is BoardMinionInstance =>
       card.kind === "minion" &&
       card.definitionId === "BG26_146",
   );
-  assert.equal(magnetics.length, 2);
+  assert.equal(combatMagnetics.length, 3);
+  assert.equal(
+    combatMagnetics.some((minion) => minion.golden),
+    false,
+  );
+
+  const recruit = gameReducer(next, { type: "CONTINUE" });
+  const magnetics = humanPlayer(recruit).hand.filter(
+    (card): card is BoardMinionInstance =>
+      card.kind === "minion" && card.definitionId === "BG26_146",
+  );
+  assert.equal(magnetics.length, 1);
   assert.equal(
     magnetics.filter((minion) => minion.golden).length,
-    1,
-  );
-  assert.equal(
-    magnetics.filter((minion) => !minion.golden).length,
     1,
   );
 });
@@ -1516,7 +1535,7 @@ test("Mobile Projection filters non-Magnetic and higher-Tier pool copies before 
   assert.equal(next.pool.BG_BOT_911, 4);
 });
 
-test("Mobile Projection resolves a triple between Golden Rally gain attempts", () => {
+test("Mobile Projection defers its Rally triple and can hit the hand limit", () => {
   const state = createGame(4036);
   const human = humanPlayer(state);
   human.tavernTier = 1;
@@ -1569,22 +1588,29 @@ test("Mobile Projection resolves a triple between Golden Rally gain attempts", (
     ) ?? [];
   assert.deepEqual(
     events.map((event) => event.cardGainResult),
-    ["added", "added"],
+    ["added", "handFull"],
   );
-  assert.equal(next.pool.BG26_146, 0);
-  assert.equal(nextHuman.hand.length, 9);
-  const magnetics = nextHuman.hand.filter(
+  assert.equal(next.pool.BG26_146, 1);
+  assert.equal(nextHuman.hand.length, 10);
+  const combatMagnetics = nextHuman.hand.filter(
     (card): card is BoardMinionInstance =>
       card.kind === "minion" &&
       card.definitionId === "BG26_146",
   );
-  assert.equal(magnetics.length, 2);
+  assert.equal(combatMagnetics.length, 3);
+  assert.equal(
+    combatMagnetics.some((minion) => minion.golden),
+    false,
+  );
+
+  const recruit = gameReducer(next, { type: "CONTINUE" });
+  const magnetics = humanPlayer(recruit).hand.filter(
+    (card): card is BoardMinionInstance =>
+      card.kind === "minion" && card.definitionId === "BG26_146",
+  );
+  assert.equal(magnetics.length, 1);
   assert.equal(
     magnetics.filter((minion) => minion.golden).length,
-    1,
-  );
-  assert.equal(
-    magnetics.filter((minion) => !minion.golden).length,
     1,
   );
 });

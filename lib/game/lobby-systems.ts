@@ -1,0 +1,451 @@
+import type {
+  TavernSpellDefinition,
+  Tribe,
+  TrinketTier,
+} from "./types.ts";
+import { getBuddyDefinitionIdForHeroPower } from "./buddies.ts";
+import { heroPowerCanBeManuallyActivated } from "./hero-powers.ts";
+import trinketSnapshot from "./generated/battlegrounds-trinkets-36.0.3-247416.zhCN.json" with {
+  type: "json",
+};
+
+export const LESSER_TRINKET_ROUND = 6;
+export const GREATER_TRINKET_ROUND = 9;
+
+const SOUS_CHEF_LABEL_CARD_ID = "BG35_MagicItem_801";
+const MAXWELL_STICKER_CARD_IDS = new Set([
+  "BG35_MagicItem_803",
+  "BG35_MagicItem_803t",
+]);
+
+export type TrinketEffect =
+  | "repeatUpgradeDiscount"
+  | "growMaxGold"
+  | "buffAfterPurchase"
+  | "goldenizerSupply"
+  | "bobsTipJar"
+  | "freeTavernSpells"
+  | "growingTavernSpellBuff"
+  | "officialTrinket";
+
+export interface TrinketDefinition {
+  id: string;
+  cardId: string;
+  name: string;
+  tier: TrinketTier;
+  cost: number;
+  description: string;
+  effect: TrinketEffect;
+  /** Types printed at the bottom of the Trinket card. Empty means neutral. */
+  associatedTribes: readonly Tribe[];
+  /** Related minion or spell CardIDs supplied by the fixed client build. */
+  relatedCardIds: readonly string[];
+  /** Removed Trinkets stay registered only so old local saves remain readable. */
+  inPool: boolean;
+  dbfId?: number;
+  sourceSlug?: string;
+  attack?: number;
+  health?: number;
+  count?: number;
+}
+
+const SOURCE_TRIBE_TO_LOCAL = {
+  BEAST: "beast",
+  DEMON: "demon",
+  DRAGON: "dragon",
+  ELEMENTAL: "elemental",
+  MECHANICAL: "mech",
+  MURLOC: "murloc",
+  NAGA: "naga",
+  PIRATE: "pirate",
+  QUILBOAR: "quilboar",
+  UNDEAD: "undead",
+} as const satisfies Readonly<Record<string, Tribe>>;
+
+type SourceTribe = keyof typeof SOURCE_TRIBE_TO_LOCAL;
+
+function mapTrinketTribe(sourceTribe: string): Tribe {
+  const tribe = SOURCE_TRIBE_TO_LOCAL[sourceTribe as SourceTribe];
+  if (!tribe) {
+    throw new Error(`Unknown Trinket associated tribe: ${sourceTribe}`);
+  }
+  return tribe;
+}
+
+const CURRENT_RULE_OVERRIDES: Readonly<
+  Record<
+    string,
+    Pick<TrinketDefinition, "effect"> &
+      Partial<Pick<TrinketDefinition, "attack" | "health" | "count">>
+  >
+> = {
+  BG30_MagicItem_435: { effect: "goldenizerSupply", count: 3 },
+  BG30_MagicItem_705: { effect: "repeatUpgradeDiscount", count: 3 },
+  BG30_MagicItem_847: { effect: "growMaxGold", count: 1 },
+  BG30_MagicItem_996: { effect: "bobsTipJar", count: 4 },
+};
+
+/**
+ * The complete current Solo pool from the pinned 36.0.3 / build-247416
+ * snapshot. The official Card Library provides pool membership and tribes;
+ * the fixed client build provides localized text, cost, tier, and CardIDs.
+ */
+export const ACTIVE_TRINKET_DEFINITIONS: readonly TrinketDefinition[] =
+  Object.freeze(
+    trinketSnapshot.trinkets.map((record) => {
+      const override = CURRENT_RULE_OVERRIDES[record.cardId];
+      return {
+        id: record.id,
+        cardId: record.cardId,
+        dbfId: record.dbfId,
+        name: record.name,
+        tier: record.tier as TrinketTier,
+        cost: record.cost,
+        description: record.description,
+        associatedTribes: record.associatedTribes.map(mapTrinketTribe),
+        relatedCardIds: [...record.relatedCardIds],
+        sourceSlug: record.sourceSlug,
+        inPool: true,
+        effect: override?.effect ?? "officialTrinket",
+        attack: override?.attack,
+        health: override?.health,
+        count: override?.count,
+      };
+    }),
+  );
+
+/** Four previously supported cards removed from the current official pool. */
+const LEGACY_REMOVED_TRINKET_DEFINITIONS = [
+  {
+    id: "lesser-trinket-kodo-leather-pouch",
+    cardId: "BG30_MagicItem_414",
+    name: "科多兽皮袋",
+    tier: "lesser",
+    cost: 3,
+    description: "在你购买一张牌后，使两个随机友方随从获得+2/+1。",
+    effect: "buffAfterPurchase",
+    associatedTribes: [],
+    relatedCardIds: [],
+    inPool: false,
+    attack: 2,
+    health: 1,
+    count: 2,
+  },
+  {
+    id: "greater-trinket-calming-candle",
+    cardId: "BG30_MagicItem_986",
+    name: "宁神蜡烛",
+    tier: "greater",
+    cost: 2,
+    description: "每回合中，你购买的前3张酒馆法术牌免费。",
+    effect: "freeTavernSpells",
+    associatedTribes: [],
+    relatedCardIds: [],
+    inPool: false,
+    count: 3,
+  },
+  {
+    id: "greater-trinket-magic-mushroom",
+    cardId: "BG32_MagicItem_700",
+    name: "魔幻蘑菇",
+    tier: "greater",
+    cost: 2,
+    description:
+      "你的酒馆法术使随从额外获得+1/+1。在每个回合开始时，提升此效果。",
+    effect: "growingTavernSpellBuff",
+    associatedTribes: [],
+    relatedCardIds: [],
+    inPool: false,
+    attack: 1,
+    health: 1,
+  },
+  {
+    id: "greater-trinket-kodo-leather-pouch",
+    cardId: "BG30_MagicItem_414t",
+    name: "科多兽皮袋",
+    tier: "greater",
+    cost: 4,
+    description: "在你购买一张牌后，使两个随机友方随从获得+4/+4。",
+    effect: "buffAfterPurchase",
+    associatedTribes: [],
+    relatedCardIds: [],
+    inPool: false,
+    attack: 4,
+    health: 4,
+    count: 2,
+  },
+] as const satisfies readonly TrinketDefinition[];
+
+/** Active definitions plus compatibility-only definitions for old saves. */
+export const TRINKET_DEFINITIONS: readonly TrinketDefinition[] = Object.freeze([
+  ...ACTIVE_TRINKET_DEFINITIONS,
+  ...LEGACY_REMOVED_TRINKET_DEFINITIONS,
+]);
+
+export type SystemEventEffect =
+  | "goldenArrowEveryThreeTurns"
+  | "startWithGoldenizer"
+  | "startWithTenGold";
+
+export interface SystemEventDefinition {
+  id: string;
+  cardId: string;
+  name: string;
+  description: string;
+  effect: SystemEventEffect;
+}
+
+/** Official Anomalies that can coexist with this local Trinket ruleset. */
+export const SYSTEM_EVENT_DEFINITIONS = [
+  {
+    id: "system-event-golden-arrow",
+    cardId: "BG31_Anomaly_124",
+    name: "点金箭",
+    description: "每3个回合，获取一张点金箭。",
+    effect: "goldenArrowEveryThreeTurns",
+  },
+  {
+    id: "system-event-perfected-alchemy",
+    cardId: "BG27_Anomaly_751",
+    name: "完美炼金术",
+    description: "开局时拥有一张点金术。",
+    effect: "startWithGoldenizer",
+  },
+  {
+    id: "system-event-money-match",
+    cardId: "BG27_Anomaly_000",
+    name: "金钱大战",
+    description: "对战开始时即有10枚铸币。",
+    effect: "startWithTenGold",
+  },
+] as const satisfies readonly SystemEventDefinition[];
+
+export const SYSTEM_TAVERN_SPELL_DEFINITIONS = [
+  {
+    id: "system-spell-goldenizer",
+    cardId: "BG26_813t",
+    name: "点金术",
+    tier: 1,
+    cost: 0,
+    description: "使一个友方随从变为金色。",
+    effectSupport: "complete",
+    effect: "goldenizer",
+    target: "friendly",
+  },
+  {
+    id: "system-spell-golden-arrow",
+    cardId: "BG31_Anomaly_124t4",
+    name: "点金箭",
+    tier: 1,
+    cost: 0,
+    description: "选择酒馆里的一个随从，将其变为金色。",
+    effectSupport: "complete",
+    effect: "goldenArrow",
+    target: "anyMinion",
+  },
+  {
+    id: "system-spell-mirror-lens",
+    cardId: trinketSnapshot.relatedCards.mirrorLens.cardId,
+    name: trinketSnapshot.relatedCards.mirrorLens.name,
+    tier: 1,
+    cost: trinketSnapshot.relatedCards.mirrorLens.cost,
+    description: trinketSnapshot.relatedCards.mirrorLens.description,
+    effectSupport: "complete",
+    effect: "mirrorLens",
+    target: "anyMinion",
+  },
+] as const satisfies readonly TavernSpellDefinition[];
+
+const TRINKET_BY_ID = new Map<string, TrinketDefinition>(
+  TRINKET_DEFINITIONS.map((definition) => [definition.id, definition]),
+);
+
+export const SOUVENIR_COPY_TRINKET_ID_PREFIX =
+  "souvenir-copy:" as const;
+export const TRIP_VOUCHER_REPLACEMENT_TRINKET_ID_PREFIX =
+  "trip-voucher-replacement:" as const;
+export const MYSTERY_CUBE_REPLACEMENT_TRINKET_ID_PREFIX =
+  "mystery-cube-replacement:" as const;
+
+export type TrinketAliasKind =
+  | "souvenirCopy"
+  | "tripVoucherReplacement"
+  | "mysteryCubeReplacement";
+
+const TRINKET_ALIAS_PREFIX_BY_KIND = {
+  souvenirCopy: SOUVENIR_COPY_TRINKET_ID_PREFIX,
+  tripVoucherReplacement:
+    TRIP_VOUCHER_REPLACEMENT_TRINKET_ID_PREFIX,
+  mysteryCubeReplacement:
+    MYSTERY_CUBE_REPLACEMENT_TRINKET_ID_PREFIX,
+} as const satisfies Readonly<Record<TrinketAliasKind, string>>;
+
+const TRINKET_ALIAS_TARGET_TIER_BY_KIND = {
+  souvenirCopy: "greater",
+  tripVoucherReplacement: "greater",
+  mysteryCubeReplacement: "lesser",
+} as const satisfies Readonly<Record<TrinketAliasKind, TrinketTier>>;
+
+export function createTrinketAliasDefinitionId(
+  kind: TrinketAliasKind,
+  targetDefinitionId: string,
+): string {
+  const target = TRINKET_BY_ID.get(targetDefinitionId);
+  const requiredTier = TRINKET_ALIAS_TARGET_TIER_BY_KIND[kind];
+  if (!target || target.tier !== requiredTier) {
+    throw new Error(
+      `The ${kind} Trinket alias requires a ${requiredTier} target: ${targetDefinitionId}`,
+    );
+  }
+  return `${TRINKET_ALIAS_PREFIX_BY_KIND[kind]}${targetDefinitionId}`;
+}
+
+export function getTrinketAliasKind(
+  id: string,
+): TrinketAliasKind | null {
+  for (const [kind, prefix] of Object.entries(
+    TRINKET_ALIAS_PREFIX_BY_KIND,
+  ) as [TrinketAliasKind, string][]) {
+    if (id.startsWith(prefix)) {
+      return kind;
+    }
+  }
+  return null;
+}
+
+function getAliasedTrinketDefinition(
+  id: string,
+): TrinketDefinition | null {
+  const kind = getTrinketAliasKind(id);
+  if (kind === null) {
+    return null;
+  }
+  const prefix = TRINKET_ALIAS_PREFIX_BY_KIND[kind];
+  const target = TRINKET_BY_ID.get(id.slice(prefix.length));
+  return target?.tier === TRINKET_ALIAS_TARGET_TIER_BY_KIND[kind]
+    ? { ...target, id }
+    : null;
+}
+const SYSTEM_EVENT_BY_ID = new Map<string, SystemEventDefinition>(
+  SYSTEM_EVENT_DEFINITIONS.map((definition) => [
+    definition.id,
+    definition,
+  ]),
+);
+const SYSTEM_TAVERN_SPELL_ID_SET = new Set<string>(
+  SYSTEM_TAVERN_SPELL_DEFINITIONS.map((definition) => definition.id),
+);
+
+export function getTrinketDefinition(id: string): TrinketDefinition {
+  const definition = TRINKET_BY_ID.get(id) ?? getAliasedTrinketDefinition(id);
+  if (!definition) {
+    throw new Error(`Unknown Trinket definition: ${id}`);
+  }
+  return definition;
+}
+
+export function isTrinketDefinitionId(id: string): boolean {
+  return TRINKET_BY_ID.has(id) || getAliasedTrinketDefinition(id) !== null;
+}
+
+const ADDITIONAL_TRINKET_SOURCE_CARD_IDS_BY_TIER = {
+  lesser: new Set(["BG35_MagicItem_816", "BG35_MagicItem_818"]),
+  greater: new Set(["BG35_MagicItem_816t"]),
+} as const satisfies Readonly<Record<TrinketTier, ReadonlySet<string>>>;
+
+/**
+ * A player normally owns one Trinket of each tier. Orb of the Unknown grants
+ * one additional Trinket of its own tier, while Souvenir Stand and Trip
+ * Vouchers retain their Lesser slot as an aliased Greater Trinket. Mystery
+ * Cube aliases still occupy its regular Lesser slot while changing the
+ * definition whose effects are active.
+ */
+export function areOwnedTrinketDefinitionIdsValid(
+  ids: readonly unknown[],
+): ids is readonly string[] {
+  if (
+    ids.length > 4 ||
+    !ids.every(
+      (id): id is string =>
+        typeof id === "string" && isTrinketDefinitionId(id),
+    ) ||
+    new Set(ids).size !== ids.length
+  ) {
+    return false;
+  }
+  const definitions = ids.map(getTrinketDefinition);
+  for (const tier of ["lesser", "greater"] as const) {
+    const tierEntries = definitions
+      .map((definition, index) => ({ definition, id: ids[index] as string }))
+      .filter(
+        ({ definition }) => definition.tier === tier,
+      );
+    const aliasCount = tierEntries.filter(({ id }) => {
+      const aliasKind = getTrinketAliasKind(id);
+      return (
+        aliasKind === "souvenirCopy" ||
+        aliasKind === "tripVoucherReplacement"
+      );
+    }).length;
+    const additionalTrinketSourceCount = tierEntries.filter(
+      ({ definition }) =>
+        ADDITIONAL_TRINKET_SOURCE_CARD_IDS_BY_TIER[tier].has(
+          definition.cardId,
+        ),
+    ).length;
+    if (
+      tierEntries.length >
+      1 + aliasCount + additionalTrinketSourceCount
+    ) {
+      return false;
+    }
+  }
+  return true;
+}
+
+export function getSystemEventDefinition(
+  id: string,
+): SystemEventDefinition {
+  const definition = SYSTEM_EVENT_BY_ID.get(id);
+  if (!definition) {
+    throw new Error(`Unknown system event definition: ${id}`);
+  }
+  return definition;
+}
+
+export function isSystemEventDefinitionId(id: string): boolean {
+  return SYSTEM_EVENT_BY_ID.has(id);
+}
+
+export function isSystemTavernSpellDefinitionId(id: string): boolean {
+  return SYSTEM_TAVERN_SPELL_ID_SET.has(id);
+}
+
+export function trinketsForTier(
+  tier: TrinketTier,
+  heroPowerId?: string | null,
+): TrinketDefinition[] {
+  return TRINKET_DEFINITIONS.filter(
+    (definition) =>
+      definition.inPool &&
+      definition.tier === tier &&
+      (heroPowerId === undefined ||
+        trinketCanBeOfferedWithHeroPower(definition, heroPowerId)),
+  ).map((definition) => ({ ...definition }));
+}
+
+export function trinketCanBeOfferedWithHeroPower(
+  definition: TrinketDefinition,
+  heroPowerId: string | null,
+): boolean {
+  if (MAXWELL_STICKER_CARD_IDS.has(definition.cardId)) {
+    return getBuddyDefinitionIdForHeroPower(heroPowerId) !== null;
+  }
+  if (definition.cardId === SOUS_CHEF_LABEL_CARD_ID) {
+    return (
+      heroPowerId !== null &&
+      heroPowerCanBeManuallyActivated(heroPowerId)
+    );
+  }
+  return true;
+}

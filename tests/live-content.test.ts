@@ -11,6 +11,7 @@ import {
   LIVE_MINION_DEFINITIONS,
   LIVE_TOKEN_DEFINITIONS,
   MINION_DEFINITIONS,
+  TIER_SEVEN_MINION_DEFINITIONS,
   TOKEN_DEFINITIONS,
   getMinionDefinition,
 } from "../lib/game/content.ts";
@@ -65,7 +66,7 @@ function expectedPlainText(html: string): string {
 test("exports the pinned current roster version through the legacy alias", () => {
   assert.equal(
     CURRENT_ROSTER_VERSION,
-    "battlegrounds-36.0.3-247416-v38",
+    "battlegrounds-36.0.3-247416-v50",
   );
   assert.equal(CLASSIC_ROSTER_VERSION, CURRENT_ROSTER_VERSION);
 });
@@ -94,15 +95,47 @@ test("maps all 237 live Solo Tavern minions as the only collectible cards", () =
   assert.equal(new Set(collectible.map((card) => card.id)).size, 237);
 });
 
+test("keeps all current Tier 7 rewards addressable but outside the Tavern pool", () => {
+  assert.equal(TIER_SEVEN_MINION_DEFINITIONS.length, 12);
+  assert.ok(
+    TIER_SEVEN_MINION_DEFINITIONS.every(
+      (definition) =>
+        definition.tier === 7 &&
+        definition.collectible === false &&
+        definition.effectSupport === "complete",
+    ),
+  );
+  assert.deepEqual(
+    TIER_SEVEN_MINION_DEFINITIONS.map((definition) => definition.id),
+    [
+      "BG23_017",
+      "BG25_034",
+      "BG26_149",
+      "BG27_016",
+      "BG27_017",
+      "BG27_514",
+      "BG31_999",
+      "BG34_145",
+      "BG34_319",
+      "BG34_320",
+      "BG34_322",
+      "BG34_950",
+    ],
+  );
+  assert.equal(getMinionDefinition("BG34_322").attack, 16);
+  assert.equal(getMinionDefinition("BG34_322").health, 32);
+});
+
 test("keeps legacy rules and tokens addressable but out of the shared pool", () => {
   assert.equal(LEGACY_RULE_DEFINITIONS.length, 36);
   assert.equal(TOKEN_DEFINITIONS.length, 9);
-  assert.equal(LIVE_TOKEN_DEFINITIONS.length, 9);
+  assert.equal(LIVE_TOKEN_DEFINITIONS.length, 44);
   assert.ok(
     [
       ...LEGACY_RULE_DEFINITIONS,
       ...TOKEN_DEFINITIONS,
       ...LIVE_TOKEN_DEFINITIONS,
+      ...TIER_SEVEN_MINION_DEFINITIONS,
     ].every(
       (definition) => definition.collectible === false,
     ),
@@ -403,7 +436,7 @@ test("maps Magnetic targets, generation, and the first complete live Magnetic ef
       health: 5,
     },
   ]);
-  assert.equal(getMinionDefinition("BG35_341").effectSupport, "partial");
+  assert.equal(getMinionDefinition("BG35_341").effectSupport, "complete");
 });
 
 test("reuses the six exact legacy rules that still match live card text", () => {
@@ -580,9 +613,10 @@ test("maps the fifth complete-effects batch to its real Golden cards and rules",
       {
         kind: "buff",
         target: "friendlyTribe",
-        tribe: "elemental",
-        attack: 4,
-        health: 4,
+         tribe: "elemental",
+         attack: 4,
+         health: 4,
+         goldenMode: "repeat",
       },
     ],
   });
@@ -740,7 +774,7 @@ test("maps Merciless Queen's Guard to the same exact Tavern Spell cast for Battl
   assert.ok(definition.printedMechanics?.includes("BACON_RALLY"));
 });
 
-test("marks every live card honestly as complete or partial", () => {
+test("marks every live card as fully implemented", () => {
   assert.ok(
     LIVE_MINION_DEFINITIONS.every(
       (definition) =>
@@ -749,13 +783,8 @@ test("marks every live card honestly as complete or partial", () => {
     ),
   );
   assert.ok(
-    LIVE_MINION_DEFINITIONS.some(
+    LIVE_MINION_DEFINITIONS.every(
       (definition) => definition.effectSupport === "complete",
-    ),
-  );
-  assert.ok(
-    LIVE_MINION_DEFINITIONS.some(
-      (definition) => definition.effectSupport === "partial",
     ),
   );
   assert.deepEqual(
@@ -765,19 +794,35 @@ test("marks every live card honestly as complete or partial", () => {
       .map((definition) => definition.id)
       .sort(),
     [
+      "BG26_801",
+      "BG28_550",
+      "BG30_129",
+      "BG31_820",
+      "BG31_835",
+      "BG32_841",
+      "BG32_842",
+      "BG33_891",
+      "BG33_920",
+      "BG35_342",
+      "BG35_890",
+      "BGS_041",
       "BG20_100",
       "BG20_203",
       "BG20_301",
       "BG21_005",
       "BG21_015",
+      "BG21_018",
       "BG24_009",
       "BG24_500",
       "BG24_707",
+      "BG24_715",
       "BG22_202",
       "BG23_002",
       "BG23_004",
       "BG23_008",
+      "BG23_009",
       "BG23_018",
+      "BG23_318",
       "BG24_018",
       "BG25_001",
       "BG25_008",
@@ -787,7 +832,10 @@ test("marks every live card honestly as complete or partial", () => {
       "BG25_013",
       "BG25_016",
       "BG25_022",
+      "BG25_032",
+      "BG25_039",
       "BG25_041",
+      "BG25_806",
       "BG25_354",
       "BG26_146",
       "BG26_135",
@@ -798,11 +846,16 @@ test("marks every live card honestly as complete or partial", () => {
       "BG26_159",
       "BG26_160",
       "BG26_162",
+      "BG26_174",
+      "BG26_175",
       "BG26_199",
       "BG26_354",
       "BG26_360",
       "BG26_501",
       "BG26_502",
+      "BG26_505",
+      "BG26_524",
+      "BG26_525",
       "BG26_529",
       "BG21_014",
       "BG26_802",
@@ -812,13 +865,17 @@ test("marks every live card honestly as complete or partial", () => {
       "BG26_810",
       "BG26_814",
       "BG26_ICC_901",
+      "BG27_002",
       "BG27_004",
       "BG27_005",
+      "BG27_084",
       "BG27_556",
       "BG28_300",
+      "BG28_303",
       "BG28_551",
       "BG28_583",
       "BG28_595",
+      "BG28_633",
       "BG28_741",
       "BG28_308",
       "BG28_309",
@@ -826,6 +883,7 @@ test("marks every live card honestly as complete or partial", () => {
       "BG29_611",
       "BG29_806",
       "BG29_807",
+      "BG29_808",
       "BG29_816",
       "BG29_813",
       "BG29_840",
@@ -837,6 +895,8 @@ test("marks every live card honestly as complete or partial", () => {
       "BG30_122",
       "BG30_123",
       "BG30_125",
+      "BG31_035",
+      "BG31_171",
       "BG31_175",
       "BG31_178",
       "BG31_330",
@@ -848,19 +908,24 @@ test("marks every live card honestly as complete or partial", () => {
       "BG31_818",
       "BG31_824",
       "BG31_859",
+      "BG31_920",
       "BG32_172",
       "BG32_170",
       "BG32_111",
       "BG32_204",
+      "BG32_234",
       "BG32_235",
       "BG32_236",
+      "BG32_237",
       "BG32_324",
+      "BG32_341",
       "BG32_430",
       "BG32_330",
       "BG32_821",
       "BG32_822",
       "BG32_835",
       "BG32_846",
+      "BG32_873",
       "BG32_880",
       "BG32_891",
       "BG33_156",
@@ -876,7 +941,9 @@ test("marks every live card honestly as complete or partial", () => {
       "BG33_821",
       "BG33_822",
       "BG33_823",
+      "BG33_825",
       "BG33_893",
+      "BG33_923",
       "BG33_809",
       "BG33_888",
       "BG33_894",
@@ -886,6 +953,7 @@ test("marks every live card honestly as complete or partial", () => {
       "BG34_175",
       "BG34_231",
       "BG34_312",
+      "BG34_321",
       "BG34_403",
       "BG34_500",
       "BG34_523",
@@ -906,32 +974,42 @@ test("marks every live card honestly as complete or partial", () => {
       "BG34_694",
       "BG34_731",
       "BG34_765",
+      "BG34_781",
       "BG34_856",
       "BG34_858",
       "BG34_865",
+      "BG34_920",
       "BG34_921",
       "BG34_922",
       "BG34_925",
       "BG34_926",
       "BG35_143",
       "BG35_123",
+      "BG35_140",
+      "BG35_141",
       "BG35_142",
       "BG35_150",
       "BG35_151",
       "BG35_152",
+      "BG35_153",
       "BG35_155",
       "BG35_334",
       "BG35_340",
+      "BG35_341",
       "BG35_431",
       "BG35_437",
       "BG35_601",
       "BG35_602",
+      "BG35_604",
       "BG35_701",
       "BG35_702",
       "BG35_801",
       "BG35_814",
       "BG35_881",
       "BG35_882",
+      "BG35_883",
+      "BG35_895",
+      "BG35_921",
       "BG35_433",
       "BG_DAL_775",
       "BG_BOT_911",
@@ -959,13 +1037,13 @@ test("marks every live card honestly as complete or partial", () => {
     LIVE_MINION_DEFINITIONS.filter(
       (definition) => definition.effectSupport === "partial",
     ).length,
-    49,
+    0,
   );
   assert.equal(
     LIVE_MINION_DEFINITIONS.filter(
       (definition) => definition.effectSupport === "complete",
     ).length,
-    188,
+    237,
   );
   assert.deepEqual(getMinionDefinition("BG35_702").interactiveBattlecry, {
     kind: "targetedBuff",

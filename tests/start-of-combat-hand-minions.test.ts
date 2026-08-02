@@ -70,6 +70,8 @@ function definitionMinion(
     effectCounters: {},
     bloodGemAttack: 0,
     bloodGemHealth: 0,
+    suppressedBloodGemAttack: 0,
+    suppressedBloodGemHealth: 0,
     temporaryAttack: 0,
     temporaryHealth: 0,
     temporaryTaunt: false,
@@ -1376,7 +1378,7 @@ test("v26 saves migrate through v31 with refreshed Golden Start-of-Combat metada
   );
   assert.equal(
     CURRENT_ROSTER_VERSION,
-    "battlegrounds-36.0.3-247416-v38",
+    "battlegrounds-36.0.3-247416-v50",
   );
   const nextPlayer = humanPlayer(migratedState);
   assert.deepEqual(nextPlayer.ghostHand, []);

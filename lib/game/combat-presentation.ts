@@ -2,6 +2,26 @@ import type { BattleEvent, BattleSummary, PlayerId } from "./types";
 
 export const COMBAT_START_INTRO_DURATION_MS = 2_800;
 
+export function combatPlaybackKey(
+  battle: Pick<
+    BattleSummary,
+    "round" | "playerAId" | "playerBId" | "isGhost"
+  >,
+): string {
+  return JSON.stringify([
+    battle.round,
+    battle.playerAId,
+    battle.playerBId,
+    battle.isGhost,
+  ]);
+}
+
+export interface CombatPlaybackSnapshot {
+  battleKey: string;
+  revealedCount: number;
+  complete: boolean;
+}
+
 export interface CombatIntroOpponent {
   opponentName: string;
   opponentIsGhost: boolean;
@@ -73,10 +93,50 @@ export function initialCombatPlayback(eventCount: number): {
   revealedCount: number;
   complete: boolean;
 } {
-  const safeEventCount = Math.max(0, Math.trunc(eventCount));
+  const safeEventCount = Number.isFinite(eventCount)
+    ? Math.max(0, Math.trunc(eventCount))
+    : 0;
   return {
     revealedCount: safeEventCount > 0 ? 1 : 0,
     complete: safeEventCount === 0,
+  };
+}
+
+export function resumeCombatPlayback(
+  battle: Pick<
+    BattleSummary,
+    "round" | "playerAId" | "playerBId" | "isGhost"
+  >,
+  eventCount: number,
+  snapshot: unknown,
+): CombatPlaybackSnapshot | null {
+  if (!snapshot || typeof snapshot !== "object") {
+    return null;
+  }
+  const candidate = snapshot as Partial<CombatPlaybackSnapshot>;
+  const battleKey = combatPlaybackKey(battle);
+  if (
+    candidate.battleKey !== battleKey ||
+    typeof candidate.revealedCount !== "number" ||
+    !Number.isFinite(candidate.revealedCount) ||
+    candidate.revealedCount < 0 ||
+    typeof candidate.complete !== "boolean"
+  ) {
+    return null;
+  }
+
+  const safeEventCount = Number.isFinite(eventCount)
+    ? Math.max(0, Math.trunc(eventCount))
+    : 0;
+  const initial = initialCombatPlayback(safeEventCount);
+  const revealedCount = Math.min(
+    safeEventCount,
+    Math.max(initial.revealedCount, Math.trunc(candidate.revealedCount)),
+  );
+  return {
+    battleKey,
+    revealedCount,
+    complete: candidate.complete && revealedCount >= safeEventCount,
   };
 }
 

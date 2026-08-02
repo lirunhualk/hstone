@@ -875,7 +875,7 @@ test("Golden Upbeat Duo counts one turn at a time and copies both adjacent origi
   );
 });
 
-test("Upbeat Duo recomputes its left neighbor after each Drakkari payoff when earlier copies triple neighbors off the board", () => {
+test("Upbeat Duo keeps its left neighbor until deferred Drakkari triples resolve", () => {
   let state = createGame(0xf431);
   const player = humanPlayer(state);
   const secondNeighbor = definitionMinion(
@@ -921,6 +921,31 @@ test("Upbeat Duo recomputes its left neighbor after each Drakkari payoff when ea
   prepareDuel(state);
 
   state = gameReducer(state, { type: "END_TURN" });
+  const combatPlayer = humanPlayer(state);
+  assert.equal(
+    minionsInHand(combatPlayer).some(
+      (minion) =>
+        minion.golden &&
+        ["BG35_801", "BG35_814"].includes(minion.definitionId),
+    ),
+    false,
+  );
+  assert.equal(
+    minionsInHand(combatPlayer).filter(
+      (minion) => minion.definitionId === "BG35_814",
+    ).length,
+    4,
+  );
+  assert.equal(
+    combatPlayer.board.filter(
+      (minion) =>
+        minion.definitionId === "BG35_801" ||
+        minion.definitionId === "BG35_814",
+    ).length,
+    2,
+  );
+
+  state = gameReducer(state, { type: "CONTINUE" });
   const nextPlayer = humanPlayer(state);
   const dynamicTriples = minionsInHand(nextPlayer).filter(
     (minion) =>
@@ -938,27 +963,21 @@ test("Upbeat Duo recomputes its left neighbor after each Drakkari payoff when ea
       .sort(([leftId], [rightId]) =>
         String(leftId).localeCompare(String(rightId)),
       ),
-    [
-      ["BG35_801", 2],
-      ["BG35_814", 2],
-    ],
+    [["BG35_814", 2]],
   );
   assert.equal(
     nextPlayer.board.some(
-      (minion) =>
-        minion.definitionId === "BG35_801" ||
-        minion.definitionId === "BG35_814",
+      (minion) => minion.definitionId === "BG35_814",
     ),
     false,
   );
   assert.equal(
-    minionsInHand(nextPlayer).some(
+    [...nextPlayer.board, ...minionsInHand(nextPlayer)].filter(
       (minion) =>
         !minion.golden &&
-        (minion.definitionId === "BG35_801" ||
-          minion.definitionId === "BG35_814"),
-    ),
-    false,
+        minion.definitionId === "BG35_814",
+    ).length,
+    2,
   );
   assert.deepEqual(
     [state.pool.BG35_801, state.pool.BG35_814],
@@ -1119,7 +1138,7 @@ test("Golden Kel'Thuzad replaces both adjacent Undead with exact new instances",
   );
 });
 
-test("Golden Kel'Thuzad resolves both sides before tripling owned, zero-pool Reborn, and exact resummoned copies", () => {
+test("Golden Kel'Thuzad resolves both sides before deferred Recruit triples", () => {
   let state = createGame(0xf442);
   const player = humanPlayer(state);
   const existingLeft = definitionMinion(
@@ -1177,6 +1196,25 @@ test("Golden Kel'Thuzad resolves both sides before tripling owned, zero-pool Reb
   prepareDuel(state);
 
   state = gameReducer(state, { type: "END_TURN" });
+  const combatPlayer = humanPlayer(state);
+  assert.equal(
+    minionsInHand(combatPlayer).some(
+      (minion) =>
+        minion.golden &&
+        ["BG35_814", "BG35_801"].includes(minion.definitionId),
+    ),
+    false,
+  );
+  assert.deepEqual(
+    ["BG35_801", "BG35_814"].map((definitionId) =>
+      combatPlayer.board.filter(
+        (minion) => minion.definitionId === definitionId,
+      ).length,
+    ),
+    [3, 3],
+  );
+
+  state = gameReducer(state, { type: "CONTINUE" });
   const nextPlayer = humanPlayer(state);
   const goldenTriples = minionsInHand(nextPlayer).filter(
     (minion) =>

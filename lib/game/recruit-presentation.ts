@@ -1,4 +1,5 @@
 import {
+  getMinionPurchaseQuote,
   getMinionSellValue,
   getRefreshCost,
   getTavernSpellPurchaseQuote,
@@ -150,17 +151,25 @@ function tripleEvents(
   );
 
   return newlyForged.map((golden) => {
+    const mixedOwnershipIds = golden.poolCopiesByDefinitionId
+      ? new Set(Object.keys(golden.poolCopiesByDefinitionId))
+      : null;
     const missingOwnedIds = beforeOwned
       .filter(
         (minion) =>
-          minion.golden === false &&
-          minion.definitionId === golden.definitionId &&
+          (mixedOwnershipIds
+            ? mixedOwnershipIds.has(minion.definitionId)
+            : minion.golden === false &&
+              minion.definitionId === golden.definitionId) &&
           !afterIds.has(minion.instanceId),
       )
       .map((minion) => minion.instanceId);
     const purchasedId =
-      purchasedMinion?.golden === false &&
-      purchasedMinion.definitionId === golden.definitionId &&
+      purchasedMinion !== null &&
+      (mixedOwnershipIds
+        ? mixedOwnershipIds.has(purchasedMinion.definitionId)
+        : purchasedMinion.golden === false &&
+          purchasedMinion.definitionId === golden.definitionId) &&
       !afterIds.has(purchasedMinion.instanceId)
         ? purchasedMinion.instanceId
         : null;
@@ -201,11 +210,13 @@ function bloodGemPulseEvents(
       attack: pulse.attackDelta,
       health: pulse.healthDelta,
       origin: pulse.origin,
-      ...(pulse.gainedKeywords.includes("reborn")
-        ? { bonusKeyword: "rebornForQuilboar" }
-        : pulse.gainedKeywords.includes("divineShield")
-          ? { bonusKeyword: "divineShieldForQuilboar" }
-          : {}),
+      ...(pulse.gainedKeywords.includes("taunt")
+        ? { bonusKeyword: "tauntForQuilboar" }
+        : pulse.gainedKeywords.includes("reborn")
+          ? { bonusKeyword: "rebornForQuilboar" }
+          : pulse.gainedKeywords.includes("divineShield")
+            ? { bonusKeyword: "divineShieldForQuilboar" }
+            : {}),
       pulseIndex,
       pulseCount: pulses.length,
       boardBeforePulse,
@@ -247,21 +258,26 @@ export function deriveRecruitPresentation(
       );
     if (offered && !stillOffered) {
       purchasedMinion = offered;
-      events.push(
-        {
-          kind: "currency",
-          currency: "gold",
-          delta: -3,
-          reason: "buy",
-        },
-        {
-          kind: "cardMove",
-          motion: "shop-to-hand",
-          card: offered,
-          purchaseCost: 3,
-          purchaseCurrency: "gold",
-        },
+      const quote = getMinionPurchaseQuote(
+        before,
+        playerId,
+        action.shopIndex,
       );
+      if (quote && quote.cost > 0) {
+        events.push({
+          kind: "currency",
+          currency: quote.currency,
+          delta: -quote.cost,
+          reason: "buy",
+        });
+      }
+      events.push({
+        kind: "cardMove",
+        motion: "shop-to-hand",
+        card: offered,
+        purchaseCost: quote?.cost ?? 0,
+        purchaseCurrency: quote?.currency ?? "gold",
+      });
     }
   } else if (action.type === "BUY_TAVERN_SPELL") {
     const offered = tavernSpellOffer(
@@ -330,7 +346,10 @@ export function deriveRecruitPresentation(
       afterPlayer.goldSpentThisTurn > beforePlayer.goldSpentThisTurn;
     const consumedFreeRefresh =
       afterPlayer.freeRefreshes < beforePlayer.freeRefreshes;
-    if (offersChanged || paid || consumedFreeRefresh) {
+    const consumedHeroRefresh =
+      beforePlayer.heroRefreshAvailable &&
+      !afterPlayer.heroRefreshAvailable;
+    if (offersChanged || paid || consumedFreeRefresh || consumedHeroRefresh) {
       if (cost > 0) {
         events.push({
           kind: "currency",

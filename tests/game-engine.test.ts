@@ -23,7 +23,8 @@ import {
 import { activeMinionKeywordVisuals } from "../lib/game/minion-presentation.ts";
 import { projectCombatBoard } from "../lib/game/playback.ts";
 import {
-  LEGACY_SCHEMA_11_CONTENT_VERSION_V37,
+  LEGACY_SCHEMA_11_CONTENT_VERSION_V38,
+  LEGACY_SCHEMA_11_CONTENT_VERSION_V39,
   normalizePersistedGameState,
 } from "../lib/game/save.ts";
 import {
@@ -317,10 +318,13 @@ test("current saves without the initial Health setting retain progress and defau
   assert.equal(normalizePersistedGameState(corrupted), null);
 });
 
-test("v37 saves gain default initial Health and survive a JSON round trip", () => {
+test("v38 saves migrate through v40 defaults and survive a JSON round trip", () => {
   const legacy = structuredClone(createGame(0x1234abd0));
-  legacy.contentVersion = LEGACY_SCHEMA_11_CONTENT_VERSION_V37;
+  legacy.contentVersion = LEGACY_SCHEMA_11_CONTENT_VERSION_V38;
   delete (legacy as Partial<GameState>).initialHealth;
+  for (const player of legacy.players) {
+    delete (player as Partial<PlayerState>).tavernSpellsCast;
+  }
 
   const normalized = normalizePersistedGameState(
     JSON.parse(JSON.stringify(legacy)),
@@ -331,7 +335,9 @@ test("v37 saves gain default initial Health and survive a JSON round trip", () =
   assert.equal(restored.players.length, 8);
   assert.ok(
     restored.players.every(
-      (player) => player.health === DEFAULT_INITIAL_HEALTH,
+      (player) =>
+        player.health === DEFAULT_INITIAL_HEALTH &&
+        player.tavernSpellsCast === 0,
     ),
   );
 
@@ -339,6 +345,25 @@ test("v37 saves gain default initial Health and survive a JSON round trip", () =
     JSON.parse(JSON.stringify(restored)),
   );
   assert.deepEqual(roundTripped, restored);
+});
+
+test("v39 saves migrate to v40 without losing Tavern Spell history", () => {
+  const legacy = structuredClone(createGame(0x1234abd1));
+  legacy.contentVersion = LEGACY_SCHEMA_11_CONTENT_VERSION_V39;
+  legacy.players[0].tavernSpellsCast = 7;
+
+  const normalized = normalizePersistedGameState(
+    JSON.parse(JSON.stringify(legacy)),
+  );
+  assert.ok(normalized && typeof normalized === "object");
+  const restored = normalized as GameState;
+  assert.equal(restored.contentVersion, CLASSIC_ROSTER_VERSION);
+  assert.equal(restored.players[0].tavernSpellsCast, 7);
+  assert.ok(
+    restored.players.slice(1).every(
+      (player) => player.tavernSpellsCast === 0,
+    ),
+  );
 });
 
 test("the shared pool uses live copy counts and excludes inactive types", () => {
@@ -1909,6 +1934,8 @@ test("Wandering Sailor uses one stable target and stacks Golden and Brann repeti
     attack: 2,
     health: 2,
     repetitions: 1,
+    battlecry: true,
+    battlecryTriggerCount: 1,
   });
 
   ordinaryState = gameReducer(ordinaryState, {

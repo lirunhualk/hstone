@@ -370,6 +370,75 @@
   white-space: nowrap;
 }
 
+.hud-lobby-system {
+  display: grid;
+  min-width: 132px;
+  max-width: 196px;
+  min-height: 48px;
+  align-content: center;
+  gap: 1px;
+  padding: 5px 10px;
+  border: 1px solid rgb(246 190 85 / 34%);
+  border-radius: 11px;
+  background:
+    radial-gradient(circle at 10% 20%, rgb(246 190 85 / 14%), transparent 46%),
+    rgb(56 38 20 / 46%);
+  box-shadow: inset 0 1px 0 rgb(255 255 255 / 6%);
+  cursor: pointer;
+  text-align: left;
+  transition:
+    border-color 150ms ease,
+    box-shadow 150ms ease,
+    transform 150ms ease;
+}
+
+.hud-lobby-system:hover,
+.hud-lobby-system:focus-visible {
+  border-color: rgb(246 216 139 / 76%);
+  outline: none;
+  box-shadow:
+    inset 0 1px 0 rgb(255 255 255 / 10%),
+    0 0 0 3px rgb(246 190 85 / 14%);
+}
+
+.hud-trinkets {
+  border-color: rgb(50 215 196 / 30%);
+  background:
+    radial-gradient(circle at 10% 20%, rgb(50 215 196 / 13%), transparent 46%),
+    rgb(17 52 54 / 42%);
+}
+
+.hud-lobby-system > small {
+  color: #f2dba0;
+  font-size: 9px;
+  font-weight: 850;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.hud-trinkets > small {
+  color: #9ce9de;
+}
+
+.hud-lobby-system > strong,
+.hud-lobby-system > span {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.hud-lobby-system > strong {
+  color: #fff1c2;
+  font-size: 12px;
+  line-height: 1.15;
+}
+
+.hud-lobby-system > span {
+  color: var(--muted);
+  font-size: 9px;
+  line-height: 1.2;
+}
+
 .hud-actions {
   display: flex;
   min-width: 0;
@@ -2218,6 +2287,37 @@
   font-size: 13px;
   font-variant-numeric: tabular-nums;
   font-weight: 900;
+}
+
+.shop-purchase-cost {
+  position: absolute;
+  z-index: 6;
+  top: 40px;
+  left: 6px;
+  display: grid;
+  min-width: 28px;
+  height: 24px;
+  padding: 0 6px;
+  place-items: center;
+  border: 1px solid rgb(178 224 255 / 72%);
+  border-radius: 999px;
+  color: #f4fbff;
+  background: linear-gradient(145deg, #318fd1, #203f92);
+  box-shadow: 0 4px 11px rgb(0 0 0 / 42%);
+  font-size: 12px;
+  font-variant-numeric: tabular-nums;
+  font-weight: 950;
+  line-height: 1;
+}
+
+.shop-purchase-cost.is-health-cost {
+  border-color: rgb(255 202 209 / 78%);
+  color: #fff4f5;
+  background: linear-gradient(145deg, #e75b70, #7c1f3b);
+  box-shadow:
+    0 4px 11px rgb(0 0 0 / 42%),
+    0 0 16px rgb(255 96 120 / 38%);
+  letter-spacing: -0.04em;
 }
 
 .card-name {
@@ -4592,6 +4692,64 @@
   gap: 4px;
 }
 
+.lobby-overview-modal {
+  width: min(620px, 100%);
+  max-height: min(760px, calc(100dvh - 28px));
+  overflow: auto;
+}
+
+.lobby-overview-sections {
+  display: grid;
+  gap: 10px;
+  margin: 18px 0 22px;
+  text-align: left;
+}
+
+.lobby-overview-sections > section {
+  display: grid;
+  gap: 4px;
+  padding: 12px 14px;
+  border: 1px solid rgb(65 97 126 / 58%);
+  border-radius: 12px;
+  background: rgb(11 26 42 / 72%);
+}
+
+.lobby-overview-sections small {
+  color: var(--muted);
+  font-size: 10px;
+  font-weight: 850;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.lobby-overview-sections strong {
+  color: #fff1c2;
+}
+
+.lobby-overview-sections p,
+.lobby-overview-sections ul {
+  margin: 0;
+  color: var(--text-soft);
+  line-height: 1.5;
+}
+
+.lobby-overview-sections ul {
+  display: grid;
+  gap: 8px;
+  padding: 0;
+  list-style: none;
+}
+
+.lobby-overview-sections li {
+  display: grid;
+  gap: 2px;
+}
+
+.lobby-overview-sections li > span {
+  color: var(--text-soft);
+  font-size: 12px;
+}
+
 .discover-modal {
   display: flex;
   width: min(860px, 100%);
@@ -4790,6 +4948,200 @@
   color: var(--text-soft);
   font-size: 11px;
   line-height: 1.4;
+}
+
+.lobby-choice-modal {
+  display: flex;
+  width: min(1120px, 100%);
+  max-height: min(820px, calc(100dvh - 36px));
+  min-height: 0;
+  overflow: auto;
+  flex-direction: column;
+  align-items: center;
+  padding: 24px clamp(14px, 3vw, 32px) 28px;
+}
+
+.lobby-event-banner {
+  display: grid;
+  width: min(680px, 100%);
+  min-height: 76px;
+  overflow: hidden;
+  grid-template-columns: 92px minmax(0, 1fr);
+  align-items: center;
+  margin: 2px auto 18px;
+  border: 1px solid rgb(246 190 85 / 42%);
+  border-radius: 16px;
+  background:
+    radial-gradient(circle at 8% 20%, rgb(246 190 85 / 22%), transparent 42%),
+    linear-gradient(135deg, rgb(62 39 17 / 94%), rgb(28 24 39 / 96%));
+  box-shadow:
+    inset 0 1px 0 rgb(255 255 255 / 10%),
+    0 12px 30px rgb(0 0 0 / 24%);
+}
+
+.lobby-event-banner > .card-art {
+  position: relative;
+  inset: auto;
+  width: 92px;
+  height: 76px;
+  border-right: 1px solid rgb(255 232 170 / 24%);
+}
+
+.lobby-event-banner > span {
+  display: grid;
+  min-width: 0;
+  gap: 3px;
+  padding: 10px 14px;
+  text-align: left;
+}
+
+.lobby-event-banner small {
+  color: var(--gold);
+  font-size: 9px;
+  font-weight: 900;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+}
+
+.lobby-event-banner strong {
+  color: #fff1bd;
+  font-size: 17px;
+}
+
+.lobby-event-banner span span {
+  color: var(--text-soft);
+  font-size: 12px;
+  line-height: 1.4;
+}
+
+.lobby-choice-options {
+  display: grid;
+  width: 100%;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: clamp(8px, 1.4vw, 16px);
+}
+
+.lobby-choice-card {
+  position: relative;
+  display: grid;
+  min-width: 0;
+  min-height: 300px;
+  overflow: hidden;
+  align-content: start;
+  gap: 7px;
+  padding: 150px 14px 16px;
+  border: 2px solid rgb(174 123 255 / 50%);
+  border-radius: 18px;
+  color: var(--text);
+  background:
+    radial-gradient(circle at 50% 4%, rgb(177 113 255 / 22%), transparent 48%),
+    linear-gradient(145deg, rgb(41 22 65 / 98%), rgb(19 15 35 / 98%));
+  box-shadow:
+    inset 0 1px 0 rgb(255 255 255 / 12%),
+    0 12px 26px rgb(0 0 0 / 30%);
+  cursor: pointer;
+  text-align: center;
+  transition:
+    border-color 150ms ease,
+    box-shadow 150ms ease,
+    transform 150ms ease;
+}
+
+.trinket-choice-card {
+  border-color: rgb(50 215 196 / 46%);
+  background:
+    radial-gradient(circle at 50% 4%, rgb(50 215 196 / 20%), transparent 48%),
+    linear-gradient(145deg, rgb(17 55 56 / 98%), rgb(14 29 39 / 98%));
+}
+
+.lobby-choice-card > .card-art {
+  position: absolute;
+  inset: 0 0 auto;
+  width: 100%;
+  height: 142px;
+  border-bottom: 1px solid rgb(238 218 255 / 22%);
+}
+
+.lobby-choice-card > .card-art::after {
+  background: linear-gradient(180deg, transparent 24%, rgb(25 18 43 / 90%));
+  transform: none;
+}
+
+.lobby-choice-card:hover,
+.lobby-choice-card:focus-visible {
+  border-color: #fff0a9;
+  outline: none;
+  box-shadow:
+    inset 0 1px 0 rgb(255 255 255 / 16%),
+    0 16px 34px rgb(0 0 0 / 38%),
+    0 0 0 3px rgb(246 190 85 / 24%);
+  transform: translateY(-5px);
+}
+
+.trinket-choice-card:hover,
+.trinket-choice-card:focus-visible {
+  border-color: #9ef0dc;
+  box-shadow:
+    inset 0 1px 0 rgb(255 255 255 / 16%),
+    0 16px 34px rgb(0 0 0 / 38%),
+    0 0 0 3px rgb(50 215 196 / 22%);
+}
+
+.lobby-choice-card:disabled {
+  filter: grayscale(0.55) brightness(0.7);
+  cursor: not-allowed;
+  opacity: 0.72;
+  transform: none;
+}
+
+.lobby-choice-card > small {
+  color: #c7bfff;
+  font-size: 9px;
+  font-weight: 900;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+}
+
+.trinket-choice-card > small {
+  color: #9ce9de;
+}
+
+.lobby-choice-card > strong {
+  color: #fff2bf;
+  font-size: 19px;
+  line-height: 1.2;
+}
+
+.lobby-choice-card > span {
+  color: #f1eaff;
+  font-size: 12px;
+  font-weight: 700;
+  line-height: 1.45;
+}
+
+.lobby-choice-card > .lobby-choice-power-name {
+  color: #c8beff;
+  font-size: 13px;
+  font-weight: 900;
+}
+
+.trinket-choice-card > .trinket-choice-tribes {
+  justify-self: center;
+  padding: 3px 8px;
+  border: 1px solid rgb(156 233 222 / 36%);
+  border-radius: 999px;
+  color: #bff8ec;
+  background: rgb(30 112 104 / 24%);
+  font-size: 10px;
+  line-height: 1.25;
+}
+
+.lobby-choice-card > .lobby-choice-cost {
+  align-self: end;
+  margin-top: auto;
+  color: var(--gold);
+  font-size: 12px;
+  font-weight: 900;
 }
 
 .hero-power-choice-modal {
@@ -6629,7 +6981,48 @@
 
 @media (max-width: 900px) {
   .game-shell {
-    min-width: 720px;
+    min-width: 0;
+  }
+
+  .top-hud {
+    overflow-x: auto;
+    overflow-y: hidden;
+    overscroll-behavior-x: contain;
+    scrollbar-width: none;
+  }
+
+  .top-hud::-webkit-scrollbar {
+    display: none;
+  }
+
+  .brand {
+    display: none;
+  }
+
+  .phase-pill,
+  .hud-stat,
+  .hud-hero-power,
+  .hud-lobby-system {
+    flex: 0 0 auto;
+  }
+
+  .hud-actions {
+    position: sticky;
+    z-index: 3;
+    left: 0;
+    order: -1;
+    flex: 0 0 auto;
+    padding-right: 6px;
+    background: rgb(11 27 43 / 98%);
+    box-shadow: 8px 0 12px rgb(7 17 30 / 72%);
+  }
+
+  .hud-actions .primary {
+    min-width: 108px;
+  }
+
+  .hud-actions .secondary {
+    min-width: 60px;
   }
 
   .combat-start-stage {
@@ -6928,5 +7321,61 @@
     animation: none;
     opacity: 1;
     transform: none;
+  }
+}
+
+@media (max-width: 1400px) {
+  .hud-lobby-system {
+    min-width: 86px;
+    max-width: 112px;
+    padding-inline: 7px;
+  }
+
+  .hud-lobby-system > span {
+    display: none;
+  }
+}
+
+@media (max-width: 1100px) {
+  .hud-system-event {
+    display: none;
+  }
+
+  .lobby-choice-options {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .lobby-choice-card {
+    min-height: 260px;
+  }
+}
+
+@media (max-width: 900px) {
+  .hud-trinkets {
+    min-width: 104px;
+    max-width: 126px;
+  }
+}
+
+@media (max-width: 620px) {
+  .lobby-choice-options {
+    grid-template-columns: 1fr;
+  }
+
+  .lobby-choice-card {
+    min-height: 230px;
+    padding-top: 126px;
+  }
+
+  .lobby-choice-card > .card-art {
+    height: 118px;
+  }
+
+  .lobby-event-banner {
+    grid-template-columns: 70px minmax(0, 1fr);
+  }
+
+  .lobby-event-banner > .card-art {
+    width: 70px;
   }
 }

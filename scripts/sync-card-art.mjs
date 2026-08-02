@@ -4,8 +4,19 @@ import { fileURLToPath } from "node:url";
 
 import { MINION_DEFINITIONS } from "../lib/game/content.ts";
 import { createGame } from "../lib/game/engine.ts";
-import { HERO_POWER_DEFINITIONS } from "../lib/game/hero-powers.ts";
-import { SPELLCRAFT_DEFINITIONS } from "../lib/game/spellcraft.ts";
+import {
+  HERO_DEFINITIONS,
+  HERO_POWER_DEFINITIONS,
+} from "../lib/game/hero-powers.ts";
+import {
+  SYSTEM_EVENT_DEFINITIONS,
+  SYSTEM_TAVERN_SPELL_DEFINITIONS,
+  TRINKET_DEFINITIONS,
+} from "../lib/game/lobby-systems.ts";
+import {
+  GENERATED_TARGETED_SPELL_DEFINITIONS,
+  SPELLCRAFT_DEFINITIONS,
+} from "../lib/game/spellcraft.ts";
 import { TAVERN_SPELL_DEFINITIONS } from "../lib/game/tavern-spells.ts";
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
@@ -32,6 +43,21 @@ const SUPPORTED_CHOICE_CARD_IDS = [
   "BG30_123t2",
   "BG30_123_Gt",
   "BG30_123_Gt2",
+  "BG32_237t",
+  "BG32_237t2",
+  "BG32_237_Gt",
+  "BG32_237_Gt2",
+  "BG27_084t",
+  "BG27_084t2",
+  "BG27_084_Gt",
+  "BG27_084_Gt2",
+];
+const LOBBY_STARTUP_CARD_IDS = [
+  ...HERO_DEFINITIONS.map((definition) => definition.cardId),
+  ...SYSTEM_EVENT_DEFINITIONS.map((definition) => definition.cardId),
+  ...SYSTEM_TAVERN_SPELL_DEFINITIONS.map(
+    (definition) => definition.cardId,
+  ),
 ];
 
 const allCardIds = [
@@ -41,10 +67,19 @@ const allCardIds = [
       definition.goldenCardId,
     ]),
     ...HERO_POWER_DEFINITIONS.map((definition) => definition.cardId),
+    ...HERO_DEFINITIONS.map((definition) => definition.cardId),
+    ...TRINKET_DEFINITIONS.map((definition) => definition.cardId),
+    ...SYSTEM_EVENT_DEFINITIONS.map((definition) => definition.cardId),
+    ...SYSTEM_TAVERN_SPELL_DEFINITIONS.map(
+      (definition) => definition.cardId,
+    ),
     ...SPELLCRAFT_DEFINITIONS.flatMap((definition) => [
       definition.cardId,
       definition.goldenCardId,
     ]),
+    ...GENERATED_TARGETED_SPELL_DEFINITIONS.map(
+      (definition) => definition.cardId,
+    ),
     ...TAVERN_SPELL_DEFINITIONS.map((definition) => definition.cardId),
     ...CORE_SPELL_CARD_IDS,
     ...SUPPORTED_CHOICE_CARD_IDS,
@@ -57,6 +92,7 @@ const startupCardIds = startupPlayer
   ? new Set(
       [
         ...CORE_SPELL_CARD_IDS,
+        ...LOBBY_STARTUP_CARD_IDS,
         ...startupPlayer.shop.map((minion) => minion.cardId),
         startupPlayer.spellShop?.cardId,
       ].filter((cardId) => typeof cardId === "string"),

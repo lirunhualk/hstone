@@ -12,6 +12,7 @@ const {
   counts,
   tavernSpellCounts,
   minions,
+  tierSevenMinions,
   tavernSpells,
 } = snapshot;
 
@@ -141,9 +142,33 @@ test("contains exactly the 237 Solo Tavern Tier 1-6 minions", () => {
   assert.ok(minions.every((card) => !card.id.startsWith("BGDUO")));
 });
 
+test("preserves the complete effect-generated Solo Tier 7 pool", () => {
+  assert.equal(tierSevenMinions.length, counts.tierSevenExcluded);
+  assert.ok(tierSevenMinions.every((card) => card.tier === 7));
+  assert.deepEqual(
+    tierSevenMinions.map((card) => card.id),
+    [
+      "BG23_017",
+      "BG25_034",
+      "BG26_149",
+      "BG27_016",
+      "BG27_017",
+      "BG27_514",
+      "BG31_999",
+      "BG34_145",
+      "BG34_319",
+      "BG34_320",
+      "BG34_322",
+      "BG34_950",
+    ],
+  );
+});
+
 test("has unique stable card and premium identifiers", () => {
   for (const field of ["id", "dbfId", "premiumDbfId"]) {
-    const values = minions.map((card) => card[field]);
+    const values = [...minions, ...tierSevenMinions].map(
+      (card) => card[field],
+    );
     assert.equal(
       new Set(values).size,
       values.length,
@@ -185,7 +210,7 @@ test("preserves the fields needed by the future live-roster engine", () => {
 });
 
 test("is sorted deterministically by Tier and CardID", () => {
-  for (const cards of [minions, tavernSpells]) {
+  for (const cards of [minions, tierSevenMinions, tavernSpells]) {
     const actual = cards.map((card) => `${card.tier}:${card.id}`);
     const sorted = [...cards]
       .sort(

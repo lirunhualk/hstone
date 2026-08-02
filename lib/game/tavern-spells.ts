@@ -1,6 +1,7 @@
 import pinnedSnapshot from "./generated/battlegrounds-36.0.3-247416.zhCN.json" with {
   type: "json",
 };
+import { SYSTEM_TAVERN_SPELL_DEFINITIONS } from "./lobby-systems.ts";
 import type {
   EffectSupport,
   TavernSpellDefinition,
@@ -189,9 +190,6 @@ export const TAVERN_SPELL_RULES = [
     cardId: "BG30_804",
     effect: "carefulMutation",
     target: "anyMinion",
-    effectSupport: "partial",
-    implementationNote:
-      "1至5星目标会严格变为高一星随从；本地普通池尚未接入7星结果，6星目标暂以另一张6星随从近似结算。",
   },
   {
     id: "tavern-spell-time-management",
@@ -372,9 +370,6 @@ export const TAVERN_SPELL_RULES = [
     cardId: "EBG_Spell_037",
     effect: "unmaskedIdentity",
     target: "none",
-    effectSupport: "partial",
-    implementationNote:
-      "本地版目前只会发现4个已完整支持的英雄技能；完整官方英雄技能池仍在适配。",
   },
   {
     id: "tavern-spell-queens-command",
@@ -411,9 +406,6 @@ export const TAVERN_SPELL_RULES = [
     cardId: "BG30_802",
     effect: "knockoffWisdomball",
     target: "none",
-    effectSupport: "partial",
-    implementationNote:
-      "本地版已实现1至6星范围的有用刷新；偶发的7星随从页面和未公开的服务器权重仍在适配。",
   },
   {
     id: "tavern-spell-eyes-of-earth-mother",
@@ -569,10 +561,10 @@ export const TAVERN_SPELL_DEFINITIONS: readonly TavernSpellDefinition[] =
   });
 
 const TAVERN_SPELL_BY_ID = new Map<string, TavernSpellDefinition>(
-  TAVERN_SPELL_DEFINITIONS.map((definition) => [
-    definition.id,
-    definition,
-  ]),
+  [
+    ...TAVERN_SPELL_DEFINITIONS,
+    ...SYSTEM_TAVERN_SPELL_DEFINITIONS,
+  ].map((definition) => [definition.id, definition]),
 );
 
 export function getTavernSpellDefinition(

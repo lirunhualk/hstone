@@ -689,7 +689,7 @@ test("a temporary hand copy can animate its own retention text without changing 
   assert.notEqual(temporaryBuff.retained, true);
 });
 
-test("retained gains follow an original Dragon through a combat-time triple", () => {
+test("combat triples wait for Recruit and retain gains on the combined Dragon", () => {
   const state = createGame(0x8242);
   const human = humanPlayer(state);
   const chromawingDefinitionIds = [
@@ -751,13 +751,26 @@ test("retained gains follow an original Dragon through a combat-time triple", ()
   human.nextCombatHealthBonus = 1;
 
   const combat = gameReducer(state, { type: "END_TURN" });
-  const golden = humanPlayer(combat).hand.find(
+  assert.equal(
+    humanPlayer(combat).hand.some(
+      (card) =>
+        card.kind === "minion" &&
+        chromawingDefinitionIds.includes(card.definitionId) &&
+        card.golden,
+    ),
+    false,
+  );
+  assert.ok(combat.deferredTriplePlayerIds.includes(human.id));
+
+  const recruit = gameReducer(combat, { type: "CONTINUE" });
+  const golden = humanPlayer(recruit).hand.find(
     (card): card is BoardMinionInstance =>
       card.kind === "minion" &&
       chromawingDefinitionIds.includes(card.definitionId) &&
       card.golden,
   );
   assert.ok(golden);
+  assert.equal(recruit.deferredTriplePlayerIds.length, 0);
   assert.ok(
     protectedDefinitionIds.has(golden.definitionId),
     `generated ${golden.definitionId}`,
@@ -1081,7 +1094,7 @@ test("v28 saves migrate through v31 while preserving Fire-forged counters and ex
   assert.equal(migrated.contentVersion, CURRENT_ROSTER_VERSION);
   assert.equal(
     CURRENT_ROSTER_VERSION,
-    "battlegrounds-36.0.3-247416-v38",
+    "battlegrounds-36.0.3-247416-v50",
   );
   const saved = humanPlayer(migrated).board[0];
   assert.deepEqual(saved.effectCounters, evoker.effectCounters);

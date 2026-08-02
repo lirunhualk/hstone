@@ -292,7 +292,7 @@ test("Scrapsmith and Vinewhisperer observe Recruit deaths by Taunt and printed D
     );
     assert.equal(
       getMinionDefinition(victim.definitionId).effectSupport,
-      "partial",
+      "complete",
     );
     player.board = [scrapsmith, vinewhisperer];
     player.hand = [victim];

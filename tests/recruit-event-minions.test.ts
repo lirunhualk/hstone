@@ -221,6 +221,7 @@ function tripleReward(
   return {
     ...definitionMinion("BG35_801", instanceId, { tier: 2 }),
     kind: "tripleReward",
+    tier: 2,
     definitionId: "triple-reward",
     cardId: "TB_BaconShop_Triples_01",
     name: "三连奖励",

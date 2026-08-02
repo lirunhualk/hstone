@@ -5,11 +5,13 @@ import {
   COMBAT_START_INTRO_DURATION_MS,
   combatBuffLabel,
   combatIntroOpponent,
+  combatPlaybackKey,
   combatTriggerLabel,
   initialCombatPlayback,
   isCombatPlaybackEvent,
   projectCombatArmor,
   projectCombatHealth,
+  resumeCombatPlayback,
 } from "../lib/game/combat-presentation.ts";
 import type {
   BattleEvent,
@@ -146,6 +148,69 @@ test("combat intro completion reveals the first real event or completes an empty
     revealedCount: 0,
     complete: true,
   });
+});
+
+test("combat playback identity survives an equivalent battle object replacement", () => {
+  const original = battle();
+  const restored = JSON.parse(JSON.stringify(original)) as BattleSummary;
+  const key = combatPlaybackKey(original);
+
+  assert.notEqual(restored, original);
+  assert.equal(combatPlaybackKey(restored), key);
+  assert.deepEqual(
+    resumeCombatPlayback(restored, 10, {
+      battleKey: key,
+      revealedCount: 4,
+      complete: false,
+    }),
+    {
+      battleKey: key,
+      revealedCount: 4,
+      complete: false,
+    },
+  );
+  assert.notEqual(
+    combatPlaybackKey(battle({ round: original.round + 1 })),
+    key,
+  );
+  assert.equal(
+    resumeCombatPlayback(battle({ round: original.round + 1 }), 10, {
+      battleKey: key,
+      revealedCount: 4,
+      complete: false,
+    }),
+    null,
+  );
+});
+
+test("combat playback session data is validated and clamped before resume", () => {
+  const summary = battle();
+  const battleKey = combatPlaybackKey(summary);
+
+  assert.deepEqual(
+    resumeCombatPlayback(summary, 3, {
+      battleKey,
+      revealedCount: 99,
+      complete: false,
+    }),
+    { battleKey, revealedCount: 3, complete: false },
+  );
+  assert.deepEqual(
+    resumeCombatPlayback(summary, 3, {
+      battleKey,
+      revealedCount: 3,
+      complete: true,
+    }),
+    { battleKey, revealedCount: 3, complete: true },
+  );
+  assert.equal(
+    resumeCombatPlayback(summary, 3, {
+      battleKey,
+      revealedCount: -1,
+      complete: false,
+    }),
+    null,
+  );
 });
 
 test("combat intro duration and opponent label match the current transition contract", () => {

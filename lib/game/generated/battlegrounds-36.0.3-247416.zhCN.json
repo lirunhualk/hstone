@@ -4689,6 +4689,243 @@
       "text": "<b>亡语：</b>在本场战斗的剩余时间内，你的野兽拥有+8/+8。"
     }
   ],
+  "tierSevenMinions": [
+    {
+      "id": "BG23_017",
+      "dbfId": 80755,
+      "premiumDbfId": 80773,
+      "name": "鲜血勇士",
+      "tier": 7,
+      "attack": 18,
+      "health": 3,
+      "races": [
+        "QUILBOAR"
+      ],
+      "associatedRaces": [],
+      "mechanics": [
+        "BATTLECRY",
+        "DEATHRATTLE"
+      ],
+      "referencedTags": [
+        "BACON_BLOOD_GEM_TOOLTIP"
+      ],
+      "elite": false,
+      "text": "<b>战吼，亡语：</b>在本局对战中，你的<b>鲜血宝石</b>使随从额外获得+1/+1。"
+    },
+    {
+      "id": "BG25_034",
+      "dbfId": 97539,
+      "premiumDbfId": 97540,
+      "name": "杉德尔船长",
+      "tier": 7,
+      "attack": 9,
+      "health": 9,
+      "races": [
+        "PIRATE"
+      ],
+      "associatedRaces": [],
+      "mechanics": [
+        "BATTLECRY"
+      ],
+      "referencedTags": [],
+      "elite": true,
+      "text": "<b>战吼：</b>使一个等级6或以下的友方随从变为金色。"
+    },
+    {
+      "id": "BG26_149",
+      "dbfId": 98713,
+      "premiumDbfId": 98718,
+      "name": "极性B-Box拳手",
+      "tier": 7,
+      "attack": 5,
+      "health": 10,
+      "races": [
+        "MECHANICAL"
+      ],
+      "associatedRaces": [],
+      "mechanics": [],
+      "referencedTags": [
+        "MAGNETIC"
+      ],
+      "elite": false,
+      "text": "每当你对一个不同的随从<b>磁力吸附</b>时，还会对本随从<b>磁力吸附</b>。"
+    },
+    {
+      "id": "BG27_016",
+      "dbfId": 103698,
+      "premiumDbfId": 103699,
+      "name": "萨格拉斯的勇士",
+      "tier": 7,
+      "attack": 10,
+      "health": 10,
+      "races": [
+        "DEMON"
+      ],
+      "associatedRaces": [],
+      "mechanics": [
+        "BATTLECRY",
+        "DEATHRATTLE"
+      ],
+      "referencedTags": [],
+      "elite": false,
+      "text": "<b>战吼，亡语：</b>在本局对战中，酒馆中的随从拥有+5/+5。"
+    },
+    {
+      "id": "BG27_017",
+      "dbfId": 103700,
+      "premiumDbfId": 103701,
+      "name": "黑曜石掠夺者",
+      "tier": 7,
+      "attack": 7,
+      "health": 7,
+      "races": [
+        "DRAGON"
+      ],
+      "associatedRaces": [],
+      "mechanics": [
+        "BACON_RALLY"
+      ],
+      "referencedTags": [],
+      "elite": false,
+      "text": "<b>进击：</b>对目标及一个相邻的随从造成等同于本随从攻击力的伤害。"
+    },
+    {
+      "id": "BG27_514",
+      "dbfId": 103069,
+      "premiumDbfId": 103075,
+      "name": "海巫扎尔吉拉",
+      "tier": 7,
+      "attack": 4,
+      "health": 5,
+      "races": [
+        "NAGA"
+      ],
+      "associatedRaces": [],
+      "mechanics": [
+        "BACON_SPELLCRAFT_ID",
+        "TRIGGER_VISUAL"
+      ],
+      "referencedTags": [],
+      "elite": true,
+      "text": "<b>塑造法术：</b>选择酒馆中一个不同的随从，获取一张复制。"
+    },
+    {
+      "id": "BG31_999",
+      "dbfId": 119666,
+      "premiumDbfId": 119669,
+      "name": "缝合回收者",
+      "tier": 7,
+      "attack": 16,
+      "health": 4,
+      "races": [
+        "UNDEAD"
+      ],
+      "associatedRaces": [],
+      "mechanics": [
+        "DEATHRATTLE",
+        "START_OF_COMBAT",
+        "TRIGGER_VISUAL"
+      ],
+      "referencedTags": [],
+      "elite": false,
+      "text": "<b>战斗开始时：</b>消灭本随从左边的随从。<b>亡语：</b>召唤被消灭随从的完全相同的复制。<i>（缝合回收者除外。）</i>"
+    },
+    {
+      "id": "BG34_145",
+      "dbfId": 127494,
+      "premiumDbfId": 127495,
+      "name": "未来鱼人",
+      "tier": 7,
+      "attack": 7,
+      "health": 13,
+      "races": [
+        "MURLOC"
+      ],
+      "associatedRaces": [],
+      "mechanics": [
+        "END_OF_TURN_TRIGGER"
+      ],
+      "referencedTags": [],
+      "elite": false,
+      "text": "在你的回合结束时，使你手牌中最左边的随从牌获得本随从的属性值。"
+    },
+    {
+      "id": "BG34_319",
+      "dbfId": 127107,
+      "premiumDbfId": 127108,
+      "name": "莱，至高守护者",
+      "tier": 7,
+      "attack": 6,
+      "health": 6,
+      "races": [],
+      "associatedRaces": [],
+      "mechanics": [
+        "BATTLECRY",
+        "BACON_RALLY",
+        "DEATHRATTLE"
+      ],
+      "referencedTags": [],
+      "elite": true,
+      "text": "<b>战吼，亡语，进击：</b>随机获取一张等级6的随从牌。"
+    },
+    {
+      "id": "BG34_320",
+      "dbfId": 127109,
+      "premiumDbfId": 127110,
+      "name": "最后的生物",
+      "tier": 7,
+      "attack": 12,
+      "health": 12,
+      "races": [
+        "ALL"
+      ],
+      "associatedRaces": [],
+      "mechanics": [
+        "BACON_RALLY"
+      ],
+      "referencedTags": [],
+      "elite": true,
+      "text": "<b>进击：</b>使每个类型的各一个友方随从永久获得+12/+12。"
+    },
+    {
+      "id": "BG34_322",
+      "dbfId": 127113,
+      "premiumDbfId": 127114,
+      "name": "坚韧的科多兽",
+      "tier": 7,
+      "attack": 16,
+      "health": 32,
+      "races": [
+        "BEAST"
+      ],
+      "associatedRaces": [],
+      "mechanics": [
+        "TRIGGER_VISUAL"
+      ],
+      "referencedTags": [],
+      "elite": false,
+      "text": "在战斗中，在你召唤\n一个随从后，使其获得本随从的最大属性值。<i>（每场战斗限3次。）</i>3在战斗中，在你召唤一个随从后，使其获得本随从的最大属性值。<i>（还剩3次！）</i>"
+    },
+    {
+      "id": "BG34_950",
+      "dbfId": 126959,
+      "premiumDbfId": 126960,
+      "name": "石器时代顽石",
+      "tier": 7,
+      "attack": 5,
+      "health": 10,
+      "races": [
+        "ELEMENTAL"
+      ],
+      "associatedRaces": [],
+      "mechanics": [
+        "TRIGGER_VISUAL"
+      ],
+      "referencedTags": [],
+      "elite": false,
+      "text": "在你购买一个随从后，使其获得+10/+10并使其属性值翻倍。<i>（每回合一次。）</i>"
+    }
+  ],
   "tavernSpells": [
     {
       "id": "BG28_503",

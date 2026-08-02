@@ -17,29 +17,47 @@ import {
 import {
   canMagnetize,
   createGame,
+  createLobbyGame,
   gameTransition,
+  ACTIVE_TRINKET_DEFINITIONS,
+  areOwnedTrinketDefinitionIdsValid,
+  areTrinketOfferCandidatesValid,
+  GREATER_TRINKET_ROUND,
+  HERO_POWER_COUNTER_KEYS,
   HELPFUL_REFRESH_LABELS,
+  LESSER_TRINKET_ROUND,
   TAVERN_SPELL_DEFINITIONS,
   getLegalSpellcraftTargetIds,
   getLegalTavernSpellTargetIds,
   getAiStrategyProfile,
   getScheduledOpponent,
+  getMinionPurchaseCost,
+  getMinionPurchaseQuote,
   getMinionSellValue,
-  getRefreshCost,
+  getTavernRefreshQuote,
+  getHeroDefinition,
   getHeroPowerDefinition,
+  getHeroPowerProgressText,
+  getSystemEventDefinition,
+  getTrinketAliasKind,
+  getTrinketDefinition,
+  getTrinketProgressText,
   getTavernSpellPurchaseQuote,
   getTavernSpellDefinition,
   getSpellcraftDefinition,
   getUpgradeCost,
   minionHasTribe,
+  isHeroDefinitionId,
   isHeroPowerDefinitionId,
+  isSystemEventDefinitionId,
+  isSystemTavernSpellDefinitionId,
+  isTrinketDefinitionId,
   tavernSpellCanTargetShop,
   tavernSpellNeedsTarget,
   tavernSpellPurchaseCurrency,
   spellcraftNeedsTarget,
   type BattleEvent,
   type BattleResult,
-  type BattleSummary,
   type BloodGemSpellInstance,
   type BoardMinionInstance,
   type ConsolationCoinSpellInstance,
@@ -60,15 +78,18 @@ import {
   TRIBE_NAMES,
   getMinionDefinition,
 } from "../lib/game/content";
+import { isTierThreeDarkmoonPrizeDefinitionId } from "../lib/game/darkmoon-prizes";
 import {
   COMBAT_START_INTRO_DURATION_MS,
   combatBuffLabel,
   combatIntroOpponent,
+  combatPlaybackKey,
   combatTriggerLabel,
   initialCombatPlayback,
   isCombatPlaybackEvent,
   projectCombatArmor,
   projectCombatHealth,
+  resumeCombatPlayback,
 } from "../lib/game/combat-presentation";
 import {
   cardInspectionDelay,
@@ -111,6 +132,8 @@ import {
 } from "../lib/game/setup";
 
 const SAVE_KEY = "hearthstone-battlegrounds-local.save.v11";
+const COMBAT_PLAYBACK_SESSION_KEY =
+  "hearthstone-battlegrounds-local.combat-playback.v1";
 const LEGACY_SAVE_KEYS = [
   "hearthstone-battlegrounds-local.save.v10",
   "hearthstone-battlegrounds-local.save.v9",
@@ -125,6 +148,9 @@ const MOUSE_DRAG_THRESHOLD_PX = 8;
 const TOUCH_DRAG_THRESHOLD_PX = 12;
 const TAVERN_SPELL_DEFINITION_IDS = new Set(
   TAVERN_SPELL_DEFINITIONS.map((definition) => definition.id),
+);
+const VALID_HERO_POWER_COUNTER_KEYS = new Set<string>(
+  Object.values(HERO_POWER_COUNTER_KEYS),
 );
 
 function safeReadLocalStorage(key: string): string | null {
@@ -149,6 +175,42 @@ function safeRemoveLocalStorage(key: string): void {
     window.localStorage.removeItem(key);
   } catch {
     // Storage can be unavailable under private or restricted browser policies.
+  }
+}
+
+function safeReadSessionStorage(key: string): string | null {
+  try {
+    return window.sessionStorage.getItem(key);
+  } catch {
+    return null;
+  }
+}
+
+function safeWriteSessionStorage(key: string, value: string): boolean {
+  try {
+    window.sessionStorage.setItem(key, value);
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+function safeRemoveSessionStorage(key: string): void {
+  try {
+    window.sessionStorage.removeItem(key);
+  } catch {
+    // Session storage can be unavailable under restricted browser policies.
+  }
+}
+
+function readCombatPlaybackSession(): unknown {
+  const raw = safeReadSessionStorage(COMBAT_PLAYBACK_SESSION_KEY);
+  if (!raw) return null;
+  try {
+    return JSON.parse(raw) as unknown;
+  } catch {
+    safeRemoveSessionStorage(COMBAT_PLAYBACK_SESSION_KEY);
+    return null;
   }
 }
 
@@ -255,7 +317,7 @@ type BattleSpeed = 1 | 2;
 type CombatPresentationStage = "intro" | "playback" | "result";
 
 type BattlePlaybackState = {
-  battle: BattleSummary | null;
+  battleKey: string | null;
   revealedCount: number;
   complete: boolean;
 };
@@ -410,6 +472,10 @@ function isTavernTier(value: unknown): boolean {
   );
 }
 
+function isMinionTier(value: unknown): boolean {
+  return isTavernTier(value) || value === 7;
+}
+
 function isPendingCardPlayedEvent(value: unknown): boolean {
   if (
     !isRecord(value) ||
@@ -467,11 +533,64 @@ function formatSignedStat(value: number): string {
   return value > 0 ? `+${value}` : `${value}`;
 }
 
+function hasValidPoolCopiesByDefinitionId(
+  value: unknown,
+  poolCopies: number,
+): boolean {
+  if (value === undefined) {
+    return true;
+  }
+  if (!isRecord(value) || Array.isArray(value)) {
+    return false;
+  }
+  let total = 0;
+  for (const [definitionId, copies] of Object.entries(value)) {
+    try {
+      getMinionDefinition(definitionId);
+    } catch {
+      return false;
+    }
+    if (
+      typeof copies !== "number" ||
+      !Number.isInteger(copies) ||
+      copies < 0
+    ) {
+      return false;
+    }
+    total += copies;
+  }
+  return total === poolCopies;
+}
+
+function hasValidOptionalUniqueStringArray(value: unknown): boolean {
+  return (
+    value === undefined ||
+    (Array.isArray(value) &&
+      value.length > 0 &&
+      value.every(
+        (entry) => typeof entry === "string" && entry.length > 0,
+      ) &&
+      new Set(value).size === value.length)
+  );
+}
+
 function hasSchema9MinionState(value: unknown): boolean {
   return (
     isRecord(value) &&
     typeof value.bloodGemAttack === "number" &&
+    Number.isFinite(value.bloodGemAttack) &&
+    value.bloodGemAttack >= 0 &&
     typeof value.bloodGemHealth === "number" &&
+    Number.isFinite(value.bloodGemHealth) &&
+    value.bloodGemHealth >= 0 &&
+    typeof value.suppressedBloodGemAttack === "number" &&
+    Number.isFinite(value.suppressedBloodGemAttack) &&
+    value.suppressedBloodGemAttack >= 0 &&
+    value.suppressedBloodGemAttack <= value.bloodGemAttack &&
+    typeof value.suppressedBloodGemHealth === "number" &&
+    Number.isFinite(value.suppressedBloodGemHealth) &&
+    value.suppressedBloodGemHealth >= 0 &&
+    value.suppressedBloodGemHealth <= value.bloodGemHealth &&
     typeof value.temporaryAttack === "number" &&
     typeof value.temporaryHealth === "number" &&
     typeof value.temporaryTaunt === "boolean" &&
@@ -493,11 +612,21 @@ function hasSchema9MinionState(value: unknown): boolean {
       (typeof value.ancientSoulFriendlyDeaths === "number" &&
         Number.isInteger(value.ancientSoulFriendlyDeaths) &&
         value.ancientSoulFriendlyDeaths >= 0)) &&
+    hasValidOptionalUniqueStringArray(
+      value.deathlyStrikerLineageIds,
+    ) &&
+    hasValidOptionalUniqueStringArray(
+      value.deathlyStrikerCreatorIds,
+    ) &&
     (value.stealth === undefined ||
       typeof value.stealth === "boolean") &&
     typeof value.poolCopies === "number" &&
     Number.isInteger(value.poolCopies) &&
     value.poolCopies >= 0 &&
+    hasValidPoolCopiesByDefinitionId(
+      value.poolCopiesByDefinitionId,
+      value.poolCopies,
+    ) &&
     (value.poolCopiesOnPurchase === undefined ||
       (typeof value.poolCopiesOnPurchase === "number" &&
         Number.isInteger(value.poolCopiesOnPurchase) &&
@@ -505,7 +634,86 @@ function hasSchema9MinionState(value: unknown): boolean {
     (value.playableFromRound === undefined ||
       typeof value.playableFromRound === "number") &&
     (value.destroyAfterPlayThroughRound === undefined ||
-      typeof value.destroyAfterPlayThroughRound === "number")
+      typeof value.destroyAfterPlayThroughRound === "number") &&
+    (value.taughtTavernSpellDefinitionId === undefined ||
+      (typeof value.taughtTavernSpellDefinitionId === "string" &&
+        TAVERN_SPELL_DEFINITION_IDS.has(
+          value.taughtTavernSpellDefinitionId,
+        )))
+  );
+}
+
+function hasValidTrinketChoiceOptions(
+  trinketTier: unknown,
+  optionIds: unknown,
+  expectedCount = 4,
+): boolean {
+  if (
+    (trinketTier !== "lesser" && trinketTier !== "greater") ||
+    !Array.isArray(optionIds) ||
+    optionIds.length !== expectedCount ||
+    new Set(optionIds).size !== optionIds.length
+  ) {
+    return false;
+  }
+  return optionIds.every(
+    (optionId) =>
+      typeof optionId === "string" &&
+      isTrinketDefinitionId(optionId) &&
+      getTrinketDefinition(optionId).inPool &&
+      getTrinketDefinition(optionId).tier === trinketTier,
+  );
+}
+
+function isMysteryCubeTrinketSlotId(id: string): boolean {
+  return (
+    getTrinketAliasKind(id) === "mysteryCubeReplacement" ||
+    getTrinketDefinition(id).cardId === "BG30_MagicItem_703"
+  );
+}
+
+function pendingTrinketChoiceMatchesState(
+  interaction: PendingInteraction,
+  players: readonly PlayerState[],
+  activeTribes: readonly Tribe[],
+): boolean {
+  if (interaction.kind !== "trinketChoice") {
+    return true;
+  }
+  const player = players.find(
+    (candidate) => candidate.id === interaction.playerId,
+  );
+  if (!player) {
+    return false;
+  }
+  const replacementId = interaction.replaceTrinketId;
+  const isMysteryCubeReplacement =
+    replacementId !== undefined &&
+    player.trinketIds.includes(replacementId) &&
+    isMysteryCubeTrinketSlotId(replacementId);
+  const ownedCardIds = new Set(
+    player.trinketIds.map(
+      (definitionId) => getTrinketDefinition(definitionId).cardId,
+    ),
+  );
+  return (
+    (!isMysteryCubeReplacement ||
+      (interaction.trinketTier === "lesser" &&
+        interaction.additionalTrinketSourceId === undefined &&
+        interaction.optionIds.every((optionId) => {
+          const definition = getTrinketDefinition(optionId);
+          return (
+            definition.cardId !== "BG30_MagicItem_703" &&
+            !ownedCardIds.has(definition.cardId)
+          );
+        }))) &&
+    areTrinketOfferCandidatesValid({
+      tier: interaction.trinketTier,
+      candidates: interaction.optionIds.map(getTrinketDefinition),
+      board: player.board,
+      activeTribes,
+      count: isMysteryCubeReplacement ? 2 : 4,
+    })
   );
 }
 
@@ -520,6 +728,20 @@ function isPendingInteraction(
   ) {
     return false;
   }
+  const validBattlecryFlag =
+    value.battlecry === undefined || value.battlecry === true;
+  const validBattlecryTriggerCount =
+    value.battlecryTriggerCount === undefined ||
+    (value.battlecry === true &&
+      typeof value.battlecryTriggerCount === "number" &&
+      Number.isInteger(value.battlecryTriggerCount) &&
+      value.battlecryTriggerCount > 0);
+  const validBattlecryEffectGrouping =
+    value.battlecryEffectRepetitionsPerTrigger === undefined ||
+    (value.battlecry === true &&
+      typeof value.battlecryEffectRepetitionsPerTrigger === "number" &&
+      Number.isInteger(value.battlecryEffectRepetitionsPerTrigger) &&
+      value.battlecryEffectRepetitionsPerTrigger > 0);
   if (value.kind === "target") {
     return (
       Array.isArray(value.optionInstanceIds) &&
@@ -530,7 +752,34 @@ function isPendingInteraction(
       typeof value.attack === "number" &&
       typeof value.health === "number" &&
       typeof value.repetitions === "number" &&
-      value.repetitions > 0
+      value.repetitions > 0 &&
+      validBattlecryFlag &&
+      validBattlecryTriggerCount &&
+      (value.grantKeywords === undefined ||
+        (Array.isArray(value.grantKeywords) &&
+          value.grantKeywords.every(
+            (keyword) =>
+              keyword === "reborn" || keyword === "windfury",
+          ))) &&
+      (value.resolution === undefined ||
+        (isRecord(value.resolution) &&
+          (value.resolution.kind === "buff" ||
+            (value.resolution.kind === "destroyFriendlyAndCopy" &&
+              typeof value.resolution.copies === "number" &&
+              value.resolution.copies > 0) ||
+            (value.resolution.kind === "castTaughtTavernSpell" &&
+              typeof value.resolution.definitionId === "string" &&
+              TAVERN_SPELL_DEFINITION_IDS.has(
+                value.resolution.definitionId,
+              ) &&
+              tavernSpellNeedsTarget(
+                getTavernSpellDefinition(value.resolution.definitionId),
+              )) ||
+            (value.resolution.kind === "makeGolden" &&
+              typeof value.resolution.maximumTier === "number" &&
+              Number.isInteger(value.resolution.maximumTier) &&
+              value.resolution.maximumTier >= 1 &&
+              value.resolution.maximumTier <= 6))))
     );
   }
   if (value.kind === "magnetizeTarget") {
@@ -542,7 +791,9 @@ function isPendingInteraction(
       ) &&
       isRecord(value.filter) &&
       typeof value.remainingDiscoveries === "number" &&
-      value.remainingDiscoveries > 0
+      value.remainingDiscoveries > 0 &&
+      validBattlecryFlag &&
+      validBattlecryEffectGrouping
     );
   }
   if (value.kind === "tavernSpellChoice") {
@@ -568,8 +819,41 @@ function isPendingInteraction(
           optionId === "escapeEruptionHealth",
       ) &&
       (value.effectMultiplier === undefined ||
-        value.effectMultiplier === 1 ||
-        value.effectMultiplier === 2)
+        (typeof value.effectMultiplier === "number" &&
+          Number.isInteger(value.effectMultiplier) &&
+          value.effectMultiplier > 0)) &&
+      (value.castCompletions === undefined ||
+        (typeof value.castCompletions === "number" &&
+          Number.isInteger(value.castCompletions) &&
+          value.castCompletions > 0)) &&
+      (value.effectMultiplier === undefined ||
+        value.castCompletions === undefined ||
+        (value.effectMultiplier >= value.castCompletions &&
+          value.effectMultiplier % value.castCompletions === 0))
+    );
+  }
+  if (value.kind === "heroChoice") {
+    return (
+      Array.isArray(value.optionIds) &&
+      value.optionIds.length === 4 &&
+      value.optionIds.every(
+        (optionId) =>
+          typeof optionId === "string" &&
+          isHeroDefinitionId(optionId),
+      ) &&
+      new Set(value.optionIds).size === value.optionIds.length
+    );
+  }
+  if (value.kind === "trinketChoice") {
+    const replacementId = value.replaceTrinketId;
+    const isMysteryCubeReplacement =
+      typeof replacementId === "string" &&
+      isTrinketDefinitionId(replacementId) &&
+      isMysteryCubeTrinketSlotId(replacementId);
+    return hasValidTrinketChoiceOptions(
+      value.trinketTier,
+      value.optionIds,
+      isMysteryCubeReplacement ? 2 : 4,
     );
   }
   if (value.kind === "heroPowerChoice") {
@@ -581,25 +865,102 @@ function isPendingInteraction(
         (optionId) =>
           typeof optionId === "string" &&
           isHeroPowerDefinitionId(optionId),
-      )
+      ) &&
+      (value.completionSource === undefined ||
+        value.completionSource === "tavernSpellCast" ||
+        value.completionSource === "generatedSpellCast") &&
+      (value.remainingChoices === undefined ||
+        (typeof value.remainingChoices === "number" &&
+          Number.isInteger(value.remainingChoices) &&
+          value.remainingChoices > 0))
     );
   }
   if (value.kind === "minionChoice") {
-    const normalOptions =
+    const foodieNormalOptions =
       Array.isArray(value.optionIds) &&
       value.optionIds.length === 2 &&
       value.optionIds[0] === "BG30_123t" &&
       value.optionIds[1] === "BG30_123t2" &&
       value.effectMultiplier === 1;
-    const goldenOptions =
+    const foodieGoldenOptions =
       Array.isArray(value.optionIds) &&
       value.optionIds.length === 2 &&
       value.optionIds[0] === "BG30_123_Gt" &&
       value.optionIds[1] === "BG30_123_Gt2" &&
       value.effectMultiplier === 2;
+    const botanistNormalOptions =
+      Array.isArray(value.optionIds) &&
+      value.optionIds.length === 2 &&
+      value.optionIds[0] === "BG32_237t" &&
+      value.optionIds[1] === "BG32_237t2" &&
+      value.effectMultiplier === 1;
+    const botanistGoldenOptions =
+      Array.isArray(value.optionIds) &&
+      value.optionIds.length === 2 &&
+      value.optionIds[0] === "BG32_237_Gt" &&
+      value.optionIds[1] === "BG32_237_Gt2" &&
+      value.effectMultiplier === 2;
+    const beetleNormalOptions =
+      Array.isArray(value.optionIds) &&
+      value.optionIds.length === 2 &&
+      value.optionIds[0] === "BG27_084t" &&
+      value.optionIds[1] === "BG27_084t2" &&
+      value.effectMultiplier === 1;
+    const beetleGoldenOptions =
+      Array.isArray(value.optionIds) &&
+      value.optionIds.length === 2 &&
+      value.optionIds[0] === "BG27_084_Gt" &&
+      value.optionIds[1] === "BG27_084_Gt2" &&
+      value.effectMultiplier === 2;
+    return value.definitionId === "BG30_123"
+      ? foodieNormalOptions || foodieGoldenOptions
+      : value.definitionId === "BG32_237"
+        ? botanistNormalOptions || botanistGoldenOptions
+        : value.definitionId === "BG27_084" &&
+          (beetleNormalOptions || beetleGoldenOptions);
+  }
+  if (value.kind === "tavernSpellDiscover") {
     return (
-      value.definitionId === "BG30_123" &&
-      (normalOptions || goldenOptions)
+      Array.isArray(value.options) &&
+      value.options.length > 0 &&
+      value.options.length <= 3 &&
+      value.options.every(isTavernSpell) &&
+      new Set(value.options.map((option) => option.instanceId)).size ===
+        value.options.length &&
+      new Set(value.options.map((option) => option.definitionId)).size ===
+        value.options.length &&
+      isTavernTier(value.maximumTier) &&
+      value.options.every(
+        (option) => option.tier <= (value.maximumTier as number),
+      ) &&
+      typeof value.remainingDiscoveries === "number" &&
+      Number.isInteger(value.remainingDiscoveries) &&
+      value.remainingDiscoveries > 0 &&
+      validBattlecryFlag &&
+      validBattlecryEffectGrouping &&
+      (value.sourceDefinitionId === undefined ||
+        typeof value.sourceDefinitionId === "string")
+    );
+  }
+  if (value.kind === "darkmoonPrizeDiscover") {
+    return (
+      Array.isArray(value.options) &&
+      value.options.length === 3 &&
+      value.options.every(
+        (option) =>
+          isSpellcraftSpell(option) &&
+          option.spellFamily === "generated" &&
+          isTierThreeDarkmoonPrizeDefinitionId(option.definitionId),
+      ) &&
+      new Set(value.options.map((option) => option.instanceId)).size ===
+        value.options.length &&
+      new Set(value.options.map((option) => option.definitionId)).size ===
+        value.options.length &&
+      typeof value.remainingDiscoveries === "number" &&
+      Number.isInteger(value.remainingDiscoveries) &&
+      value.remainingDiscoveries > 0 &&
+      (value.completionSource === undefined ||
+        value.completionSource === "generatedSpellCast")
     );
   }
   if (value.kind !== "discover") {
@@ -612,9 +973,53 @@ function isPendingInteraction(
         typeof value.destination.playableFromRound === "number") &&
       (value.destination.destroyAfterPlayThroughRound === undefined ||
         typeof value.destination.destroyAfterPlayThroughRound ===
-          "number")) ||
+          "number") &&
+      (value.destination.allowOverflow === undefined ||
+        typeof value.destination.allowOverflow === "boolean")) ||
       (value.destination.kind === "magnetize" &&
-        typeof value.destination.targetInstanceId === "string"));
+        typeof value.destination.targetInstanceId === "string") ||
+      (value.destination.kind === "transform" &&
+        typeof value.destination.targetInstanceId === "string") ||
+      (value.destination.kind === "customUndeadFirst" &&
+        typeof value.destination.sourceTrinketDefinitionId === "string" &&
+        isTrinketDefinitionId(
+          value.destination.sourceTrinketDefinitionId,
+        )) ||
+      (value.destination.kind === "customUndeadSecond" &&
+        typeof value.destination.sourceTrinketDefinitionId === "string" &&
+        isTrinketDefinitionId(
+          value.destination.sourceTrinketDefinitionId,
+        ) &&
+        typeof value.destination.firstComponentDefinitionId === "string"));
+  const validFilter =
+    isRecord(value.filter) &&
+    (value.filter.exactTier === undefined ||
+      isMinionTier(value.filter.exactTier)) &&
+    (value.filter.maximumTier === undefined ||
+      isTavernTier(value.filter.maximumTier)) &&
+    (value.filter.tribe === undefined || isTribe(value.filter.tribe)) &&
+    (value.filter.ability === undefined ||
+      value.filter.ability === "battlecry" ||
+      value.filter.ability === "deathrattle") &&
+    (value.filter.requiresMinionType === undefined ||
+      typeof value.filter.requiresMinionType === "boolean");
+  const validSelectionEffect =
+    value.selectionEffect === undefined ||
+    (isRecord(value.selectionEffect) &&
+      (value.selectionEffect.kind === "damageHeroBySelectedTier" ||
+        value.selectionEffect.kind === "makeGolden" ||
+        (value.selectionEffect.kind === "rememberTrinketMinion" &&
+          typeof value.selectionEffect.trinketDefinitionId === "string" &&
+          isTrinketDefinitionId(
+            value.selectionEffect.trinketDefinitionId,
+          )) ||
+        (value.selectionEffect.kind === "setStats" &&
+          typeof value.selectionEffect.attack === "number" &&
+          Number.isInteger(value.selectionEffect.attack) &&
+          value.selectionEffect.attack >= 0 &&
+          typeof value.selectionEffect.health === "number" &&
+          Number.isInteger(value.selectionEffect.health) &&
+          value.selectionEffect.health >= 0)));
   return (
     Array.isArray(value.options) &&
     value.options.length > 0 &&
@@ -625,12 +1030,25 @@ function isPendingInteraction(
         typeof option.instanceId === "string" &&
         hasSchema9MinionState(option),
     ) &&
-    isRecord(value.filter) &&
+    validFilter &&
     validDestination &&
     typeof value.remainingDiscoveries === "number" &&
     value.remainingDiscoveries > 0 &&
-    (value.completionSource === undefined ||
-      value.completionSource === "tavernSpellCast")
+    validBattlecryFlag &&
+    validBattlecryEffectGrouping &&
+    (value.sourceDefinitionId === undefined ||
+      typeof value.sourceDefinitionId === "string") &&
+    validSelectionEffect &&
+      (value.completionSource === undefined ||
+        value.completionSource === "tavernSpellCast" ||
+        value.completionSource === "tripleRewardCast" ||
+        value.completionSource === "generatedSpellCast") &&
+    (value.remainingCastCompletions === undefined ||
+      (typeof value.remainingCastCompletions === "number" &&
+        Number.isInteger(value.remainingCastCompletions) &&
+        value.remainingCastCompletions > 0)) &&
+    (value.firstCastFromHandPending === undefined ||
+      typeof value.firstCastFromHandPending === "boolean")
   );
 }
 
@@ -646,10 +1064,83 @@ function pendingInteractionMatchesPlayer(
   const boardIds = new Set(
     player.board.map((minion) => minion.instanceId),
   );
+  const shopIds = new Set(player.shop.map((minion) => minion.instanceId));
   if (interaction.kind === "discover") {
+    if (
+      interaction.selectionEffect?.kind === "rememberTrinketMinion" &&
+      !player.trinketIds.includes(
+        interaction.selectionEffect.trinketDefinitionId,
+      )
+    ) {
+      return false;
+    }
+    const destination = interaction.destination;
+    if (destination.kind === "hand") {
+      return true;
+    }
+    if (
+      destination.kind === "magnetize" ||
+      destination.kind === "transform"
+    ) {
+      return boardIds.has(destination.targetInstanceId);
+    }
+    if (
+      !player.trinketIds.includes(destination.sourceTrinketDefinitionId) ||
+      !isTrinketDefinitionId(destination.sourceTrinketDefinitionId) ||
+      getTrinketDefinition(destination.sourceTrinketDefinitionId).cardId !==
+        "BG32_MagicItem_300" ||
+      interaction.sourceDefinitionId !==
+        destination.sourceTrinketDefinitionId ||
+      interaction.options.length !== 3 ||
+      interaction.options.some(
+        (option) =>
+          option.poolCopies !== 0 ||
+          option.tier > player.tavernTier ||
+          !minionHasTribe(option, "undead"),
+      )
+    ) {
+      return false;
+    }
+    if (destination.kind === "customUndeadSecond") {
+      try {
+        const first = getMinionDefinition(
+          destination.firstComponentDefinitionId,
+        );
+        const tribes =
+          first.tribes ?? (first.tribe === "neutral" ? [] : [first.tribe]);
+        return (
+          first.collectible !== false &&
+          first.tier <= player.tavernTier &&
+          (tribes.includes("undead") || tribes.includes("all"))
+        );
+      } catch {
+        return false;
+      }
+    }
+    return true;
+  }
+  if (interaction.kind === "darkmoonPrizeDiscover") {
+    return interaction.completionSource === "generatedSpellCast"
+      ? player.pendingCardPlayed?.sourceInstanceId ===
+          interaction.sourceInstanceId
+      : player.trinketIds.includes(interaction.sourceInstanceId);
+  }
+  if (interaction.kind === "tavernSpellDiscover") {
+    const source = player.board.find(
+      (minion) => minion.instanceId === interaction.sourceInstanceId,
+    );
+    const sourceMatches =
+      (source !== undefined &&
+        (interaction.sourceDefinitionId === undefined ||
+          source.definitionId === interaction.sourceDefinitionId)) ||
+      (interaction.sourceDefinitionId !== undefined &&
+        player.trinketIds.includes(interaction.sourceDefinitionId));
     return (
-      interaction.destination.kind === "hand" ||
-      boardIds.has(interaction.destination.targetInstanceId)
+      sourceMatches &&
+      interaction.maximumTier <= 6 &&
+      interaction.options.every(
+        (option) => option.tier <= interaction.maximumTier,
+      )
     );
   }
   if (interaction.kind === "tavernSpellChoice") {
@@ -665,7 +1156,38 @@ function pendingInteractionMatchesPlayer(
       interaction.optionIds.length === 2
     );
   }
+  if (interaction.kind === "heroChoice") {
+    return (
+      interaction.sourceInstanceId === "lobby-hero-offer" &&
+      interaction.optionIds.length === 4 &&
+      interaction.optionIds.every(isHeroDefinitionId)
+    );
+  }
+  if (interaction.kind === "trinketChoice") {
+    const replacementId = interaction.replaceTrinketId;
+    const isMysteryCubeReplacement =
+      replacementId !== undefined &&
+      player.trinketIds.includes(replacementId) &&
+      isMysteryCubeTrinketSlotId(replacementId);
+    return hasValidTrinketChoiceOptions(
+      interaction.trinketTier,
+      interaction.optionIds,
+      isMysteryCubeReplacement ? 2 : 4,
+    );
+  }
   if (interaction.kind === "heroPowerChoice") {
+    if (interaction.completionSource === "generatedSpellCast") {
+      try {
+        return (
+          getSpellcraftDefinition(interaction.definitionId).effect ===
+            "darkmoonTrainingSession" &&
+          player.pendingCardPlayed?.sourceInstanceId ===
+            interaction.sourceInstanceId
+        );
+      } catch {
+        return false;
+      }
+    }
     return (
       interaction.definitionId ===
         "tavern-spell-unmasked-identity" &&
@@ -679,9 +1201,49 @@ function pendingInteractionMatchesPlayer(
         minion.instanceId === interaction.sourceInstanceId,
     );
     return (
-      interaction.definitionId === "BG30_123" &&
+      (interaction.definitionId === "BG30_123" ||
+        interaction.definitionId === "BG32_237" ||
+        interaction.definitionId === "BG27_084") &&
       source?.definitionId === interaction.definitionId &&
       source.golden === (interaction.effectMultiplier === 2)
+    );
+  }
+  if (
+    interaction.kind === "target" &&
+    interaction.resolution?.kind === "castTaughtTavernSpell"
+  ) {
+    const source = player.board.find(
+      (minion) => minion.instanceId === interaction.sourceInstanceId,
+    );
+    return (
+      source?.taughtTavernSpellDefinitionId ===
+        interaction.resolution.definitionId &&
+      interaction.optionInstanceIds.every(
+        (instanceId) => boardIds.has(instanceId) || shopIds.has(instanceId),
+      )
+    );
+  }
+  if (
+    interaction.kind === "target" &&
+    interaction.resolution?.kind === "makeGolden"
+  ) {
+    const maximumTier = interaction.resolution.maximumTier;
+    const source = player.board.find(
+      (minion) => minion.instanceId === interaction.sourceInstanceId,
+    );
+    return (
+      source?.definitionId === "BG25_034" &&
+      maximumTier === 6 &&
+      interaction.optionInstanceIds.every((instanceId) => {
+        const target = player.board.find(
+          (minion) => minion.instanceId === instanceId,
+        );
+        return (
+          target !== undefined &&
+          !target.golden &&
+          getMinionDefinition(target.definitionId).tier <= maximumTier
+        );
+      })
     );
   }
   return (
@@ -731,6 +1293,7 @@ function isGhostHandMinion(
     value.kind === "minion" &&
     value.poolCopies === 0 &&
     value.poolCopiesOnPurchase === undefined &&
+    value.poolCopiesByDefinitionId === undefined &&
     Array.isArray(value.attachments) &&
     value.attachments.every(isZeroPoolMagneticAttachment) &&
     hasSchema9MinionState(value)
@@ -748,6 +1311,7 @@ function isBloodGemSpell(value: unknown): value is BloodGemSpellInstance {
     typeof value.description === "string" &&
     value.spellFamily === "bloodGem" &&
     (value.bonusKeyword === undefined ||
+      value.bonusKeyword === "tauntForQuilboar" ||
       value.bonusKeyword === "rebornForQuilboar" ||
       value.bonusKeyword === "divineShieldForQuilboar")
   );
@@ -815,8 +1379,11 @@ function isSpellcraftSpell(
     typeof value.cardId !== "string" ||
     typeof value.name !== "string" ||
     typeof value.description !== "string" ||
-    value.spellFamily !== "spellcraft" ||
-    (value.target !== "none" && value.target !== "friendly")
+    (value.spellFamily !== "spellcraft" &&
+      value.spellFamily !== "generated") ||
+    (value.target !== "none" &&
+      value.target !== "friendly" &&
+      value.target !== "shop")
   ) {
     return false;
   }
@@ -844,7 +1411,8 @@ function isSpellcraftSpell(
       expectedCardId === value.cardId &&
       definition.name === value.name &&
       expectedDescription === value.description &&
-      definition.target === value.target
+      definition.target === value.target &&
+      (definition.spellFamily ?? "spellcraft") === value.spellFamily
     );
   } catch {
     return false;
@@ -909,6 +1477,84 @@ function isHumanScoutingReports(value: unknown): boolean {
   );
 }
 
+function hasLobbySystemPlayerState(value: unknown): boolean {
+  if (!isRecord(value)) return false;
+  if (
+    !Array.isArray(value.trinketIds) ||
+    !areOwnedTrinketDefinitionIdsValid(value.trinketIds)
+  ) {
+    return false;
+  }
+  const trinketIds = value.trinketIds as string[];
+  if (
+    !Array.isArray(value.pendingMysteryCubeReplacementIds) ||
+    new Set(value.pendingMysteryCubeReplacementIds).size !==
+      value.pendingMysteryCubeReplacementIds.length ||
+    !value.pendingMysteryCubeReplacementIds.every(
+      (definitionId) =>
+        typeof definitionId === "string" &&
+        trinketIds.includes(definitionId) &&
+        isMysteryCubeTrinketSlotId(definitionId),
+    )
+  ) {
+    return false;
+  }
+  if (
+    !isRecord(value.heroPowerCounters) ||
+    Array.isArray(value.heroPowerCounters) ||
+    !Object.entries(value.heroPowerCounters).every(
+      ([counterKey, count]) =>
+        VALID_HERO_POWER_COUNTER_KEYS.has(counterKey) &&
+        typeof count === "number" &&
+        Number.isInteger(count) &&
+        count >= 0,
+    )
+  ) {
+    return false;
+  }
+  return (
+    (value.heroId === null ||
+      (typeof value.heroId === "string" &&
+        isHeroDefinitionId(value.heroId))) &&
+    isRecord(value.trinketCounters) &&
+    Object.entries(value.trinketCounters).every(
+      ([definitionId, count]) =>
+        trinketIds.includes(definitionId) &&
+        typeof count === "number" &&
+        Number.isInteger(count) &&
+        count >= 0,
+    ) &&
+    isRecord(value.trinketSelections) &&
+    !Array.isArray(value.trinketSelections) &&
+    Object.entries(value.trinketSelections).every(
+      ([definitionId, selectedMinionDefinitionId]) => {
+        if (
+          !trinketIds.includes(definitionId) ||
+          typeof selectedMinionDefinitionId !== "string"
+        ) {
+          return false;
+        }
+        try {
+          getMinionDefinition(selectedMinionDefinitionId);
+          return true;
+        } catch {
+          return false;
+        }
+      },
+    ) &&
+    Array.isArray(value.pendingSystemSpellIds) &&
+    value.pendingSystemSpellIds.every(
+      (definitionId) =>
+        typeof definitionId === "string" &&
+        isSystemTavernSpellDefinitionId(definitionId),
+    ) &&
+    typeof value.freeTavernSpellPurchases === "number" &&
+    Number.isInteger(value.freeTavernSpellPurchases) &&
+    value.freeTavernSpellPurchases >= 0 &&
+    typeof value.heroRefreshAvailable === "boolean"
+  );
+}
+
 function isGameState(value: unknown): value is GameState {
   if (!value || typeof value !== "object") return false;
   const candidate = value as Partial<GameState>;
@@ -918,26 +1564,57 @@ function isGameState(value: unknown): value is GameState {
     isValidInitialHealth(candidate.initialHealth) &&
     typeof candidate.seed === "number" &&
     typeof candidate.nextInteractionId === "number" &&
+    typeof candidate.lobbySystemsEnabled === "boolean" &&
+    (candidate.lobbySystemsEnabled
+      ? typeof candidate.systemEventId === "string" &&
+        isSystemEventDefinitionId(candidate.systemEventId)
+      : candidate.systemEventId === null) &&
     isTavernSpellPool(candidate.spellPool) &&
     isHumanScoutingReports(candidate.humanScoutingReports) &&
     Array.isArray(candidate.activeTribes) &&
     candidate.activeTribes.length === 5 &&
+    candidate.activeTribes.every(isTribe) &&
     Array.isArray(candidate.players) &&
     candidate.players.length === 8 &&
+    Array.isArray(candidate.deferredTriplePlayerIds) &&
+    candidate.deferredTriplePlayerIds.every(
+      (playerId) =>
+        typeof playerId === "string" &&
+        candidate.players?.some((player) => player.id === playerId),
+    ) &&
+    new Set(candidate.deferredTriplePlayerIds).size ===
+      candidate.deferredTriplePlayerIds.length &&
     candidate.players.every(
       (player) =>
         typeof player.armor === "number" &&
         player.armor >= 0 &&
+        hasLobbySystemPlayerState(player) &&
         (player.heroPowerId === null ||
           (typeof player.heroPowerId === "string" &&
             isHeroPowerDefinitionId(player.heroPowerId))) &&
         typeof player.tavernSpellsCastThisTurn === "number" &&
+        typeof player.tavernSpellsCast === "number" &&
         typeof player.cardsPlayedThisTurn === "number" &&
         Number.isInteger(player.cardsPlayedThisTurn) &&
         player.cardsPlayedThisTurn >= 0 &&
         typeof player.goldSpentThisTurn === "number" &&
         Number.isInteger(player.goldSpentThisTurn) &&
         player.goldSpentThisTurn >= 0 &&
+        typeof player.mrrgltonsPlayed === "number" &&
+        Number.isInteger(player.mrrgltonsPlayed) &&
+        player.mrrgltonsPlayed >= 0 &&
+        typeof player.battlecriesTriggered === "number" &&
+        Number.isInteger(player.battlecriesTriggered) &&
+        player.battlecriesTriggered >= 0 &&
+        typeof player.heroPowerExtraTriggers === "number" &&
+        Number.isInteger(player.heroPowerExtraTriggers) &&
+        player.heroPowerExtraTriggers >= 0 &&
+        typeof player.darkmoonReservePricesDiscount === "number" &&
+        Number.isInteger(player.darkmoonReservePricesDiscount) &&
+        player.darkmoonReservePricesDiscount >= 0 &&
+        typeof player.pendingTickatusTagPrizes === "number" &&
+        Number.isInteger(player.pendingTickatusTagPrizes) &&
+        player.pendingTickatusTagPrizes >= 0 &&
         (player.pendingCardPlayed === null ||
           isPendingCardPlayedEvent(player.pendingCardPlayed)) &&
         (player.lastTavernSpellDefinitionId === null ||
@@ -975,6 +1652,12 @@ function isGameState(value: unknown): value is GameState {
             ))) &&
         typeof player.tavernMinionAttackBonus === "number" &&
         typeof player.tavernMinionHealthBonus === "number" &&
+        typeof player.tavernMinionAttackBonusThisTurn === "number" &&
+        Number.isInteger(player.tavernMinionAttackBonusThisTurn) &&
+        player.tavernMinionAttackBonusThisTurn >= 0 &&
+        typeof player.tavernMinionHealthBonusThisTurn === "number" &&
+        Number.isInteger(player.tavernMinionHealthBonusThisTurn) &&
+        player.tavernMinionHealthBonusThisTurn >= 0 &&
         typeof player.nextCombatAttackBonus === "number" &&
         typeof player.nextCombatHealthBonus === "number" &&
         typeof player.nextCombatSetEnemyHealthToOne === "number" &&
@@ -1028,6 +1711,18 @@ function isGameState(value: unknown): value is GameState {
         player.beetleHealthBonus >= 0 &&
         typeof player.ballerAttackBonus === "number" &&
         typeof player.ballerHealthBonus === "number" &&
+        typeof player.elementalGrantAttackBonus === "number" &&
+        Number.isInteger(player.elementalGrantAttackBonus) &&
+        player.elementalGrantAttackBonus >= 0 &&
+        typeof player.elementalGrantHealthBonus === "number" &&
+        Number.isInteger(player.elementalGrantHealthBonus) &&
+        player.elementalGrantHealthBonus >= 0 &&
+        typeof player.deathrattlesTriggered === "number" &&
+        Number.isInteger(player.deathrattlesTriggered) &&
+        player.deathrattlesTriggered >= 0 &&
+        typeof player.magnetizationsThisGame === "number" &&
+        Number.isInteger(player.magnetizationsThisGame) &&
+        player.magnetizationsThisGame >= 0 &&
         typeof player.deepBlueBonus === "number" &&
         typeof player.undeadArmyAttackBonus === "number" &&
         typeof player.undeadArmyHealthBonus === "number" &&
@@ -1083,6 +1778,11 @@ function isGameState(value: unknown): value is GameState {
         pendingInteractionMatchesPlayer(
           candidate.pendingInteraction,
           candidate.players,
+        ) &&
+        pendingTrinketChoiceMatchesState(
+          candidate.pendingInteraction,
+          candidate.players,
+          candidate.activeTribes,
         ))) &&
     typeof candidate.humanPlayerId === "string" &&
     (candidate.phase === "recruit" ||
@@ -1358,6 +2058,8 @@ function UnitCardFace({
 
 function UnitCard({
   unit,
+  purchaseCost,
+  purchaseCurrency = "gold",
   selected = false,
   unaffordable = false,
   compact = false,
@@ -1405,6 +2107,8 @@ function UnitCard({
   onKeyDown,
 }: {
   unit: MinionInstance;
+  purchaseCost?: number;
+  purchaseCurrency?: "gold" | "health";
   selected?: boolean;
   unaffordable?: boolean;
   compact?: boolean;
@@ -1437,7 +2141,7 @@ function UnitCard({
   bloodGemCastLabel?: string;
   bloodGemCastToken?: string;
   tavernSpellTarget?: boolean;
-  spellTargetKind?: "tavernSpell" | "spellcraft";
+  spellTargetKind?: "tavernSpell" | "spellcraft" | "generated";
   tavernSpellDropTarget?: boolean;
   tavernSpellCast?: boolean;
   tavernSpellCastLabel?: string;
@@ -1529,7 +2233,7 @@ function UnitCard({
         unit,
       )}，${unit.attack} 攻击，${unit.health} 生命，${
         unit.description
-      }${
+      }${purchaseCost === undefined ? "" : `，购买费用${purchaseCost}${purchaseCurrency === "health" ? "点生命" : "枚金币"}`}${
         keywordVisuals.length > 0
           ? `，当前关键词：${keywordVisuals
               .map(({ label }) => label)
@@ -1541,7 +2245,9 @@ function UnitCard({
         tavernSpellTarget
           ? spellTargetKind === "spellcraft"
             ? "，可作为塑造法术目标"
-            : "，可作为酒馆法术目标"
+            : spellTargetKind === "generated"
+              ? "，可作为法术目标"
+              : "，可作为酒馆法术目标"
           : ""
       }${
         newlyGenerated ? "，本轮战斗新获得" : ""
@@ -1552,7 +2258,7 @@ function UnitCard({
       }${
         combatTrigger ? "，正在触发特殊效果" : ""
       }${
-        locked ? "，锁定至下个招募回合" : ""
+        locked ? "，当前锁定，达到可用回合后解锁" : ""
       }`}
       aria-pressed={selected}
       aria-disabled={disabled}
@@ -1562,9 +2268,9 @@ function UnitCard({
           magneticTarget ? "magnetic-target-instructions" : "",
           bloodGemTarget ? "blood-gem-target-instructions" : "",
           tavernSpellTarget
-            ? spellTargetKind === "spellcraft"
-              ? "spellcraft-target-instructions"
-              : "tavern-spell-target-instructions"
+            ? spellTargetKind === "tavernSpell"
+              ? "tavern-spell-target-instructions"
+              : "spellcraft-target-instructions"
             : "",
         ]
           .filter(Boolean)
@@ -1596,6 +2302,17 @@ function UnitCard({
       {...mergeCardPointerHandlers(inspectionHandlers, dragHandlers)}
     >
       <UnitCardFace unit={unit} keywordVisuals={keywordVisuals} />
+      {purchaseCost !== undefined && (
+        <span
+          className={`shop-purchase-cost${
+            purchaseCurrency === "health" ? " is-health-cost" : ""
+          }`}
+          data-purchase-currency={purchaseCurrency}
+        >
+          {purchaseCurrency === "health" ? "♥" : ""}
+          {purchaseCost}
+        </span>
+      )}
       {combatShieldBreaking && (
         <span className="keyword-vfx-shield-break" aria-hidden="true" />
       )}
@@ -1804,7 +2521,9 @@ function ConsolationCoinCard({
 }
 
 function bloodGemKeywordText(card: BloodGemSpellInstance): string {
-  return card.bonusKeyword === "rebornForQuilboar"
+  return card.bonusKeyword === "tauntForQuilboar"
+    ? "嘲讽"
+    : card.bonusKeyword === "rebornForQuilboar"
     ? "复生"
     : card.bonusKeyword === "divineShieldForQuilboar"
       ? "圣盾"
@@ -1909,7 +2628,11 @@ function SpellcraftCardFace({
       <span className="tavern-spell-copy">{card.description}</span>
       <span className="tavern-spell-hint">
         {spellcraftNeedsTarget(card)
-          ? "拖到友方随从上塑造"
+          ? card.target === "shop"
+            ? "拖到酒馆随从上塑造"
+            : card.spellFamily === "generated"
+            ? "拖到友方随从上施放"
+            : "拖到友方随从上塑造"
           : "拖到战场或点击施放"}
       </span>
     </>
@@ -1951,7 +2674,9 @@ function SpellcraftCard({
       }`}
       aria-label={`${(card.effectMultiplier ?? 1) > 1 ? "金色" : ""}${
         card.name
-      }，0费塑造法术，${card.description}`}
+      }，0费${
+        card.spellFamily === "generated" ? "法术" : "塑造法术"
+      }，${card.description}`}
       aria-pressed={selected}
       data-card-instance-id={card.instanceId}
       data-drag-enabled={Boolean(dragHandlers)}
@@ -1970,12 +2695,16 @@ function TavernSpellCardFace({
   card,
   inShop = false,
   purchaseCost,
+  purchaseCurrency,
 }: {
   card: TavernSpellInstance;
   inShop?: boolean;
   purchaseCost?: number;
+  purchaseCurrency?: "gold" | "health";
 }) {
-  const purchaseCurrency = tavernSpellPurchaseCurrency(card);
+  const displayedPurchaseCurrency = inShop
+    ? (purchaseCurrency ?? tavernSpellPurchaseCurrency(card))
+    : tavernSpellPurchaseCurrency(card);
   const displayCost = inShop ? (purchaseCost ?? card.cost) : card.cost;
   const discounted = inShop && displayCost < card.cost;
   return (
@@ -1983,11 +2712,11 @@ function TavernSpellCardFace({
       <CardArtwork unit={card} kind="portrait" />
       <span
         className={`tavern-spell-cost${
-          purchaseCurrency === "health" ? " is-health-cost" : ""
+          displayedPurchaseCurrency === "health" ? " is-health-cost" : ""
         }${discounted ? " is-discounted" : ""
         }`}
       >
-        {purchaseCurrency === "health" ? "♥" : ""}
+        {displayedPurchaseCurrency === "health" ? "♥" : ""}
         {displayCost}
       </span>
       <span className="tavern-spell-tier">{card.tier}</span>
@@ -1995,7 +2724,7 @@ function TavernSpellCardFace({
       <span className="tavern-spell-copy">{card.description}</span>
       <span className="tavern-spell-hint">
         {inShop
-          ? purchaseCurrency === "health"
+          ? displayedPurchaseCurrency === "health"
             ? `购买 · ${displayCost} 生命`
             : discounted
               ? `购买 · ${displayCost}（原${card.cost}）`
@@ -2012,6 +2741,7 @@ function TavernSpellCard({
   card,
   inShop = false,
   purchaseCost,
+  purchaseCurrency,
   selected = false,
   playable = false,
   unaffordable = false,
@@ -2025,6 +2755,7 @@ function TavernSpellCard({
   card: TavernSpellInstance;
   inShop?: boolean;
   purchaseCost?: number;
+  purchaseCurrency?: "gold" | "health";
   selected?: boolean;
   playable?: boolean;
   unaffordable?: boolean;
@@ -2035,7 +2766,9 @@ function TavernSpellCard({
   testId?: string;
   onClick?: () => void;
 }) {
-  const purchaseCurrency = tavernSpellPurchaseCurrency(card);
+  const displayedPurchaseCurrency = inShop
+    ? (purchaseCurrency ?? tavernSpellPurchaseCurrency(card))
+    : tavernSpellPurchaseCurrency(card);
   const displayCost = inShop ? (purchaseCost ?? card.cost) : card.cost;
   return (
     <button
@@ -2048,7 +2781,7 @@ function TavernSpellCard({
         dragHandlers ? " is-draggable" : ""
       }${dragging ? " is-drag-source" : ""}`}
       aria-label={`${card.name}，${card.tier}级酒馆法术，费用${displayCost}${
-        purchaseCurrency === "health" ? "点生命" : "枚金币"
+        displayedPurchaseCurrency === "health" ? "点生命" : "枚金币"
       }，${card.description}`}
       aria-pressed={selected}
       data-card-instance-id={card.instanceId}
@@ -2063,6 +2796,7 @@ function TavernSpellCard({
         card={card}
         inShop={inShop}
         purchaseCost={purchaseCost}
+        purchaseCurrency={displayedPurchaseCurrency}
       />
     </button>
   );
@@ -2080,10 +2814,15 @@ function CardArtwork({
   const portraitRemote = `https://art.hearthstonejson.com/v1/256x/${cardId}.webp`;
   const renderLocal = `/card-art/renders/zhCN/${cardId}.png`;
   const renderRemote = `https://art.hearthstonejson.com/v1/render/latest/zhCN/512x/${cardId}.png`;
+  const preferRemote = unit.cardId.includes("_MagicItem_");
   const sources =
     kind === "detail"
-      ? [renderLocal, renderRemote, portraitLocal, portraitRemote]
-      : [portraitLocal, portraitRemote];
+      ? preferRemote
+        ? [renderRemote, portraitRemote, renderLocal, portraitLocal]
+        : [renderLocal, renderRemote, portraitLocal, portraitRemote]
+      : preferRemote
+        ? [portraitRemote, portraitLocal]
+        : [portraitLocal, portraitRemote];
   const [sourceIndex, setSourceIndex] = useState(0);
 
   const source = sources[sourceIndex];
@@ -2095,7 +2834,7 @@ function CardArtwork({
       data-fallback={unit.name}
     >
       {source ? (
-        // A plain img is required for the local -> remote -> placeholder chain.
+        // A plain img is required for the preferred source -> fallback chain.
         // eslint-disable-next-line @next/next/no-img-element
         <img
           src={source}
@@ -2109,6 +2848,10 @@ function CardArtwork({
       )}
     </span>
   );
+}
+
+function spellcraftDisplayLabel(card: SpellcraftSpellInstance): string {
+  return card.spellFamily === "generated" ? "法术" : "塑造法术";
 }
 
 function inspectionCardMeta(
@@ -2128,6 +2871,9 @@ function inspectionCardMeta(
     return `${card.tier} 星酒馆法术 · ${card.cost} 费`;
   }
   if (card.kind === "spellcraft") {
+    if (card.spellFamily === "generated") {
+      return "法术 · 0 费";
+    }
     return `${
       (card.effectMultiplier ?? 1) > 1 ? "金色" : "普通"
     }塑造法术 · 0 费`;
@@ -2440,7 +3186,7 @@ function BoardRow({
   bloodGemDropTargetId?: string;
   bloodGemCastFeedback?: BloodGemCastFeedback | null;
   tavernSpellTargetIds?: readonly string[];
-  spellTargetKind?: "tavernSpell" | "spellcraft";
+  spellTargetKind?: "tavernSpell" | "spellcraft" | "generated";
   tavernSpellDropTargetId?: string;
   tavernSpellCastFeedback?: TavernSpellCastFeedback | null;
   getDragHandlers?: (
@@ -2917,8 +3663,8 @@ function InitialHealthControl({
       }`}
     >
       <label htmlFor={inputId}>
-        <span>所有玩家初始生命值</span>
-        <small>同一数值会应用给你和 7 位 AI</small>
+        <span>所有玩家基础生命值</span>
+        <small>你和 7 位 AI 使用同一基础值；英雄技能会另行结算</small>
       </label>
       <div className="initial-health-control">
         <button
@@ -2971,7 +3717,7 @@ function InitialHealthControl({
       >
         {parsedHealth === null
           ? `请输入 ${MIN_INITIAL_HEALTH} 到 ${MAX_INITIAL_HEALTH} 的整数。`
-          : `本局 8 名玩家都将以 ${parsedHealth} 点生命开始。`}
+          : `本局 8 名玩家的基础生命值均为 ${parsedHealth} 点。`}
       </span>
     </div>
   );
@@ -2989,6 +3735,7 @@ export default function GameClient() {
   const [selectedStandingPlayerId, setSelectedStandingPlayerId] =
     useState<string | null>(null);
   const [showRestart, setShowRestart] = useState(false);
+  const [showLobbyOverview, setShowLobbyOverview] = useState(false);
   const [dragSession, setDragSession] = useState<DragSession | null>(null);
   const [cardInspection, setCardInspection] =
     useState<CardInspectionState | null>(null);
@@ -3005,12 +3752,12 @@ export default function GameClient() {
   );
   const [battlePlayback, setBattlePlayback] =
     useState<BattlePlaybackState>({
-      battle: null,
+      battleKey: null,
       revealedCount: 0,
       complete: false,
     });
-  const [combatIntroCompletedBattle, setCombatIntroCompletedBattle] =
-    useState<BattleSummary | null>(null);
+  const [combatIntroCompletedBattleKey, setCombatIntroCompletedBattleKey] =
+    useState<string | null>(null);
   const gameRef = useRef(game);
   const recruitPresentationTokenRef = useRef(0);
   const dragSessionRef = useRef<DragSession | null>(null);
@@ -3028,6 +3775,7 @@ export default function GameClient() {
   const tavernSpellCastTimerRef = useRef<number | null>(null);
   const interactionReturnFocusRef = useRef<HTMLElement | null>(null);
   const restartReturnFocusRef = useRef<HTMLElement | null>(null);
+  const lobbyOverviewReturnFocusRef = useRef<HTMLElement | null>(null);
   const previousInteractionIdRef = useRef<string | null>(null);
   const magneticFocusTargetRef = useRef<string | null>(null);
   const previousMagneticSelectionRef = useRef<string | null>(null);
@@ -3138,17 +3886,43 @@ export default function GameClient() {
   useEffect(() => {
     const hydrationTimer = window.setTimeout(() => {
       try {
+        const restoreGame = (saved: GameState) => {
+          setGame(saved);
+          setStarted(true);
+          setInitialHealthInput(String(saved.initialHealth));
+          safeWriteLocalStorage(SAVE_KEY, JSON.stringify(saved));
+
+          const resumedPlayback =
+            saved.phase === "combat" && saved.lastBattle
+              ? resumeCombatPlayback(
+                  saved.lastBattle,
+                  saved.lastBattle.events.filter(isCombatPlaybackEvent)
+                    .length,
+                  readCombatPlaybackSession(),
+                )
+              : null;
+          if (resumedPlayback) {
+            setBattlePlayback(resumedPlayback);
+            setCombatIntroCompletedBattleKey(
+              resumedPlayback.battleKey,
+            );
+          } else {
+            safeRemoveSessionStorage(COMBAT_PLAYBACK_SESSION_KEY);
+          }
+        };
+
         const raw = safeReadLocalStorage(SAVE_KEY);
         let restored = false;
         if (raw) {
-          const saved = normalizePersistedGameState(JSON.parse(raw));
-          if (isGameState(saved)) {
-            setGame(saved);
-            setStarted(true);
-            setInitialHealthInput(String(saved.initialHealth));
-            safeWriteLocalStorage(SAVE_KEY, JSON.stringify(saved));
-            restored = true;
-          } else {
+          try {
+            const saved = normalizePersistedGameState(JSON.parse(raw));
+            if (isGameState(saved)) {
+              restoreGame(saved);
+              restored = true;
+            } else {
+              safeRemoveLocalStorage(SAVE_KEY);
+            }
+          } catch {
             safeRemoveLocalStorage(SAVE_KEY);
           }
         }
@@ -3164,13 +3938,7 @@ export default function GameClient() {
                   JSON.parse(legacyRaw) as unknown,
                 );
                 if (isGameState(migrated)) {
-                  setGame(migrated);
-                  setStarted(true);
-                  setInitialHealthInput(String(migrated.initialHealth));
-                  safeWriteLocalStorage(
-                    SAVE_KEY,
-                    JSON.stringify(migrated),
-                  );
+                  restoreGame(migrated);
                   restored = true;
                 }
                 safeRemoveLocalStorage(legacyKey);
@@ -3196,6 +3964,19 @@ export default function GameClient() {
     if (!loaded || !started) return;
     safeWriteLocalStorage(SAVE_KEY, JSON.stringify(game));
   }, [game, loaded, started]);
+
+  useEffect(() => {
+    if (battlePlayback.battleKey === null) return;
+    safeWriteSessionStorage(
+      COMBAT_PLAYBACK_SESSION_KEY,
+      JSON.stringify(battlePlayback),
+    );
+  }, [battlePlayback]);
+
+  useEffect(() => {
+    if (!loaded || game.phase === "combat") return;
+    safeRemoveSessionStorage(COMBAT_PLAYBACK_SESSION_KEY);
+  }, [game.phase, loaded]);
 
   useEffect(() => {
     if (!combatRewardNotice) return;
@@ -3268,9 +4049,65 @@ export default function GameClient() {
       game.players[0],
     [game],
   );
+  const humanHero = human.heroId
+    ? getHeroDefinition(human.heroId)
+    : null;
   const humanHeroPower = human.heroPowerId
     ? getHeroPowerDefinition(human.heroPowerId)
     : null;
+  const humanHeroPowerProgress = human.heroPowerId
+    ? getHeroPowerProgressText(
+        human.heroPowerId,
+        human.heroPowerCounters,
+        game.round,
+      )
+    : null;
+  const humanHeroPowerStatus = humanHeroPower
+    ? `${humanHeroPower.description}${
+        humanHeroPowerProgress ? ` · ${humanHeroPowerProgress}` : ""
+      }`
+    : null;
+  const systemEvent = game.systemEventId
+    ? getSystemEventDefinition(game.systemEventId)
+    : null;
+  const humanTrinkets = human.trinketIds.map(getTrinketDefinition);
+  const humanTrinketDescription = (
+    definition: (typeof humanTrinkets)[number],
+  ) => {
+    const progress = getTrinketProgressText(human, definition.id);
+    return `${definition.description}${
+      progress ? ` · 当前：${progress}` : ""
+    }`;
+  };
+  const lobbyOverviewSummary = [
+    systemEvent
+      ? `系统事件 ${systemEvent.name}：${systemEvent.description}`
+      : "无系统事件",
+    humanHeroPower
+      ? `英雄技能 ${humanHeroPower.name}：${
+          humanHeroPowerStatus ?? humanHeroPower.description
+        }`
+      : "无英雄技能",
+    humanTrinkets.length > 0
+      ? `已选符文：${humanTrinkets
+          .map(
+            (definition) =>
+              `${definition.name}：${humanTrinketDescription(definition)}`,
+          )
+          .join("；")}`
+      : `尚未选择符文，首次将在第 ${LESSER_TRINKET_ROUND} 回合开启`,
+  ].join("；");
+  const hasLesserTrinket = humanTrinkets.some(
+    (definition) => definition.tier === "lesser",
+  );
+  const hasGreaterTrinket = humanTrinkets.some(
+    (definition) => definition.tier === "greater",
+  );
+  const nextTrinketRound = !hasLesserTrinket
+    ? LESSER_TRINKET_ROUND
+    : !hasGreaterTrinket
+      ? GREATER_TRINKET_ROUND
+      : null;
   const tavernSpellShopOffers = useMemo(
     () => [
       ...(human.spellShop ? [human.spellShop] : []),
@@ -3305,8 +4142,31 @@ export default function GameClient() {
     game.pendingInteraction?.playerId === human.id
       ? game.pendingInteraction
       : null;
+  const heroChoiceInteraction =
+    humanInteraction?.kind === "heroChoice" ? humanInteraction : null;
+  const trinketChoiceInteraction =
+    humanInteraction?.kind === "trinketChoice"
+      ? humanInteraction
+      : null;
+  const isMysteryCubeTrinketChoice =
+    trinketChoiceInteraction?.replaceTrinketId !== undefined &&
+    isTrinketDefinitionId(trinketChoiceInteraction.replaceTrinketId) &&
+    isMysteryCubeTrinketSlotId(
+      trinketChoiceInteraction.replaceTrinketId,
+    );
   const targetInteraction =
     humanInteraction?.kind === "target" ? humanInteraction : null;
+  const taughtTavernSpellTargetResolution =
+    targetInteraction?.resolution?.kind === "castTaughtTavernSpell"
+      ? targetInteraction.resolution
+      : null;
+  const taughtTavernSpellTargetInteraction =
+    taughtTavernSpellTargetResolution ? targetInteraction : null;
+  const taughtTavernSpellDefinition = taughtTavernSpellTargetResolution
+    ? getTavernSpellDefinition(
+        taughtTavernSpellTargetResolution.definitionId,
+      )
+    : null;
   const magnetizeTargetInteraction =
     humanInteraction?.kind === "magnetizeTarget"
       ? humanInteraction
@@ -3315,6 +4175,14 @@ export default function GameClient() {
     magnetizeTargetInteraction ?? targetInteraction;
   const discoverInteraction =
     humanInteraction?.kind === "discover" ? humanInteraction : null;
+  const tavernSpellDiscoverInteraction =
+    humanInteraction?.kind === "tavernSpellDiscover"
+      ? humanInteraction
+      : null;
+  const darkmoonPrizeDiscoverInteraction =
+    humanInteraction?.kind === "darkmoonPrizeDiscover"
+      ? humanInteraction
+      : null;
   const tavernSpellChoiceInteraction =
     humanInteraction?.kind === "tavernSpellChoice"
       ? humanInteraction
@@ -3333,6 +4201,10 @@ export default function GameClient() {
     humanInteraction?.kind === "minionChoice"
       ? humanInteraction
       : null;
+  const isBuddingBotanistChoice =
+    minionChoiceInteraction?.definitionId === "BG32_237";
+  const isAdaptableBeetleChoice =
+    minionChoiceInteraction?.definitionId === "BG27_084";
   const interactionLocked =
     game.pendingInteraction !== null ||
     queuedRecruitBloodGemPulse?.kind === "bloodGemPulse";
@@ -3354,10 +4226,26 @@ export default function GameClient() {
         humanInteraction.interactionId;
       const focusFrame = window.requestAnimationFrame(() => {
         const focusTarget =
-          humanInteraction.kind === "discover"
+          humanInteraction.kind === "heroChoice"
+            ? document.querySelector<HTMLElement>(
+                '[data-testid="hero-choice-0"]',
+              )
+            : humanInteraction.kind === "trinketChoice"
+              ? document.querySelector<HTMLElement>(
+                  '[data-testid="trinket-choice-dialog"] button:not(:disabled)',
+                )
+          : humanInteraction.kind === "discover"
             ? document.querySelector<HTMLElement>(
                 '[data-testid="discover-option-0"]',
               )
+            : humanInteraction.kind === "tavernSpellDiscover"
+              ? document.querySelector<HTMLElement>(
+                  '[data-testid="tavern-spell-discover-option-0"]',
+                )
+            : humanInteraction.kind === "darkmoonPrizeDiscover"
+              ? document.querySelector<HTMLElement>(
+                  '[data-testid="darkmoon-prize-discover-option-0"]',
+                )
             : humanInteraction.kind === "tavernSpellChoice"
               ? document.querySelector<HTMLElement>(
                   '[data-testid="time-management-now"]',
@@ -3372,7 +4260,11 @@ export default function GameClient() {
                 )
             : humanInteraction.kind === "minionChoice"
               ? document.querySelector<HTMLElement>(
-                  '[data-testid="fearless-foodie-improve"]',
+                  humanInteraction.definitionId === "BG32_237"
+                    ? '[data-testid="budding-botanist-attack"]'
+                    : humanInteraction.definitionId === "BG27_084"
+                      ? '[data-testid="adaptable-beetle-reborn"]'
+                      : '[data-testid="fearless-foodie-improve"]',
                 )
             : Array.from(
                 document.querySelectorAll<HTMLElement>(
@@ -3454,13 +4346,17 @@ export default function GameClient() {
   );
 
   const battle = game.lastBattle;
+  const battleKey = battle ? combatPlaybackKey(battle) : null;
   const combatIntroActive =
     started &&
     game.phase === "combat" &&
-    battle !== null &&
-    combatIntroCompletedBattle !== battle;
+    battleKey !== null &&
+    combatIntroCompletedBattleKey !== battleKey;
   const pageModalOpen =
-    (loaded && !started) || showRestart || game.phase === "gameOver";
+    (loaded && !started) ||
+    showRestart ||
+    showLobbyOverview ||
+    game.phase === "gameOver";
   const introOpponent = battle
     ? combatIntroOpponent(battle, game.humanPlayerId)
     : null;
@@ -3501,8 +4397,8 @@ export default function GameClient() {
   const playbackEventCount = playbackEvents.length;
   const playbackIsCurrent =
     game.phase === "combat" &&
-    battle !== null &&
-    battlePlayback.battle === battle;
+    battleKey !== null &&
+    battlePlayback.battleKey === battleKey;
   const revealedBattleEventCount =
     game.phase === "combat" && battle
       ? combatIntroActive
@@ -3533,6 +4429,10 @@ export default function GameClient() {
     revealedBattleEventCount > 0
       ? playbackEvents[revealedBattleEventCount - 1]
       : undefined;
+  const currentBattleEventDelay = battleEventDelay(
+    currentBattleEvent,
+    battleSpeed,
+  );
   const revealedPlaybackEvents =
     battle && game.phase === "combat"
       ? playbackEvents.slice(0, revealedBattleEventCount)
@@ -3816,7 +4716,7 @@ export default function GameClient() {
       : tavernSpellTargetIds;
   const activeSpellTargetKind =
     spellcraftSourceForTargets !== null
-      ? "spellcraft"
+      ? spellcraftSourceForTargets.spellFamily
       : tavernSpellSourceForTargets !== null
         ? "tavernSpell"
         : undefined;
@@ -3885,7 +4785,15 @@ export default function GameClient() {
     (infoTab === "scouting" && selectedStandingPlayer !== null) ||
     (infoTab === "battle" && battle !== null);
   const upgradeCost = getUpgradeCost(game, human.id);
-  const refreshCost = getRefreshCost(game, human.id);
+  const selectedMinionPurchaseQuote =
+    selection?.zone === "shop"
+      ? getMinionPurchaseQuote(game, human.id, selection.index)
+      : null;
+  const minionPurchaseCost =
+    selectedMinionPurchaseQuote?.cost ??
+    getMinionPurchaseCost(game, human.id);
+  const refreshQuote = getTavernRefreshQuote(game, human.id);
+  const refreshCost = refreshQuote?.cost ?? 1;
   const tavernSpellPurchaseQuote = getTavernSpellPurchaseQuote(
     game,
     human.id,
@@ -3902,11 +4810,23 @@ export default function GameClient() {
       )?.affordable === true,
     [game, human.id, interactionLocked],
   );
+  const canBuyMinionOffer = useCallback(
+    (shopIndex: number) =>
+      game.phase === "recruit" &&
+      !interactionLocked &&
+      getMinionPurchaseQuote(game, human.id, shopIndex)?.affordable === true,
+    [game, human.id, interactionLocked],
+  );
   const canBuyFromShop =
     game.phase === "recruit" &&
     !interactionLocked &&
-    human.gold >= 3 &&
-    human.hand.length < 10;
+    (selectedMinionPurchaseQuote?.affordable === true ||
+      (dragSession?.zone === "shop" &&
+        getMinionPurchaseQuote(
+          game,
+          human.id,
+          dragSession.index,
+        )?.affordable === true));
   const canBuyTavernSpell =
     game.phase === "recruit" &&
     !interactionLocked &&
@@ -3923,7 +4843,7 @@ export default function GameClient() {
   const selectedOfferCost =
     selection?.zone === "spellShop"
       ? (tavernSpellPurchaseQuote?.cost ?? selectedShopSpell?.cost ?? 0)
-      : 3;
+      : minionPurchaseCost;
   const selectedTavernSpellDisplayCost =
     selection?.zone === "spellShop"
       ? selectedOfferCost
@@ -3931,7 +4851,7 @@ export default function GameClient() {
   const selectedOfferCurrency =
     selection?.zone === "spellShop"
       ? (tavernSpellPurchaseQuote?.currency ?? "gold")
-      : "gold";
+      : (selectedMinionPurchaseQuote?.currency ?? "gold");
   const buyUnavailableReason =
     interactionLocked
       ? "请先完成当前选择"
@@ -3956,6 +4876,15 @@ export default function GameClient() {
           minion.instanceId === discoverInteraction.sourceInstanceId,
       )
     : undefined;
+  const discoverSourceTrinket =
+    discoverInteraction?.sourceDefinitionId !== undefined &&
+    human.trinketIds.includes(discoverInteraction.sourceDefinitionId) &&
+    isTrinketDefinitionId(discoverInteraction.sourceDefinitionId)
+      ? getTrinketDefinition(discoverInteraction.sourceDefinitionId)
+      : undefined;
+  const isKaleidoscopeDiscover =
+    discoverSourceTrinket?.cardId === "BG35_MagicItem_821" ||
+    discoverSourceTrinket?.cardId === "BG35_MagicItem_821t";
   const discoverDestination = discoverInteraction?.destination;
   const discoverMagnetizeTarget =
     discoverDestination?.kind === "magnetize"
@@ -3965,16 +4894,48 @@ export default function GameClient() {
             discoverDestination.targetInstanceId,
         )
       : undefined;
+  const discoverTransformTarget =
+    discoverDestination?.kind === "transform"
+      ? human.board.find(
+          (minion) =>
+            minion.instanceId === discoverDestination.targetInstanceId,
+        )
+      : undefined;
   const discoverTitle = discoverInteraction
-    ? discoverInteraction.destination.kind === "magnetize"
+    ? discoverInteraction.destination.kind === "transform"
+      ? `古神信物 · 为${discoverTransformTarget?.name ?? "目标随从"}选择高一级形态`
+      : discoverInteraction.destination.kind === "customUndeadFirst"
+        ? "普崔塞德标签 · 选择战斗组件"
+        : discoverInteraction.destination.kind === "customUndeadSecond"
+          ? "普崔塞德标签 · 选择功能组件"
+      : discoverInteraction.destination.kind === "magnetize"
       ? `${discoverSource?.name ?? "战吼"} · 发现机械并吸附到${
           discoverMagnetizeTarget?.name ?? "目标机械"
         }`
-      : discoverInteraction.destination.destroyAfterPlayThroughRound !==
-          undefined
+      : discoverInteraction.destination.kind === "hand" &&
+          discoverInteraction.destination.destroyAfterPlayThroughRound !== undefined
         ? "惊扰墓穴 · 发现一张亡灵牌"
-      : discoverInteraction.destination.playableFromRound !== undefined
+      : isKaleidoscopeDiscover
+        ? `${discoverSourceTrinket?.name ?? "万花筒"} · 发现一个${
+            discoverInteraction.selectionEffect?.kind === "makeGolden"
+              ? "金色"
+              : ""
+          }等级7随从`
+      : discoverInteraction.destination.kind === "hand" &&
+          discoverInteraction.destination.playableFromRound !== undefined
         ? `搜寻时光 · 发现一个 ${discoverInteraction.filter.exactTier} 级随从`
+      : discoverInteraction.sourceDefinitionId === "BG24_715"
+        ? `耐心的侦查员 · 发现一个 ${discoverInteraction.filter.exactTier} 级随从`
+      : discoverInteraction.sourceDefinitionId === "BG26_525"
+        ? "奇瑰打击乐手 · 发现一张恶魔牌"
+      : discoverInteraction.sourceDefinitionId ===
+            "lesser-trinket-bg32-magicitem-361" ||
+          discoverInteraction.sourceDefinitionId ===
+            "greater-trinket-bg32-magicitem-361t"
+        ? `口袋工厂 · 发现一张等级${discoverInteraction.filter.exactTier}的具有类型的随从牌`
+      : discoverInteraction.sourceDefinitionId ===
+          "greater-trinket-bg32-magicitem-362t"
+        ? "旅店老板的炉火 · 发现两张等级6的随从牌"
       : discoverInteraction.filter.ability === "deathrattle"
         ? "预订遗体 · 发现一张亡语随从牌"
       : discoverInteraction.filter.ability === "battlecry"
@@ -4047,6 +5008,7 @@ export default function GameClient() {
     return () => window.cancelAnimationFrame(focusFrame);
   }, [
     human.board,
+    human.shop,
     selectedBloodGem,
     selectedSpellcraft,
     selectedHandTavernSpell,
@@ -4057,9 +5019,9 @@ export default function GameClient() {
   useEffect(() => {
     clearCombatIntroTimer();
     if (
-      !battle ||
+      !battleKey ||
       game.phase !== "combat" ||
-      combatIntroCompletedBattle === battle
+      combatIntroCompletedBattleKey === battleKey
     ) {
       return clearCombatIntroTimer;
     }
@@ -4067,17 +5029,17 @@ export default function GameClient() {
     combatIntroTimerRef.current = window.setTimeout(() => {
       combatIntroTimerRef.current = null;
       setBattlePlayback({
-        battle,
+        battleKey,
         ...initialCombatPlayback(playbackEventCount),
       });
-      setCombatIntroCompletedBattle(battle);
+      setCombatIntroCompletedBattleKey(battleKey);
     }, COMBAT_START_INTRO_DURATION_MS);
 
     return clearCombatIntroTimer;
   }, [
-    battle,
+    battleKey,
     clearCombatIntroTimer,
-    combatIntroCompletedBattle,
+    combatIntroCompletedBattleKey,
     game.phase,
     playbackEventCount,
   ]);
@@ -4085,7 +5047,7 @@ export default function GameClient() {
   useEffect(() => {
     clearBattlePlaybackTimer();
     if (
-      !battle ||
+      !battleKey ||
       game.phase !== "combat" ||
       combatIntroActive ||
       battlePlaybackComplete
@@ -4093,12 +5055,10 @@ export default function GameClient() {
       return clearBattlePlaybackTimer;
     }
 
-    const currentEvent =
-      playbackEvents[Math.max(0, revealedBattleEventCount - 1)];
     battlePlaybackTimerRef.current = window.setTimeout(() => {
       battlePlaybackTimerRef.current = null;
       setBattlePlayback((current) => {
-        const currentIsThisBattle = current.battle === battle;
+        const currentIsThisBattle = current.battleKey === battleKey;
         const currentRevealedCount = currentIsThisBattle
           ? Math.min(current.revealedCount, playbackEventCount)
           : playbackEventCount > 0
@@ -4107,44 +5067,43 @@ export default function GameClient() {
         if (currentIsThisBattle && current.complete) return current;
         if (currentRevealedCount >= playbackEventCount) {
           return {
-            battle,
+            battleKey,
             revealedCount: playbackEventCount,
             complete: true,
           };
         }
         return {
-          battle,
+          battleKey,
           revealedCount: currentRevealedCount + 1,
           complete: false,
         };
       });
-    }, battleEventDelay(currentEvent, battleSpeed));
+    }, currentBattleEventDelay);
 
     return clearBattlePlaybackTimer;
   }, [
-    battle,
+    battleKey,
     battlePlaybackComplete,
-    battleSpeed,
     clearBattlePlaybackTimer,
+    currentBattleEventDelay,
     game.phase,
     playbackEventCount,
-    playbackEvents,
     revealedBattleEventCount,
     combatIntroActive,
   ]);
 
   const skipBattlePlayback = useCallback(() => {
     clearBattlePlaybackTimer();
-    if (!battle || game.phase !== "combat" || combatIntroActive) {
+    if (!battleKey || game.phase !== "combat" || combatIntroActive) {
       return;
     }
     setBattlePlayback({
-      battle,
+      battleKey,
       revealedCount: playbackEventCount,
       complete: true,
     });
   }, [
-    battle,
+    battleKey,
     clearBattlePlaybackTimer,
     combatIntroActive,
     game.phase,
@@ -4195,7 +5154,7 @@ export default function GameClient() {
     clearBattlePlaybackTimer();
     clearCombatIntroTimer();
     clearTavernSpellCastFeedback();
-    const next = createGame(seed, configuredInitialHealth);
+    const next = createLobbyGame(seed, configuredInitialHealth);
     safeWriteLocalStorage(SAVE_KEY, JSON.stringify(next));
     gameRef.current = next;
     setGame(next);
@@ -4204,17 +5163,19 @@ export default function GameClient() {
     setSelection(null);
     setSelectedStandingPlayerId(null);
     setShowRestart(false);
+    setShowLobbyOverview(false);
     setInfoTab("details");
     setMagneticAnnouncement("");
     setBattlePlayback({
-      battle: null,
+      battleKey: null,
       revealedCount: 0,
       complete: false,
     });
     setRecruitPresentationQueue([]);
-    setCombatIntroCompletedBattle(null);
+    setCombatIntroCompletedBattleKey(null);
     clearCombatRewardFeedback();
     restartReturnFocusRef.current = null;
+    lobbyOverviewReturnFocusRef.current = null;
     magneticFocusTargetRef.current = null;
     preCombatHandIdsRef.current = null;
   }, [
@@ -4226,7 +5187,7 @@ export default function GameClient() {
   ]);
 
   const startInitialGame = useCallback(() => {
-    startConfiguredGame(gameRef.current.seed);
+    startConfiguredGame(newSeed());
   }, [startConfiguredGame]);
 
   const startFreshGame = useCallback(() => {
@@ -4253,6 +5214,34 @@ export default function GameClient() {
       }
       document
         .querySelector<HTMLElement>('[data-testid="play-again"]')
+        ?.focus();
+    });
+  }, []);
+
+  const openLobbyOverview = useCallback(() => {
+    lobbyOverviewReturnFocusRef.current =
+      document.activeElement instanceof HTMLElement
+        ? document.activeElement
+        : null;
+    setShowLobbyOverview(true);
+  }, []);
+
+  const closeLobbyOverview = useCallback(() => {
+    const returnTarget = lobbyOverviewReturnFocusRef.current;
+    lobbyOverviewReturnFocusRef.current = null;
+    setShowLobbyOverview(false);
+    window.requestAnimationFrame(() => {
+      if (
+        returnTarget?.isConnected &&
+        returnTarget.getClientRects().length > 0
+      ) {
+        returnTarget.focus();
+        return;
+      }
+      document
+        .querySelector<HTMLElement>(
+          '[data-testid="trinket-hud"], [data-testid="end-turn"]',
+        )
         ?.focus();
     });
   }, []);
@@ -4323,7 +5312,8 @@ export default function GameClient() {
       }
       const bonusKeyword =
         minionHasTribe(target, "quilboar") &&
-        ((card.bonusKeyword === "rebornForQuilboar" &&
+        ((card.bonusKeyword === "tauntForQuilboar" && !target.taunt) ||
+          (card.bonusKeyword === "rebornForQuilboar" &&
           !target.reborn) ||
           (card.bonusKeyword === "divineShieldForQuilboar" &&
             !target.divineShield))
@@ -4429,9 +5419,12 @@ export default function GameClient() {
       const needsTarget = spellcraftNeedsTarget(card);
       const target = targetInstanceId
         ? legalTargetIds.includes(targetInstanceId)
-          ? human.board.find(
+          ? (human.board.find(
               (minion) => minion.instanceId === targetInstanceId,
-            )
+            ) ??
+            human.shop.find(
+              (minion) => minion.instanceId === targetInstanceId,
+            ))
           : undefined
         : undefined;
       if (
@@ -4454,10 +5447,11 @@ export default function GameClient() {
           setTavernSpellCastFeedback(null);
         }, 720);
       }
+      const spellLabel = spellcraftDisplayLabel(card);
       setMagneticAnnouncement(
         target
-          ? `已对${target.name}施放塑造法术${card.name}`
-          : `已施放塑造法术${card.name}：${card.description}`,
+          ? `已对${target.name}施放${spellLabel}${card.name}`
+          : `已施放${spellLabel}${card.name}：${card.description}`,
       );
       send({
         type: "CAST_SPELLCRAFT",
@@ -4465,7 +5459,7 @@ export default function GameClient() {
         targetInstanceId,
       });
     },
-    [game, human.board, human.hand, human.id, send],
+    [game, human.board, human.hand, human.id, human.shop, send],
   );
 
   const showCardInspection = useCallback(
@@ -4717,7 +5711,7 @@ export default function GameClient() {
       if (!hit) return null;
 
       if (source.zone === "shop") {
-        return canBuyFromShop &&
+        return canBuyMinionOffer(source.index) &&
           hit.closest('[data-hand-drop-zone="true"]')
           ? { kind: "hand" }
           : null;
@@ -4782,19 +5776,21 @@ export default function GameClient() {
             targetInstanceId: hoveredTavernSpellTarget.instanceId,
           };
         }
+        const hoveredSpellcraftTarget =
+          hoveredBoardTarget ?? hoveredShopTarget;
         if (
           sourceCard?.kind === "spellcraft" &&
           spellcraftNeedsTarget(sourceCard) &&
-          hoveredBoardTarget &&
+          hoveredSpellcraftTarget &&
           getLegalSpellcraftTargetIds(
             game,
             human.id,
             sourceCard,
-          ).includes(hoveredBoardTarget.instanceId)
+          ).includes(hoveredSpellcraftTarget.instanceId)
         ) {
           return {
             kind: "spellcraft",
-            targetInstanceId: hoveredBoardTarget.instanceId,
+            targetInstanceId: hoveredSpellcraftTarget.instanceId,
           };
         }
         if (
@@ -4908,7 +5904,7 @@ export default function GameClient() {
       return null;
     },
     [
-      canBuyFromShop,
+      canBuyMinionOffer,
       canBuyTavernSpellOffer,
       game,
       human.board,
@@ -4958,7 +5954,7 @@ export default function GameClient() {
         !event.isPrimary ||
         event.button !== 0 ||
         handCardCannotAct ||
-        (source.zone === "shop" && !canBuyFromShop) ||
+        (source.zone === "shop" && !canBuyMinionOffer(source.index)) ||
         (source.zone === "spellShop" &&
           (card.kind !== "tavernSpell" ||
             !canBuyTavernSpellOffer(card)))
@@ -4992,7 +5988,7 @@ export default function GameClient() {
       });
     },
     [
-      canBuyFromShop,
+      canBuyMinionOffer,
       canBuyTavernSpellOffer,
       game,
       human,
@@ -5338,7 +6334,7 @@ export default function GameClient() {
           selectedBloodGem
             ? "已取消鲜血宝石目标选择"
             : selectedSpellcraft
-              ? "已取消塑造法术目标选择"
+              ? `已取消${spellcraftDisplayLabel(selectedSpellcraft)}目标选择`
             : selectedHandTavernSpell
               ? "已取消酒馆法术目标选择"
             : "已取消磁力目标选择",
@@ -5412,17 +6408,37 @@ export default function GameClient() {
             minion.instanceId === dragMagneticTargetInstanceId,
         )?.name
       : undefined;
-  const draggedOfferCost =
+  const draggedMinionShopIndex =
+    dragSession?.zone === "shop" && dragSession.card.kind === "minion"
+      ? human.shop.findIndex(
+          (minion) => minion.instanceId === dragSession.card.instanceId,
+        )
+      : -1;
+  const draggedMinionPurchaseQuote =
+    draggedMinionShopIndex >= 0
+      ? getMinionPurchaseQuote(game, human.id, draggedMinionShopIndex)
+      : null;
+  const draggedTavernSpellPurchaseQuote =
     dragSession?.zone === "spellShop" &&
     dragSession.card.kind === "tavernSpell"
-      ? (getTavernSpellPurchaseQuote(
+      ? getTavernSpellPurchaseQuote(
           game,
           human.id,
           dragSession.card.instanceId,
-        )?.cost ?? dragSession.card.cost)
-      : dragSession?.card.kind === "tavernSpell"
+        )
+      : null;
+  const draggedOfferCost =
+    draggedTavernSpellPurchaseQuote?.cost ??
+    draggedMinionPurchaseQuote?.cost ??
+    (dragSession?.card.kind === "tavernSpell"
         ? dragSession.card.cost
-        : 3;
+        : minionPurchaseCost);
+  const draggedOfferCurrency =
+    draggedTavernSpellPurchaseQuote?.currency ??
+    draggedMinionPurchaseQuote?.currency ??
+    (dragSession?.card.kind === "tavernSpell"
+      ? tavernSpellPurchaseCurrency(dragSession.card)
+      : "gold");
   const dragAnnouncement =
     dragSession?.active !== true
       ? ""
@@ -5437,13 +6453,10 @@ export default function GameClient() {
               : 0
           } 枚金币`
         : dragSession.target?.kind === "hand"
-          ? dragSession.card.kind === "tavernSpell" &&
-            tavernSpellPurchaseCurrency(dragSession.card) === "health"
+          ? draggedOfferCurrency === "health"
             ? `松手购买${dragSession.card.name}，支付 ${draggedOfferCost} 点生命`
             : `松手购买${dragSession.card.name}，支付 ${
-                dragSession.card.kind === "tavernSpell"
-                  ? draggedOfferCost
-                  : 3
+                draggedOfferCost
               } 枚金币`
           : dragSession.target?.kind === "magnetic"
             ? `松手将${dragSession.card.name}吸附到${
@@ -5454,22 +6467,26 @@ export default function GameClient() {
             : dragSession.target?.kind === "tavernSpell"
               ? `松手对目标随从施放${dragSession.card.name}`
             : dragSession.target?.kind === "spellcraft"
-              ? `松手对目标随从塑造${dragSession.card.name}`
+              ? `松手对目标随从施放${dragSession.card.name}`
             : dragSession.target?.kind === "castTavernSpell"
               ? `松手施放${dragSession.card.name}`
             : dragSession.target?.kind === "castSpellcraft"
-              ? `松手施放塑造法术${dragSession.card.name}`
+              ? `松手施放${
+                  dragSession.card.kind === "spellcraft"
+                    ? spellcraftDisplayLabel(dragSession.card)
+                    : "法术"
+                }${dragSession.card.name}`
             : dragSession.target?.kind === "blockedMagnetic"
               ? `${dragSession.card.name}不能吸附到${dragSession.target.targetName}，松手将返回手牌`
           : dragSession.target?.kind === "board"
             ? `松手放到战场第 ${dragSession.target.index + 1} 个位置`
             : dragSession.zone === "shop"
-              ? "拖到发光的手牌区域购买，花费 3 枚金币"
+              ? `拖到发光的手牌区域购买，花费 ${draggedOfferCost} ${
+                  draggedOfferCurrency === "health" ? "点生命" : "枚金币"
+                }`
               : dragSession.zone === "spellShop" &&
                   dragSession.card.kind === "tavernSpell"
-                ? tavernSpellPurchaseCurrency(
-                  dragSession.card,
-                  ) === "health"
+                ? draggedOfferCurrency === "health"
                   ? `拖到发光的手牌区域购买，花费 ${draggedOfferCost} 点生命`
                   : `拖到发光的手牌区域购买，花费 ${draggedOfferCost} 枚金币`
               : dragSession.zone === "board"
@@ -5484,8 +6501,8 @@ export default function GameClient() {
                     : "拖到战场区域施放酒馆法术"
                 : dragSession.card.kind === "spellcraft"
                   ? spellcraftNeedsTarget(dragSession.card)
-                    ? "拖到任意发光的友方随从上施放塑造法术"
-                    : "拖到战场区域施放塑造法术"
+                    ? `拖到任意发光的友方随从上施放${spellcraftDisplayLabel(dragSession.card)}`
+                    : `拖到战场区域施放${spellcraftDisplayLabel(dragSession.card)}`
                 : isMagneticMinion(dragSession.card)
                   ? boardHasOpenSlot
                     ? "拖到标有“可吸附”的随从进行磁力吸附，或拖到插位线上普通上场"
@@ -5519,9 +6536,9 @@ export default function GameClient() {
   const spellcraftSelectionAnnouncement = selectedSpellcraft
     ? spellcraftNeedsTarget(selectedSpellcraft)
       ? spellcraftTargetIds.length > 0
-        ? `已选择塑造法术${selectedSpellcraft.name}，可对 ${spellcraftTargetIds.length} 个发光的友方随从施放`
-        : `已选择塑造法术${selectedSpellcraft.name}，但场上没有合法目标`
-      : `已选择塑造法术${selectedSpellcraft.name}，可在详情面板点击施放，或拖到战场区域`
+        ? `已选择${spellcraftDisplayLabel(selectedSpellcraft)}${selectedSpellcraft.name}，可对 ${spellcraftTargetIds.length} 个发光的友方随从施放`
+        : `已选择${spellcraftDisplayLabel(selectedSpellcraft)}${selectedSpellcraft.name}，但场上没有合法目标`
+      : `已选择${spellcraftDisplayLabel(selectedSpellcraft)}${selectedSpellcraft.name}，可在详情面板点击施放，或拖到战场区域`
     : "";
   const interactionAnnouncement =
     dragAnnouncement ||
@@ -5615,12 +6632,15 @@ export default function GameClient() {
           health: activeRecruitBloodGemPulse.health,
           bonusKeyword:
             activeRecruitBloodGemPulse.bonusKeyword ===
-            "rebornForQuilboar"
-              ? "复生"
+            "tauntForQuilboar"
+              ? "嘲讽"
               : activeRecruitBloodGemPulse.bonusKeyword ===
-                  "divineShieldForQuilboar"
-                ? "圣盾"
-                : "",
+                  "rebornForQuilboar"
+                ? "复生"
+                : activeRecruitBloodGemPulse.bonusKeyword ===
+                    "divineShieldForQuilboar"
+                  ? "圣盾"
+                  : "",
           token: `${activeRecruitPresentation?.token ?? 0}-${
             activeRecruitBloodGemPulse.pulseIndex
           }`,
@@ -5810,18 +6830,66 @@ export default function GameClient() {
           className="hud-hero-power"
           aria-label={
             humanHeroPower
-              ? `英雄技能 ${humanHeroPower.name}：${humanHeroPower.description}`
-              : "英雄技能：无"
+              ? `${humanHero?.name ?? "英雄"}，英雄技能 ${humanHeroPower.name}：${
+                  humanHeroPowerStatus ?? humanHeroPower.description
+                }`
+              : "英雄与英雄技能：无"
           }
           data-testid="human-hero-power"
-          title={humanHeroPower?.description ?? "尚未获得英雄技能"}
+          title={humanHeroPowerStatus ?? "尚未获得英雄技能"}
         >
-          <small>英雄技能</small>
+          <small>{humanHero?.name ?? "英雄技能"}</small>
           <strong>{humanHeroPower?.name ?? "无"}</strong>
           <span>
-            {humanHeroPower?.description ?? "可通过身份揭晓获得"}
+            {humanHeroPowerStatus ??
+              (game.lobbySystemsEnabled
+                ? "等待选择英雄"
+                : "旧存档沿用中立英雄")}
           </span>
         </div>
+        {systemEvent && (
+          <button
+            type="button"
+            className="hud-lobby-system hud-system-event"
+            aria-label={`系统事件 ${systemEvent.name}：${systemEvent.description}`}
+            data-testid="system-event-hud"
+            title={systemEvent.description}
+            onClick={openLobbyOverview}
+          >
+            <small>系统事件</small>
+            <strong>{systemEvent.name}</strong>
+            <span>{systemEvent.description}</span>
+          </button>
+        )}
+        {game.lobbySystemsEnabled && (
+          <button
+            type="button"
+            className="hud-lobby-system hud-trinkets"
+            aria-label={`查看本局大厅规则。${lobbyOverviewSummary}`}
+            data-testid="trinket-hud"
+            title={lobbyOverviewSummary}
+            onClick={openLobbyOverview}
+          >
+            <small>大厅规则</small>
+            <strong>
+              {humanTrinkets.length > 0
+                ? humanTrinkets
+                    .map((definition) => definition.name)
+                    .join(" · ")
+                : "尚未开启"}
+            </strong>
+            <span>
+              {nextTrinketRound === null
+                ? "小符文与大符文均已生效"
+                : game.round < nextTrinketRound
+                  ? `第 ${nextTrinketRound} 回合开启下一次选择`
+                  : "本回合等待选择"}
+              {human.pendingSystemSpellIds.length > 0
+                ? ` · ${human.pendingSystemSpellIds.length} 张系统牌等待手牌空位`
+                : ""}
+            </span>
+          </button>
+        )}
         <div className="hud-actions">
           <button
             type="button"
@@ -5982,13 +7050,23 @@ export default function GameClient() {
                   disabled={
                     game.phase !== "recruit" ||
                     interactionLocked ||
-                    human.gold < refreshCost
+                    refreshQuote?.affordable !== true
                   }
                   onClick={() => send({ type: "REFRESH_SHOP" })}
                 >
-                  刷新 · {refreshCost}
+                  {refreshCost === 0
+                    ? "刷新 · 免费"
+                    : refreshQuote?.currency === "health"
+                      ? `刷新 · ${refreshCost}生命`
+                      : `刷新 · ${refreshCost}`}
+                  {human.heroRefreshAvailable
+                    ? "（英雄首次免费）"
+                    : ""}
                   {human.freeRefreshes > 0
                     ? `（免费剩余 ${human.freeRefreshes}）`
+                    : ""}
+                  {(refreshQuote?.remainingHealthRefreshes ?? 0) > 0
+                    ? `（生命刷新剩余 ${refreshQuote?.remainingHealthRefreshes}）`
                     : ""}
                   {human.helpfulRefreshes > 0
                     ? `（有用剩余 ${human.helpfulRefreshes}）`
@@ -6015,21 +7093,46 @@ export default function GameClient() {
                     <UnitCard
                       unit={offer.unit}
                       key={offer.unit.instanceId}
+                      purchaseCost={
+                        getMinionPurchaseQuote(
+                          game,
+                          human.id,
+                          offer.shopIndex,
+                        )?.cost
+                      }
+                      purchaseCurrency={
+                        getMinionPurchaseQuote(
+                          game,
+                          human.id,
+                          offer.shopIndex,
+                        )?.currency
+                      }
                       selected={
                         selection?.zone === "shop" &&
                         selection.index === offer.shopIndex
                       }
                       unaffordable={
-                        human.gold < 3 || human.hand.length >= 10
+                        !canBuyMinionOffer(offer.shopIndex)
                       }
-                      disabled={interactionLocked}
+                      choiceTarget={
+                        taughtTavernSpellTargetInteraction?.optionInstanceIds.includes(
+                          offer.unit.instanceId,
+                        ) === true
+                      }
+                      disabled={
+                        interactionLocked &&
+                        !taughtTavernSpellTargetInteraction?.optionInstanceIds.includes(
+                          offer.unit.instanceId,
+                        )
+                      }
                       testId={`shop-card-${offer.shopIndex}`}
-                      tavernSpellTarget={tavernSpellTargetIds.includes(
+                      tavernSpellTarget={activeSpellTargetIds.includes(
                         offer.unit.instanceId,
                       )}
-                      spellTargetKind="tavernSpell"
+                      spellTargetKind={activeSpellTargetKind}
                       tavernSpellDropTarget={
-                        dragSession?.target?.kind === "tavernSpell" &&
+                        (dragSession?.target?.kind === "tavernSpell" ||
+                          dragSession?.target?.kind === "spellcraft") &&
                         dragSession.target.targetInstanceId ===
                           offer.unit.instanceId
                       }
@@ -6050,8 +7153,8 @@ export default function GameClient() {
                           : undefined
                       }
                       dragEnabled={
-                        canBuyFromShop &&
-                        !tavernSpellTargetIds.includes(
+                        canBuyMinionOffer(offer.shopIndex) &&
+                        !activeSpellTargetIds.includes(
                           offer.unit.instanceId,
                         )
                       }
@@ -6061,8 +7164,8 @@ export default function GameClient() {
                           offer.unit.instanceId
                       }
                       dragHandlers={
-                        canBuyFromShop &&
-                        !tavernSpellTargetIds.includes(
+                        canBuyMinionOffer(offer.shopIndex) &&
+                        !activeSpellTargetIds.includes(
                           offer.unit.instanceId,
                         )
                           ? getDragHandlers(
@@ -6078,6 +7181,31 @@ export default function GameClient() {
                         offer.unit,
                       )}
                       onClick={() => {
+                        if (
+                          taughtTavernSpellTargetInteraction?.optionInstanceIds.includes(
+                            offer.unit.instanceId,
+                          )
+                        ) {
+                          send({
+                            type: "RESOLVE_INTERACTION",
+                            interactionId:
+                              taughtTavernSpellTargetInteraction.interactionId,
+                            optionInstanceId: offer.unit.instanceId,
+                          });
+                          return;
+                        }
+                        if (
+                          selectedSpellcraft &&
+                          spellcraftTargetIds.includes(
+                            offer.unit.instanceId,
+                          )
+                        ) {
+                          castSpellcraft(
+                            selectedSpellcraft.instanceId,
+                            offer.unit.instanceId,
+                          );
+                          return;
+                        }
                         if (
                           selectedHandTavernSpell &&
                           tavernSpellTargetIds.includes(
@@ -6111,6 +7239,13 @@ export default function GameClient() {
                             human.id,
                             offer.spell.instanceId,
                           )?.cost
+                        }
+                        purchaseCurrency={
+                          getTavernSpellPurchaseQuote(
+                            game,
+                            human.id,
+                            offer.spell.instanceId,
+                          )?.currency
                         }
                         selected={
                           selection?.zone === "spellShop" &&
@@ -6404,18 +7539,51 @@ export default function GameClient() {
                   data-purpose={
                     magnetizeTargetInteraction
                       ? "magnetize-discover"
-                      : "buff"
+                      : taughtTavernSpellTargetInteraction
+                        ? "cast-taught-tavern-spell"
+                       : targetInteraction?.resolution?.kind ===
+                           "destroyFriendlyAndCopy"
+                         ? "destroy-copy"
+                        : targetInteraction?.resolution?.kind === "makeGolden"
+                          ? "make-golden"
+                        : targetInteraction?.grantKeywords?.length
+                          ? "keyword-buff"
+                          : "buff"
                   }
                   data-testid="target-choice-banner"
                 >
                   <strong>
                     {magnetizeTargetInteraction
                       ? `为${targetSource?.name ?? "这张牌"}选择一个友方机械`
-                      : `为${targetSource?.name ?? "这张牌"}选择一个友方随从`}
+                      : taughtTavernSpellTargetInteraction
+                        ? `为${targetSource?.name ?? "魔鳍学徒"}选择“${taughtTavernSpellDefinition?.name ?? "酒馆法术"}”的目标`
+                       : targetInteraction?.resolution?.kind ===
+                           "destroyFriendlyAndCopy"
+                         ? `为${targetSource?.name ?? "这张牌"}选择一个友方亡灵`
+                        : targetInteraction?.resolution?.kind === "makeGolden"
+                          ? `为${targetSource?.name ?? "杉德尔船长"}选择一个等级6或以下的非金色友方随从`
+                        : targetInteraction?.grantKeywords?.length
+                          ? `为${targetSource?.name ?? "这张牌"}选择一个此前在场的友方野兽`
+                          : `为${targetSource?.name ?? "这张牌"}选择一个友方随从`}
                   </strong>
                   <span>
                     {magnetizeTargetInteraction
                       ? `点击发光机械，随后连续发现 ${magnetizeTargetInteraction.remainingDiscoveries} 次并立即吸附`
+                      : taughtTavernSpellTargetInteraction
+                        ? `点击发光随从，由魔鳍学徒施放“${taughtTavernSpellDefinition?.name ?? "酒馆法术"}”`
+                       : targetInteraction?.resolution?.kind ===
+                           "destroyFriendlyAndCopy"
+                         ? `点击发光亡灵，将其消灭并获取 ${targetInteraction.resolution.copies} 张原始版复制`
+                        : targetInteraction?.resolution?.kind === "makeGolden"
+                          ? `点击发光随从，使其变为金色${
+                              targetInteraction.repetitions > 1
+                                ? `（还需选择 ${targetInteraction.repetitions} 个目标）`
+                                : ""
+                            }`
+                       : targetInteraction?.grantKeywords?.includes("reborn")
+                        ? `点击发光野兽，使其获得 +${targetInteraction.attack}/+${targetInteraction.health} 和复生`
+                      : targetInteraction?.grantKeywords?.includes("windfury")
+                        ? `点击发光野兽，使其获得 +${targetInteraction.attack} 攻击力和风怒`
                       : targetInteraction
                         ? `点击发光随从，使其获得 +${
                             targetInteraction.attack *
@@ -6699,23 +7867,16 @@ export default function GameClient() {
                   selection?.zone === "spellShop") &&
                 buyUnavailableReason
                   ? buyUnavailableReason
-                  : dragSession?.card.kind === "tavernSpell" &&
-                      tavernSpellPurchaseCurrency(
-                        dragSession.card,
-                      ) === "health"
+                  : draggedOfferCurrency === "health"
                     ? `松手支付 ${draggedOfferCost} 点生命`
-                    : `松手支付 ${
-                        dragSession?.card.kind === "tavernSpell"
-                          ? draggedOfferCost
-                          : selectedOfferCost
-                      } 枚金币`}
+                    : `松手支付 ${draggedOfferCost} 枚金币`}
               </span>
             </div>
             <div className="panel-title">
               <span>
                 手牌
                 <small>
-                  随从拖到战场；酒馆法术、塑造法术和鲜血宝石拖放施放；三连奖励点击使用
+              随从拖到战场；酒馆法术、普通法术、塑造法术和鲜血宝石拖放施放；三连奖励点击使用
                 </small>
               </span>
               <span
@@ -7044,7 +8205,10 @@ export default function GameClient() {
                     />
                     <h2>{selectedSpellcraft.name}</h2>
                     <p className="detail-meta">
-                      0 费塑造法术 · 回合结束时未使用会消失
+                      0 费{spellcraftDisplayLabel(selectedSpellcraft)}
+                      {selectedSpellcraft.spellFamily === "spellcraft"
+                        ? " · 回合结束时未使用会消失"
+                        : " · 可以保留在手牌中"}
                     </p>
                     <p>{selectedSpellcraft.description}</p>
                     <p
@@ -7054,14 +8218,20 @@ export default function GameClient() {
                     >
                       {spellcraftNeedsTarget(selectedSpellcraft)
                         ? spellcraftTargetIds.length > 0
-                          ? `点击任意发光的友方随从，或把法术拖到目标上施放。当前有 ${spellcraftTargetIds.length} 个合法目标。`
+                          ? selectedSpellcraft.target === "shop"
+                            ? `点击任意发光的酒馆随从，或把法术拖到目标上施放。当前有 ${spellcraftTargetIds.length} 个合法目标。`
+                            : `点击任意发光的友方随从，或把法术拖到目标上施放。当前有 ${spellcraftTargetIds.length} 个合法目标。`
                           : "当前没有合法随从目标；法术会留在手牌中。"
                         : "点击下方按钮施放，或把法术拖到战场区域。"}
                     </p>
                     <div className="detail-keywords">
-                      <span>塑造法术</span>
+                      <span>{spellcraftDisplayLabel(selectedSpellcraft)}</span>
                       <span>0费</span>
-                      <span>回合结束消失</span>
+                      {selectedSpellcraft.spellFamily === "spellcraft" ? (
+                        <span>回合结束消失</span>
+                      ) : (
+                        <span>不会在回合结束时消失</span>
+                      )}
                       {spellcraftNeedsTarget(selectedSpellcraft) && (
                         <span>需要目标</span>
                       )}
@@ -7080,8 +8250,10 @@ export default function GameClient() {
                         }
                       >
                         {spellcraftNeedsTarget(selectedSpellcraft)
-                          ? "请选择发光随从"
-                          : "施放塑造法术"}
+                          ? selectedSpellcraft.target === "shop"
+                            ? "请选择发光的酒馆随从"
+                            : "请选择发光随从"
+                          : `施放${spellcraftDisplayLabel(selectedSpellcraft)}`}
                       </button>
                     </div>
                   </>
@@ -7096,9 +8268,11 @@ export default function GameClient() {
                     <p className="detail-meta">
                       {selectedTavernSpell.tier} 级酒馆法术 ·{" "}
                       {selectedTavernSpellDisplayCost}{" "}
-                      {tavernSpellPurchaseCurrency(
-                        selectedTavernSpell,
-                      ) === "health"
+                      {(selection?.zone === "spellShop"
+                        ? selectedOfferCurrency
+                        : tavernSpellPurchaseCurrency(
+                            selectedTavernSpell,
+                          )) === "health"
                         ? "点生命"
                         : "枚金币"}
                     </p>
@@ -7156,9 +8330,7 @@ export default function GameClient() {
                           }
                         >
                           购买 · {selectedOfferCost}
-                          {tavernSpellPurchaseCurrency(
-                            selectedTavernSpell,
-                          ) === "health"
+                          {selectedOfferCurrency === "health"
                             ? " 生命"
                             : " 金币"}
                         </button>
@@ -7239,7 +8411,13 @@ export default function GameClient() {
                         className="turn-lock-note"
                         data-testid="selected-minion-turn-lock"
                       >
-                        搜寻时光将这张牌锁定在手牌中；下个招募回合才能打出或磁力吸附。
+                        这张牌还会锁定
+                        {Math.max(
+                          1,
+                          (selectedUnit.playableFromRound ?? game.round) -
+                            game.round,
+                        )}
+                        个回合；达到可用回合后才能打出或磁力吸附。
                       </p>
                     )}
                     {selectedUnit.effectSupport === "partial" && (
@@ -7318,7 +8496,10 @@ export default function GameClient() {
                             })
                           }
                         >
-                          购买 · 3
+                          购买 · {minionPurchaseCost}
+                          {selectedOfferCurrency === "health"
+                            ? " 生命"
+                            : " 金币"}
                         </button>
                       )}
                       {selection?.zone === "hand" && (
@@ -7632,11 +8813,13 @@ export default function GameClient() {
       <span className="sr-only" id="tavern-spell-target-instructions">
         这是当前酒馆法术的合法目标。点击或按回车键即可施放；按 Escape 键取消选择。
       </span>
-      <span className="sr-only" id="spellcraft-target-instructions">
-        这是当前塑造法术的合法目标。点击或按回车键即可施放；按 Escape 键取消选择。
-      </span>
+          <span className="sr-only" id="spellcraft-target-instructions">
+            这是当前所选法术的合法目标。点击或按回车键即可施放；按 Escape 键取消选择。
+          </span>
       <span className="sr-only" id="buy-drop-description">
-        购买随从需要 3 枚金币；酒馆法术按卡面费用支付，拼命发掘改为消耗生命值。购买时手牌必须未满，也可点击卡牌后使用详情面板中的购买按钮。
+        购买随从需要 {minionPurchaseCost}
+        {selectedOfferCurrency === "health" ? "点生命" : "枚金币"}
+        ；饰品可能把随从或酒馆法术的费用改为生命值。生命购买必须保留至少1点生命，且购买时手牌必须未满；也可点击卡牌后使用详情面板中的购买按钮。
       </span>
       <span
         className="sr-only"
@@ -7778,6 +8961,7 @@ export default function GameClient() {
                 card={activeRecruitMove.card}
                 inShop
                 purchaseCost={activeRecruitMove.purchaseCost}
+                purchaseCurrency={activeRecruitMove.purchaseCurrency}
               />
             )}
           </div>
@@ -7870,12 +9054,175 @@ export default function GameClient() {
               card={dragSession.card}
               inShop={dragSession.zone === "spellShop"}
               purchaseCost={draggedOfferCost}
+              purchaseCurrency={draggedOfferCurrency}
             />
           ) : dragSession.card.kind === "spellcraft" ? (
             <SpellcraftCardFace card={dragSession.card} />
           ) : (
             <UnitCardFace unit={dragSession.card} />
           )}
+        </div>
+      )}
+
+      {heroChoiceInteraction && (
+        <div
+          className="overlay interaction-overlay"
+          role="dialog"
+          aria-modal="true"
+          aria-labelledby="hero-choice-title"
+          aria-describedby="hero-choice-description"
+          data-testid="hero-choice-dialog"
+          onKeyDown={trapModalFocus}
+        >
+          <div className="modal lobby-choice-modal hero-choice-modal">
+            <span className="discover-kicker">开局 · 四选一</span>
+            <h2 className="discover-title" id="hero-choice-title">
+              选择你的英雄
+            </h2>
+            <p className="discover-copy" id="hero-choice-description">
+              每位英雄拥有不同的被动英雄技能。选择会立即保存，并用于本局余下时间。
+            </p>
+            {systemEvent && (
+              <div
+                className="lobby-event-banner"
+                data-testid="hero-choice-system-event"
+              >
+                <CardArtwork unit={systemEvent} kind="portrait" />
+                <span>
+                  <small>本局随机系统事件</small>
+                  <strong>{systemEvent.name}</strong>
+                  <span>{systemEvent.description}</span>
+                </span>
+              </div>
+            )}
+            <div className="lobby-choice-options hero-choice-options">
+              {heroChoiceInteraction.optionIds.map((optionId, index) => {
+                const option = getHeroDefinition(optionId);
+                const power = getHeroPowerDefinition(option.heroPowerId);
+                return (
+                  <button
+                    type="button"
+                    className="lobby-choice-card hero-choice-card"
+                    data-testid={`hero-choice-${index}`}
+                    key={option.id}
+                    onClick={() =>
+                      send({
+                        type: "RESOLVE_INTERACTION",
+                        interactionId: heroChoiceInteraction.interactionId,
+                        optionInstanceId: option.id,
+                      })
+                    }
+                  >
+                    <CardArtwork unit={option} kind="portrait" />
+                    <small>英雄</small>
+                    <strong>{option.name}</strong>
+                    <span className="lobby-choice-power-name">
+                      {power.name}
+                    </span>
+                    <span>{power.description}</span>
+                  </button>
+                );
+              })}
+            </div>
+          </div>
+        </div>
+      )}
+
+      {trinketChoiceInteraction && (
+        <div
+          className="overlay interaction-overlay"
+          role="dialog"
+          aria-modal="true"
+          aria-labelledby="trinket-choice-title"
+          aria-describedby="trinket-choice-description"
+          data-testid="trinket-choice-dialog"
+          onKeyDown={trapModalFocus}
+        >
+          <div className="modal lobby-choice-modal trinket-choice-modal">
+            <span className="discover-kicker">
+              第 {game.round} 回合 ·
+              {trinketChoiceInteraction.trinketTier === "lesser"
+                ? " 小符文"
+                : " 大符文"}
+            </span>
+            <h2 className="discover-title" id="trinket-choice-title">
+              {isMysteryCubeTrinketChoice
+                ? "神秘魔方 · 选择新的次级饰品"
+                : `选择一个${
+                    trinketChoiceInteraction.trinketTier === "lesser"
+                      ? "次级饰品"
+                      : "强效饰品"
+                  }`}
+            </h2>
+            <p className="discover-copy" id="trinket-choice-description">
+              {isMysteryCubeTrinketChoice ? (
+                "从两个新的次级饰品中选择一个，免费替换神秘魔方；以后每个回合开始时会再次替换。"
+              ) : (
+                <>
+                  本局从
+                  {ACTIVE_TRINKET_DEFINITIONS.filter(
+                    (definition) =>
+                      definition.tier ===
+                      trinketChoiceInteraction.trinketTier,
+                  ).length}
+                  件
+                  {trinketChoiceInteraction.trinketTier === "lesser"
+                    ? "次级"
+                    : "强效"}
+                  饰品中随机生成四个候选，选择一个并支付标示费用。类型专属饰品只会在你的战队拥有该类型时出现，所占比例越高，进入候选的概率越大；完成选择前其他酒馆操作保持锁定。
+                </>
+              )}
+            </p>
+            <div className="lobby-choice-options trinket-choice-options">
+              {trinketChoiceInteraction.optionIds.map(
+                (optionId, index) => {
+                  const option = getTrinketDefinition(optionId);
+                  const affordable =
+                    isMysteryCubeTrinketChoice || human.gold >= option.cost;
+                  return (
+                    <button
+                      type="button"
+                      className="lobby-choice-card trinket-choice-card"
+                      data-testid={`trinket-choice-${index}`}
+                      disabled={!affordable}
+                      key={option.id}
+                      onClick={() =>
+                        send({
+                          type: "RESOLVE_INTERACTION",
+                          interactionId:
+                            trinketChoiceInteraction.interactionId,
+                          optionInstanceId: option.id,
+                        })
+                      }
+                    >
+                      <CardArtwork unit={option} kind="portrait" />
+                      <small>
+                        {option.tier === "lesser"
+                          ? "次级饰品"
+                          : "强效饰品"}
+                      </small>
+                      <strong>{option.name}</strong>
+                      <span className="trinket-choice-tribes">
+                        {option.associatedTribes.length > 0
+                          ? `专属类型：${option.associatedTribes
+                              .map((tribe) => TRIBE_NAMES[tribe])
+                              .join(" / ")}`
+                          : "无类型饰品"}
+                      </span>
+                      <span>{option.description}</span>
+                      <span className="lobby-choice-cost">
+                        {isMysteryCubeTrinketChoice
+                          ? `免费替换 · 原价 ${option.cost} 枚铸币`
+                          : `${option.cost} 枚铸币${
+                              !affordable ? " · 当前不足" : ""
+                            }`}
+                      </span>
+                    </button>
+                  );
+                },
+              )}
+            </div>
+          </div>
         </div>
       )}
 
@@ -7886,13 +9233,23 @@ export default function GameClient() {
           aria-modal="true"
           aria-labelledby="minion-choice-title"
           aria-describedby="minion-choice-description"
-          data-testid="fearless-foodie-dialog"
+          data-testid={
+            isBuddingBotanistChoice
+              ? "budding-botanist-dialog"
+              : isAdaptableBeetleChoice
+                ? "adaptable-beetle-dialog"
+                : "fearless-foodie-dialog"
+          }
           onKeyDown={trapModalFocus}
         >
           <div className="modal minion-choice-modal">
             <span className="discover-kicker">抉择 · 随从</span>
             <h2 className="discover-title" id="minion-choice-title">
-              无畏的食客 · 选择鲜血宝石路线
+              {isBuddingBotanistChoice
+                ? "新锐植物学家 · 选择酒馆法术路线"
+                : isAdaptableBeetleChoice
+                  ? "机变甲虫 · 选择强化路线"
+                  : "无畏的食客 · 选择鲜血宝石路线"}
             </h2>
             <p
               className="discover-copy"
@@ -7904,7 +9261,13 @@ export default function GameClient() {
               <button
                 type="button"
                 className="minion-choice"
-                data-testid="fearless-foodie-improve"
+                data-testid={
+                  isBuddingBotanistChoice
+                    ? "budding-botanist-attack"
+                    : isAdaptableBeetleChoice
+                      ? "adaptable-beetle-reborn"
+                      : "fearless-foodie-improve"
+                }
                 onClick={() =>
                   send({
                     type: "RESOLVE_INTERACTION",
@@ -7918,29 +9281,66 @@ export default function GameClient() {
                 <CardArtwork
                   unit={{
                     cardId: minionChoiceInteraction.optionIds[0],
-                    name: "大吃特吃",
+                    name: isBuddingBotanistChoice
+                      ? "纯净百合"
+                      : isAdaptableBeetleChoice
+                        ? "机变精修"
+                        : "大吃特吃",
                   }}
                   kind="portrait"
                 />
-                <strong>大吃特吃</strong>
-                <span>
-                  本局鲜血宝石额外获得 +
-                  {minionChoiceInteraction.effectMultiplier}/+
-                  {minionChoiceInteraction.effectMultiplier}。
-                </span>
-                <small>
-                  当前宝石将变为 +
-                  {human.bloodGemAttack +
-                    minionChoiceInteraction.effectMultiplier}
-                  /+
-                  {human.bloodGemHealth +
-                    minionChoiceInteraction.effectMultiplier}
-                </small>
+                {isBuddingBotanistChoice ? (
+                  <>
+                    <strong>纯净百合</strong>
+                    <span>
+                      本局酒馆法术使随从额外获得 +
+                      {minionChoiceInteraction.effectMultiplier} 攻击力。
+                    </span>
+                    <small>
+                      永久攻击加成将变为 +
+                      {human.tavernSpellAttackBonus +
+                        minionChoiceInteraction.effectMultiplier}
+                    </small>
+                  </>
+                ) : isAdaptableBeetleChoice ? (
+                  <>
+                    <strong>机变精修</strong>
+                    <span>
+                      使一只此前在场的友方野兽获得 +
+                      {minionChoiceInteraction.effectMultiplier}/+
+                      {minionChoiceInteraction.effectMultiplier} 和复生。
+                    </span>
+                    <small>选择后点击发光野兽；机变甲虫自己不能成为目标</small>
+                  </>
+                ) : (
+                  <>
+                    <strong>大吃特吃</strong>
+                    <span>
+                      本局鲜血宝石额外获得 +
+                      {minionChoiceInteraction.effectMultiplier}/+
+                      {minionChoiceInteraction.effectMultiplier}。
+                    </span>
+                    <small>
+                      当前宝石将变为 +
+                      {human.bloodGemAttack +
+                        minionChoiceInteraction.effectMultiplier}
+                      /+
+                      {human.bloodGemHealth +
+                        minionChoiceInteraction.effectMultiplier}
+                    </small>
+                  </>
+                )}
               </button>
               <button
                 type="button"
                 className="minion-choice"
-                data-testid="fearless-foodie-gain"
+                data-testid={
+                  isBuddingBotanistChoice
+                    ? "budding-botanist-health"
+                    : isAdaptableBeetleChoice
+                      ? "adaptable-beetle-windfury"
+                      : "fearless-foodie-gain"
+                }
                 onClick={() =>
                   send({
                     type: "RESOLVE_INTERACTION",
@@ -7954,16 +9354,47 @@ export default function GameClient() {
                 <CardArtwork
                   unit={{
                     cardId: minionChoiceInteraction.optionIds[1],
-                    name: "餐盘装满",
+                    name: isBuddingBotanistChoice
+                      ? "巨硕滴露"
+                      : isAdaptableBeetleChoice
+                        ? "机变加强"
+                        : "餐盘装满",
                   }}
                   kind="portrait"
                 />
-                <strong>餐盘装满</strong>
-                <span>
-                  获取 {4 * minionChoiceInteraction.effectMultiplier}{" "}
-                  张鲜血宝石。
-                </span>
-                <small>手牌已满时，超出上限的宝石不会进入手牌</small>
+                {isBuddingBotanistChoice ? (
+                  <>
+                    <strong>巨硕滴露</strong>
+                    <span>
+                      本局酒馆法术使随从额外获得 +
+                      {minionChoiceInteraction.effectMultiplier} 生命值。
+                    </span>
+                    <small>
+                      永久生命加成将变为 +
+                      {human.tavernSpellHealthBonus +
+                        minionChoiceInteraction.effectMultiplier}
+                    </small>
+                  </>
+                ) : isAdaptableBeetleChoice ? (
+                  <>
+                    <strong>机变加强</strong>
+                    <span>
+                      使一只此前在场的友方野兽获得 +
+                      {4 * minionChoiceInteraction.effectMultiplier}{" "}
+                      攻击力和风怒。
+                    </span>
+                    <small>选择后点击发光野兽；已有风怒仍会获得攻击力</small>
+                  </>
+                ) : (
+                  <>
+                    <strong>餐盘装满</strong>
+                    <span>
+                      获取 {4 * minionChoiceInteraction.effectMultiplier}{" "}
+                      张鲜血宝石。
+                    </span>
+                    <small>手牌已满时，超出上限的宝石不会进入手牌</small>
+                  </>
+                )}
               </button>
             </div>
           </div>
@@ -8184,12 +9615,31 @@ export default function GameClient() {
               {discoverTitle}
             </h2>
             <p className="discover-copy">
-              {discoverInteraction.destination.kind === "magnetize"
+              {discoverInteraction.destination.kind === "transform"
+                ? "选择后，目标会变形为所选随从；原随从和另外两张候选会回到共享随从池。"
+                : discoverInteraction.destination.kind ===
+                    "customUndeadFirst"
+                  ? "先从三个战斗组件中选择一个。候选是制造用组件，不会占用共享随从池。"
+                  : discoverInteraction.destination.kind ===
+                      "customUndeadSecond"
+                    ? "再从三个功能组件中选择一个；两个组件的属性、关键词与可组合效果会制造成一张无法三连的亡灵牌。"
+              : discoverInteraction.destination.kind === "magnetize"
                 ? "选择后会立即吸附到目标，不会进入手牌；其余候选会回到共享随从池。"
-                : discoverInteraction.destination
+                : discoverInteraction.destination.kind === "hand" &&
+                    discoverInteraction.destination
                       .destroyAfterPlayThroughRound !== undefined
                   ? "选择一张加入手牌；本回合打出时会先完成入场效果，随后死亡并触发亡语。组成三连会清除死亡预言。"
-                : "选择一张加入手牌；另外两张会回到共享随从池。"}
+                  : discoverInteraction.selectionEffect?.kind === "setStats"
+                    ? "选择一张加入手牌并将其属性值变为30/30；另外两张会回到共享随从池。"
+                    : isKaleidoscopeDiscover
+                      ? discoverInteraction.selectionEffect?.kind ===
+                        "makeGolden"
+                        ? "选择一个金色等级7随从加入手牌。它将在手牌中锁定两回合，达到可用回合后才能打出；这些候选不占用共享随从池。"
+                        : "选择一个等级7随从加入手牌。它将在手牌中锁定两回合，达到可用回合后才能打出；这些候选不占用共享随从池。"
+                    : discoverInteraction.selectionEffect?.kind ===
+                        "rememberTrinketMinion"
+                      ? "选择一张加入手牌；口袋工厂会在以后每个回合开始时获取一张它的复制。"
+                      : "选择一张加入手牌；另外两张会回到共享随从池。"}
             </p>
             {discoverInteraction.destination.kind === "magnetize" && (
               <div
@@ -8258,6 +9708,122 @@ export default function GameClient() {
         </div>
       )}
 
+      {darkmoonPrizeDiscoverInteraction && (
+        <div
+          className="overlay interaction-overlay"
+          role="dialog"
+          aria-modal="true"
+          aria-labelledby="darkmoon-prize-discover-title"
+          data-testid="darkmoon-prize-discover-dialog"
+          onKeyDown={trapModalFocus}
+        >
+          <div className="modal discover-modal">
+            <span className="discover-kicker">发现</span>
+            <h2
+              className="discover-title"
+              id="darkmoon-prize-discover-title"
+            >
+              发现等级3暗月奖品
+            </h2>
+            <p className="discover-copy">
+              从随机出现的三张等级3暗月奖品中选择一张加入手牌。
+            </p>
+            <div className="discover-options">
+              {darkmoonPrizeDiscoverInteraction.options.map(
+                (option, index) => (
+                  <div
+                    className="discover-option"
+                    key={option.instanceId}
+                  >
+                    <SpellcraftCard
+                      card={option}
+                      testId={`darkmoon-prize-discover-option-${index}`}
+                      onClick={() => {
+                        send({
+                          type: "RESOLVE_INTERACTION",
+                          interactionId:
+                            darkmoonPrizeDiscoverInteraction.interactionId,
+                          optionInstanceId: option.instanceId,
+                        });
+                      }}
+                    />
+                    <div className="discover-option-summary">
+                      <span>等级3暗月奖品</span>
+                      <p>{option.description}</p>
+                    </div>
+                  </div>
+                ),
+              )}
+            </div>
+            {darkmoonPrizeDiscoverInteraction.remainingDiscoveries > 1 && (
+              <p className="discover-progress" role="status">
+                还需选择{" "}
+                {darkmoonPrizeDiscoverInteraction.remainingDiscoveries} 次
+              </p>
+            )}
+          </div>
+        </div>
+      )}
+
+      {tavernSpellDiscoverInteraction && (
+        <div
+          className="overlay interaction-overlay"
+          role="dialog"
+          aria-modal="true"
+          aria-labelledby="tavern-spell-discover-title"
+          data-testid="tavern-spell-discover-dialog"
+          onKeyDown={trapModalFocus}
+        >
+          <div className="modal discover-modal">
+            <span className="discover-kicker">发现</span>
+            <h2
+              className="discover-title"
+              id="tavern-spell-discover-title"
+            >
+              发现酒馆法术
+            </h2>
+            <p className="discover-copy">
+              选择一张加入手牌；竞技表演者可以发现当前牌池中的任意等级酒馆法术。
+            </p>
+            <div className="discover-options">
+              {tavernSpellDiscoverInteraction.options.map(
+                (option, index) => (
+                  <div
+                    className="discover-option"
+                    key={option.instanceId}
+                  >
+                    <TavernSpellCard
+                      card={option}
+                      testId={`tavern-spell-discover-option-${index}`}
+                      onClick={() => {
+                        send({
+                          type: "RESOLVE_INTERACTION",
+                          interactionId:
+                            tavernSpellDiscoverInteraction.interactionId,
+                          optionInstanceId: option.instanceId,
+                        });
+                      }}
+                    />
+                    <div className="discover-option-summary">
+                      <span>
+                        {option.tier} 级 · {option.cost} 枚铸币
+                      </span>
+                      <p>{option.description}</p>
+                    </div>
+                  </div>
+                ),
+              )}
+            </div>
+            {tavernSpellDiscoverInteraction.remainingDiscoveries > 1 && (
+              <p className="discover-progress" role="status">
+                还需选择 {tavernSpellDiscoverInteraction.remainingDiscoveries}{" "}
+                次
+              </p>
+            )}
+          </div>
+        </div>
+      )}
+
       {!started && loaded && (
         <div
           className="overlay"
@@ -8283,6 +9849,9 @@ export default function GameClient() {
               <span>8 人战局</span>
               <span>36.0.3 · 237 随从 · 65 法术数据</span>
               <span>每局开放 5 个种族</span>
+              <span>开局 4 选 1 英雄</span>
+              <span>第 6 / 9 回合符文选择</span>
+              <span>随机系统事件</span>
               <span>鼠标与触控拖拽</span>
               <span>三连奖励与发现</span>
               <span>磁力吸附</span>
@@ -8356,6 +9925,77 @@ export default function GameClient() {
               </button>
             </div>
           </form>
+        </div>
+      )}
+
+      {showLobbyOverview && (
+        <div
+          className="overlay"
+          role="dialog"
+          aria-modal="true"
+          aria-labelledby="lobby-overview-title"
+          aria-describedby="lobby-overview-description"
+          data-testid="lobby-overview-dialog"
+          onKeyDown={(event) => {
+            trapModalFocus(event);
+            if (event.key === "Escape") {
+              closeLobbyOverview();
+            }
+          }}
+        >
+          <div className="modal lobby-overview-modal">
+            <span className="modal-kicker">本局持续生效</span>
+            <h2 id="lobby-overview-title">英雄、符文与系统事件</h2>
+            <p id="lobby-overview-description">
+              可随时从顶部的“大厅规则”入口回看本局效果。
+            </p>
+            <div className="lobby-overview-sections">
+              <section>
+                <small>系统事件</small>
+                <strong>{systemEvent?.name ?? "无"}</strong>
+                <p>{systemEvent?.description ?? "本局没有启用系统事件。"}</p>
+              </section>
+              <section>
+                <small>{humanHero?.name ?? "英雄技能"}</small>
+                <strong>{humanHeroPower?.name ?? "无"}</strong>
+                <p>
+                  {humanHeroPowerStatus ??
+                    (game.lobbySystemsEnabled
+                      ? "尚未选择英雄。"
+                      : "旧存档沿用中立英雄。")}
+                </p>
+              </section>
+              <section>
+                <small>符文 · 饰品</small>
+                {humanTrinkets.length > 0 ? (
+                  <ul>
+                    {humanTrinkets.map((definition) => (
+                      <li key={definition.id}>
+                        <strong>{definition.name}</strong>
+                        <span>{humanTrinketDescription(definition)}</span>
+                      </li>
+                    ))}
+                  </ul>
+                ) : (
+                  <p>
+                    尚未选择；小符文在第 {LESSER_TRINKET_ROUND}
+                    回合、大符文在第 {GREATER_TRINKET_ROUND} 回合开启。
+                  </p>
+                )}
+              </section>
+            </div>
+            <div className="modal-actions">
+              <button
+                type="button"
+                className="action-button primary"
+                data-testid="close-lobby-overview"
+                autoFocus
+                onClick={closeLobbyOverview}
+              >
+                返回酒馆
+              </button>
+            </div>
+          </div>
         </div>
       )}
 
