@@ -185,7 +185,15 @@ export const TRINKET_DEFINITIONS: readonly TrinketDefinition[] = Object.freeze([
 export type SystemEventEffect =
   | "goldenArrowEveryThreeTurns"
   | "startWithGoldenizer"
-  | "startWithTenGold";
+  | "startWithTenGold"
+  | "startAtTier2"
+  | "startAtTier3With9Gold"
+  | "fullHouse"
+  | "titanGrip"
+  | "buyOneGetOne"
+  | "goldCarryover"
+  | "refundTrick"
+  | "mimironsClockworkArena";
 
 export interface SystemEventDefinition {
   id: string;
@@ -217,6 +225,63 @@ export const SYSTEM_EVENT_DEFINITIONS = [
     name: "金钱大战",
     description: "对战开始时即有10枚铸币。",
     effect: "startWithTenGold",
+  },
+  {
+    id: "system-event-sandglass",
+    cardId: "BG27_Anomaly_116",
+    name: "讲究的沙漏",
+    description: "以酒馆等级2开始赛局。",
+    effect: "startAtTier2",
+  },
+  {
+    id: "system-event-amanthul",
+    cardId: "BG27_Anomaly_119",
+    name: "阿曼苏尔的节制",
+    description: "以酒馆等级3和9枚铸币开始赛局。",
+    effect: "startAtTier3With9Gold",
+  },
+  {
+    id: "system-event-full-house",
+    cardId: "BG27_Anomaly_102",
+    name: "座无虚席",
+    description: "旅店中永远有7个卡牌。",
+    effect: "fullHouse",
+  },
+  {
+    id: "system-event-titan-grip",
+    cardId: "BG27_Anomaly_113",
+    name: "泰坦爪钩",
+    description: "每回合你购买的第一个手下免费。",
+    effect: "titanGrip",
+  },
+  {
+    id: "system-event-buy-one-get-one",
+    cardId: "BG27_Anomaly_111",
+    name: "买一送一",
+    description: "你每回合第一次购买手下时，会获得一张它的复製品。",
+    effect: "buyOneGetOne",
+  },
+  {
+    id: "system-event-gold-carryover",
+    cardId: "BG27_Anomaly_100",
+    name: "艾蜜特斯的谨慎",
+    description: "未花费的金币会带到你的下一回合。若你存了至少5枚金币，获得1枚额外金币。",
+    effect: "goldCarryover",
+  },
+  {
+    id: "system-event-refund-trick",
+    cardId: "BG27_Anomaly_104",
+    name: "不退款就捣蛋",
+    description:
+      "以1枚金币开始赛局。手下花费(1)枚金币，但卖出时获得(0)枚金币。升级旅店的消耗降低(2)。",
+    effect: "refundTrick",
+  },
+  {
+    id: "system-event-mimiron-clockwork",
+    cardId: "BG27_Anomaly_117",
+    name: "弥米伦发条竞技场",
+    description: "无法以金币升级旅店。旅店每两回合会自动升级。",
+    effect: "mimironsClockworkArena",
   },
 ] as const satisfies readonly SystemEventDefinition[];
 

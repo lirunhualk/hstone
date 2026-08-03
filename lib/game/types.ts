@@ -1698,6 +1698,8 @@ export interface PlayerState {
   trinketIds: string[];
   /** Per-Trinket periodic progress, keyed by definition ID. */
   trinketCounters: Record<string, number>;
+  /** Per-SystemEvent turn tracking, keyed by counter name. */
+  systemEventCounters: Record<string, number>;
   /** Same-turn Tavern Spell discount granted by Reserve Prices. */
   darkmoonReservePricesDiscount?: number;
   /** Tickatus Tag rewards queued behind another modal interaction. */

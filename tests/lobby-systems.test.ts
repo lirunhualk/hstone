@@ -59,6 +59,12 @@ function lobbyGameOfferingHero(
 ): GameState {
   for (let seed = 1; seed <= 10_000; seed += 1) {
     const state = createLobbyGame(seed, initialHealth);
+    state.systemEventId = null;
+    for (const player of state.players) {
+      player.tavernTier = 1;
+      player.gold = Math.min(player.maxGold, state.round + 2);
+      player.systemEventCounters = {};
+    }
     const pending = state.pendingInteraction;
     if (
       pending?.kind === "heroChoice" &&
@@ -1144,4 +1150,196 @@ test("Goldenizer Supply fills space freed by expiring Spellcraft", () => {
   assert.deepEqual(player.pendingSystemSpellIds, []);
   assert.equal(player.hand.length, 1);
   assert.equal(player.hand[0]?.definitionId, "system-spell-goldenizer");
+});
+
+test("Sandglass starts everyone at Tavern Tier 2", () => {
+  const state = lobbyGameForEvent("system-event-sandglass");
+  assert.equal(state.systemEventId, "system-event-sandglass");
+  assert.ok(state.players.every((player) => player.tavernTier === 2));
+});
+
+test("Aman'Thul starts everyone at Tavern Tier 3 with 9 gold", () => {
+  const state = lobbyGameForEvent("system-event-amanthul");
+  assert.equal(state.systemEventId, "system-event-amanthul");
+  assert.ok(state.players.every((player) => player.tavernTier === 3));
+  assert.ok(state.players.every((player) => player.gold === 9));
+});
+
+test("Full House tavern always has 7 cards", () => {
+  let state = chooseHero(lobbyGameForEvent("system-event-full-house"));
+  state = gameReducer(state, { type: "REFRESH_SHOP" });
+  let player = humanPlayer(state);
+  assert.ok(player.shop.length >= 5);
+
+  state = gameReducer(state, { type: "REFRESH_SHOP" });
+  player = humanPlayer(state);
+  assert.equal(player.shop.length, 6);
+});
+
+test("Titan Grip first minion purchase each turn is free", () => {
+  let state = chooseHero(lobbyGameForEvent("system-event-titan-grip"));
+  let player = humanPlayer(state);
+  player.gold = 10;
+  const goldBefore = player.gold;
+  assert.ok(player.shop[0]);
+
+  state = gameReducer(state, { type: "BUY_MINION", shopIndex: 0 });
+  player = humanPlayer(state);
+  assert.equal(player.gold, goldBefore);
+
+  state = gameReducer(state, { type: "BUY_MINION", shopIndex: 0 });
+  player = humanPlayer(state);
+  assert.equal(player.gold, goldBefore - 3);
+});
+
+test("Titan Grip resets the free purchase each turn", () => {
+  let state = chooseHero(lobbyGameForEvent("system-event-titan-grip"));
+  let player = humanPlayer(state);
+  player.gold = 10;
+
+  state = gameReducer(state, { type: "BUY_MINION", shopIndex: 0 });
+  player = humanPlayer(state);
+  assert.equal(player.gold, 10);
+
+  state = continueThroughCombat(state);
+  player = humanPlayer(state);
+  player.gold = 10;
+
+  state = gameReducer(state, { type: "BUY_MINION", shopIndex: 0 });
+  player = humanPlayer(state);
+  assert.equal(player.gold, 10);
+});
+
+test("Buy One Get One grants a copy of the first minion each turn", () => {
+  let state = chooseHero(lobbyGameForEvent("system-event-buy-one-get-one"));
+  let player = humanPlayer(state);
+  player.gold = 20;
+  player.hand = [];
+  player.board = [];
+  state = gameReducer(state, { type: "REFRESH_SHOP" });
+  player = humanPlayer(state);
+  const shopMinionId = player.shop[0]?.definitionId;
+  assert.ok(shopMinionId);
+
+  state = gameReducer(state, { type: "BUY_MINION", shopIndex: 0 });
+  player = humanPlayer(state);
+  const matchingCards = player.hand.filter(
+    (card) =>
+      card.kind !== "spellcraft" && card.definitionId === shopMinionId,
+  );
+  assert.equal(matchingCards.length, 2, "bought card plus free copy");
+  assert.equal(player.systemEventCounters.copyGrantedRound, 1);
+
+  state = gameReducer(state, { type: "BUY_MINION", shopIndex: 0 });
+  player = humanPlayer(state);
+  assert.equal(player.systemEventCounters.copyGrantedRound, 1, "not reset by second purchase");
+});
+
+test("Gold Carryover saves unspent gold for the next turn with bonus at 5", () => {
+  let state = chooseHero(lobbyGameForEvent("system-event-gold-carryover"));
+  let player = humanPlayer(state);
+  player.gold = 7;
+
+  state = continueThroughCombat(state);
+  player = humanPlayer(state);
+  assert.equal(player.gold, 4);
+  assert.equal(player.systemEventCounters.savedGold, 7);
+
+  player.gold = 3;
+  state = continueThroughCombat(state);
+  player = humanPlayer(state);
+  assert.equal(player.gold, 5 + 7 + 1); // base(5) + saved(7) + bonus(1)
+});
+
+test("Gold Carryover bonus only triggers when saved >= 5", () => {
+  let state = chooseHero(lobbyGameForEvent("system-event-gold-carryover"));
+  let player = humanPlayer(state);
+  player.gold = 3;
+
+  state = continueThroughCombat(state);
+  player = humanPlayer(state);
+  assert.equal(player.systemEventCounters.savedGold, 3);
+
+  player.gold = 2;
+  state = continueThroughCombat(state);
+  player = humanPlayer(state);
+  assert.equal(player.gold, 5 + 3); // base(5) + saved(3), no bonus since 3 < 5
+});
+
+test("Refund Trick minions cost 1, sell gives 0, upgrade costs -2", () => {
+  let state = chooseHero(lobbyGameForEvent("system-event-refund-trick"));
+  let player = humanPlayer(state);
+  assert.equal(player.gold, 1);
+
+  assert.equal(getMinionPurchaseCost(state, player.id), 1);
+  const shopMinion = player.shop[0];
+  assert.ok(shopMinion);
+  const goldBeforeBuy = player.gold;
+
+  state = gameReducer(state, { type: "BUY_MINION", shopIndex: 0 });
+  player = humanPlayer(state);
+  assert.equal(player.gold, goldBeforeBuy - 1);
+  const cardInHand = player.hand.find(
+    (card) =>
+      card.kind !== "spellcraft" &&
+      card.definitionId === shopMinion.definitionId,
+  );
+  assert.ok(cardInHand);
+  const goldBeforeSell = player.gold;
+
+  state = gameReducer(state, {
+    type: "PLAY_HAND_CARD",
+    cardInstanceId: cardInHand.instanceId ?? "",
+  });
+  player = humanPlayer(state);
+  const boardMinion = player.board.at(-1);
+  assert.ok(boardMinion);
+
+  state = gameReducer(state, {
+    type: "SELL_MINION",
+    boardIndex: player.board.length - 1,
+  });
+  player = humanPlayer(state);
+  assert.equal(player.gold, goldBeforeSell);
+
+  assert.equal(getUpgradeCost(state, player.id), 3); // 5 - 2 = 3
+  player.gold = 10;
+
+  state = gameReducer(state, { type: "UPGRADE_TAVERN" });
+  player = humanPlayer(state);
+  assert.equal(player.gold, 7);
+  assert.equal(player.tavernTier, 2);
+});
+
+test("Mimiron's Clockwork Arena blocks manual upgrades and auto-upgrades every 2 turns", () => {
+  let state = chooseHero(
+    lobbyGameForEvent("system-event-mimiron-clockwork"),
+  );
+  let player = humanPlayer(state);
+  assert.equal(player.tavernTier, 1);
+  assert.equal(player.systemEventCounters.mimironTurns, 1);
+
+  player.gold = 10;
+  state = gameReducer(state, { type: "UPGRADE_TAVERN" });
+  assert.equal(humanPlayer(state).tavernTier, 1);
+
+  state = continueThroughCombat(state);
+  player = humanPlayer(state);
+  assert.equal(player.tavernTier, 1);
+  assert.equal(player.systemEventCounters.mimironTurns, 2);
+
+  state = continueThroughCombat(state);
+  player = humanPlayer(state);
+  assert.equal(player.tavernTier, 2);
+  assert.equal(player.systemEventCounters.mimironTurns, 1);
+
+  state = continueThroughCombat(state);
+  player = humanPlayer(state);
+  assert.equal(player.tavernTier, 2);
+  assert.equal(player.systemEventCounters.mimironTurns, 2);
+
+  state = continueThroughCombat(state);
+  player = humanPlayer(state);
+  assert.equal(player.tavernTier, 3);
+  assert.equal(player.systemEventCounters.mimironTurns, 1);
 });

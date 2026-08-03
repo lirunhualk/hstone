@@ -403,7 +403,7 @@ type AssertNever<Value extends never> = Value;
 export type AiTrainingPlayerStateCoverage = AssertNever<
   Exclude<
     keyof PlayerState,
-    keyof AiTrainingRecruitObservation | "id" | "lastOpponentId"
+    keyof AiTrainingRecruitObservation | "id" | "lastOpponentId" | "systemEventCounters"
   >
 >;
 

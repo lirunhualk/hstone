@@ -4001,6 +4001,28 @@ function applySystemEventAtLobbyStart(state: GameState): void {
         break;
       case "goldenArrowEveryThreeTurns":
         break;
+      case "startAtTier2":
+        player.tavernTier = 2;
+        break;
+      case "startAtTier3With9Gold":
+        player.tavernTier = 3;
+        player.gold = 9;
+        break;
+      case "fullHouse":
+        player.systemEventCounters.fullHouseActive = 1;
+        break;
+      case "titanGrip":
+        break;
+      case "buyOneGetOne":
+        break;
+      case "goldCarryover":
+        break;
+      case "refundTrick":
+        player.gold = 1;
+        break;
+      case "mimironsClockworkArena":
+        player.systemEventCounters.mimironTurns = 1;
+        break;
     }
   }
 }
@@ -7234,6 +7256,9 @@ function observePersistentFriendlyDeath(
 }
 
 function tavernMinionCapacity(player: PlayerState): number {
+  if (player.systemEventCounters.fullHouseActive) {
+    return 6;
+  }
   if (playerHasTrinketCardId(player, TAVERN_FAN_CARD_ID)) {
     return 6;
   }
@@ -7266,7 +7291,7 @@ function trimTavernForAssignedHeroPower(
 }
 
 function tavernCardCapacity(player: PlayerState): number {
-  return playerHasTrinketCardId(player, TAVERN_FAN_CARD_ID)
+  return player.systemEventCounters.fullHouseActive || playerHasTrinketCardId(player, TAVERN_FAN_CARD_ID)
     ? 7
     : tavernMinionCapacity(player) + 1;
 }
@@ -7525,12 +7550,19 @@ export function getUpgradeCost(
   )
     ? 1
     : 0;
+  const refundTrickDiscount =
+    state.lobbySystemsEnabled &&
+    state.systemEventId &&
+    getSystemEventDefinition(state.systemEventId).effect === "refundTrick"
+      ? 2
+      : 0;
   return Math.max(
     0,
     baseCost -
       player.upgradeDiscount -
       heroPowerDiscount +
-      heroPowerSurcharge,
+      heroPowerSurcharge -
+      refundTrickDiscount,
   );
 }
 
@@ -7578,7 +7610,12 @@ export function getMinionPurchaseQuote(
     unusedFirstPirateFreeTrinket(player) !== null;
   const cost = usesFreePiratePurchase
     ? 0
-    : baseMinionPurchaseCost(player, offered);
+    : state.lobbySystemsEnabled &&
+        state.systemEventId &&
+        getSystemEventDefinition(state.systemEventId).effect ===
+          "refundTrick"
+      ? 1
+      : baseMinionPurchaseCost(player, offered);
   const currency =
     !usesFreePiratePurchase &&
     (minionHasDemonicTapestryHealthPrice(offered) ||
@@ -7615,6 +7652,13 @@ export function getMinionPurchaseCost(
       getMinionPurchaseQuote(state, playerId, shopIndex)?.cost ??
       baseMinionPurchaseCost(player)
     );
+  }
+  if (
+    state.lobbySystemsEnabled &&
+    state.systemEventId &&
+    getSystemEventDefinition(state.systemEventId).effect === "refundTrick"
+  ) {
+    return 1;
   }
   return baseMinionPurchaseCost(player);
 }
@@ -10884,7 +10928,18 @@ function buyMinion(
   if (quote.currency === "health") {
     player.health -= quote.cost;
   } else {
-    spendGold(state, player, quote.cost);
+    const freeFirst =
+      state.lobbySystemsEnabled &&
+      state.systemEventId &&
+      getSystemEventDefinition(state.systemEventId).effect ===
+        "titanGrip" &&
+      (player.systemEventCounters.titanGripFreeUsedRound ?? 0) !==
+        state.round;
+    if (!freeFirst) {
+      spendGold(state, player, quote.cost);
+    } else {
+      player.systemEventCounters.titanGripFreeUsedRound = state.round;
+    }
   }
   recordFirstPirateFreeTrinketProgress(player, minion);
   recordHealthPurchaseTrinketProgress(
@@ -10904,6 +10959,20 @@ function buyMinion(
     player,
     minion.definitionId,
   );
+  const copyFirst =
+    state.lobbySystemsEnabled &&
+    state.systemEventId &&
+    getSystemEventDefinition(state.systemEventId).effect ===
+      "buyOneGetOne" &&
+    (player.systemEventCounters.copyGrantedRound ?? 0) !== state.round;
+  if (copyFirst && player.hand.length < MAX_HAND_SIZE) {
+    const handCopy = structuredClone(minion);
+    handCopy.instanceId = `minion-${state.nextInstanceId++}`;
+    handCopy.sellValue = 1;
+    handCopy.effectCounters = {};
+    player.hand.push(handCopy);
+    player.systemEventCounters.copyGrantedRound = state.round;
+  }
   resolveTriples(state, player);
   applyAfterMinionPurchasedHeroPower(state, player, minion);
   return true;
@@ -11059,7 +11128,15 @@ function sellMinionTransaction(
   const [minion] = player.board.splice(boardIndex, 1);
   const sellValue = getMinionSellValue(state, player.id, minion);
   returnMinionToPool(state, minion);
-  player.gold += sellValue;
+  if (
+    state.lobbySystemsEnabled &&
+    state.systemEventId &&
+    getSystemEventDefinition(state.systemEventId).effect === "refundTrick"
+  ) {
+    // Sell gives 0 gold under Refund Trick anomaly.
+  } else {
+    player.gold += sellValue;
+  }
   applyRecruitEffects(
     state,
     player,
@@ -15939,6 +16016,14 @@ function refreshShop(state: GameState, player: PlayerState): boolean {
 
 function upgradeTavern(state: GameState, player: PlayerState): boolean {
   if (player.tavernTier >= 6) {
+    return false;
+  }
+  if (
+    state.lobbySystemsEnabled &&
+    state.systemEventId &&
+    getSystemEventDefinition(state.systemEventId).effect ===
+      "mimironsClockworkArena"
+  ) {
     return false;
   }
   const cost = getUpgradeCost(state, player.id);
@@ -32741,9 +32826,23 @@ function beginNextRecruit(state: GameState): void {
     resolveTriples(state, player);
   }
   for (const player of alivePlayers) {
+    const carryoverActive =
+      state.lobbySystemsEnabled &&
+      state.systemEventId &&
+      getSystemEventDefinition(state.systemEventId).effect ===
+        "goldCarryover";
+    const endOfTurnGold = carryoverActive ? player.gold : 0;
+    const previousSaved = player.systemEventCounters.savedGold ?? 0;
     player.gold =
       Math.min(player.maxGold, state.round + 2) +
-      player.pendingNextTurnGold;
+      player.pendingNextTurnGold +
+      previousSaved;
+    if (carryoverActive && previousSaved >= 5) {
+      player.gold += 1;
+    }
+    player.systemEventCounters.savedGold = carryoverActive
+      ? Math.max(0, endOfTurnGold)
+      : 0;
     player.pendingNextTurnGold = 0;
     if (playerHasHeroPower(player, "goldAfterSellNextTurn")) {
       setHeroPowerCounter(player, "smartSavingsGold", 0);
@@ -32769,6 +32868,21 @@ function beginNextRecruit(state: GameState): void {
           "rakanishuTurns",
           nextImprovementRound + improvements * 4,
         );
+      }
+    }
+    if (
+      state.lobbySystemsEnabled &&
+      state.systemEventId &&
+      getSystemEventDefinition(state.systemEventId).effect ===
+        "mimironsClockworkArena"
+    ) {
+      const turns = player.systemEventCounters.mimironTurns ?? 1;
+      if (turns >= 2 && player.tavernTier < 6) {
+        player.tavernTier = (player.tavernTier + 1) as MutableTier;
+        player.systemEventCounters.mimironTurns = 1;
+        player.upgradeDiscount = 0;
+      } else {
+        player.systemEventCounters.mimironTurns = turns + 1;
       }
     }
     player.tavernSpellsCastThisTurn = 0;
@@ -32918,6 +33032,7 @@ export function createGame(
     heroId: null,
     trinketIds: [],
     trinketCounters: {},
+    systemEventCounters: {},
     trinketSelections: {},
     pendingMysteryCubeReplacementIds: [],
     pendingSystemSpellIds: [],

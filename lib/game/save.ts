@@ -179,6 +179,7 @@ function migrateLegacyLobbySystems(
     player.heroPowerCounters = {};
     player.trinketIds = [];
     player.trinketCounters = {};
+    player.systemEventCounters = {};
     player.trinketSelections = {};
     player.pendingMysteryCubeReplacementIds = [];
     player.pendingSystemSpellIds = [];
