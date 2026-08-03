@@ -203,7 +203,16 @@ export type SystemEventEffect =
   | "assemblyLine"
   | "planeAlignment"
   | "goldenArena"
-  | "falseIdols";
+  | "falseIdols"
+  | "extraSpellPerRefresh"
+  | "gladiatorSpoils"
+  | "gargonnisStorm"
+  | "overseersOrb"
+  | "tavernSpecial"
+  | "wisdomballAnomaly"
+  | "yoggArena"
+  | "upgradePrize"
+  | "vault";
 
 export interface SystemEventDefinition {
   id: string;
@@ -362,6 +371,69 @@ export const SYSTEM_EVENT_DEFINITIONS = [
     name: "虚假塑像",
     description: "你只需要2个手下，就能合成金卡。不再获得三合一奖励，改為获得金币。",
     effect: "falseIdols",
+  },
+  {
+    id: "system-event-extra-spell",
+    cardId: "BG31_Anomaly_101",
+    name: "情势判断",
+    description: "每次重置后，旅店都会提供1个额 外的旅店法术。",
+    effect: "extraSpellPerRefresh",
+  },
+  {
+    id: "system-event-gladiator-spoils",
+    cardId: "BG31_Anomaly_105",
+    name: "斗士的战利品",
+    description: "在你赢得一场战斗后，发现一个你旅 店等级的手下。反之则获得一个低于你旅店等级一级的随机手下。",
+    effect: "gladiatorSpoils",
+  },
+  {
+    id: "system-event-gargonnis-storm",
+    cardId: "BG27_Anomaly_114",
+    name: "葛刚尼斯的风暴",
+    description: "手下花费2枚金币。你无法重置旅店。旅店会 在你购买一张卡牌后自行重置。",
+    effect: "gargonnisStorm",
+  },
+  {
+    id: "system-event-overseers-orb",
+    cardId: "BG27_Anomaly_120",
+    name: "监督者的宝珠",
+    description: "在你升级旅店后，以你数量最 多的手下类型重置旅店。",
+    effect: "overseersOrb",
+  },
+  {
+    id: "system-event-tavern-special",
+    cardId: "BG27_Anomaly_107",
+    name: "旅店 特典",
+    description: "旅店内所有类型的手下，永远有7张卡牌。",
+    effect: "tavernSpecial",
+  },
+  {
+    id: "system-event-wisdomball",
+    cardId: "BG27_Anomaly_118",
+    name: "异象智慧球",
+    description: "偶尔会获得有用的重置！（于第6回合解锁）",
+    effect: "wisdomballAnomaly",
+  },
+  {
+    id: "system-event-yogg-arena",
+    cardId: "BG27_Anomaly_122",
+    name: "尤格竞技场",
+    description: "在每个回合开始时转动相同的尤格萨轮。",
+    effect: "yoggArena",
+  },
+  {
+    id: "system-event-upgrade-prize",
+    cardId: "BG27_Anomaly_121",
+    name: "升级奖品",
+    description: "在你升级旅店后，发现一个等级1的暗月奖品。（3回合后强化！）",
+    effect: "upgradePrize",
+  },
+  {
+    id: "system-event-vault",
+    cardId: "BG27_Anomaly_123",
+    name: "宝库",
+    description: "在第X回合，发现一个金卡等级X手下（等级3-7版本）。",
+    effect: "vault",
   },
 ] as const satisfies readonly SystemEventDefinition[];
 

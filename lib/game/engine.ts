@@ -4069,6 +4069,28 @@ function applySystemEventAtLobbyStart(state: GameState): void {
       case "falseIdols":
         player.systemEventCounters.falseIdolsActive = 1;
         break;
+      case "extraSpellPerRefresh":
+        player.systemEventCounters.extraSpellSlot = 1;
+        break;
+      case "gladiatorSpoils":
+        break;
+      case "gargonnisStorm":
+        player.systemEventCounters.gargonnisActive = 1;
+        break;
+      case "overseersOrb":
+        break;
+      case "tavernSpecial":
+        player.systemEventCounters.tavernSpecialActive = 1;
+        player.systemEventCounters.fullHouseActive = 1;
+        break;
+      case "wisdomballAnomaly":
+        break;
+      case "yoggArena":
+        break;
+      case "upgradePrize":
+        break;
+      case "vault":
+        break;
     }
   }
 }
@@ -7344,9 +7366,10 @@ function trimTavernForAssignedHeroPower(
 }
 
 function tavernCardCapacity(player: PlayerState): number {
-  return player.systemEventCounters.fullHouseActive || playerHasTrinketCardId(player, TAVERN_FAN_CARD_ID)
+  const base = player.systemEventCounters.fullHouseActive || playerHasTrinketCardId(player, TAVERN_FAN_CARD_ID)
     ? 7
     : tavernMinionCapacity(player) + 1;
+  return player.systemEventCounters.extraSpellSlot ? base + 1 : base;
 }
 
 function applyAfterTavernRefreshEffects(
@@ -7646,7 +7669,8 @@ function baseMinionPurchaseCost(
     return 2;
   }
   return playerHasHeroPower(player, "twoGoldMinionRefresh") ||
-    playerHasHeroPower(player, "freezeEndTurnSmallerTavern")
+    playerHasHeroPower(player, "freezeEndTurnSmallerTavern") ||
+    player.systemEventCounters.gargonnisActive
     ? 2
     : BUY_COST;
 }
@@ -11046,6 +11070,10 @@ function buyMinion(
   }
   resolveTriples(state, player);
   applyAfterMinionPurchasedHeroPower(state, player, minion);
+  if (player.systemEventCounters.gargonnisActive) {
+    releaseShop(state, player);
+    fillShop(state, player, false);
+  }
   return true;
 }
 
@@ -16002,6 +16030,9 @@ function playHandCard(
 }
 
 function refreshShop(state: GameState, player: PlayerState): boolean {
+  if (player.systemEventCounters.gargonnisActive) {
+    return false;
+  }
   const warbandCopyRefresh = pendingWarbandCopyRefreshTrinket(player);
   const guidingCandleRefresh = availableGuidingCandleRefresh(player);
   const wishboneHeroRefresh = availableWishboneHeroRefresh(player);
@@ -16140,6 +16171,54 @@ function upgradeTavern(state: GameState, player: PlayerState): boolean {
     playerHasTrinketCardId(player, "BG35_MagicItem_814")
   ) {
     player.gold += 12;
+  }
+  if (
+    state.lobbySystemsEnabled &&
+    state.systemEventId &&
+    getSystemEventDefinition(state.systemEventId).effect ===
+      "overseersOrb"
+  ) {
+    releaseShop(state, player);
+    const tribeCounts: Record<string, number> = {};
+    for (const minion of player.board) {
+      for (const tribe of minion.tribes) {
+        tribeCounts[tribe] = (tribeCounts[tribe] ?? 0) + 1;
+      }
+    }
+    let majorityTribe = "";
+    let maxCount = 0;
+    for (const [tribe, count] of Object.entries(tribeCounts)) {
+      if (count > maxCount) {
+        maxCount = count;
+        majorityTribe = tribe;
+      }
+    }
+    if (majorityTribe) {
+      while (player.shop.length < tavernMinionCapacity(player)) {
+        const minion = drawMatchingFromPool(
+          state,
+          player.tavernTier,
+          (definition) =>
+            (definition.tribes?.includes(majorityTribe as Tribe) ?? false),
+        );
+        if (!minion) {
+          break;
+        }
+        applyTavernBonuses(player, minion);
+        player.shop.push(minion);
+      }
+    } else {
+      fillShop(state, player, false);
+    }
+    applyAfterTavernRefreshEffects(state, player);
+  }
+  if (
+    state.lobbySystemsEnabled &&
+    state.systemEventId &&
+    getSystemEventDefinition(state.systemEventId).effect ===
+      "upgradePrize"
+  ) {
+    grantRandomDarkmoonPrizes(state, player, 1);
   }
   return true;
 }
@@ -32691,6 +32770,50 @@ function simulateBattle(
   });
   flushRetainedCombatEnchantments(context);
 
+  if (
+    state.lobbySystemsEnabled &&
+    state.systemEventId &&
+    getSystemEventDefinition(state.systemEventId).effect ===
+      "gladiatorSpoils"
+  ) {
+    for (const [p, won] of [
+      [playerA, winnerId === playerA.id],
+      [playerB, winnerId === playerB.id && !isGhost],
+    ] as const) {
+      if (!p || !won) {
+        continue;
+      }
+      if (p === playerB && isGhost) {
+        continue;
+      }
+      if (!p.alive) {
+        continue;
+      }
+      if (won && p.hand.length < MAX_HAND_SIZE) {
+        const reward = drawMatchingFromPool(
+          state,
+          p.tavernTier,
+          (d) => d.tier === p.tavernTier,
+        );
+        if (reward) {
+          reward.sellValue = 1;
+          p.hand.push(reward);
+        }
+      } else if (!won && p.hand.length < MAX_HAND_SIZE) {
+        const lowerTier = Math.max(1, p.tavernTier - 1) as TavernTier;
+        const reward = drawMatchingFromPool(
+          state,
+          lowerTier,
+          (d) => d.tier === lowerTier,
+        );
+        if (reward) {
+          reward.sellValue = 1;
+          p.hand.push(reward);
+        }
+      }
+    }
+  }
+
   const humanInBattle =
     playerA.id === state.humanPlayerId || playerB.id === state.humanPlayerId;
   return {
@@ -33068,6 +33191,115 @@ function beginNextRecruit(state: GameState): void {
         );
         if (minion) {
           minion.sellValue = 1;
+          player.hand.push(minion);
+        }
+      }
+    }
+    if (
+      state.lobbySystemsEnabled &&
+      state.systemEventId &&
+      state.round >= 2 &&
+      getSystemEventDefinition(state.systemEventId).effect ===
+        "planeAlignment"
+    ) {
+      const tribeCounts: Record<string, number> = {};
+      for (const minion of player.board) {
+        for (const tribe of minion.tribes) {
+          tribeCounts[tribe] = (tribeCounts[tribe] ?? 0) + 1;
+        }
+      }
+      let majorityTribe = "";
+      let maxCount = 0;
+      for (const [tribe, count] of Object.entries(tribeCounts)) {
+        if (count > maxCount) {
+          maxCount = count;
+          majorityTribe = tribe;
+        }
+      }
+      if (majorityTribe && player.hand.length < MAX_HAND_SIZE) {
+        const minion = drawMatchingFromPool(
+          state,
+          player.tavernTier,
+          (definition) =>
+            definition.tier <= player.tavernTier &&
+            (definition.tribes?.includes(majorityTribe as Tribe) ?? false),
+        );
+        if (minion) {
+          minion.sellValue = 1;
+          player.hand.push(minion);
+        }
+      }
+    }
+    if (
+      state.lobbySystemsEnabled &&
+      state.systemEventId &&
+      getSystemEventDefinition(state.systemEventId).effect ===
+        "yoggArena"
+    ) {
+      const outcome =
+        YOGG_WHEEL_OUTCOMES[
+          randomIndex(state, YOGG_WHEEL_OUTCOMES.length)
+        ];
+      switch (outcome) {
+        case "mysteryBoxHeroPower":
+          player.heroPowerExtraTriggers =
+            (player.heroPowerExtraTriggers ?? 0) + 1;
+          break;
+        case "handOfFate":
+          grantRandomDarkmoonPrizes(state, player, 2);
+          break;
+        case "curseOfFlesh":
+          applyYoggCurseOfFlesh(state, player);
+          break;
+        case "devouringHunger":
+          applyYoggDevouringHunger(state, player);
+          break;
+        case "rodOfRoasting":
+          applyYoggRodOfRoasting(state, player);
+          break;
+        case "goldenMysteryBox":
+          applyYoggGoldenMysteryBox(state, player);
+          break;
+        case "mindflayerGoggles":
+          applyYoggMindflayerGoggles(state, player);
+          break;
+      }
+    }
+    if (
+      state.lobbySystemsEnabled &&
+      state.systemEventId &&
+      state.round >= 6 &&
+      getSystemEventDefinition(state.systemEventId).effect ===
+        "wisdomballAnomaly"
+    ) {
+      player.helpfulRefreshes += 1;
+    }
+    if (
+      state.lobbySystemsEnabled &&
+      state.systemEventId &&
+      getSystemEventDefinition(state.systemEventId).effect ===
+        "vault" &&
+      state.round >= 3 &&
+      state.round <= 7
+    ) {
+      const used =
+        player.systemEventCounters.vaultRoundUsed ?? 0;
+      if (state.round > used && player.hand.length < MAX_HAND_SIZE) {
+        player.systemEventCounters.vaultRoundUsed = state.round;
+        const minion = drawMatchingFromPool(
+          state,
+          state.round as TavernTier,
+          (d) => d.tier === state.round,
+        );
+        if (minion) {
+          const def = getMinionDefinition(minion.definitionId);
+          minion.golden = true;
+          minion.cardId = def.goldenCardId ?? def.cardId;
+          minion.name = `金色·${def.name}`;
+          minion.attack = def.attack * 2;
+          minion.health = def.health * 2;
+          minion.sellValue = 1;
+          minion.grantsTripleReward = false;
           player.hand.push(minion);
         }
       }
