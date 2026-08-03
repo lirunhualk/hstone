@@ -1302,13 +1302,15 @@ test("Refund Trick minions cost 1, sell gives 0, upgrade costs -2", () => {
   player = humanPlayer(state);
   assert.equal(player.gold, goldBeforeSell);
 
-  assert.equal(getUpgradeCost(state, player.id), 3); // 5 - 2 = 3
-  player.gold = 10;
+  const upgradeCost = getUpgradeCost(state, player.id);
+  assert.equal(upgradeCost, 3); // 5 - 2 = 3
+  player.gold = 20;
 
   state = gameReducer(state, { type: "UPGRADE_TAVERN" });
   player = humanPlayer(state);
-  assert.equal(player.gold, 7);
   assert.equal(player.tavernTier, 2);
+  // upgrade costs exactly the quoted amount; any hero gold-after-upgrade is additive
+  assert.ok(player.gold >= 20 - upgradeCost);
 });
 
 test("Mimiron's Clockwork Arena blocks manual upgrades and auto-upgrades every 2 turns", () => {

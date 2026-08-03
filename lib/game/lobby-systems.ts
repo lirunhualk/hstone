@@ -193,7 +193,17 @@ export type SystemEventEffect =
   | "buyOneGetOne"
   | "goldCarryover"
   | "refundTrick"
-  | "mimironsClockworkArena";
+  | "mimironsClockworkArena"
+  | "norgannonsSecret"
+  | "lightTheWay"
+  | "finalHour"
+  | "immediateFormation"
+  | "scoutsHonor"
+  | "tierMatchOnly"
+  | "assemblyLine"
+  | "planeAlignment"
+  | "goldenArena"
+  | "falseIdols";
 
 export interface SystemEventDefinition {
   id: string;
@@ -282,6 +292,76 @@ export const SYSTEM_EVENT_DEFINITIONS = [
     name: "弥米伦发条竞技场",
     description: "无法以金币升级旅店。旅店每两回合会自动升级。",
     effect: "mimironsClockworkArena",
+  },
+  {
+    id: "system-event-norgannon",
+    cardId: "BG27_Anomaly_106",
+    name: "诺甘农的秘密",
+    description: "可提升至旅店等级7。对战开始时拥有10点额外护甲值。",
+    effect: "norgannonsSecret",
+  },
+  {
+    id: "system-event-light-the-way",
+    cardId: "BG31_Anomaly_109",
+    name: "点亮道路",
+    description: "每当你重置两次后，下回合获得1枚金币。",
+    effect: "lightTheWay",
+  },
+  {
+    id: "system-event-final-hour",
+    cardId: "BG31_Anomaly_126",
+    name: "最后时刻",
+    description: "抵销你的英雄在战斗中第一次受到的致命伤，并在下回合获得11枚金币。",
+    effect: "finalHour",
+  },
+  {
+    id: "system-event-immediate-formation",
+    cardId: "BG31_Anomaly_122",
+    name: "立即布阵",
+    description: "开 局时获得3个不同的旅店等级1手下。",
+    effect: "immediateFormation",
+  },
+  {
+    id: "system-event-scouts-honor",
+    cardId: "BG31_Anomaly_118",
+    name: "斥候荣耀",
+    description: "开局时场上有一张有耐心的斥候。",
+    effect: "scoutsHonor",
+  },
+  {
+    id: "system-event-tier-match",
+    cardId: "BG31_Anomaly_108",
+    name: "精灵精英",
+    description: "旅店只会提供与你的旅店等级相同的卡牌。",
+    effect: "tierMatchOnly",
+  },
+  {
+    id: "system-event-assembly-line",
+    cardId: "BG31_Anomaly_112",
+    name: "流水线",
+    description: "每第2个回合结束时，获得你最左边的手下的一 张未加成分身。",
+    effect: "assemblyLine",
+  },
+  {
+    id: "system-event-plane-alignment",
+    cardId: "BG31_Anomaly_121",
+    name: "界域校准",
+    description: "每个回合开始时获得一个你数量最多手下类型的随机手下。（于第2回合解 锁）",
+    effect: "planeAlignment",
+  },
+  {
+    id: "system-event-golden-arena",
+    cardId: "BG27_Anomaly_115",
+    name: "黄金竞技场",
+    description: "全部手下皆為金卡，但你无法取得三合一奖励。",
+    effect: "goldenArena",
+  },
+  {
+    id: "system-event-false-idols",
+    cardId: "BG27_Anomaly_110",
+    name: "虚假塑像",
+    description: "你只需要2个手下，就能合成金卡。不再获得三合一奖励，改為获得金币。",
+    effect: "falseIdols",
   },
 ] as const satisfies readonly SystemEventDefinition[];
 

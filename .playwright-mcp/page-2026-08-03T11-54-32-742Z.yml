@@ -1,0 +1,674 @@
+- generic [active] [ref=e1]:
+  - generic [ref=e4]:
+    - list [ref=e5]:
+      - listitem [ref=e6]:
+        - link "首页" [ref=e7] [cursor=pointer]:
+          - /url: //www.bilibili.com
+      - listitem [ref=e15]:
+        - link "番剧" [ref=e16] [cursor=pointer]:
+          - /url: //www.bilibili.com/anime/
+      - listitem [ref=e17]:
+        - link "直播" [ref=e18] [cursor=pointer]:
+          - /url: //live.bilibili.com
+      - listitem [ref=e19]:
+        - link "游戏中心" [ref=e21] [cursor=pointer]:
+          - /url: //game.bilibili.com/platform
+      - listitem [ref=e22]:
+        - link "会员购" [ref=e23] [cursor=pointer]:
+          - /url: //show.bilibili.com/platform/home.html?msource=pc_web
+      - listitem [ref=e24]:
+        - link "漫画" [ref=e25] [cursor=pointer]:
+          - /url: //manga.bilibili.com?from=bill_top_mnav
+      - listitem [ref=e26]:
+        - link "赛事" [ref=e27] [cursor=pointer]:
+          - /url: //www.bilibili.com/match/home/
+      - listitem
+    - list [ref=e679]:
+      - listitem [ref=e680] [cursor=pointer]:
+        - listitem [ref=e681]:
+          - generic [ref=e682]: 登录
+          - generic [ref=e686]:
+            - paragraph [ref=e687]: 登录后你可以：
+            - generic [ref=e688]:
+              - generic [ref=e689]: 免费看高清视频
+              - generic [ref=e695]: 多端同步播放记录
+              - generic [ref=e700]: 发表弹幕/评论
+              - generic [ref=e708]: 热门番剧影视看不停
+            - generic [ref=e713]: 立即登录
+            - generic [ref=e714]: 首次使用？ 点我注册
+      - listitem [ref=e715] [cursor=pointer]:
+        - listitem [ref=e717]:
+          - link [ref=e718]:
+            - /url: //account.bilibili.com/big
+      - listitem [ref=e723] [cursor=pointer]
+      - listitem [ref=e728] [cursor=pointer]
+      - listitem [ref=e736] [cursor=pointer]
+      - listitem [ref=e741] [cursor=pointer]
+      - listitem [ref=e745] [cursor=pointer]
+      - listitem [ref=e751] [cursor=pointer]:
+        - listitem [ref=e752]
+  - generic [ref=e30]:
+    - generic [ref=e31]:
+      - generic [ref=e35]:
+        - textbox "输入关键字搜索" [ref=e41]: 炉石传说战棋 缝合回收者 BG31_999
+        - button "搜索" [ref=e42] [cursor=pointer]
+      - navigation [ref=e45]:
+        - list [ref=e46]:
+          - listitem [ref=e47]:
+            - generic [ref=e48] [cursor=pointer]: 综合
+          - listitem [ref=e50]:
+            - generic [ref=e51] [cursor=pointer]:
+              - generic [ref=e52]: 视频
+              - generic [ref=e53]: 99+
+          - listitem [ref=e54]:
+            - generic [ref=e55] [cursor=pointer]:
+              - generic [ref=e56]: 番剧
+              - generic [ref=e57]: "0"
+          - listitem [ref=e58]:
+            - generic [ref=e59] [cursor=pointer]:
+              - generic [ref=e60]: 影视
+              - generic [ref=e61]: "0"
+          - listitem [ref=e62]:
+            - generic [ref=e63] [cursor=pointer]:
+              - generic [ref=e64]: 直播
+              - generic [ref=e65]: "99"
+          - listitem [ref=e66]:
+            - generic [ref=e67] [cursor=pointer]:
+              - generic [ref=e68]: 专栏
+              - generic [ref=e69]: 99+
+          - listitem [ref=e70]:
+            - generic [ref=e71] [cursor=pointer]:
+              - generic [ref=e72]: 用户
+              - generic [ref=e73]: "0"
+      - separator [ref=e75]
+      - generic [ref=e78]:
+        - generic [ref=e79]:
+          - button "综合排序" [ref=e80] [cursor=pointer]
+          - button "最多播放" [ref=e81] [cursor=pointer]
+          - button "最新发布" [ref=e82] [cursor=pointer]
+          - button "最多弹幕" [ref=e83] [cursor=pointer]
+          - button "最多收藏" [ref=e84] [cursor=pointer]
+        - button "更多筛选" [ref=e85] [cursor=pointer]
+    - generic [ref=e90]:
+      - generic [ref=e91]:
+        - generic [ref=e94]:
+          - link [ref=e95] [cursor=pointer]:
+            - /url: //www.bilibili.com/video/BV1LRGgzzEQK/
+            - generic [ref=e96]:
+              - img "七本缝合亡语猪，先贴宝石再传播频率，炉石自己的大卫戴！" [ref=e99]
+              - generic:
+                - generic:
+                  - generic:
+                    - generic: 1.4万
+                    - generic: "13"
+                  - generic: 08:22
+          - generic [ref=e101]:
+            - link [ref=e102] [cursor=pointer]:
+              - /url: //www.bilibili.com/video/BV1LRGgzzEQK/
+              - heading [level=3] [ref=e103]:
+                - text: 七本
+                - emphasis [ref=e104]: 缝合
+                - text: 亡语猪，先贴宝石再传播频率，
+                - emphasis [ref=e105]: 炉石
+                - text: 自己的大卫戴！
+            - link "枫枫辰 · 2025-07-11" [ref=e107] [cursor=pointer]:
+              - /url: //space.bilibili.com/197978634
+              - generic [ref=e112]: 枫枫辰
+              - generic [ref=e113]: · 2025-07-11
+        - generic [ref=e116]:
+          - link [ref=e117] [cursor=pointer]:
+            - /url: //www.bilibili.com/video/BV1afKZzSEDA/
+            - generic [ref=e118]:
+              - img "七回合双金打击者！超爽亡灵资源多到拿不下！" [ref=e121]
+              - generic:
+                - generic:
+                  - generic:
+                    - generic: 1.0万
+                    - generic: "17"
+                  - generic: 06:02
+          - generic [ref=e123]:
+            - link [ref=e124] [cursor=pointer]:
+              - /url: //www.bilibili.com/video/BV1afKZzSEDA/
+              - heading "七回合双金打击者！超爽亡灵资源多到拿不下！" [level=3] [ref=e125]
+            - link "佐助Sama · 2025-06-27" [ref=e127] [cursor=pointer]:
+              - /url: //space.bilibili.com/2571478
+              - generic [ref=e132]: 佐助Sama
+              - generic [ref=e133]: · 2025-06-27
+        - generic [ref=e136]:
+          - link [ref=e137] [cursor=pointer]:
+            - /url: //www.bilibili.com/video/BV1DDM8zuEAX/
+            - generic [ref=e138]:
+              - img "八回合金屠夫不可怕！可怕的是九回合拿到了施法者肖像！亡灵小钱袋倒转流！" [ref=e141]
+              - generic:
+                - generic:
+                  - generic:
+                    - generic: 2.3万
+                    - generic: "13"
+                  - generic: 05:21
+          - generic [ref=e143]:
+            - link [ref=e144] [cursor=pointer]:
+              - /url: //www.bilibili.com/video/BV1DDM8zuEAX/
+              - heading "八回合金屠夫不可怕！可怕的是九回合拿到了施法者肖像！亡灵小钱袋倒转流！" [level=3] [ref=e145]
+            - link "佐助Sama · 2025-06-16" [ref=e147] [cursor=pointer]:
+              - /url: //space.bilibili.com/2571478
+              - generic [ref=e152]: 佐助Sama
+              - generic [ref=e153]: · 2025-06-16
+        - generic [ref=e156]:
+          - link [ref=e157] [cursor=pointer]:
+            - /url: //www.bilibili.com/video/BV1ajMVztEHu/
+            - generic [ref=e158]:
+              - img "九五至尊还带双打击者！马速拉满的天胡亡灵！" [ref=e161]
+              - generic:
+                - generic:
+                  - generic:
+                    - generic: 1.2万
+                    - generic: "28"
+                  - generic: 06:08
+          - generic [ref=e163]:
+            - link [ref=e164] [cursor=pointer]:
+              - /url: //www.bilibili.com/video/BV1ajMVztEHu/
+              - heading "九五至尊还带双打击者！马速拉满的天胡亡灵！" [level=3] [ref=e165]
+            - link "佐助Sama · 2025-06-11" [ref=e167] [cursor=pointer]:
+              - /url: //space.bilibili.com/2571478
+              - generic [ref=e172]: 佐助Sama
+              - generic [ref=e173]: · 2025-06-11
+        - generic [ref=e176]:
+          - link [ref=e177] [cursor=pointer]:
+            - /url: //www.bilibili.com/video/BV19tT4zeE6T/
+            - generic [ref=e178]:
+              - img "八回合六本！九回合就金铸霜者！" [ref=e181]
+              - generic:
+                - generic:
+                  - generic:
+                    - generic: 2.1万
+                    - generic: "41"
+                  - generic: 05:44
+          - generic [ref=e183]:
+            - link [ref=e184] [cursor=pointer]:
+              - /url: //www.bilibili.com/video/BV19tT4zeE6T/
+              - heading "八回合六本！九回合就金铸霜者！" [level=3] [ref=e185]
+            - link "佐助Sama · 2025-06-06" [ref=e187] [cursor=pointer]:
+              - /url: //space.bilibili.com/2571478
+              - generic [ref=e192]: 佐助Sama
+              - generic [ref=e193]: · 2025-06-06
+        - generic [ref=e196]:
+          - link [ref=e197] [cursor=pointer]:
+            - /url: //www.bilibili.com/video/BV1Lg7XzMEfd/
+            - generic [ref=e198]:
+              - img "【衣锦夜行】借天地之力，掀翻牌桌，成功是对勇敢者的奖励" [ref=e201]
+              - generic:
+                - generic:
+                  - generic:
+                    - generic: 3.6万
+                    - generic: "64"
+                  - generic: 24:01
+          - generic [ref=e203]:
+            - link [ref=e204] [cursor=pointer]:
+              - /url: //www.bilibili.com/video/BV1Lg7XzMEfd/
+              - heading "【衣锦夜行】借天地之力，掀翻牌桌，成功是对勇敢者的奖励" [level=3] [ref=e205]
+            - link "一斤牙龈切片师 · 2025-06-02" [ref=e207] [cursor=pointer]:
+              - /url: //space.bilibili.com/398212342
+              - generic [ref=e212]: 一斤牙龈切片师
+              - generic [ref=e213]: · 2025-06-02
+        - generic [ref=e216]:
+          - link [ref=e217] [cursor=pointer]:
+            - /url: //www.bilibili.com/video/BV1gj75zSEh1/
+            - generic [ref=e218]:
+              - img "最纯粹的海盗！七德鲁斯特爽刷万血眺望者！" [ref=e221]
+              - generic:
+                - generic:
+                  - generic:
+                    - generic: 4.5万
+                    - generic: "128"
+                  - generic: 08:34
+          - generic [ref=e223]:
+            - link [ref=e224] [cursor=pointer]:
+              - /url: //www.bilibili.com/video/BV1gj75zSEh1/
+              - heading "最纯粹的海盗！七德鲁斯特爽刷万血眺望者！" [level=3] [ref=e225]
+            - link "佐助Sama · 2025-05-30" [ref=e227] [cursor=pointer]:
+              - /url: //space.bilibili.com/2571478
+              - generic [ref=e232]: 佐助Sama
+              - generic [ref=e233]: · 2025-05-30
+        - generic [ref=e236]:
+          - link [ref=e237] [cursor=pointer]:
+            - /url: //www.bilibili.com/video/BV1PvEozhETo/
+            - generic [ref=e238]:
+              - img "手速越快身材越大！全金海盗爽刷8000血眺望者！" [ref=e241]
+              - generic:
+                - generic:
+                  - generic:
+                    - generic: 3.1万
+                    - generic: "70"
+                  - generic: 07:29
+          - generic [ref=e243]:
+            - link [ref=e244] [cursor=pointer]:
+              - /url: //www.bilibili.com/video/BV1PvEozhETo/
+              - heading "手速越快身材越大！全金海盗爽刷8000血眺望者！" [level=3] [ref=e245]
+            - link "佐助Sama · 2025-05-19" [ref=e247] [cursor=pointer]:
+              - /url: //space.bilibili.com/2571478
+              - generic [ref=e252]: 佐助Sama
+              - generic [ref=e253]: · 2025-05-19
+        - generic [ref=e256]:
+          - link [ref=e257] [cursor=pointer]:
+            - /url: //www.bilibili.com/video/BV1hvJNzYEDM/
+            - generic [ref=e258]:
+              - img "第8回合的金打击者，亡灵不打后期！" [ref=e261]
+              - generic:
+                - generic:
+                  - generic:
+                    - generic: 11.2万
+                    - generic: "446"
+                  - generic: 07:08
+          - generic [ref=e263]:
+            - link [ref=e264] [cursor=pointer]:
+              - /url: //www.bilibili.com/video/BV1hvJNzYEDM/
+              - heading "第8回合的金打击者，亡灵不打后期！" [level=3] [ref=e265]
+            - link "大大怪怪怪将军 · 2025-05-17" [ref=e267] [cursor=pointer]:
+              - /url: //space.bilibili.com/254803796
+              - generic [ref=e272]: 大大怪怪怪将军
+              - generic [ref=e273]: · 2025-05-17
+        - generic [ref=e276]:
+          - link [ref=e277] [cursor=pointer]:
+            - /url: //www.bilibili.com/video/BV1rkEwzTE3n/
+            - generic [ref=e278]:
+              - img "懒人最爱！十铸霜者纯挂机元素！" [ref=e281]
+              - generic:
+                - generic:
+                  - generic:
+                    - generic: 1.2万
+                    - generic: "11"
+                  - generic: 04:19
+          - generic [ref=e283]:
+            - link [ref=e284] [cursor=pointer]:
+              - /url: //www.bilibili.com/video/BV1rkEwzTE3n/
+              - heading "懒人最爱！十铸霜者纯挂机元素！" [level=3] [ref=e285]
+            - link "佐助Sama · 2025-05-14" [ref=e287] [cursor=pointer]:
+              - /url: //space.bilibili.com/2571478
+              - generic [ref=e292]: 佐助Sama
+              - generic [ref=e293]: · 2025-05-14
+        - generic [ref=e296]:
+          - link [ref=e297] [cursor=pointer]:
+            - /url: //www.bilibili.com/video/BV1iKE3zXEuW/
+            - generic [ref=e298]:
+              - img "双金感染者超能舰队，一回合全员上百身材！" [ref=e301]
+              - generic:
+                - generic:
+                  - generic:
+                    - generic: 11.0万
+                    - generic: "411"
+                  - generic: 08:06
+          - generic [ref=e303]:
+            - link [ref=e304] [cursor=pointer]:
+              - /url: //www.bilibili.com/video/BV1iKE3zXEuW/
+              - heading "双金感染者超能舰队，一回合全员上百身材！" [level=3] [ref=e305]
+            - link "大大怪怪怪将军 · 2025-05-11" [ref=e307] [cursor=pointer]:
+              - /url: //space.bilibili.com/254803796
+              - generic [ref=e312]: 大大怪怪怪将军
+              - generic [ref=e313]: · 2025-05-11
+        - generic [ref=e316]:
+          - link [ref=e317] [cursor=pointer]:
+            - /url: //www.bilibili.com/video/BV11uVozSEwg/
+            - generic [ref=e318]:
+              - img "低语者最强打法，一回合上千buff（一共）" [ref=e321]
+              - generic:
+                - generic:
+                  - generic:
+                    - generic: 18.0万
+                    - generic: "540"
+                  - generic: 07:16
+          - generic [ref=e323]:
+            - link [ref=e324] [cursor=pointer]:
+              - /url: //www.bilibili.com/video/BV11uVozSEwg/
+              - heading "低语者最强打法，一回合上千buff（一共）" [level=3] [ref=e325]
+            - link "大大怪怪怪将军 · 2025-05-10" [ref=e327] [cursor=pointer]:
+              - /url: //space.bilibili.com/254803796
+              - generic [ref=e332]: 大大怪怪怪将军
+              - generic [ref=e333]: · 2025-05-10
+        - generic [ref=e336]:
+          - link [ref=e337] [cursor=pointer]:
+            - /url: //www.bilibili.com/video/BV1Y6GRzoE2z/
+            - generic [ref=e338]:
+              - img "动物低语者的正确使用方法！混合挂机流全员上千身材！" [ref=e341]
+              - generic:
+                - generic:
+                  - generic:
+                    - generic: 5.1万
+                    - generic: "48"
+                  - generic: 08:03
+          - generic [ref=e343]:
+            - link [ref=e344] [cursor=pointer]:
+              - /url: //www.bilibili.com/video/BV1Y6GRzoE2z/
+              - heading "动物低语者的正确使用方法！混合挂机流全员上千身材！" [level=3] [ref=e345]
+            - link "佐助Sama · 2025-05-04" [ref=e347] [cursor=pointer]:
+              - /url: //space.bilibili.com/2571478
+              - generic [ref=e352]: 佐助Sama
+              - generic [ref=e353]: · 2025-05-04
+        - generic [ref=e356]:
+          - link [ref=e357] [cursor=pointer]:
+            - /url: //www.bilibili.com/video/BV1hyLzzSEVA/
+            - generic [ref=e358]:
+              - img "无限刷法术，最适合血望者的畸变" [ref=e361]
+              - generic:
+                - generic:
+                  - generic:
+                    - generic: 4.9万
+                    - generic: "408"
+                  - generic: 07:12
+          - generic [ref=e363]:
+            - link [ref=e364] [cursor=pointer]:
+              - /url: //www.bilibili.com/video/BV1hyLzzSEVA/
+              - heading "无限刷法术，最适合血望者的畸变" [level=3] [ref=e365]
+            - link "大大怪怪怪将军 · 2025-04-28" [ref=e367] [cursor=pointer]:
+              - /url: //space.bilibili.com/254803796
+              - generic [ref=e372]: 大大怪怪怪将军
+              - generic [ref=e373]: · 2025-04-28
+        - generic [ref=e376]:
+          - link [ref=e377] [cursor=pointer]:
+            - /url: //www.bilibili.com/video/BV1PiLBzTEM7/
+            - generic [ref=e378]:
+              - img "如果缝合云顶之弈和酒馆战棋，会有多好玩？" [ref=e381]
+              - generic:
+                - generic:
+                  - generic:
+                    - generic: 1.4万
+                    - generic: "2"
+                  - generic: 01:51
+          - generic [ref=e383]:
+            - link [ref=e384] [cursor=pointer]:
+              - /url: //www.bilibili.com/video/BV1PiLBzTEM7/
+              - heading [level=3] [ref=e385]:
+                - text: 如果
+                - emphasis [ref=e386]: 缝合
+                - text: 云顶之弈和酒馆
+                - emphasis [ref=e387]: 战棋
+                - text: ，会有多好玩？
+            - link "炉火torch · 2025-04-27" [ref=e389] [cursor=pointer]:
+              - /url: //space.bilibili.com/1409476482
+              - generic [ref=e394]: 炉火torch
+              - generic [ref=e395]: · 2025-04-27
+        - generic [ref=e398]:
+          - link [ref=e399] [cursor=pointer]:
+            - /url: //www.bilibili.com/video/BV1VwjPzxEdx/
+            - generic [ref=e400]:
+              - img "运筹帷幄，又是我一个人的7本局" [ref=e403]
+              - generic:
+                - generic:
+                  - generic:
+                    - generic: 13.8万
+                    - generic: "484"
+                  - generic: 09:01
+          - generic [ref=e405]:
+            - link [ref=e406] [cursor=pointer]:
+              - /url: //www.bilibili.com/video/BV1VwjPzxEdx/
+              - heading "运筹帷幄，又是我一个人的7本局" [level=3] [ref=e407]
+            - link "大大怪怪怪将军 · 2025-04-27" [ref=e409] [cursor=pointer]:
+              - /url: //space.bilibili.com/254803796
+              - generic [ref=e414]: 大大怪怪怪将军
+              - generic [ref=e415]: · 2025-04-27
+        - generic [ref=e418]:
+          - link [ref=e419] [cursor=pointer]:
+            - /url: //www.bilibili.com/video/BV1S8LJztEoM/
+            - generic [ref=e420]:
+              - img "【夜吹的战棋日记1700】天胡娜迦，五回合的碎地者你怕不怕！" [ref=e423]
+              - generic:
+                - generic:
+                  - generic:
+                    - generic: 2.6万
+                    - generic: "129"
+                  - generic: 21:19
+          - generic [ref=e425]:
+            - link [ref=e426] [cursor=pointer]:
+              - /url: //www.bilibili.com/video/BV1S8LJztEoM/
+              - heading [level=3] [ref=e427]:
+                - text: 【夜吹的
+                - emphasis [ref=e428]: 战棋
+                - text: 日记1700】天胡娜迦，五回合的碎地者你怕不怕！
+            - link "高冷难神衣锦夜行 · 2025-04-25" [ref=e430] [cursor=pointer]:
+              - /url: //space.bilibili.com/383684359
+              - generic [ref=e435]: 高冷难神衣锦夜行
+              - generic [ref=e436]: · 2025-04-25
+        - generic [ref=e439]:
+          - link [ref=e440] [cursor=pointer]:
+            - /url: //www.bilibili.com/video/BV1bM52zeEac/
+            - generic [ref=e441]:
+              - img "打击者：“接下来，准备好被群殴了吗？”" [ref=e444]
+              - generic:
+                - generic:
+                  - generic:
+                    - generic: 2.3万
+                    - generic: "39"
+                  - generic: 07:22
+          - generic [ref=e446]:
+            - link [ref=e447] [cursor=pointer]:
+              - /url: //www.bilibili.com/video/BV1bM52zeEac/
+              - heading "打击者：“接下来，准备好被群殴了吗？”" [level=3] [ref=e448]
+            - link "矮矮的桔子 · 2025-04-21" [ref=e450] [cursor=pointer]:
+              - /url: //space.bilibili.com/251569233
+              - generic [ref=e455]: 矮矮的桔子
+              - generic [ref=e456]: · 2025-04-21
+        - generic [ref=e459]:
+          - link [ref=e460] [cursor=pointer]:
+            - /url: //www.bilibili.com/video/BV1PofAYBEiD/
+            - generic [ref=e461]:
+              - img "13回合上亿身材，你的纳迦怎么没碎地者？" [ref=e464]
+              - generic:
+                - generic:
+                  - generic:
+                    - generic: 8.6万
+                    - generic: "386"
+                  - generic: 09:20
+          - generic [ref=e466]:
+            - link [ref=e467] [cursor=pointer]:
+              - /url: //www.bilibili.com/video/BV1PofAYBEiD/
+              - heading "13回合上亿身材，你的纳迦怎么没碎地者？" [level=3] [ref=e468]
+            - link "大大怪怪怪将军 · 2025-04-02" [ref=e470] [cursor=pointer]:
+              - /url: //space.bilibili.com/254803796
+              - generic [ref=e475]: 大大怪怪怪将军
+              - generic [ref=e476]: · 2025-04-02
+        - generic [ref=e479]:
+          - link [ref=e480] [cursor=pointer]:
+            - /url: //www.bilibili.com/video/BV1JZZLYaEVn/
+            - generic [ref=e481]:
+              - img "人类对缝合怪的开发不足1％" [ref=e484]
+              - generic:
+                - generic:
+                  - generic:
+                    - generic: 1.2万
+                    - generic: "6"
+                  - generic: 01:03
+          - generic [ref=e486]:
+            - link [ref=e487] [cursor=pointer]:
+              - /url: //www.bilibili.com/video/BV1JZZLYaEVn/
+              - heading [level=3] [ref=e488]:
+                - text: 人类对
+                - emphasis [ref=e489]: 缝合
+                - text: 怪的开发不足1％
+            - link "账号已注销 · 2025-03-28" [ref=e491] [cursor=pointer]:
+              - /url: //space.bilibili.com/673764817
+              - generic [ref=e496]: 账号已注销
+              - generic [ref=e497]: · 2025-03-28
+        - generic [ref=e500]:
+          - link [ref=e501] [cursor=pointer]:
+            - /url: //www.bilibili.com/video/BV1AH9SYnEsu/
+            - generic [ref=e502]:
+              - img "双金拉法姆伙伴，一回合偷四个复仇者直接原地飞起来！" [ref=e505]
+              - generic:
+                - generic:
+                  - generic:
+                    - generic: 1.7万
+                    - generic: "21"
+                  - generic: 07:36
+          - generic [ref=e507]:
+            - link [ref=e508] [cursor=pointer]:
+              - /url: //www.bilibili.com/video/BV1AH9SYnEsu/
+              - heading "双金拉法姆伙伴，一回合偷四个复仇者直接原地飞起来！" [level=3] [ref=e509]
+            - link "佐助Sama · 2025-03-08" [ref=e511] [cursor=pointer]:
+              - /url: //space.bilibili.com/2571478
+              - generic [ref=e516]: 佐助Sama
+              - generic [ref=e517]: · 2025-03-08
+        - generic [ref=e520]:
+          - link [ref=e521] [cursor=pointer]:
+            - /url: //www.bilibili.com/video/BV15tRKYnEop/
+            - generic [ref=e522]:
+              - img "当我有6金不朽者！" [ref=e525]
+              - generic:
+                - generic:
+                  - generic:
+                    - generic: 19.4万
+                    - generic: "453"
+                  - generic: 06:56
+          - generic [ref=e527]:
+            - link [ref=e528] [cursor=pointer]:
+              - /url: //www.bilibili.com/video/BV15tRKYnEop/
+              - heading "当我有6金不朽者！" [level=3] [ref=e529]
+            - link "大大怪怪怪将军 · 2025-03-06" [ref=e531] [cursor=pointer]:
+              - /url: //space.bilibili.com/254803796
+              - generic [ref=e536]: 大大怪怪怪将军
+              - generic [ref=e537]: · 2025-03-06
+        - generic [ref=e540]:
+          - link [ref=e541] [cursor=pointer]:
+            - /url: //www.bilibili.com/video/BV1fZ9FYrEMR/
+            - generic [ref=e542]:
+              - img "缝合怪的终极玩法" [ref=e545]
+              - generic:
+                - generic:
+                  - generic:
+                    - generic: "9513"
+                    - generic: "0"
+                  - generic: 01:26
+          - generic [ref=e547]:
+            - link [ref=e548] [cursor=pointer]:
+              - /url: //www.bilibili.com/video/BV1fZ9FYrEMR/
+              - heading [level=3] [ref=e549]:
+                - emphasis [ref=e550]: 缝合
+                - text: 怪的终极玩法
+            - link "耳与心叶 · 2025-03-02" [ref=e552] [cursor=pointer]:
+              - /url: //space.bilibili.com/322024010
+              - generic [ref=e557]: 耳与心叶
+              - generic [ref=e558]: · 2025-03-02
+        - generic [ref=e561]:
+          - link [ref=e562] [cursor=pointer]:
+            - /url: //www.bilibili.com/video/BV1cE9VY2EN7/
+            - generic [ref=e563]:
+              - img "别人五费我九费！第二回合开始挖矿的预言者！" [ref=e566]
+              - generic:
+                - generic:
+                  - generic:
+                    - generic: 7.9万
+                    - generic: "100"
+                  - generic: 06:02
+          - generic [ref=e568]:
+            - link [ref=e569] [cursor=pointer]:
+              - /url: //www.bilibili.com/video/BV1cE9VY2EN7/
+              - heading "别人五费我九费！第二回合开始挖矿的预言者！" [level=3] [ref=e570]
+            - link "佐助Sama · 2025-03-01" [ref=e572] [cursor=pointer]:
+              - /url: //space.bilibili.com/2571478
+              - generic [ref=e577]: 佐助Sama
+              - generic [ref=e578]: · 2025-03-01
+      - generic [ref=e581]:
+        - button "上一页" [disabled] [ref=e582]
+        - button "1" [ref=e583] [cursor=pointer]
+        - button "2" [ref=e584] [cursor=pointer]
+        - button "3" [ref=e585] [cursor=pointer]
+        - button "4" [ref=e586] [cursor=pointer]
+        - button "5" [ref=e587] [cursor=pointer]
+        - button "下一页" [ref=e588] [cursor=pointer]
+  - generic [ref=e593]:
+    - generic [ref=e594]:
+      - generic [ref=e595]:
+        - generic [ref=e596]: bilibili
+        - generic [ref=e597]:
+          - link "关于我们" [ref=e598] [cursor=pointer]:
+            - /url: //www.bilibili.com/blackboard/aboutUs.html
+          - link "联系我们" [ref=e599] [cursor=pointer]:
+            - /url: //www.bilibili.com/blackboard/contact.html
+          - link "用户协议" [ref=e600] [cursor=pointer]:
+            - /url: //www.bilibili.com/protocal/licence.html
+          - link "加入我们" [ref=e601] [cursor=pointer]:
+            - /url: //www.bilibili.com/blackboard/join.html
+          - link "隐私协议" [ref=e602] [cursor=pointer]:
+            - /url: //www.bilibili.com/blackboard/privacy-pc.html
+          - link "bilibili认证" [ref=e603] [cursor=pointer]:
+            - /url: //account.bilibili.com/account/official/home
+          - link "Investor Relations" [ref=e604] [cursor=pointer]:
+            - /url: //ir.bilibili.com/
+      - generic [ref=e605]:
+        - generic [ref=e606]: 传送门
+        - generic [ref=e607]:
+          - link "协议汇总" [ref=e608] [cursor=pointer]:
+            - /url: //www.bilibili.com/blackboard/topic/activity-cn8bxPLzz.html
+          - link "活动中心" [ref=e609] [cursor=pointer]:
+            - /url: //www.bilibili.com/blackboard/activity-list.html
+          - link "活动专题页" [ref=e610] [cursor=pointer]:
+            - /url: //www.bilibili.com/blackboard/topic_list.html
+          - link "侵权申诉" [ref=e611] [cursor=pointer]:
+            - /url: //www.bilibili.com/v/copyright/intro/
+          - link "帮助中心" [ref=e612] [cursor=pointer]:
+            - /url: //www.bilibili.com/blackboard/help.html
+          - link "社区中心" [ref=e613] [cursor=pointer]:
+            - /url: https://www.bilibili.com/blackboard/activity-5zJxM3spoS.html
+          - link "壁纸站" [ref=e614] [cursor=pointer]:
+            - /url: //space.bilibili.com/6823116#/album
+          - link "广告合作" [ref=e615] [cursor=pointer]:
+            - /url: //e.bilibili.com/
+          - link "名人堂" [ref=e616] [cursor=pointer]:
+            - /url: //www.bilibili.com/blackboard/activity-S1jfy69Jz.html
+          - link "MCN管理中心" [ref=e617] [cursor=pointer]:
+            - /url: //mcn.bilibili.com/studio/mcn/entry
+          - link "高级弹幕" [ref=e618] [cursor=pointer]:
+            - /url: //www.bilibili.com/video/BV1Xx411c7cH/
+          - link "品牌号官网" [ref=e619] [cursor=pointer]:
+            - /url: //b.bilibili.com/
+      - generic [ref=e620]:
+        - link [ref=e622] [cursor=pointer]:
+          - /url: //app.bilibili.com/
+          - paragraph [ref=e626]: 下载APP
+        - link [ref=e628] [cursor=pointer]:
+          - /url: //love.bilibili.com/
+          - paragraph [ref=e635]: 公益
+        - link [ref=e637] [cursor=pointer]:
+          - /url: //weibo.com/bilibiliweb
+          - paragraph [ref=e641]: 官方微博
+        - paragraph [ref=e647]: 官方微信
+    - generic [ref=e650]:
+      - generic [ref=e651]:
+        - link "营业执照" [ref=e652] [cursor=pointer]:
+          - /url: //i0.hdslb.com/bfs/activity-plat/static/20240516/9ccf041718e5d6d6dfaebc91b85c791c/gd85E6tDco.jpg
+        - text: 信息网络传播视听节目许可证：0910417
+        - link "网络文化经营许可证 沪网文【2025】0258-085号" [ref=e653] [cursor=pointer]:
+          - /url: //i0.hdslb.com/bfs/activity-plat/static/20260209/3b3c5705bda98d50983f6f47df360fef/K4t52YryBV.jpeg
+        - text: 广播电视节目制作经营许可证：（沪）字第01248号增值电信业务经营许可证 沪B2-20100043
+      - generic [ref=e654]:
+        - link "互联网ICP备案：沪ICP备13002172号-3" [ref=e655] [cursor=pointer]:
+          - /url: //beian.miit.gov.cn/
+        - link "出版物经营许可证 沪批字第U6699 号" [ref=e656] [cursor=pointer]:
+          - /url: //i0.hdslb.com/bfs/activity-plat/static/20240516/9ccf041718e5d6d6dfaebc91b85c791c/4ainzbFKao.jpg
+        - text: 互联网药品信息服务资格证 沪-非经营性-2022-0011营业性演出许可证 沪市文演（经）00-2253 |
+      - generic [ref=e657]:
+        - link "不良信息举报邮箱：help@bilibili.com" [ref=e658] [cursor=pointer]:
+          - /url: mailto:help@bilibili.com
+        - link "涉未成年举报邮箱：teenprotect@bilibili.com" [ref=e659] [cursor=pointer]:
+          - /url: mailto:teenprotect@bilibili.com
+        - text: 不良信息举报电话：4006262233转3
+        - link "上海互联网举报中心 |" [ref=e661] [cursor=pointer]:
+          - /url: http://www.shjbzx.cn/
+        - link "12345政务服务便民热线 |" [ref=e662] [cursor=pointer]:
+          - /url: http://www.sh12345.gov.cn/
+      - generic [ref=e663]:
+        - link "沪公网安备31011002002436号 |" [ref=e665] [cursor=pointer]:
+          - /url: http://www.beian.gov.cn/portal/registerSystemInfo?recordcode=31011002002436
+        - link "儿童色情信息举报专区 |" [ref=e666] [cursor=pointer]:
+          - /url: mailto:userreport@bilibili.com
+        - link "扫黄打非举报" [ref=e667] [cursor=pointer]:
+          - /url: https://bzpt.shdf.gov.cn/www/shouye/gzfw/wsjb/index.shtml
+      - generic [ref=e668]:
+        - link "网信算备310110764385705230011号" [ref=e669] [cursor=pointer]:
+          - /url: https://beian.cac.gov.cn/api/static/fileUpload/principalOrithm/additional/user_699bbd78-36f4-459c-aeb0-bf98a2a562d8_6185ea2c-c84c-404a-9280-c5465af05948.pdf
+        - link "网信算备310110764385702230013号" [ref=e670] [cursor=pointer]:
+          - /url: https://beian.cac.gov.cn/api/static/fileUpload/principalOrithm/additional/user_699bbd78-36f4-459c-aeb0-bf98a2a562d8_e03e6855-76a6-43fb-b799-d090e7fce25d.pdf
+      - generic [ref=e671]:
+        - text: 网上有害信息举报专区：
+        - link "中国互联网违法和不良信息举报中心" [ref=e673] [cursor=pointer]:
+          - /url: https://www.12377.cn/
+        - text: 亲爱的市民朋友，上海警方反诈劝阻电话"96110"系专门针对避免您财产被骗受损而设，请您一旦收到来电，立即接听。
+      - generic [ref=e674]: 公司名称：上海宽娱数码科技有限公司 |公司地址：上海市杨浦区政立路489号 |电话：021-25099888

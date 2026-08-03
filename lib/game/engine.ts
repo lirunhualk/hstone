@@ -4023,6 +4023,52 @@ function applySystemEventAtLobbyStart(state: GameState): void {
       case "mimironsClockworkArena":
         player.systemEventCounters.mimironTurns = 1;
         break;
+      case "norgannonsSecret":
+        player.armor += 10;
+        break;
+      case "lightTheWay":
+        break;
+      case "finalHour":
+        player.systemEventCounters.finalHourUsed = 0;
+        break;
+      case "immediateFormation":
+        for (let i = 0; i < 3; i += 1) {
+          const minion = drawMatchingFromPool(
+            state,
+            1,
+            (d) => d.tier === 1,
+          );
+          if (minion) {
+            minion.sellValue = 1;
+            player.hand.push(minion);
+          }
+        }
+        break;
+      case "scoutsHonor": {
+        const scout = createMinionInstance(
+          state,
+          PATIENT_SCOUT_DEFINITION_ID,
+          1,
+        );
+        if (scout && player.board.length < 7) {
+          player.board.push(scout);
+        }
+        break;
+      }
+      case "tierMatchOnly":
+        player.systemEventCounters.tierMatchOnly = 1;
+        break;
+      case "assemblyLine":
+        player.systemEventCounters.assemblyLineTurns = 0;
+        break;
+      case "planeAlignment":
+        break;
+      case "goldenArena":
+        player.systemEventCounters.goldenArenaActive = 1;
+        break;
+      case "falseIdols":
+        player.systemEventCounters.falseIdolsActive = 1;
+        break;
     }
   }
 }
@@ -5635,6 +5681,13 @@ function drawTavernMinionFromPool(
   state: GameState,
   player: PlayerState,
 ): BoardMinionInstance | null {
+  if (player.systemEventCounters.tierMatchOnly) {
+    return drawMatchingFromPool(
+      state,
+      player.tavernTier,
+      (definition) => definition.tier === player.tavernTier,
+    );
+  }
   const minimumTier = playerHasTrinketCardId(player, GOBLIN_WALLET_CARD_ID)
     ? 3
     : 1;
@@ -7379,6 +7432,15 @@ function fillShop(
       player.magnetizationsThisGame ?? 0,
     );
     refreshDynamicMinionDescription(minion, player);
+    if (player.systemEventCounters.goldenArenaActive) {
+      const def = getMinionDefinition(minion.definitionId);
+      minion.golden = true;
+      minion.cardId = def.goldenCardId ?? def.cardId;
+      minion.name = `金色·${def.name}`;
+      minion.attack = def.attack * 2;
+      minion.health = def.health * 2;
+      minion.sellValue = 1;
+    }
     player.shop.push(minion);
     tavernRefreshed = true;
   }
@@ -10144,7 +10206,9 @@ function findTripleCombination(
       playerHasTrinketCardId(player, GOLDEN_PIRATE_STICKER_CARD_ID) &&
       definitionHasTribe(definition, "pirate")
         ? 2
-        : 3;
+        : player.systemEventCounters.falseIdolsActive
+          ? 2
+          : 3;
     if (matches.length >= copiesRequired) {
       return {
         definitionId,
@@ -10360,7 +10424,14 @@ function resolveTriples(
       }
       golden.golden = true;
       golden.cardId = definition.goldenCardId ?? definition.cardId;
-      golden.grantsTripleReward = true;
+      if (player.systemEventCounters.falseIdolsActive) {
+        golden.grantsTripleReward = false;
+        player.gold += 1;
+      } else if (player.systemEventCounters.goldenArenaActive) {
+        golden.grantsTripleReward = false;
+      } else {
+        golden.grantsTripleReward = true;
+      }
       golden.name = `金色·${definition.name}`;
       golden.attack =
         definition.attack * 2 +
@@ -16011,11 +16082,33 @@ function refreshShop(state: GameState, player: PlayerState): boolean {
   applyQueuedDemonFodderToRefresh(state, player);
   applyAfterTavernRefreshEffects(state, player);
   applyAfterManualRefreshTrinkets(state, player);
+  if (
+    state.lobbySystemsEnabled &&
+    state.systemEventId &&
+    getSystemEventDefinition(state.systemEventId).effect === "lightTheWay"
+  ) {
+    const count =
+      (player.systemEventCounters.lightTheWayCount ?? 0) + 1;
+    if (count >= 2) {
+      player.pendingNextTurnGold += 1;
+      player.systemEventCounters.lightTheWayCount = 0;
+    } else {
+      player.systemEventCounters.lightTheWayCount = count;
+    }
+  }
   return true;
 }
 
 function upgradeTavern(state: GameState, player: PlayerState): boolean {
-  if (player.tavernTier >= 6) {
+  const maxTier = (
+    state.lobbySystemsEnabled &&
+    state.systemEventId &&
+    getSystemEventDefinition(state.systemEventId).effect ===
+      "norgannonsSecret"
+  )
+    ? 7
+    : 6;
+  if (player.tavernTier >= maxTier) {
     return false;
   }
   if (
@@ -32485,6 +32578,25 @@ function simulateBattle(
           message: `${playerB.name}的安全徽章触发了寒冰屏障，防止了致命伤害。`,
         });
       }
+      if (
+        state.lobbySystemsEnabled &&
+        state.systemEventId &&
+        getSystemEventDefinition(state.systemEventId).effect ===
+          "finalHour" &&
+        (playerB.systemEventCounters.finalHourUsed ?? 0) === 0 &&
+        damageToPlayerB > 0 &&
+        playerB.health + playerB.armor <= damageToPlayerB
+      ) {
+        damageToPlayerB = 0;
+        playerB.systemEventCounters.finalHourUsed = 1;
+        playerB.pendingNextTurnGold += 11;
+        pushBattleEvent(events, {
+          type: "trigger",
+          actorPlayerId: playerB.id,
+          targetPlayerId: playerB.id,
+          message: `${playerB.name}的最后时刻触发了，防止了致命伤害！`,
+        });
+      }
       const damage = damagePlayer(playerB, damageToPlayerB);
       pushBattleEvent(events, {
         type: "heroDamage",
@@ -32517,6 +32629,25 @@ function simulateBattle(
         actorInstanceId: safeBadge.id,
         targetPlayerId: playerA.id,
         message: `${playerA.name}的安全徽章触发了寒冰屏障，防止了致命伤害。`,
+      });
+    }
+    if (
+      state.lobbySystemsEnabled &&
+      state.systemEventId &&
+      getSystemEventDefinition(state.systemEventId).effect ===
+        "finalHour" &&
+      (playerA.systemEventCounters.finalHourUsed ?? 0) === 0 &&
+      damageToPlayerA > 0 &&
+      playerA.health + playerA.armor <= damageToPlayerA
+    ) {
+      damageToPlayerA = 0;
+      playerA.systemEventCounters.finalHourUsed = 1;
+      playerA.pendingNextTurnGold += 11;
+      pushBattleEvent(events, {
+        type: "trigger",
+        actorPlayerId: playerA.id,
+        targetPlayerId: playerA.id,
+        message: `${playerA.name}的最后时刻触发了，防止了致命伤害！`,
       });
     }
     const damage = damagePlayer(playerA, damageToPlayerA);
@@ -32885,6 +33016,62 @@ function beginNextRecruit(state: GameState): void {
         player.systemEventCounters.mimironTurns = turns + 1;
       }
     }
+    if (
+      state.lobbySystemsEnabled &&
+      state.systemEventId &&
+      getSystemEventDefinition(state.systemEventId).effect ===
+        "assemblyLine"
+    ) {
+      const turns = player.systemEventCounters.assemblyLineTurns ?? 0;
+      if (turns >= 2 && player.board.length > 0 && player.hand.length < MAX_HAND_SIZE) {
+        const leftmost = player.board[0];
+        const copy = structuredClone(leftmost);
+        copy.instanceId = `minion-${state.nextInstanceId++}`;
+        copy.golden = false;
+        copy.grantsTripleReward = false;
+        copy.sellValue = 1;
+        copy.effectCounters = {};
+        player.hand.push(copy);
+        player.systemEventCounters.assemblyLineTurns = 1;
+      } else {
+        player.systemEventCounters.assemblyLineTurns = turns + 1;
+      }
+    }
+    if (
+      state.lobbySystemsEnabled &&
+      state.systemEventId &&
+      state.round >= 2 &&
+      getSystemEventDefinition(state.systemEventId).effect ===
+        "planeAlignment"
+    ) {
+      const tribeCounts: Record<string, number> = {};
+      for (const minion of player.board) {
+        for (const tribe of minion.tribes) {
+          tribeCounts[tribe] = (tribeCounts[tribe] ?? 0) + 1;
+        }
+      }
+      let majorityTribe = "";
+      let maxCount = 0;
+      for (const [tribe, count] of Object.entries(tribeCounts)) {
+        if (count > maxCount) {
+          maxCount = count;
+          majorityTribe = tribe;
+        }
+      }
+      if (majorityTribe && player.hand.length < MAX_HAND_SIZE) {
+        const minion = drawMatchingFromPool(
+          state,
+          player.tavernTier,
+          (definition) =>
+            definition.tier <= player.tavernTier &&
+            (definition.tribes?.includes(majorityTribe as Tribe) ?? false),
+        );
+        if (minion) {
+          minion.sellValue = 1;
+          player.hand.push(minion);
+        }
+      }
+    }
     player.tavernSpellsCastThisTurn = 0;
     player.darkmoonReservePricesDiscount = 0;
     applyStartOfTurnTrinkets(state, player);
@@ -33233,6 +33420,21 @@ export function createLobbyGame(
   });
 
   applySystemEventAtLobbyStart(state);
+
+  if (
+    state.systemEventId &&
+    getSystemEventDefinition(state.systemEventId).effect ===
+      "norgannonsSecret"
+  ) {
+    for (const definition of MINION_DEFINITIONS) {
+      if (
+        definition.tier === 7 &&
+        definitionIsAvailable(definition, state.activeTribes)
+      ) {
+        state.pool[definition.id] = POOL_COPIES_BY_TIER[7] ?? 5;
+      }
+    }
+  }
 
   state.pendingInteraction = {
     kind: "heroChoice",
