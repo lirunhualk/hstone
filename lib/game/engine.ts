@@ -1156,6 +1156,7 @@ function assignHeroDefinition(
   hero: HeroDefinition,
 ): void {
   player.heroId = hero.id;
+  player.armor = hero.armor;
   assignHeroPower(
     state,
     player,
@@ -4124,6 +4125,35 @@ function applySystemEventAtLobbyStart(state: GameState): void {
         break;
       case "treasureSeeker":
         player.systemEventCounters.treasureSeeksRefreshes = 0;
+        break;
+      case "facelessEvery4":
+        break;
+      case "bringBuddies": {
+        const buddyId = getBuddyDefinitionIdForHeroPower(
+          player.heroPowerId,
+        );
+        if (buddyId && player.hand.length < MAX_HAND_SIZE) {
+          const buddy = createMinionInstance(state, buddyId, 1);
+          if (buddy) {
+            buddy.attack *= 2;
+            buddy.health *= 2;
+            player.hand.push(buddy);
+          }
+        }
+        break;
+      }
+      case "dualUniverse":
+        if (player.heroPowerId) {
+          const eligible = identityEligibleHeroPowers(
+            player.heroPowerId,
+          );
+          if (eligible.length >= 3) {
+            // AI picks the first eligible option deterministically
+            assignHeroPower(state, player, eligible[0].id);
+          }
+        }
+        break;
+      case "emergencyLanding":
         break;
     }
   }
@@ -18989,6 +19019,47 @@ function resolvePendingInteraction(
     }
     assignHeroDefinition(next, nextPlayer, definition);
     next.pendingInteraction = null;
+    if (
+      next.lobbySystemsEnabled &&
+      next.systemEventId &&
+      getSystemEventDefinition(next.systemEventId).effect ===
+        "bringBuddies"
+    ) {
+      const buddyId = getBuddyDefinitionIdForHeroPower(
+        nextPlayer.heroPowerId,
+      );
+      if (buddyId && nextPlayer.hand.length < MAX_HAND_SIZE) {
+        const buddy = createMinionInstance(next, buddyId, 1);
+        if (buddy) {
+          buddy.attack *= 2;
+          buddy.health *= 2;
+          nextPlayer.hand.push(buddy);
+        }
+      }
+    }
+    if (
+      next.lobbySystemsEnabled &&
+      next.systemEventId &&
+      getSystemEventDefinition(next.systemEventId).effect ===
+        "dualUniverse" &&
+      nextPlayer.heroPowerId
+    ) {
+      const eligible = identityEligibleHeroPowers(
+        nextPlayer.heroPowerId,
+      );
+      if (eligible.length >= 3) {
+        const shuffled = [...eligible];
+        shuffleInPlace(next, shuffled);
+        next.pendingInteraction = {
+          kind: "heroPowerChoice",
+          interactionId: nextInteractionId(next),
+          playerId: nextPlayer.id,
+          sourceInstanceId: "system-event-dual-universe",
+          definitionId: "system-event-dual-universe",
+          optionIds: shuffled.slice(0, 3).map((p) => p.id),
+        };
+      }
+    }
     return next;
   }
 
@@ -33388,6 +33459,41 @@ function beginNextRecruit(state: GameState): void {
         "matchFixing"
     ) {
       player.gold += 3;
+    }
+    if (
+      state.lobbySystemsEnabled &&
+      state.systemEventId &&
+      state.round % 4 === 0 &&
+      getSystemEventDefinition(state.systemEventId).effect ===
+        "facelessEvery4" &&
+      player.hand.length < MAX_HAND_SIZE
+    ) {
+      const faceless = createMinionInstance(state, MANIPULATOR_DEFINITION_ID, 1);
+      if (faceless) {
+        player.hand.push(faceless);
+      }
+    }
+    if (
+      state.lobbySystemsEnabled &&
+      state.systemEventId &&
+      getSystemEventDefinition(state.systemEventId).effect ===
+        "emergencyLanding"
+    ) {
+      const shopDefIds = new Set(
+        player.shop.map((m) => m.definitionId),
+      );
+      if (shopDefIds.size > 0) {
+        const defId = [...shopDefIds][
+          randomIndex(state, shopDefIds.size)
+        ];
+        const poolCount = state.pool[defId] ?? 0;
+        if (poolCount > 0) {
+          state.pool[defId] = Math.max(0, poolCount - 1);
+          player.shop = player.shop.filter(
+            (m) => m.definitionId !== defId,
+          );
+        }
+      }
     }
     if (
       state.lobbySystemsEnabled &&

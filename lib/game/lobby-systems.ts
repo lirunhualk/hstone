@@ -221,7 +221,11 @@ export type SystemEventEffect =
   | "risingTide"
   | "matchFixing"
   | "incubating"
-  | "treasureSeeker";
+  | "treasureSeeker"
+  | "facelessEvery4"
+  | "bringBuddies"
+  | "dualUniverse"
+  | "emergencyLanding";
 
 export interface SystemEventDefinition {
   id: string;
@@ -506,6 +510,34 @@ export const SYSTEM_EVENT_DEFINITIONS = [
     name: "宝库追寻者之路",
     description: "重置5次以後，获得一个当前酒馆等级的金卡手下。",
     effect: "treasureSeeker",
+  },
+  {
+    id: "system-event-faceless",
+    cardId: "BG27_Anomaly_119",
+    name: "无面无间",
+    description: "每4回合获得一个「无面操纵者」。",
+    effect: "facelessEvery4",
+  },
+  {
+    id: "system-event-bring-buddies",
+    cardId: "BG27_Anomaly_108",
+    name: "叫伙伴来",
+    description: "每个玩家获得其英雄的伙伴。",
+    effect: "bringBuddies",
+  },
+  {
+    id: "system-event-dual-universe",
+    cardId: "BG31_Anomaly_125",
+    name: "双重宇宙",
+    description: "在赛局开始时发现第二个英雄能力。",
+    effect: "dualUniverse",
+  },
+  {
+    id: "system-event-emergency-landing",
+    cardId: "BG31_Anomaly_111",
+    name: "紧急着陆",
+    description: "每回合从备选手下库中移除旅店一个手下的所有卡牌。",
+    effect: "emergencyLanding",
   },
 ] as const satisfies readonly SystemEventDefinition[];
 

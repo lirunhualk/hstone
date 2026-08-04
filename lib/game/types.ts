@@ -1620,6 +1620,8 @@ export interface HeroDefinition {
   cardId: string;
   name: string;
   heroPowerId: string;
+  /** Starting armor granted when the hero is assigned. */
+  armor: number;
   /** At least one associated type must be active for this hero to be offered. */
   associatedTribes?: readonly Tribe[];
 }
