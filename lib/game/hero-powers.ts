@@ -47,6 +47,10 @@ export const HERO_POWER_COUNTER_KEYS = {
   mirokRound: "mirokRound",
   gennRound: "gennRound",
   luoAttacks: "luoAttacks",
+  luoGranted: "luoGranted",
+  arannaFreeBuyUsed: "arannaFreeBuyUsed",
+  thorimUnlockRound: "thorimUnlockRound",
+  artanisUnlockRound: "artanisUnlockRound",
   kerriganTier: "kerriganTier",
   carielLevel: "carielLevel",
   carielChoice: "carielChoice",
@@ -68,6 +72,10 @@ export const HERO_POWER_COUNTER_KEYS = {
   muklaBananas: "muklaBananas",
   akazamzarakSecrets: "akazamzarakSecrets",
   brannBuys: "brannBuys",
+  blackthornPlays: "blackthornPlays",
+  ingeToggle: "ingeToggle",
+  renoUsed: "renoUsed",
+  zerekUsed: "zerekUsed",
 } as const;
 
 export const HERO_POWER_DEFINITIONS = [
@@ -1994,7 +2002,7 @@ export function createInitialHeroPowerCounters(
     case "afterThreePurchasesGetCopy": return { [HERO_POWER_COUNTER_KEYS.kurtrusBuys]: 0, [HERO_POWER_COUNTER_KEYS.kurtrusUsed]: 0 };
     case "nagaExpedition": return { [HERO_POWER_COUNTER_KEYS.nagaAttack]: 0, [HERO_POWER_COUNTER_KEYS.nagaActive]: 0 };
     case "deadMinionsForMech": return { [HERO_POWER_COUNTER_KEYS.iniDeaths]: 9 };
-    case "attacksForFirstFreeBuy": return { [HERO_POWER_COUNTER_KEYS.arannaAttacks]: 14 };
+    case "attacksForFirstFreeBuy": return { [HERO_POWER_COUNTER_KEYS.arannaAttacks]: 14, [HERO_POWER_COUNTER_KEYS.arannaFreeBuyUsed]: 0 };
     case "sellMinionsForRandomMurloc": return { [HERO_POWER_COUNTER_KEYS.flurglSells]: 5 };
     case "collectDarkmoonTickets": return { [HERO_POWER_COUNTER_KEYS.darkmoonTickets]: 0 };
     case "dealDamageForPortal": return { [HERO_POWER_COUNTER_KEYS.jaraxxusDamage]: 0 };
@@ -2005,14 +2013,14 @@ export function createInitialHeroPowerCounters(
     case "activeDigForGolden": return { [HERO_POWER_COUNTER_KEYS.eudoraDigs]: 0 };
     case "periodicDarkmoonPrizes": return { [HERO_POWER_COUNTER_KEYS.tickatusRound]: 4 };
     case "copyLeftmostHandCard": return { [HERO_POWER_COUNTER_KEYS.vooneRound]: 3, [HERO_POWER_COUNTER_KEYS.vooneActive]: 0 };
-    case "discoverTier7ForGoldSpent": return { [HERO_POWER_COUNTER_KEYS.thorimGold]: 0 };
-    case "delayedRewardAfterPurchases": return { [HERO_POWER_COUNTER_KEYS.artanisBuys]: 0 };
+    case "discoverTier7ForGoldSpent": return { [HERO_POWER_COUNTER_KEYS.thorimGold]: 0, [HERO_POWER_COUNTER_KEYS.thorimUnlockRound]: 0 };
+    case "delayedRewardAfterPurchases": return { [HERO_POWER_COUNTER_KEYS.artanisBuys]: 0, [HERO_POWER_COUNTER_KEYS.artanisUnlockRound]: 0 };
     case "chooseTrinketAtTurn5": return { [HERO_POWER_COUNTER_KEYS.marinRound]: 1 };
     case "chooseGreaterTrinketAtTurn8": return { [HERO_POWER_COUNTER_KEYS.buttonRound]: 1 };
     case "timeWarpAtTurn8": return { [HERO_POWER_COUNTER_KEYS.murozondRound]: 1 };
     case "timeWarpAtTurn5": return { [HERO_POWER_COUNTER_KEYS.mirokRound]: 1 };
     case "discoverHeroPowerAtTurn4": return { [HERO_POWER_COUNTER_KEYS.gennRound]: 4 };
-    case "attacksForTriple": return { [HERO_POWER_COUNTER_KEYS.luoAttacks]: 15 };
+    case "attacksForTriple": return { [HERO_POWER_COUNTER_KEYS.luoAttacks]: 15, [HERO_POWER_COUNTER_KEYS.luoGranted]: 0 };
     case "activeUnlockZergTier": return { [HERO_POWER_COUNTER_KEYS.kerriganTier]: 0 };
     case "activeRandomBuffChooseUpgrade": return { [HERO_POWER_COUNTER_KEYS.carielLevel]: 0 };
     case "activeDiscoverFromNextOpponent": return { [HERO_POWER_COUNTER_KEYS.scabbsUsed]: 0 };
@@ -2029,6 +2037,10 @@ export function createInitialHeroPowerCounters(
     case "activeLockCardUnlockLater": return { [HERO_POWER_COUNTER_KEYS.maievSlots]: 0 };
     case "battlecryPurchasesForBrann": return { [HERO_POWER_COUNTER_KEYS.brannBuys]: 0 };
     case "hatPassesOnSell": return {};
+    case "getBloodGemsPerTurn": return { [HERO_POWER_COUNTER_KEYS.blackthornPlays]: 0 };
+    case "alternatingStatBuff": return { [HERO_POWER_COUNTER_KEYS.ingeToggle]: 0 };
+    case "oncePerGameGolden": return { [HERO_POWER_COUNTER_KEYS.renoUsed]: 0 };
+    case "oncePerGameExactCopy": return { [HERO_POWER_COUNTER_KEYS.zerekUsed]: 0 };
     default: return {};
   }
 }

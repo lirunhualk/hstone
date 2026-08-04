@@ -646,6 +646,12 @@ const CURATOR_AMALGAM_DEFINITION_ID =
   "TB_BaconShop_HERO_33_Buddy" as const;
 const CURATOR_FUSION_MONSTER_DEFINITION_ID =
   "TB_BaconShop_HP_033t" as const;
+const NZOTH_FISH_DEFINITION_ID = "TB_BaconShop_HP_105t" as const;
+const SNEED_VEHICLE_DEFINITION_ID = "sneed-vehicle-token" as const;
+const RAYNOR_BATTLECRUISER_DEFINITION_ID =
+  "raynor-battlecruiser-token" as const;
+const KERRIGAN_ZERG_LARVA_DEFINITION_ID =
+  "kerrigan-zerg-larva-token" as const;
 const MORGL_DEFINITION_ID = "BG27_513" as const;
 const BEHEMOTH_DEFINITION_ID = "BG31_360" as const;
 const MECHA_JARAXXUS_DEFINITION_IDS = [
@@ -1171,6 +1177,124 @@ function assignHeroDefinition(
   // Ysera's first extra Dragon has to be dealt at hero assignment time.
   if (playerHasHeroPower(player, "extraDragonOnRefresh")) {
     addYseraDragonToTavern(state, player);
+  }
+
+  // —— Start-of-game passive hero power effects ——
+
+  if (playerHasHeroPower(player, "startWithAmalgam")) {
+    const amalgam = createMinionInstance(
+      state,
+      CURATOR_FUSION_MONSTER_DEFINITION_ID,
+      0,
+    );
+    if (amalgam && player.board.length < 7) {
+      player.board.push(amalgam);
+    }
+  }
+
+  if (playerHasHeroPower(player, "startWithDeathrattleFish")) {
+    const fish = createMinionInstance(
+      state,
+      NZOTH_FISH_DEFINITION_ID,
+      0,
+    );
+    if (fish && player.board.length < 7) {
+      player.board.push(fish);
+    }
+  }
+
+  if (playerHasHeroPower(player, "startWithVehicleSummon")) {
+    const vehicle = createMinionInstance(
+      state,
+      SNEED_VEHICLE_DEFINITION_ID,
+      0,
+    );
+    if (vehicle && player.board.length < 7) {
+      player.board.push(vehicle);
+    }
+  }
+
+  if (playerHasHeroPower(player, "startWithBattlecruiser")) {
+    const battlecruiser = createMinionInstance(
+      state,
+      RAYNOR_BATTLECRUISER_DEFINITION_ID,
+      0,
+    );
+    if (battlecruiser && player.board.length < 7) {
+      player.board.push(battlecruiser);
+    }
+  }
+
+  if (playerHasHeroPower(player, "activeUnlockZergTier")) {
+    const larva = createMinionInstance(
+      state,
+      KERRIGAN_ZERG_LARVA_DEFINITION_ID,
+      0,
+    );
+    if (larva && player.board.length < 7) {
+      player.board.push(larva);
+    }
+  }
+
+  // —— Complex start-of-game effects: hook infrastructure ——
+
+  // AFKay (skipTwoTurnsForDiscovers): skip first two turns, then discover
+  // tier 3 and tier 4 minions.  This is handled in beginNextRecruit /
+  // endOfRecruit via the turn-skip and discover logic.
+  // TODO: implement turn-skipping and delayed discover reward.
+
+  // Faelin (skipTurnForDiscovers): skip first turn, grant tier 6, 4, 2
+  // discovers locked to respective tavern tiers.
+  // TODO: implement turn-skip and tier-locked hand cards.
+
+  // Finley (startDiscoverHeroPower): at game start, discover a hero power
+  // from 3 random eligible hero powers.
+  // TODO: trigger beginHeroPowerChoice(state, player, ...) for the player.
+
+  // Denathrius (chooseQuestAtStart): at game start, choose a quest from
+  // two options.  Quest subsystem not yet built.
+  // TODO: implement quest choice UI and quest reward tracking.
+
+  // Artanis (startChooseProtossMinion): at game start, choose from 2
+  // protoss minions; lock the chosen one until 14 purchases.
+  // TODO: implement protoss minion choice and purchase-counter unlock.
+
+  // Thorim (discoverTier7ForGoldSpent): discover a tier-7 minion at game start,
+  // locked until 60 gold spent.
+  if (playerHasHeroPower(player, "discoverTier7ForGoldSpent")) {
+    // TODO: full discover UI from tier-7 pool; for now grant a random tier-7
+    // minion locked behind gold threshold (unlock in beginNextRecruit)
+    if (TIER_SEVEN_MINION_DEFINITIONS.length > 0) {
+      const tier7Def =
+        TIER_SEVEN_MINION_DEFINITIONS[
+          randomIndex(state, TIER_SEVEN_MINION_DEFINITIONS.length)
+        ];
+      const tier7 = createMinionInstance(state, tier7Def.id, 0);
+      if (tier7 && player.hand.length < MAX_HAND_SIZE) {
+        tier7.sellValue = 0;
+        tier7.grantsTripleReward = false;
+        tier7.playableFromRound = 999; // locked until thorimGold >= 60
+        addCardToHand(state, player, tier7);
+      }
+    }
+  }
+
+  // Holmes (holmesGuessMinion): inspect 2 minions, guess competitor's
+  // TODO: implement the complex choice mechanic with inspect UI
+  if (playerHasHeroPower(player, "holmesGuessMinion")) {
+    // No-op: complex multi-step state machine; hook is ready.
+  }
+
+  // Reno (oncePerGameGolden): once per game, make a friendly minion golden.
+  // TODO: add active UI targeting to use this power.
+  if (playerHasHeroPower(player, "oncePerGameGolden")) {
+    setHeroPowerCounter(player, "renoUsed", 0);
+  }
+
+  // Zerek (oncePerGameExactCopy): once per game, summon an exact copy.
+  // TODO: add active UI targeting to use this power.
+  if (playerHasHeroPower(player, "oncePerGameExactCopy")) {
+    setHeroPowerCounter(player, "zerekUsed", 0);
   }
 }
 
@@ -7071,6 +7195,18 @@ function spendGold(
   player.goldSpentThisTurn += amount;
   applyAfterGoldSpentTrinkets(state, player, amount);
 
+  // NEW: discoverTier7ForGoldSpent - Thorim: track cumulative gold spent
+  if (
+    playerHasHeroPower(player, "discoverTier7ForGoldSpent") &&
+    heroPowerCounter(player, "thorimUnlockRound") === 0
+  ) {
+    setHeroPowerCounter(
+      player,
+      "thorimGold",
+      heroPowerCounter(player, "thorimGold") + amount,
+    );
+  }
+
   for (const source of [...player.board]) {
     const trigger =
       getMinionDefinition(source.definitionId).afterGoldSpent;
@@ -7491,12 +7627,19 @@ function fillShop(
   const normalMinionTargetSize = tavernMinionCapacity(player);
   const totalTargetSize = tavernCardCapacity(player);
   const currentSpellCount = tavernSpellShopOffers(player).length;
-  const minionTargetSize = player.spellOnlyRefreshActive
-    ? Math.max(0, totalTargetSize - currentSpellCount)
-    : Math.min(
-        normalMinionTargetSize,
-        Math.max(0, totalTargetSize - currentSpellCount),
-      );
+  // NEW: refreshToTavernSpells - Chromie: all shop slots become tavern spells
+  const chromieActive = playerHasHeroPower(
+    player,
+    "refreshToTavernSpells",
+  );
+  const minionTargetSize = chromieActive
+    ? 0
+    : player.spellOnlyRefreshActive
+      ? Math.max(0, totalTargetSize - currentSpellCount)
+      : Math.min(
+          normalMinionTargetSize,
+          Math.max(0, totalTargetSize - currentSpellCount),
+        );
   let tavernRefreshed = false;
   while (player.shop.length < minionTargetSize) {
     const minion = exactTier === undefined
@@ -7539,7 +7682,19 @@ function fillShop(
     player.shop.push(minion);
     tavernRefreshed = true;
   }
-  if (
+  // NEW: refreshToTavernSpells - Chromie: fill all slots with tavern spells
+  if (chromieActive) {
+    while (tavernSpellShopOffers(player).length < totalTargetSize) {
+      const spell = drawTavernSpell(state, player.tavernTier);
+      if (!spell) break;
+      if (!player.spellShop) {
+        player.spellShop = spell;
+      } else {
+        player.additionalSpellShop.push(spell);
+      }
+      tavernRefreshed = true;
+    }
+  } else if (
     !player.spellOnlyRefreshActive &&
     player.spellShop === null &&
     player.shop.length + tavernSpellShopOffers(player).length <
@@ -9427,6 +9582,13 @@ function applyAfterFriendlyPlayed(
       }
     }
   }
+  if (minionHasTribe(played, "quilboar") && playerHasHeroPower(player, "getBloodGemsPerTurn")) {
+    const plays = heroPowerCounter(player, "blackthornPlays");
+    if (plays < 2) {
+      setHeroPowerCounter(player, "blackthornPlays", plays + 1);
+      addBloodGems(state, player, 2);
+    }
+  }
   for (const watcher of player.board) {
     if (watcher.instanceId === played.instanceId) {
       continue;
@@ -10302,7 +10464,8 @@ function findTripleCombination(
       playerHasTrinketCardId(player, GOLDEN_PIRATE_STICKER_CARD_ID) &&
       definitionHasTribe(definition, "pirate")
         ? 2
-        : player.systemEventCounters.falseIdolsActive
+        : player.systemEventCounters.falseIdolsActive ||
+            playerHasHeroPower(player, "easyTripleCoin")
           ? 2
           : 3;
     if (matches.length >= copiesRequired) {
@@ -10529,6 +10692,10 @@ function resolveTriples(
         golden.grantsTripleReward = false;
         grantRandomDarkmoonPrizes(state, player, 1);
       } else if (player.systemEventCounters.falseIdolsActive) {
+        golden.grantsTripleReward = false;
+        player.gold += 1;
+      } else if (playerHasHeroPower(player, "easyTripleCoin")) {
+        // NEW: easyTripleCoin - Clockwork: coin instead of triple reward
         golden.grantsTripleReward = false;
         player.gold += 1;
       } else if (player.systemEventCounters.goldenArenaActive) {
@@ -11100,6 +11267,58 @@ function applyAfterMinionPurchasedHeroPower(
       }
     }
   }
+  // NEW: buyTierTripleReward - Guff: after buying 20 total tiers get triple reward
+  if (playerHasHeroPower(player, "buyTierTripleReward")) {
+    const definition = getMinionDefinition(minion.definitionId);
+    const tiersRemaining = heroPowerCounter(player, "guffTiers") - definition.tier;
+    if (tiersRemaining <= 0) {
+      setHeroPowerCounter(player, "guffTiers", 20);
+      if (player.hand.length < MAX_HAND_SIZE) {
+        addCardToHand(
+          state,
+          player,
+          playerHasTrinketCardId(player, CORRUPTED_TOME_CARD_ID)
+            ? createSpellcraftSpell(state, TRIPLE_PRIZE_DEFINITION)
+            : createTripleRewardSpell(state, player.tavernTier),
+        );
+      }
+    } else {
+      setHeroPowerCounter(player, "guffTiers", tiersRemaining);
+    }
+  }
+  // NEW: afterThreePurchasesGetCopy - Kurtrus: after 3 buys get a copy (once/turn)
+  if (playerHasHeroPower(player, "afterThreePurchasesGetCopy")) {
+    if (heroPowerCounter(player, "kurtrusUsed") === 0) {
+      const buys = heroPowerCounter(player, "kurtrusBuys") + 1;
+      if (buys >= 3 && player.hand.length < MAX_HAND_SIZE) {
+        const copy = structuredClone(minion);
+        copy.instanceId = `minion-${state.nextInstanceId++}`;
+        copy.golden = false;
+        copy.grantsTripleReward = false;
+        copy.sellValue = 1;
+        copy.effectCounters = {};
+        addCardToHand(state, player, copy);
+        setHeroPowerCounter(player, "kurtrusUsed", 1);
+        setHeroPowerCounter(player, "kurtrusBuys", 0);
+      } else {
+        setHeroPowerCounter(player, "kurtrusBuys", buys);
+      }
+    }
+  }
+  // NEW: delayedRewardAfterPurchases - Artanis: track purchases toward 14
+  if (playerHasHeroPower(player, "delayedRewardAfterPurchases")) {
+    if (heroPowerCounter(player, "artanisUnlockRound") === 0) {
+      const buys = heroPowerCounter(player, "artanisBuys") + 1;
+      setHeroPowerCounter(player, "artanisBuys", buys);
+    }
+  }
+  // NEW: discoverTier7ForGoldSpent - Thorim: track gold on purchase
+  if (playerHasHeroPower(player, "discoverTier7ForGoldSpent")) {
+    if (heroPowerCounter(player, "thorimUnlockRound") === 0) {
+      // Gold tracking is done in spendGold; here we add the cost being paid
+      // (the actual spendGold call already records goldSpentThisTurn)
+    }
+  }
 }
 
 function applyGoldenWarbandPurchaseTrinket(
@@ -11170,16 +11389,26 @@ function buyMinion(
     player.health -= quote.cost;
   } else {
     const freeFirst =
-      state.lobbySystemsEnabled &&
+      (state.lobbySystemsEnabled &&
       state.systemEventId &&
       getSystemEventDefinition(state.systemEventId).effect ===
         "titanGrip" &&
       (player.systemEventCounters.titanGripFreeUsedRound ?? 0) !==
-        state.round;
+        state.round) ||
+      // NEW: attacksForFirstFreeBuy - Aranna: first buy free each turn after unlock
+      (playerHasHeroPower(player, "attacksForFirstFreeBuy") &&
+        heroPowerCounter(player, "arannaAttacks") <= 0 &&
+        heroPowerCounter(player, "arannaFreeBuyUsed") === 0);
     if (!freeFirst) {
       spendGold(state, player, quote.cost);
     } else {
-      player.systemEventCounters.titanGripFreeUsedRound = state.round;
+      if (state.systemEventId &&
+        getSystemEventDefinition(state.systemEventId).effect === "titanGrip") {
+        player.systemEventCounters.titanGripFreeUsedRound = state.round;
+      }
+      if (playerHasHeroPower(player, "attacksForFirstFreeBuy")) {
+        setHeroPowerCounter(player, "arannaFreeBuyUsed", 1);
+      }
     }
   }
   recordFirstPirateFreeTrinketProgress(player, minion);
@@ -11464,6 +11693,16 @@ function sellMinionTransaction(
       reconcileConditionalMinion(target);
       refreshDynamicMinionDescription(target, player);
     }
+  }
+  if (playerHasHeroPower(player, "sellDevourStats")) {
+    // TODO: active UI - choose target minion, add sold minion's attack & health to it
+    // Currently: no-op until active targeting is implemented
+  }
+  if (playerHasHeroPower(player, "removeDiscoverLowerTier")) {
+    // TODO: active UI - remove a friendly minion, discover a lower-tier one
+  }
+  if (playerHasHeroPower(player, "swapNonGoldenWithTavern")) {
+    // TODO: active UI - swap a non-golden friendly with random tavern minion
   }
   applyAfterMinionSoldTrinkets(state, player);
   return minion;
@@ -16323,6 +16562,69 @@ function refreshShop(state: GameState, player: PlayerState): boolean {
   applyQueuedDemonFodderToRefresh(state, player);
   applyAfterTavernRefreshEffects(state, player);
   applyAfterManualRefreshTrinkets(state, player);
+  // NEW: refreshRandomKeyword - Enhance-o: random keyword to random tavern minion
+  if (
+    playerHasHeroPower(player, "refreshRandomKeyword") &&
+    player.shop.length > 0
+  ) {
+    for (
+      let t = 0;
+      t < heroPowerTriggerMultiplier(player);
+      t++
+    ) {
+      const target =
+        player.shop[randomIndex(state, player.shop.length)];
+      const availableKeywords: Array<
+        "divineShield" | "taunt" | "windfury" | "reborn" | "venomous"
+      > = [];
+      if (!target.divineShield)
+        availableKeywords.push("divineShield");
+      if (!target.taunt) availableKeywords.push("taunt");
+      if (!target.windfury) availableKeywords.push("windfury");
+      if (!target.reborn) availableKeywords.push("reborn");
+      if (!target.venomous) availableKeywords.push("venomous");
+      if (availableKeywords.length > 0) {
+        const keyword =
+          availableKeywords[
+            randomIndex(state, availableKeywords.length)
+          ];
+        if (keyword === "divineShield")
+          target.divineShield = true;
+        else if (keyword === "taunt") target.taunt = true;
+        else if (keyword === "windfury") target.windfury = true;
+        else if (keyword === "reborn") target.reborn = true;
+        else if (keyword === "venomous")
+          target.venomous = true;
+      }
+    }
+  }
+  // NEW: refreshCopyHighestFreeze - Varden: copy highest-tier minion and freeze
+  if (
+    playerHasHeroPower(player, "refreshCopyHighestFreeze") &&
+    player.shop.length > 0
+  ) {
+    let highestTier = 0;
+    let highestMinion: BoardMinionInstance | null = null;
+    for (const minion of player.shop) {
+      const def = getMinionDefinition(minion.definitionId);
+      if (def.tier > highestTier) {
+        highestTier = def.tier;
+        highestMinion = minion;
+      }
+    }
+    if (
+      highestMinion &&
+      player.shop.length < tavernMinionCapacity(player)
+    ) {
+      const copy = structuredClone(highestMinion);
+      copy.instanceId = `minion-${state.nextInstanceId++}`;
+      copy.sellValue = 1;
+      copy.grantsTripleReward = false;
+      copy.effectCounters = {};
+      player.shop.push(copy);
+      player.frozen = true;
+    }
+  }
   if (
     state.lobbySystemsEnabled &&
     state.systemEventId &&
@@ -29435,6 +29737,18 @@ function performAttackStrike(
   }
   triggerCombatAttackTrinkets(context, ownerId, attacker);
   triggerAfterFriendlyAttacks(context, ownerId, attacker);
+  // Hero power: count friendly attacks for arannaAttacks / luoAttacks
+  const attackOwner = persistentCombatOwner(context, ownerId);
+  if (attackOwner) {
+    if (playerHasHeroPower(attackOwner, "attacksForFirstFreeBuy")) {
+      const remaining = heroPowerCounter(attackOwner, "arannaAttacks") - 1;
+      setHeroPowerCounter(attackOwner, "arannaAttacks", remaining);
+    }
+    if (playerHasHeroPower(attackOwner, "attacksForTriple")) {
+      const remaining = heroPowerCounter(attackOwner, "luoAttacks") - 1;
+      setHeroPowerCounter(attackOwner, "luoAttacks", remaining);
+    }
+  }
   triggerRally(context, ownerId, attacker, target);
   if (context.deathResolutionDepth === 0) {
     summonPendingStartOfCombatHandMinions(context, ownerId);
@@ -33692,6 +34006,42 @@ function settleEliminations(state: GameState): void {
     releaseEliminatedPlayer(state, player);
   }
 
+  // deadHeroDiscoverMinion - Bigglesworth: discover from eliminated hero's board
+  const aliveAfterElimination = state.players.filter((player) => player.alive);
+  for (const deadPlayer of newlyEliminated) {
+    const deadBoard = (state.lastRoundBattles ?? []).flatMap((battle) => {
+      if (battle.playerAId === deadPlayer.id) return battle.finalBoards[deadPlayer.id] ?? [];
+      if (battle.playerBId === deadPlayer.id) return battle.finalBoards[deadPlayer.id] ?? [];
+      return [];
+    }).filter((m): m is BoardMinionInstance => m.kind === "minion");
+    for (const alivePlayer of aliveAfterElimination) {
+      if (
+        playerHasHeroPower(alivePlayer, "deadHeroDiscoverMinion") &&
+        deadBoard.length > 0
+      ) {
+        for (
+          let t = 0;
+          t < heroPowerTriggerMultiplier(alivePlayer);
+          t++
+        ) {
+          // TODO: full discover from the dead hero's board; for now grant a random
+          // copy of one of the dead hero's last minions
+          const source = deadBoard[randomIndex(state, deadBoard.length)];
+          const targetClone = structuredClone(source);
+          targetClone.instanceId = `minion-${state.nextInstanceId++}`;
+          targetClone.golden = false;
+          targetClone.grantsTripleReward = false;
+          targetClone.sellValue = 1;
+          targetClone.effectCounters = { ...(targetClone.effectCounters ?? {}) };
+          targetClone.poolCopies = 0;
+          if (alivePlayer.hand.length < MAX_HAND_SIZE) {
+            addCardToHand(state, alivePlayer, targetClone);
+          }
+        }
+      }
+    }
+  }
+
   const alivePlayers = state.players.filter((player) => player.alive);
   const sharedPlacement = alivePlayers.length + 1;
   for (const player of newlyEliminated) {
@@ -34066,6 +34416,204 @@ function beginNextRecruit(state: GameState): void {
     ) {
       player.gold += 3;
     }
+    // NEW: turnStartRandomSpell - Yogg-Saron: cast random tavern spell (round 3+)
+    if (
+      playerHasHeroPower(player, "turnStartRandomSpell") &&
+      state.round >= 3
+    ) {
+      for (
+        let t = 0;
+        t < heroPowerTriggerMultiplier(player);
+        t++
+      ) {
+        const spell = drawTavernSpell(state, player.tavernTier);
+        if (spell) {
+          addCardToHand(state, player, spell);
+        }
+      }
+    }
+    // NEW: spellcraftPerTurn - Vashj: random Spellcraft spell each turn
+    if (playerHasHeroPower(player, "spellcraftPerTurn")) {
+      for (
+        let t = 0;
+        t < heroPowerTriggerMultiplier(player) &&
+        player.hand.length < MAX_HAND_SIZE;
+        t++
+      ) {
+        const def =
+          SPELLCRAFT_DEFINITIONS[
+            randomIndex(state, SPELLCRAFT_DEFINITIONS.length)
+          ];
+        if (def) {
+          addCardToHand(
+            state,
+            player,
+            createSpellcraftSpell(state, def),
+          );
+        }
+      }
+    }
+    // NEW: periodicDarkmoonPrizes - Tickatus: every 4 turns discover a Darkmoon Prize
+    if (playerHasHeroPower(player, "periodicDarkmoonPrizes")) {
+      const remaining = heroPowerCounter(player, "tickatusRound") - 1;
+      if (remaining <= 0) {
+        for (
+          let t = 0;
+          t < heroPowerTriggerMultiplier(player);
+          t++
+        ) {
+          // TODO: trigger Darkmoon Prize discover instead of random grant
+          grantRandomDarkmoonPrizes(state, player, 1);
+        }
+        setHeroPowerCounter(player, "tickatusRound", 4);
+      } else {
+        setHeroPowerCounter(player, "tickatusRound", remaining);
+      }
+    }
+    // NEW: chooseHeroPowerEachTurn - Nguyen: choose from 2 new hero powers
+    if (playerHasHeroPower(player, "chooseHeroPowerEachTurn")) {
+      // TODO: trigger a hero power choice from 2 options (not 3)
+      // beginHeroPowerChoice with only 2 options requires an override
+    }
+    // NEW: giveBananasEveryone - Mukla
+    if (playerHasHeroPower(player, "giveBananasEveryone")) {
+      for (let i = 0; i < 2; i++) {
+        addGeneratedTavernSpellToHand(
+          state,
+          player,
+          "tavern-spell-tavern-dish-banana",
+        );
+      }
+      for (const otherPlayer of alivePlayers) {
+        if (otherPlayer.id !== player.id) {
+          addGeneratedTavernSpellToHand(
+            state,
+            otherPlayer,
+            "tavern-spell-tavern-dish-banana",
+          );
+        }
+      }
+    }
+    // NEW: copyLeftmostHandCard - Voone: every 3 turns
+    if (playerHasHeroPower(player, "copyLeftmostHandCard")) {
+      const remaining = heroPowerCounter(player, "vooneRound") - 1;
+      if (remaining <= 0) {
+        for (
+          let t = 0;
+          t < heroPowerTriggerMultiplier(player);
+          t++
+        ) {
+          const leftmostMinion = player.hand.find(
+            (card) => card.kind === "minion",
+          );
+          if (
+            leftmostMinion &&
+            player.hand.length < MAX_HAND_SIZE
+          ) {
+            const copy = structuredClone(leftmostMinion);
+            copy.instanceId = `minion-${state.nextInstanceId++}`;
+            copy.golden = false;
+            copy.grantsTripleReward = false;
+            copy.sellValue = 1;
+            copy.effectCounters = {};
+            player.hand.push(copy);
+          }
+        }
+        setHeroPowerCounter(player, "vooneRound", 3);
+      } else {
+        setHeroPowerCounter(player, "vooneRound", remaining);
+      }
+    }
+    // NEW: increaseGoldCap - Cenarius: max gold +1
+    if (playerHasHeroPower(player, "increaseGoldCap")) {
+      player.maxGold = 11;
+    }
+    // NEW: nextTavernSpellDiscountDelayed - Archbishop (round 3+)
+    if (
+      playerHasHeroPower(
+        player,
+        "nextTavernSpellDiscountDelayed",
+      ) &&
+      state.round >= 3
+    ) {
+      player.nextTavernSpellDiscount += 1;
+    }
+    // NEW: attacksForTriple - Luo: after 15 friendly attacks grant triple reward (once)
+    if (
+      playerHasHeroPower(player, "attacksForTriple") &&
+      heroPowerCounter(player, "luoAttacks") <= 0 &&
+      heroPowerCounter(player, "luoGranted") === 0
+    ) {
+      setHeroPowerCounter(player, "luoGranted", 1);
+      for (
+        let t = 0;
+        t < heroPowerTriggerMultiplier(player) &&
+        player.hand.length < MAX_HAND_SIZE;
+        t++
+      ) {
+        addCardToHand(
+          state,
+          player,
+          playerHasTrinketCardId(player, CORRUPTED_TOME_CARD_ID)
+            ? createSpellcraftSpell(state, TRIPLE_PRIZE_DEFINITION)
+            : createTripleRewardSpell(state, player.tavernTier),
+        );
+      }
+    }
+    // NEW: attacksForFirstFreeBuy - Aranna: after 14 attacks first buy free per turn
+    if (playerHasHeroPower(player, "attacksForFirstFreeBuy")) {
+      setHeroPowerCounter(player, "arannaFreeBuyUsed", 0);
+    }
+    // NEW: afterThreePurchasesGetCopy - Kurtrus: reset per-turn flag
+    if (playerHasHeroPower(player, "afterThreePurchasesGetCopy")) {
+      setHeroPowerCounter(player, "kurtrusUsed", 0);
+      setHeroPowerCounter(player, "kurtrusBuys", 0);
+    }
+    // NEW: discoverTier7ForGoldSpent - Thorim: unlock at 60 gold
+    if (playerHasHeroPower(player, "discoverTier7ForGoldSpent")) {
+      const thorimGold = heroPowerCounter(player, "thorimGold");
+      if (
+        thorimGold >= 60 &&
+        heroPowerCounter(player, "thorimUnlockRound") === 0
+      ) {
+        setHeroPowerCounter(player, "thorimUnlockRound", 1);
+        // TODO: the tier-7 minion was discovered at game start and stored;
+        // now add it to hand. For now, grant a random tier-7 minion.
+        const tier7 = createMinionInstance(
+          state,
+          TIER_SEVEN_MINION_DEFINITIONS[
+            randomIndex(state, TIER_SEVEN_MINION_DEFINITIONS.length)
+          ].id,
+          0,
+        );
+        if (tier7 && player.hand.length < MAX_HAND_SIZE) {
+          tier7.sellValue = 1;
+          tier7.grantsTripleReward = false;
+          addCardToHand(state, player, tier7);
+        }
+      }
+    }
+    // NEW: delayedRewardAfterPurchases - Artanis: unlock at 14 purchases
+    if (playerHasHeroPower(player, "delayedRewardAfterPurchases")) {
+      if (
+        heroPowerCounter(player, "artanisBuys") >= 14 &&
+        heroPowerCounter(player, "artanisUnlockRound") === 0
+      ) {
+        setHeroPowerCounter(player, "artanisUnlockRound", 1);
+        // TODO: the chosen protoss minion was stored at game start;
+        // now add it to hand. For now grant a random tier-4+ minion.
+        const reward = drawMatchingFromPool(
+          state,
+          Math.min(6, player.tavernTier + 1) as TavernTier,
+          (d) => d.tier >= 4 && d.tier <= Math.min(6, player.tavernTier + 1),
+        );
+        if (reward && player.hand.length < MAX_HAND_SIZE) {
+          reward.sellValue = 1;
+          reward.grantsTripleReward = false;
+          addCardToHand(state, player, reward);
+        }
+      }
+    }
     if (
       state.lobbySystemsEnabled &&
       state.systemEventId &&
@@ -34260,6 +34808,70 @@ function beginNextRecruit(state: GameState): void {
     }
     if (player.tavernTier < 6) {
       player.upgradeDiscount += 1;
+    }
+    if (playerHasHeroPower(player, "getBloodGemsPerTurn")) {
+      setHeroPowerCounter(player, "blackthornPlays", 0);
+    }
+    if (playerHasHeroPower(player, "alternatingStatBuff") && player.board.length > 0) {
+      const toggle = heroPowerCounter(player, "ingeToggle");
+      const nextToggle = toggle === 0 ? 1 : 0;
+      setHeroPowerCounter(player, "ingeToggle", nextToggle);
+      const leftmost = player.board[0];
+      const multiplier = heroPowerTriggerMultiplier(player);
+      if (toggle === 0) {
+        leftmost.attack += player.tavernTier * multiplier;
+        observeRecruitFriendlyAttackGain(player, leftmost, player.tavernTier * multiplier);
+      } else {
+        leftmost.health += player.tavernTier * multiplier;
+        observeRecruitFriendlyHealthGain(player, leftmost, player.tavernTier * multiplier);
+      }
+      reconcileConditionalMinion(leftmost);
+      refreshDynamicMinionDescription(leftmost, player);
+    }
+    if (playerHasHeroPower(player, "discoverHeroPowerAtTurn4") && state.round === 4) {
+      const gennRound = heroPowerCounter(player, "gennRound");
+      if (gennRound === 4) {
+        setHeroPowerCounter(player, "gennRound", 0);
+        beginHeroPowerChoice(
+          state,
+          player,
+          { instanceId: player.id },
+          getHeroPowerDefinition(player.heroPowerId!),
+          "best",
+          "tavernSpellCast",
+          2,
+        );
+      }
+    }
+    if (playerHasHeroPower(player, "chooseTrinketAtTurn5") && state.round === 5) {
+      if (heroPowerCounter(player, "marinRound") === 1) {
+        setHeroPowerCounter(player, "marinRound", 0);
+        offerTrinkets(state, "lesser", {
+          source: "marin-lesser-trinket-offer",
+          eligible: (p) => p.id === player.id,
+        });
+      }
+    }
+    if (playerHasHeroPower(player, "chooseGreaterTrinketAtTurn8") && state.round === 8) {
+      if (heroPowerCounter(player, "buttonRound") === 1) {
+        setHeroPowerCounter(player, "buttonRound", 0);
+        offerTrinkets(state, "greater", {
+          source: "button-greater-trinket-offer",
+          eligible: (p) => p.id === player.id,
+        });
+      }
+    }
+    if (playerHasHeroPower(player, "timeWarpAtTurn5") && state.round === 5) {
+      if (heroPowerCounter(player, "mirokRound") === 1) {
+        setHeroPowerCounter(player, "mirokRound", 0);
+        // TODO: activate lesser time warp game mode
+      }
+    }
+    if (playerHasHeroPower(player, "timeWarpAtTurn8") && state.round === 8) {
+      if (heroPowerCounter(player, "murozondRound") === 1) {
+        setHeroPowerCounter(player, "murozondRound", 0);
+        // TODO: activate greater time warp game mode
+      }
     }
     applyStartOfTurnEffects(state, player);
     applyGoldThresholdTrinket(state, player);

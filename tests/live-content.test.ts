@@ -129,7 +129,7 @@ test("keeps all current Tier 7 rewards addressable but outside the Tavern pool",
 test("keeps legacy rules and tokens addressable but out of the shared pool", () => {
   assert.equal(LEGACY_RULE_DEFINITIONS.length, 36);
   assert.equal(TOKEN_DEFINITIONS.length, 9);
-  assert.equal(LIVE_TOKEN_DEFINITIONS.length, 44);
+  assert.equal(LIVE_TOKEN_DEFINITIONS.length, 47);
   assert.ok(
     [
       ...LEGACY_RULE_DEFINITIONS,

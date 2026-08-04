@@ -2342,7 +2342,8 @@ export type GameAction =
   | { type: "UPGRADE_TAVERN" }
   | { type: "MOVE_MINION"; fromIndex: number; toIndex: number }
   | { type: "END_TURN" }
-  | { type: "CONTINUE" };
+  | { type: "CONTINUE" }
+  | { type: "ACTIVATE_HERO_POWER"; targetInstanceId?: string };
 
 /**
  * One real Recruit-phase Blood Gem resolution. These snapshots are emitted in
