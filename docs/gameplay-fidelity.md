@@ -69,8 +69,8 @@
 1. **英雄护甲档位**（已部分完成）
    英雄池 90+ 名英雄均有独立护甲值（`hero-powers.ts`），本局选择后自动分配。帕奇维克额外生命已接入。后续如需动态护甲档位调整（根据 MMR/补丁变化），需接入官方护甲数据源。
 
-2. **英雄主动技能**（基础已完成）
-   主动英雄技能的点击按钮、金币费用徽章、已使用/可用/不可用状态已在 HUD 中接入。`heroPowerCanBeManuallyActivated` 和 `heroPowerActiveCost` 已从引擎导出。待完善：需要指定目标的技能（如指向酒馆/战场的 `activeShrinkMinionToHand` 等 12 个）需新增加目标选择模式；AI 尚未使用主动技能。
+2. **英雄主动技能**（已完成）
+   主动英雄技能的点击按钮、金币费用徽章、已使用/可用/不可用状态已在 HUD 中接入。8 个需目标的技能支持战场目标（teal 脉冲突出 + Escape 取消）和商店目标。AI 在招募阶段自动评估并使用主动技能（非目标技能直接触发，目标技能按启发式选择最优目标）。`heroPowerCanBeManuallyActivated`、`heroPowerActiveCost`、`heroPowerNeedsTarget` 均已从引擎导出。
 
 3. **AI 策略持续迭代**
    见 `docs/ai-learning-roadmap.md`：坐标搜索阶段 2 已建立基础设施但尚未有候选通过门禁（303 训练因 draw 被否决）。后续需在新的 304 区间注册训练，并在留出种子上通过成对部署席位评测。
