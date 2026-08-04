@@ -3977,6 +3977,17 @@
   font-size: 11px;
 }
 
+.hand-panel .unit-card:hover:not([aria-disabled="true"]):not(.is-disabled) {
+  z-index: 5;
+  border-color: rgb(50 215 196 / 62%);
+  box-shadow:
+    0 14px 28px rgb(0 0 0 / 32%),
+    0 0 0 3px rgb(50 215 196 / 36%),
+    0 0 20px rgb(50 215 196 / 20%);
+  transform: translateY(-4px) scale(1.03);
+  transition: transform 140ms ease-out, box-shadow 140ms ease-out;
+}
+
 .hand-panel
   :is(
     .unit-card,
@@ -8081,5 +8092,131 @@
 
   .lobby-event-banner > .card-art {
     width: 70px;
+  }
+}
+
+@media (max-width: 540px) {
+  .game-shell {
+    --top-hud-height: 48px;
+    font-size: 12px;
+  }
+
+  .brand {
+    display: none;
+  }
+
+  .top-hud {
+    gap: 4px;
+    padding: 3px 5px;
+    overflow-x: auto;
+    overscroll-behavior-x: contain;
+    scrollbar-width: none;
+  }
+
+  .phase-pill {
+    min-height: 34px;
+    padding-inline: 8px;
+    font-size: 11px;
+  }
+
+  .hud-stat {
+    min-height: 34px;
+    padding-inline: 5px;
+  }
+
+  .hud-stat > strong,
+  .hud-stat .value {
+    font-size: 14px;
+  }
+
+  .hud-hero-power {
+    max-width: 156px;
+    min-height: 38px;
+    padding: 3px 7px;
+  }
+
+  .hud-hero-power > strong {
+    font-size: 10px;
+  }
+
+  .hud-actions .primary {
+    min-width: 92px;
+    min-height: 36px;
+    font-size: 13px;
+  }
+
+  .game-layout {
+    grid-template-columns: 1fr;
+    grid-template-rows:
+      auto
+      minmax(0, 1.6fr)
+      auto
+      auto;
+    grid-template-areas:
+      "shop"
+      "board"
+      "hand"
+      "side";
+    gap: 4px;
+  }
+
+  .shop-panel {
+    grid-area: shop;
+  }
+
+  .board-panel {
+    grid-area: board;
+  }
+
+  .hand-panel {
+    grid-area: hand;
+  }
+
+  .side-rail {
+    grid-area: side;
+  }
+
+  .standings {
+    display: flex;
+    gap: 2px;
+  }
+
+  .player-row {
+    flex: 1 1 0;
+    min-width: 0;
+    padding: 3px 4px;
+  }
+
+  .player-row .player-survivability {
+    font-size: 9px;
+  }
+
+  .shop-panel .card-row {
+    gap: 3px;
+  }
+
+  .shop-panel .card-row > .unit-card {
+    max-width: 74px;
+  }
+
+  .board {
+    gap: 2px;
+  }
+
+  .slot {
+    height: auto;
+    min-height: 72px;
+  }
+
+  .unit-card {
+    max-width: 56px;
+  }
+
+  .hand-panel .card-row {
+    gap: 2px;
+  }
+
+  .hand-panel .unit-card {
+    max-width: 48px;
   }
 }
