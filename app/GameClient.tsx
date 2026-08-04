@@ -10336,7 +10336,7 @@ export default function GameClient() {
           aria-modal="true"
           onKeyDown={trapModalFocus}
         >
-          <div className="modal">
+          <div className={`modal game-over-modal${game.winnerId === game.humanPlayerId ? " is-victory" : ""}`}>
             <span className="modal-kicker">
               {game.winnerId === game.humanPlayerId ? "酒馆战棋胜利" : "战局结束"}
             </span>
@@ -10346,8 +10346,29 @@ export default function GameClient() {
                 : `最终第 ${human.placement ?? 8} 名`}
             </h1>
             <p>
-              坚持 {game.round} 回合，最终战场保留 {human.board.length} 个随从。
+              坚持 {game.round} 回合 ·{" "}
+              {humanHero?.name ?? "中立英雄"}
+              {humanHeroPower ? ` · ${humanHeroPower.name}` : ""}
             </p>
+            <div className="game-over-standings">
+              {[...game.players]
+                .sort((a, b) => (a.placement ?? 99) - (b.placement ?? 99))
+                .filter((p) => p.placement !== undefined)
+                .slice(0, 4)
+                .map((p) => (
+                  <div
+                    className={`game-over-player${p.id === game.humanPlayerId ? " is-self" : ""}`}
+                    key={p.id}
+                  >
+                    <span className="game-over-rank">
+                      {p.placement === 1 ? "🥇" : p.placement === 2 ? "🥈" : p.placement === 3 ? "🥉" : `#${p.placement}`}
+                    </span>
+                    <span className="game-over-name">
+                      {p.id === game.humanPlayerId ? "你" : p.name}
+                    </span>
+                  </div>
+                ))}
+            </div>
             <button
               type="button"
               className="action-button primary"

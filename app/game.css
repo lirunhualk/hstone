@@ -5034,6 +5034,63 @@ button.hud-hero-power.is-unaffordable .hero-power-cost-badge {
   min-width: min(320px, 100%);
 }
 
+.game-over-modal.is-victory {
+  border-color: rgb(246 190 85 / 72%);
+  box-shadow:
+    0 28px 80px rgb(0 0 0 / 48%),
+    0 0 0 2px rgb(246 190 85 / 18%),
+    0 0 48px rgb(246 190 85 / 28%),
+    inset 0 1px 0 rgb(255 255 255 / 8%);
+}
+
+.game-over-modal.is-victory .modal-kicker {
+  color: var(--gold);
+}
+
+.game-over-modal.is-victory h1 {
+  color: #fff0b6;
+  text-shadow:
+    0 2px 6px rgb(246 190 85 / 52%),
+    0 0 18px rgb(255 220 113 / 28%);
+}
+
+.game-over-standings {
+  display: grid;
+  margin: 16px 0 20px;
+  gap: 6px;
+}
+
+.game-over-player {
+  display: flex;
+  min-height: 36px;
+  align-items: center;
+  gap: 10px;
+  padding: 6px 10px;
+  border: 1px solid rgb(255 255 255 / 8%);
+  border-radius: 9px;
+  background: rgb(255 255 255 / 2%);
+}
+
+.game-over-player.is-self {
+  border-color: rgb(50 215 196 / 38%);
+  background: rgb(50 215 196 / 6%);
+}
+
+.game-over-rank {
+  min-width: 32px;
+  font-size: 16px;
+  font-weight: 900;
+  text-align: center;
+}
+
+.game-over-name {
+  overflow: hidden;
+  font-size: 14px;
+  font-weight: 800;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
 .modal-features {
   display: flex;
   flex-wrap: wrap;
