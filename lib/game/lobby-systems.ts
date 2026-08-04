@@ -212,7 +212,16 @@ export type SystemEventEffect =
   | "wisdomballAnomaly"
   | "yoggArena"
   | "upgradePrize"
-  | "vault";
+  | "vault"
+  | "sinDoreiMirror"
+  | "mysteryFlower"
+  | "circusPrize"
+  | "continuingEducation"
+  | "herosCall"
+  | "risingTide"
+  | "matchFixing"
+  | "incubating"
+  | "treasureSeeker";
 
 export interface SystemEventDefinition {
   id: string;
@@ -434,6 +443,69 @@ export const SYSTEM_EVENT_DEFINITIONS = [
     name: "宝库",
     description: "在第X回合，发现一个金卡等级X手下（等级3-7版本）。",
     effect: "vault",
+  },
+  {
+    id: "system-event-sindorei-mirror",
+    cardId: "BG31_Anomaly_103",
+    name: "辛多雷之镜",
+    description: "你每回合第一次购买旅店法术後，获得一张它的复製品（於第5回合解锁）。",
+    effect: "sinDoreiMirror",
+  },
+  {
+    id: "system-event-mystery-flower",
+    cardId: "BG31_Anomaly_106",
+    name: "奥秘之花",
+    description: "在每个回合开始时，发现一个旅店法术。（於第3回合解锁）",
+    effect: "mysteryFlower",
+  },
+  {
+    id: "system-event-circus-prize",
+    cardId: "BG27_Anomaly_103",
+    name: "马戏团奖赏",
+    description: "三合一奖励不提供手下，改為发现一个等级1暗月奖品。",
+    effect: "circusPrize",
+  },
+  {
+    id: "system-event-continuing-education",
+    cardId: "BG31_Anomaly_102",
+    name: "继续教育",
+    description: "在每个回合开始时获得一个进化卷轴。每个回合都会变成高一 级的旅店法术。",
+    effect: "continuingEducation",
+  },
+  {
+    id: "system-event-heros-call",
+    cardId: "BG27_Anomaly_125",
+    name: "勇士召唤",
+    description: "在赛局开始时，全部玩家从同样的选择中发现一个等级6的手下。",
+    effect: "herosCall",
+  },
+  {
+    id: "system-event-rising-tide",
+    cardId: "BG31_Anomaly_104",
+    name: "水涨船高",
+    description: "在你升级旅店後，发现一个等级1的法术。（每2个回合获得强化！）",
+    effect: "risingTide",
+  },
+  {
+    id: "system-event-match-fixing",
+    cardId: "BG27_Anomaly_105",
+    name: "打假赛",
+    description: "每个回合获得3枚金币。",
+    effect: "matchFixing",
+  },
+  {
+    id: "system-event-incubating",
+    cardId: "BG31_Anomaly_107",
+    name: "孵育异变",
+    description: "不具有类型的手下拥有全部手下类型。",
+    effect: "incubating",
+  },
+  {
+    id: "system-event-treasure-seeker",
+    cardId: "BG27_Anomaly_112",
+    name: "宝库追寻者之路",
+    description: "重置5次以後，获得一个当前酒馆等级的金卡手下。",
+    effect: "treasureSeeker",
   },
 ] as const satisfies readonly SystemEventDefinition[];
 

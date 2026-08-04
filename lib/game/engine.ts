@@ -4091,6 +4091,40 @@ function applySystemEventAtLobbyStart(state: GameState): void {
         break;
       case "vault":
         break;
+      case "sinDoreiMirror":
+        break;
+      case "mysteryFlower":
+        break;
+      case "circusPrize":
+        break;
+      case "continuingEducation":
+        break;
+      case "herosCall": {
+        for (const p of state.players) {
+          if (p.hand.length < MAX_HAND_SIZE) {
+            const m = drawMatchingFromPool(
+              state,
+              6 as TavernTier,
+              (d) => d.tier === 6,
+            );
+            if (m) {
+              m.sellValue = 1;
+              p.hand.push(m);
+            }
+          }
+        }
+        break;
+      }
+      case "risingTide":
+        break;
+      case "matchFixing":
+        break;
+      case "incubating":
+        player.systemEventCounters.incubatingActive = 1;
+        break;
+      case "treasureSeeker":
+        player.systemEventCounters.treasureSeeksRefreshes = 0;
+        break;
     }
   }
 }
@@ -7455,6 +7489,14 @@ function fillShop(
       player.magnetizationsThisGame ?? 0,
     );
     refreshDynamicMinionDescription(minion, player);
+    if (player.systemEventCounters.incubatingActive) {
+      const def = getMinionDefinition(minion.definitionId);
+      const defTribes = def.tribes ?? (def.tribe === "neutral" ? [] : [def.tribe]);
+      if (defTribes.length === 0) {
+        minion.tribes = ["all"];
+        minion.tribe = "all";
+      }
+    }
     if (player.systemEventCounters.goldenArenaActive) {
       const def = getMinionDefinition(minion.definitionId);
       minion.golden = true;
@@ -10448,7 +10490,15 @@ function resolveTriples(
       }
       golden.golden = true;
       golden.cardId = definition.goldenCardId ?? definition.cardId;
-      if (player.systemEventCounters.falseIdolsActive) {
+      if (
+        state.lobbySystemsEnabled &&
+        state.systemEventId &&
+        getSystemEventDefinition(state.systemEventId).effect ===
+          "circusPrize"
+      ) {
+        golden.grantsTripleReward = false;
+        grantRandomDarkmoonPrizes(state, player, 1);
+      } else if (player.systemEventCounters.falseIdolsActive) {
         golden.grantsTripleReward = false;
         player.gold += 1;
       } else if (player.systemEventCounters.goldenArenaActive) {
@@ -11142,6 +11192,21 @@ function buyTavernSpell(
     instanceId: spell.instanceId,
   });
   applyAfterCardPurchaseTrinkets(state, player);
+  if (
+    state.lobbySystemsEnabled &&
+    state.systemEventId &&
+    state.round >= 5 &&
+    getSystemEventDefinition(state.systemEventId).effect ===
+      "sinDoreiMirror" &&
+    (player.systemEventCounters.sinDoreiCopyRound ?? 0) !== state.round
+  ) {
+    if (player.hand.length < MAX_HAND_SIZE) {
+      const copy = structuredClone(spell);
+      copy.instanceId = `spell-${state.nextInstanceId++}`;
+      player.hand.push(copy);
+      player.systemEventCounters.sinDoreiCopyRound = state.round;
+    }
+  }
   return true;
 }
 
@@ -16127,6 +16192,36 @@ function refreshShop(state: GameState, player: PlayerState): boolean {
       player.systemEventCounters.lightTheWayCount = count;
     }
   }
+  if (
+    state.lobbySystemsEnabled &&
+    state.systemEventId &&
+    getSystemEventDefinition(state.systemEventId).effect ===
+      "treasureSeeker"
+  ) {
+    const seeks =
+      (player.systemEventCounters.treasureSeeksRefreshes ?? 0) + 1;
+    if (seeks >= 5 && player.hand.length < MAX_HAND_SIZE) {
+      const reward = drawMatchingFromPool(
+        state,
+        player.tavernTier,
+        (d) => d.tier === player.tavernTier,
+      );
+      if (reward) {
+        const def = getMinionDefinition(reward.definitionId);
+        reward.golden = true;
+        reward.cardId = def.goldenCardId ?? def.cardId;
+        reward.name = `金色·${def.name}`;
+        reward.attack = def.attack * 2;
+        reward.health = def.health * 2;
+        reward.sellValue = 1;
+        reward.grantsTripleReward = false;
+        player.hand.push(reward);
+      }
+      player.systemEventCounters.treasureSeeksRefreshes = 0;
+    } else {
+      player.systemEventCounters.treasureSeeksRefreshes = seeks;
+    }
+  }
   return true;
 }
 
@@ -16219,6 +16314,18 @@ function upgradeTavern(state: GameState, player: PlayerState): boolean {
       "upgradePrize"
   ) {
     grantRandomDarkmoonPrizes(state, player, 1);
+  }
+  if (
+    state.lobbySystemsEnabled &&
+    state.systemEventId &&
+    getSystemEventDefinition(state.systemEventId).effect ===
+      "risingTide" &&
+    player.hand.length < MAX_HAND_SIZE
+  ) {
+    const spell = drawTavernSpell(state, 1 as TavernTier);
+    if (spell) {
+      player.hand.push(spell);
+    }
   }
   return true;
 }
@@ -33273,6 +33380,39 @@ function beginNextRecruit(state: GameState): void {
         "wisdomballAnomaly"
     ) {
       player.helpfulRefreshes += 1;
+    }
+    if (
+      state.lobbySystemsEnabled &&
+      state.systemEventId &&
+      getSystemEventDefinition(state.systemEventId).effect ===
+        "matchFixing"
+    ) {
+      player.gold += 3;
+    }
+    if (
+      state.lobbySystemsEnabled &&
+      state.systemEventId &&
+      state.round >= 3 &&
+      getSystemEventDefinition(state.systemEventId).effect ===
+        "mysteryFlower" &&
+      player.hand.length < MAX_HAND_SIZE
+    ) {
+      const spell = drawTavernSpell(state, player.tavernTier);
+      if (spell) {
+        player.hand.push(spell);
+      }
+    }
+    if (
+      state.lobbySystemsEnabled &&
+      state.systemEventId &&
+      getSystemEventDefinition(state.systemEventId).effect ===
+        "continuingEducation" &&
+      player.hand.length < MAX_HAND_SIZE
+    ) {
+      const spell = drawTavernSpell(state, player.tavernTier);
+      if (spell) {
+        player.hand.push(spell);
+      }
     }
     if (
       state.lobbySystemsEnabled &&
