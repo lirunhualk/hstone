@@ -41,6 +41,7 @@ import {
   getSystemEventDefinition,
   heroPowerActiveCost,
   heroPowerCanBeManuallyActivated,
+  heroPowerNeedsTarget,
   getTrinketAliasKind,
   getTrinketDefinition,
   getTrinketProgressText,
@@ -2099,6 +2100,7 @@ function UnitCard({
   tavernSpellCast = false,
   tavernSpellCastLabel,
   tavernSpellCastToken,
+  heroPowerTarget = false,
   newlyGenerated = false,
   locked = false,
   disabled = false,
@@ -2162,6 +2164,7 @@ function UnitCard({
   tavernSpellCast?: boolean;
   tavernSpellCastLabel?: string;
   tavernSpellCastToken?: string;
+  heroPowerTarget?: boolean;
   newlyGenerated?: boolean;
   locked?: boolean;
   disabled?: boolean;
@@ -2248,7 +2251,7 @@ function UnitCard({
         tavernSpellTarget ? " is-tavern-spell-target" : ""
       }${tavernSpellDropTarget ? " is-tavern-spell-drop-target" : ""}${
         tavernSpellCast ? " is-tavern-spell-cast" : ""
-      }${
+      }${heroPowerTarget ? " is-hero-power-target" : ""}${
         newlyGenerated ? " is-newly-generated" : ""
       }${
         locked ? " is-turn-locked" : ""
@@ -3206,6 +3209,7 @@ function BoardRow({
   spellTargetKind,
   tavernSpellDropTargetId,
   tavernSpellCastFeedback,
+  heroPowerTargetIds,
   getDragHandlers,
   getCardInspectionHandlers,
   onUnitClick,
@@ -3213,6 +3217,7 @@ function BoardRow({
   onMagneticTarget,
   onBloodGemTarget,
   onTavernSpellTarget,
+  onHeroPowerTarget,
   onEmptyClick,
   interactionLocked = false,
 }: {
@@ -3254,6 +3259,7 @@ function BoardRow({
   spellTargetKind?: "tavernSpell" | "spellcraft" | "generated";
   tavernSpellDropTargetId?: string;
   tavernSpellCastFeedback?: TavernSpellCastFeedback | null;
+  heroPowerTargetIds?: readonly string[];
   getDragHandlers?: (
     source: DragSource,
     card: DraggableCard,
@@ -3266,6 +3272,7 @@ function BoardRow({
   onMagneticTarget?: (instanceId: string) => void;
   onBloodGemTarget?: (instanceId: string) => void;
   onTavernSpellTarget?: (instanceId: string) => void;
+  onHeroPowerTarget?: (instanceId: string) => void;
   onEmptyClick?: (index: number) => void;
   interactionLocked?: boolean;
 }) {
@@ -3349,6 +3356,9 @@ function BoardRow({
           tavernSpellDropTargetId === unit?.instanceId;
         const isTavernSpellCast =
           tavernSpellCastFeedback?.targetInstanceId === unit?.instanceId;
+        const isHeroPowerTarget =
+          unit !== undefined &&
+          heroPowerTargetIds?.includes(unit.instanceId) === true;
         const isValidDragTarget =
           side === "friendly" &&
           dragSession?.active === true &&
@@ -3525,6 +3535,9 @@ function BoardRow({
                       ? tavernSpellCastFeedback?.token
                       : undefined
                   }
+                  heroPowerTarget={
+                    heroPowerTargetIds?.includes(unit.instanceId)
+                  }
                   disabled={interactionLocked && !isChoiceTarget}
                   dragHandlers={
                     side === "friendly" && getDragHandlers
@@ -3544,6 +3557,8 @@ function BoardRow({
                         ? () => onBloodGemTarget(unit.instanceId)
                       : isMagneticTarget && onMagneticTarget
                         ? () => onMagneticTarget(unit.instanceId)
+                      : isHeroPowerTarget && onHeroPowerTarget
+                        ? () => onHeroPowerTarget(unit.instanceId)
                       : onUnitClick
                         ? () => onUnitClick(index)
                         : undefined
@@ -4309,6 +4324,59 @@ export default function GameClient() {
     humanHeroPower ? heroPowerActiveCost(humanHeroPower.effect) : 99;
   const humanHeroPowerAffordable =
     humanHeroPowerCost <= human.gold;
+  const humanHeroPowerTargetMode =
+    humanHeroPower ? heroPowerNeedsTarget(humanHeroPower.effect) : null;
+  const [heroPowerTargeting, setHeroPowerTargeting] = useState(false);
+  const heroPowerTargetValidIds = useMemo(() => {
+    if (
+      !heroPowerTargeting ||
+      !humanHeroPowerTargetMode ||
+      !humanHeroPower
+    ) {
+      return new Set<string>();
+    }
+    if (humanHeroPowerTargetMode === "shop") {
+      return new Set(human.shop.map((m) => m.instanceId));
+    }
+    return new Set(human.board.map((m) => m.instanceId));
+  }, [heroPowerTargeting, humanHeroPowerTargetMode, humanHeroPower, human.shop, human.board]);
+
+  const doActivateHeroPower = useCallback(
+    (targetInstanceId?: string) => {
+      if (!humanHeroPowerCanActivate || !humanHeroPowerAffordable) return;
+      if (humanHeroPowerTargetMode && !targetInstanceId) {
+        setHeroPowerTargeting(true);
+        return;
+      }
+      setHeroPowerTargeting(false);
+      send({ type: "ACTIVATE_HERO_POWER", targetInstanceId });
+    },
+    [
+      humanHeroPowerCanActivate,
+      humanHeroPowerAffordable,
+      humanHeroPowerTargetMode,
+      send,
+    ],
+  );
+
+  useEffect(() => {
+    if (!heroPowerTargeting) return;
+    const onKeyDown = (e: globalThis.KeyboardEvent) => {
+      if (e.key === "Escape") {
+        setHeroPowerTargeting(false);
+      }
+    };
+    window.addEventListener("keydown", onKeyDown);
+    return () => window.removeEventListener("keydown", onKeyDown);
+  }, [heroPowerTargeting]);
+
+  const onHeroPowerTargetClick = useCallback(
+    (instanceId: string) => {
+      if (!heroPowerTargeting) return;
+      doActivateHeroPower(instanceId);
+    },
+    [heroPowerTargeting, doActivateHeroPower],
+  );
   const modalInteractionLocked = interactionRequiresModalBackdrop(
     game.pendingInteraction,
   );
@@ -6972,8 +7040,8 @@ export default function GameClient() {
             }
             data-testid="human-hero-power"
             title={`${humanHeroPower?.name ?? "英雄技能"} · ${humanHeroPowerCost} 金币${humanHeroPowerAffordable ? "" : " · 金币不足"}`}
-            onClick={() => send({ type: "ACTIVATE_HERO_POWER" })}
-            disabled={!humanHeroPowerAffordable}
+            onClick={() => doActivateHeroPower()}
+            disabled={!humanHeroPowerAffordable || heroPowerTargeting}
           >
             {humanHero && (
               <span className="hero-hud-portrait" aria-hidden="true">
@@ -7620,6 +7688,11 @@ export default function GameClient() {
                   }
                   combatChargeX={combatChargeVector.x}
                   combatChargeY={combatChargeVector.y}
+                  heroPowerTargetIds={
+                    humanHeroPowerTargetMode === "board"
+                      ? [...heroPowerTargetValidIds]
+                      : undefined
+                  }
                 />
               )}
               {game.phase === "combat" &&
@@ -7919,6 +7992,11 @@ export default function GameClient() {
                 }
                 combatChargeX={combatChargeVector.x}
                 combatChargeY={combatChargeVector.y}
+                heroPowerTargetIds={
+                  humanHeroPowerTargetMode === "board"
+                    ? [...heroPowerTargetValidIds]
+                    : undefined
+                }
                 choiceTargetIds={
                   boardChoiceInteraction?.optionInstanceIds
                 }
@@ -8011,6 +8089,7 @@ export default function GameClient() {
                     );
                   }
                 }}
+                onHeroPowerTarget={onHeroPowerTargetClick}
                 onEmptyClick={deploySelected}
               />
               {game.phase === "combat" && currentStrikeEvent && (

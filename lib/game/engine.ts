@@ -35222,6 +35222,28 @@ export function heroPowerActiveCost(effect: HeroPowerDefinition["effect"]): numb
   }
 }
 
+const HERO_POWER_SHOP_TARGET_EFFECTS = new Set<HeroPowerDefinition["effect"]>([
+  "activeShrinkMinionToHand",
+  "activeReplaceHigherTier",
+  "activeDoubleHealthTavernMinion",
+  "activeStealTavernCardDamage",
+  "activeLockCardUnlockLater",
+]);
+
+const HERO_POWER_BOARD_TARGET_EFFECTS = new Set<HeroPowerDefinition["effect"]>([
+  "activeGiveDivineShield",
+  "activeScalingTargetBuff",
+  "activeKillUndeadForUndead",
+]);
+
+export function heroPowerNeedsTarget(
+  effect: HeroPowerDefinition["effect"],
+): "shop" | "board" | null {
+  if (HERO_POWER_SHOP_TARGET_EFFECTS.has(effect)) return "shop";
+  if (HERO_POWER_BOARD_TARGET_EFFECTS.has(effect)) return "board";
+  return null;
+}
+
 function activateHeroPower(
   state: GameState,
   player: PlayerState,

@@ -2143,6 +2143,45 @@ button.hud-hero-power.is-unaffordable .hero-power-cost-badge {
   }
 }
 
+.unit-card.is-hero-power-target {
+  z-index: 11;
+  cursor: pointer;
+  touch-action: manipulation;
+  border-color: rgb(50 215 196 / 78%);
+  box-shadow:
+    0 14px 30px rgb(0 0 0 / 34%),
+    0 0 0 3px rgb(50 215 196 / 62%),
+    0 0 26px rgb(50 215 196 / 32%);
+  transform: translateY(-5px) scale(1.025);
+  animation: hero-power-target-pulse 1.05s ease-in-out infinite;
+}
+
+.unit-card.is-hero-power-target:hover {
+  z-index: 13;
+  border-color: #e0fffc;
+  box-shadow:
+    0 17px 36px rgb(0 0 0 / 40%),
+    0 0 0 4px rgb(80 240 220 / 90%),
+    0 0 44px rgb(50 215 196 / 58%);
+  transform: translateY(-8px) scale(1.04);
+}
+
+@keyframes hero-power-target-pulse {
+  0%,
+  100% {
+    box-shadow:
+      0 14px 28px rgb(0 0 0 / 34%),
+      0 0 0 3px rgb(50 215 196 / 56%),
+      0 0 22px rgb(50 215 196 / 26%);
+  }
+  50% {
+    box-shadow:
+      0 16px 32px rgb(0 0 0 / 38%),
+      0 0 0 5px rgb(100 240 230 / 84%),
+      0 0 38px rgb(50 215 196 / 48%);
+  }
+}
+
 @keyframes tavern-spell-label-pop {
   0% {
     opacity: 0;
