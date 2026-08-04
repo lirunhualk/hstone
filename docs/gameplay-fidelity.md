@@ -36,7 +36,7 @@
 
 ### 战斗阶段演出
 
-- 战斗中保留手牌：战斗阶段手牌缩小至 62% 原始大小、72% 透明度、不可操作（`game.css:6402-6431`），方便观察手牌触发和下一回合资源。商店隐藏（`shop-layout` 的 `opacity:0`），只展示对阵双方棋盘。
+- 战斗中保留手牌：战斗阶段手牌缩小至 62% 原始大小、72% 透明度、不可操作（`game.css:6402-6431`），方便观察手牌触发和下一回合资源。商店降为半透明（`opacity:0.32, brightness:0.42`）而非完全消失。
 - 完整攻击动画系统（`game.css:6526-6624`）：
   - **蓄力**：`card-attack-charge`（520ms）— 使用 CSS 变量 `--charge-x`/`--charge-y` 计算屏幕坐标位移，附带金色辉光 `drop-shadow`
   - **碰撞**：`card-attack-collision`（360ms）— 目标闪烁白金色闪光 `box-shadow` + `brightness(1.8)`
@@ -45,10 +45,16 @@
   - 敌我双方攻击器有独立方向动画（`card-attack-enemy`）
 - 圣盾爆裂动画：`shield-burst`（560ms）— 金色光环扩散 + 亮度炸裂 + `card-hit` 生命值面板红色高亮
 - 伤害跳字动画：`combat-damage-pop`（620ms）— 红色标签底部弹出、放大、上浮、淡出
-- 死亡消散动画：`card-death-dissolve`（720ms ease forwards）— 随从淡出并不可交互
+- 死亡消散动画：`card-death-dissolve`（720ms ease forwards）— 随从淡出，伴彩色碎片粒子散开（`death-fragment-scatter`）
+- 属性变化微动：被增益时 ATK/HP 数字短时放大高亮（`stat-pop` 260ms）
 - 战斗触发标签：增益（`combat-buff-label`）、减益（`combat-debuff-label`）、召唤（`combat-summon-label`）、战斗开始（`combat-start-of-combat-label`）、复仇（`combat-avenge-label`）、触发（`combat-trigger-label`），均带弹出动画
 - 随从状态 CSS 类：`is-combat-actor`（金色光环）、`is-combat-target`（红色光环）、`is-combat-buff-target`（青色光环提升）、`is-combat-debuff-target`（紫色光环）
 - 英雄受击动画：`hero-damage-flash`（620ms）
+- 磁力融合动画：`magnetic-fuse`（480ms）— 蓝色光环扩散 + brightness burst + scale 回弹
+- 商店卡牌周期性光扫（`shop-shine-sweep` 4.2s）+ 卡牌等级星标微光（`tier-star-glimmer` 3.6s）
+- 手牌卡牌 hover 抬升发光（teal border + translateY -4px + scale 1.03）
+- 战斗面板红调背景光（combat phase 红色径向渐变 + border overlay）
+- 战斗 VS 分隔线（金色渐变横线）
 
 ### 全局系统
 
