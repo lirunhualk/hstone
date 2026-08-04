@@ -35297,6 +35297,12 @@ export function createLobbyGame(
   });
 
   applySystemEventAtLobbyStart(state);
+  // Refill shops so system events that modify tavern capacity
+  // (fullHouse, tavernSpecial, extraSpellPerRefresh) take effect.
+  for (const player of state.players) {
+    releaseShop(state, player);
+    fillShop(state, player);
+  }
 
   if (
     state.systemEventId &&
