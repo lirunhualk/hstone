@@ -33865,6 +33865,9 @@ function simulateBattle(
     damageToPlayerB =
       playerA.tavernTier +
       boardA.reduce((total, minion) => total + minion.tier, 0);
+    if (state.round > 60) {
+      damageToPlayerB += Math.max(0, state.round - 60);
+    }
     if (!isGhost) {
       const safeBadge = consumeSafeBadgeForLethalCombatDamage(
         playerB,
@@ -33919,6 +33922,9 @@ function simulateBattle(
     damageToPlayerA =
       playerB.tavernTier +
       boardB.reduce((total, minion) => total + minion.tier, 0);
+    if (state.round > 60) {
+      damageToPlayerA += Math.max(0, state.round - 60);
+    }
     const safeBadge = consumeSafeBadgeForLethalCombatDamage(
       playerA,
       damageToPlayerA,
