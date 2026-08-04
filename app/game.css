@@ -370,6 +370,40 @@
   white-space: nowrap;
 }
 
+.hero-hud-portrait {
+  position: absolute;
+  left: -8px;
+  top: 50%;
+  transform: translateY(-50%);
+  width: 44px;
+  height: 44px;
+  border-radius: 50%;
+  overflow: hidden;
+  border: 2px solid rgb(155 140 255 / 50%);
+  box-shadow: 0 0 12px rgb(155 140 255 / 20%);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: rgb(20 16 44);
+}
+
+.hero-hud-portrait .card-art {
+  width: 100%;
+  height: 100%;
+  border-radius: 50%;
+}
+
+.hero-hud-portrait .card-art img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  border-radius: 50%;
+}
+
+.hud-hero-power:has(.hero-hud-portrait) {
+  padding-left: 44px;
+}
+
 .hud-lobby-system {
   display: grid;
   min-width: 132px;
@@ -452,9 +486,9 @@
   flex: 1 1 auto;
   min-width: 0;
   min-height: 0;
-  grid-template-columns: minmax(0, 1fr) 256px;
-  gap: 12px;
-  padding: 12px;
+  grid-template-columns: minmax(0, 1fr) 178px;
+  gap: 10px;
+  padding: 10px;
   overflow: hidden;
 }
 
@@ -471,8 +505,8 @@
   display: grid;
   min-width: 0;
   min-height: 0;
-  grid-template-rows: 430px minmax(0, 1fr);
-  gap: 10px;
+  grid-template-rows: minmax(0, 1fr);
+  gap: 8px;
 }
 
 .panel {
@@ -518,8 +552,7 @@
 
 .shop-panel,
 .board-panel,
-.hand-panel,
-.info-panel {
+.hand-panel {
   display: flex;
   min-width: 0;
   min-height: 0;
@@ -713,6 +746,201 @@
   min-height: 0;
   grid-template-rows: repeat(3, minmax(44px, 1fr));
   gap: 6px;
+}
+
+.tavern-control {
+  position: relative;
+  display: inline-flex;
+  min-width: 0;
+  min-height: 44px;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  padding: 6px 8px;
+  cursor: pointer;
+  touch-action: manipulation;
+  border: 1px solid rgb(65 97 126 / 84%);
+  border-radius: 10px;
+  background: linear-gradient(180deg, rgb(20 38 58 / 84%), rgb(14 30 47 / 92%));
+  color: var(--text);
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  transition:
+    border-color 140ms ease,
+    box-shadow 140ms ease,
+    filter 140ms ease,
+    opacity 140ms ease,
+    transform 100ms ease;
+  overflow: hidden;
+}
+
+.tavern-control::before {
+  content: "";
+  position: absolute;
+  inset: -1px;
+  border-radius: inherit;
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 200ms ease;
+}
+
+.tavern-control:hover:not(:disabled) {
+  border-color: var(--accent);
+  filter: brightness(1.08);
+  box-shadow: 0 0 0 3px rgb(50 215 196 / 20%);
+}
+
+.tavern-control:active:not(:disabled) {
+  transform: translateY(1px) scale(0.985);
+}
+
+.tavern-control:disabled {
+  filter: grayscale(0.45);
+  opacity: 0.46;
+}
+
+.tavern-control-icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 28px;
+  flex-shrink: 0;
+  border-radius: 8px;
+  background: linear-gradient(135deg, rgb(255 255 255 / 8%), rgb(255 255 255 / 2%));
+  font-size: 16px;
+  line-height: 1;
+}
+
+.tavern-control-label {
+  display: flex;
+  min-width: 0;
+  flex-direction: column;
+  align-items: flex-start;
+  line-height: 1.2;
+}
+
+.tavern-control-label > strong {
+  font-size: 11px;
+  font-weight: 800;
+  white-space: nowrap;
+}
+
+.tavern-control-label > span {
+  color: var(--muted);
+  font-size: 9px;
+  font-weight: 600;
+  white-space: nowrap;
+}
+
+.tavern-control-cost {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 32px;
+  min-height: 22px;
+  margin-left: auto;
+  flex-shrink: 0;
+  padding: 2px 7px;
+  border-radius: 999px;
+  background: var(--gold);
+  color: rgb(10 10 12);
+  font-size: 10px;
+  font-weight: 900;
+}
+
+.tavern-control-cost.is-free {
+  background: linear-gradient(135deg, var(--accent), #0fbca9);
+  color: rgb(4 16 14);
+}
+
+.tavern-control-cost.is-health {
+  background: linear-gradient(135deg, var(--danger), #e0484f);
+  color: rgb(255 240 240);
+}
+
+.tavern-control.is-active {
+  border-color: rgb(50 215 196 / 78%);
+  background: linear-gradient(180deg, rgb(50 215 196 / 16%), rgb(50 215 196 / 5%));
+  box-shadow:
+    0 0 0 2px rgb(50 215 196 / 28%),
+    inset 0 0 14px rgb(50 215 196 / 10%);
+}
+
+.tavern-control.is-active .tavern-control-icon {
+  background: linear-gradient(135deg, rgb(50 215 196 / 24%), rgb(50 215 196 / 8%));
+}
+
+.tavern-control-frost {
+  position: absolute;
+  inset: -1px;
+  border-radius: inherit;
+  pointer-events: none;
+  opacity: 0;
+  background:
+    linear-gradient(
+      105deg,
+      transparent 0%,
+      rgb(180 210 255 / 18%) 20%,
+      rgb(200 230 255 / 35%) 35%,
+      rgb(180 210 255 / 18%) 50%,
+      transparent 70%
+    );
+  transition: opacity 320ms ease;
+}
+
+.tavern-control.is-active .tavern-control-frost {
+  opacity: 1;
+}
+
+@keyframes frost-sweep {
+  0% {
+    background-position: 140% 0;
+    opacity: 0;
+  }
+  35%,
+  65% {
+    opacity: 1;
+  }
+  100% {
+    background-position: -40% 0;
+    opacity: 0;
+  }
+}
+
+.tavern-control-frost-sweep {
+  position: absolute;
+  inset: -1px;
+  border-radius: inherit;
+  pointer-events: none;
+  background:
+    linear-gradient(
+      105deg,
+      transparent 0%,
+      rgb(200 230 255 / 30%) 30%,
+      rgb(220 240 255 / 55%) 45%,
+      rgb(200 230 255 / 30%) 60%,
+      transparent 100%
+    );
+  background-size: 200% 100%;
+  animation: frost-sweep 900ms ease-in-out;
+}
+
+.tavern-control-ice-edge {
+  position: absolute;
+  inset: -2px;
+  border-radius: inherit;
+  pointer-events: none;
+  border: 2px solid transparent;
+  transition: border-color 400ms ease;
+}
+
+.tavern-control.is-active .tavern-control-ice-edge {
+  border-color: rgb(150 210 240 / 50%);
+  box-shadow:
+    inset 0 0 12px rgb(150 210 240 / 15%),
+    0 0 8px rgb(150 210 240 / 25%);
 }
 
 .card-row {
@@ -1121,6 +1349,10 @@
     0 0 48px rgb(255 207 75 / 56%);
   opacity: 0;
   animation: keyword-shield-break 620ms ease-out both;
+}
+
+.unit-card.is-shield-breaking {
+  animation: shield-burst 560ms cubic-bezier(0.2, 0.9, 0.3, 1);
 }
 
 .unit-card.is-shield-breaking .keyword-vfx-divine-shield {
@@ -3852,6 +4084,26 @@
 
 .info-panel {
   gap: 8px;
+  position: absolute;
+  z-index: 120;
+  top: 62px;
+  right: 8px;
+  bottom: 10px;
+  width: min(300px, calc(100vw - 200px));
+  box-shadow: -16px 0 42px rgb(0 0 0 / 34%);
+  opacity: 0;
+  pointer-events: none;
+  transform: translateX(calc(100% + 16px));
+  transition:
+    opacity 180ms ease,
+    transform 180ms ease;
+}
+
+.info-panel.is-open,
+.info-panel[data-open="true"] {
+  opacity: 1;
+  pointer-events: auto;
+  transform: translateX(0);
 }
 
 .details-content {
@@ -5302,13 +5554,14 @@
 }
 
 .discover-options {
-  display: grid;
+  display: flex;
+  align-items: center;
+  justify-content: center;
   width: 100%;
   min-height: 0;
-  grid-template-columns: repeat(3, minmax(0, 1fr));
-  align-items: stretch;
-  justify-items: center;
-  gap: clamp(10px, 2vw, 20px);
+  gap: 0;
+  padding: 24px 0 18px;
+  perspective: 900px;
 }
 
 .discover-option {
@@ -5316,6 +5569,7 @@
   width: 100%;
   min-width: 0;
   min-height: 44px;
+  max-width: 210px;
   align-items: stretch;
   justify-content: flex-start;
   flex-direction: column;
@@ -5326,11 +5580,26 @@
   outline: none;
   color: inherit;
   background: rgb(255 255 255 / 2%);
+  cursor: pointer;
   transition:
     border-color 150ms ease,
     background 150ms ease,
     box-shadow 150ms ease,
-    transform 150ms ease;
+    transform 280ms cubic-bezier(0.2, 0.82, 0.3, 1);
+  transform-origin: center bottom;
+}
+
+.discover-option:nth-child(1) {
+  transform: rotate(-7deg) translateX(20px);
+}
+
+.discover-option:nth-child(2) {
+  transform: translateY(-14px);
+  z-index: 2;
+}
+
+.discover-option:nth-child(3) {
+  transform: rotate(7deg) translateX(-20px);
 }
 
 .discover-option > .unit-card,
@@ -5345,13 +5614,14 @@
 .discover-option:hover,
 .discover-option:focus-visible,
 .discover-option:focus-within {
-  border-color: rgb(246 190 85 / 68%);
+  border-color: rgb(246 190 85 / 72%);
   outline: none;
   background: rgb(246 190 85 / 8%);
   box-shadow:
-    0 0 0 3px rgb(246 190 85 / 14%),
-    0 12px 28px rgb(0 0 0 / 20%);
-  transform: translateY(-3px);
+    0 0 0 3px rgb(246 190 85 / 36%),
+    0 14px 36px rgb(0 0 0 / 28%);
+  z-index: 5;
+  transform: translateY(-18px) scale(1.08) rotate(0deg) !important;
 }
 
 .discover-option:hover .unit-card,
@@ -5391,9 +5661,46 @@
   color: var(--text-soft);
   font-size: 11px;
   line-height: 1.35;
-  text-align: left;
+  -webkit-line-clamp: 7;
   -webkit-box-orient: vertical;
-  -webkit-line-clamp: 3;
+}
+
+@keyframes discover-fly-to-hand {
+  0% {
+    opacity: 1;
+    transform: translate(0, 0) scale(1) rotate(0deg);
+    filter: brightness(1.3);
+  }
+  35% {
+    opacity: 1;
+    transform: translate(var(--fly-x), var(--fly-y)) scale(0.52) rotate(8deg);
+    filter: brightness(1.55);
+  }
+  100% {
+    opacity: 0;
+    transform: translate(var(--fly-x), var(--fly-y)) scale(0.28) rotate(14deg);
+    filter: brightness(2);
+  }
+}
+
+.discover-option.is-selected {
+  pointer-events: none;
+  animation: discover-fly-to-hand 560ms cubic-bezier(0.3, 0.88, 0.35, 1) forwards;
+  border-color: rgb(246 190 85 / 90%) !important;
+  box-shadow:
+    0 0 0 5px rgb(246 190 85 / 90%),
+    0 0 40px rgb(246 190 85 / 55%) !important;
+}
+
+.discover-option:not(.is-selected).is-fading {
+  pointer-events: none;
+  opacity: 0;
+  filter: saturate(0.4) brightness(0.5);
+  transform: scale(0.9) !important;
+  transition:
+    opacity 400ms ease,
+    transform 400ms ease,
+    filter 400ms ease;
 }
 
 .discover-progress {
@@ -6083,27 +6390,44 @@
 .game-shell[data-phase="combat"] .play-column,
 .game-shell[data-phase="result"] .play-column,
 .game-shell.combat-phase .play-column {
-  grid-template-rows: 44px minmax(0, 1fr) 44px;
+  grid-template-rows: 44px minmax(0, 1fr) 110px;
 }
 
 .game-shell[data-phase="combat"] .shop-panel,
-.game-shell[data-phase="combat"] .hand-panel,
 .game-shell[data-phase="result"] .shop-panel,
-.game-shell[data-phase="result"] .hand-panel,
-.game-shell.combat-phase .shop-panel,
-.game-shell.combat-phase .hand-panel {
+.game-shell.combat-phase .shop-panel {
   padding-block: 5px;
 }
 
+.game-shell[data-phase="combat"] .hand-panel,
+.game-shell[data-phase="result"] .hand-panel,
+.game-shell.combat-phase .hand-panel {
+  padding-block: 4px 8px;
+  background: radial-gradient(ellipse at 50% 90%, rgb(155 140 255 / 6%), transparent 50%), rgb(14 27 43 / 80%);
+}
+
 .game-shell[data-phase="combat"] .shop-layout,
-.game-shell[data-phase="combat"] .hand-panel .card-row,
 .game-shell[data-phase="result"] .shop-layout,
-.game-shell[data-phase="result"] .hand-panel .card-row,
-.game-shell.combat-phase .shop-layout,
-.game-shell.combat-phase .hand-panel .card-row {
+.game-shell.combat-phase .shop-layout {
   pointer-events: none;
   opacity: 0;
   transform: translateY(-6px);
+}
+
+.game-shell[data-phase="combat"] .hand-panel .card-row,
+.game-shell[data-phase="result"] .hand-panel .card-row,
+.game-shell.combat-phase .hand-panel .card-row {
+  pointer-events: none;
+  opacity: 0.72;
+  transform: scale(0.62);
+  transform-origin: center bottom;
+  transition: opacity 260ms ease, transform 260ms ease;
+}
+
+.game-shell[data-phase="combat"] .hand-panel .unit-card,
+.game-shell[data-phase="result"] .hand-panel .unit-card,
+.game-shell.combat-phase .hand-panel .unit-card {
+  max-width: 64px;
 }
 
 .game-shell[data-phase="combat"] .board,
@@ -6134,8 +6458,37 @@
   animation-name: card-attack-enemy;
 }
 
+.unit-card.is-charging {
+  z-index: 10;
+  animation: card-attack-charge 520ms cubic-bezier(0.25, 0.9, 0.35, 1);
+}
+
+.unit-card.is-colliding {
+  z-index: 11;
+  animation: card-attack-collision 360ms cubic-bezier(0.2, 0.85, 0.3, 1);
+}
+
+.unit-card.is-rebounding {
+  z-index: 9;
+  animation: card-attack-rebound 280ms ease-out;
+}
+
+.unit-card.is-shield-burst {
+  z-index: 12;
+  animation: shield-burst 560ms cubic-bezier(0.2, 0.9, 0.3, 1);
+}
+
 .unit-card.is-hit {
   animation: card-hit 220ms ease;
+}
+
+.hero-hud-portrait.is-damaged {
+  animation: hero-damage-flash 620ms ease;
+}
+
+.unit-card.is-dead-dissolve {
+  pointer-events: none;
+  animation: card-death-dissolve 720ms ease forwards;
 }
 
 .unit-card.is-buffed {
@@ -6167,16 +6520,26 @@
 
 .unit-card.is-dead {
   pointer-events: none;
-  animation: card-death 620ms ease forwards;
+  animation: card-death 720ms ease forwards;
 }
 
 @keyframes card-attack {
   0%,
   100% {
     transform: translateY(0) scale(1);
+    filter: brightness(1);
   }
-  46% {
-    transform: translateY(-18px) scale(1.035);
+  20% {
+    transform: translateY(-6px) scale(0.97);
+    filter: brightness(0.9);
+  }
+  48% {
+    transform: translateY(-16px) scale(1.06);
+    filter: brightness(1.25);
+  }
+  65% {
+    transform: translateY(4px) scale(0.96);
+    filter: brightness(1.15);
   }
 }
 
@@ -6184,22 +6547,168 @@
   0%,
   100% {
     transform: translateY(0) scale(1);
+    filter: brightness(1);
   }
-  46% {
-    transform: translateY(18px) scale(1.035);
+  20% {
+    transform: translateY(6px) scale(0.97);
+    filter: brightness(0.9);
+  }
+  48% {
+    transform: translateY(16px) scale(1.06);
+    filter: brightness(1.25);
+  }
+  65% {
+    transform: translateY(-4px) scale(0.96);
+    filter: brightness(1.15);
+  }
+}
+
+@keyframes card-attack-charge {
+  0% {
+    transform: translate(0, 0) scale(1);
+    filter: brightness(1) drop-shadow(0 0 0 transparent);
+  }
+  35% {
+    transform: translate(var(--charge-x), var(--charge-y)) scale(1.28);
+    filter: brightness(1.5) drop-shadow(0 0 18px rgb(255 190 40 / 70%));
+  }
+  55% {
+    transform: translate(var(--charge-x), var(--charge-y)) scale(1.28);
+    filter: brightness(1.5) drop-shadow(0 0 18px rgb(255 190 40 / 70%));
+  }
+  75% {
+    transform: translate(calc(var(--charge-x) * 0.3), calc(var(--charge-y) * 0.3)) scale(1.08);
+    filter: brightness(1.15) drop-shadow(0 0 6px rgb(255 190 40 / 30%));
+  }
+  100% {
+    transform: translate(0, 0) scale(1);
+    filter: brightness(1) drop-shadow(0 0 0 transparent);
+  }
+}
+
+@keyframes card-attack-rebound {
+  0% {
+    transform: translate(0, 0) scale(1);
+  }
+  35% {
+    transform: translate(
+        calc(var(--bounce-x) * -0.6),
+        calc(var(--bounce-y) * -0.45)
+      )
+      scale(0.94);
+  }
+  100% {
+    transform: translate(0, 0) scale(1);
+  }
+}
+
+@keyframes card-attack-collision {
+  0% {
+    transform: translate(0, 0) scale(1);
+    filter: none;
+  }
+  30% {
+    transform: translate(calc(var(--hit-x) * 0.15), calc(var(--hit-y) * 0.15))
+      scale(0.86);
+    filter: brightness(1.8) saturate(0.6);
+    box-shadow:
+      0 0 0 6px rgb(255 255 220 / 90%),
+      0 0 36px rgb(255 200 80 / 85%),
+      0 0 52px rgb(255 140 40 / 55%);
+  }
+  100% {
+    transform: translate(0, 0) scale(1);
+    filter: none;
+    box-shadow: none;
+  }
+}
+
+@keyframes shield-burst {
+  0% {
+    filter: brightness(1);
+    box-shadow: 0 0 0 0 rgb(255 215 0 / 0%);
+  }
+  30% {
+    filter: brightness(2.2) saturate(0.3);
+    box-shadow:
+      0 0 0 12px rgb(255 215 0 / 90%),
+      0 0 42px rgb(255 215 0 / 80%),
+      0 0 72px rgb(255 180 0 / 50%);
+    transform: scale(1.06);
+  }
+  70% {
+    filter: brightness(1.3);
+    box-shadow:
+      0 0 0 4px rgb(255 215 0 / 40%),
+      0 0 18px rgb(255 215 0 / 25%);
+    transform: scale(0.98);
+  }
+  100% {
+    filter: brightness(1);
+    box-shadow: 0 0 0 0 rgb(255 215 0 / 0%);
+    transform: scale(1);
+  }
+}
+
+@keyframes card-death-dissolve {
+  0% {
+    opacity: 1;
+    filter: grayscale(0) blur(0);
+    transform: scale(1);
+  }
+  30% {
+    opacity: 0.92;
+    filter: grayscale(0.3) blur(1px);
+    transform: scale(1.04);
+  }
+  70% {
+    opacity: 0.45;
+    filter: grayscale(0.85) blur(3px);
+    transform: scale(0.94);
+  }
+  100% {
+    opacity: 0;
+    filter: grayscale(1) blur(6px);
+    transform: scale(0.82) translateY(8px);
+  }
+}
+
+@keyframes hero-damage-flash {
+  0% {
+    filter: none;
+    transform: scale(1);
+  }
+  20% {
+    filter: brightness(2.4) saturate(0.2);
+    transform: scale(1.08);
+  }
+  60% {
+    filter: brightness(1.6) saturate(0.5);
+    transform: scale(0.98);
+  }
+  100% {
+    filter: none;
+    transform: scale(1);
   }
 }
 
 @keyframes card-hit {
-  0%,
+  0% {
+    filter: none;
+    transform: scale(1);
+  }
+  30% {
+    filter: brightness(2) saturate(0.5);
+    box-shadow:
+      0 0 0 6px rgb(255 240 180 / 90%),
+      0 0 36px rgb(255 180 60 / 80%),
+      0 0 56px rgb(255 120 20 / 50%);
+    transform: scale(0.9);
+  }
   100% {
     filter: none;
-  }
-  45% {
-    filter: brightness(1.5) saturate(1.35);
-    box-shadow:
-      0 0 0 4px rgb(255 107 115 / 78%),
-      0 0 28px rgb(255 107 115 / 40%);
+    transform: scale(1);
+    box-shadow: none;
   }
 }
 
@@ -6287,19 +6796,24 @@
 
 @keyframes card-death {
   0% {
-    filter: grayscale(0);
     opacity: 1;
+    filter: grayscale(0) blur(0);
     transform: scale(1);
   }
-  52% {
-    filter: grayscale(0.88);
-    opacity: 1;
-    transform: scale(0.97);
+  30% {
+    opacity: 0.92;
+    filter: grayscale(0.3) blur(1px);
+    transform: scale(1.04);
+  }
+  70% {
+    opacity: 0.45;
+    filter: grayscale(0.85) blur(3px);
+    transform: scale(0.94);
   }
   100% {
-    filter: grayscale(1);
     opacity: 0;
-    transform: scale(0.92);
+    filter: grayscale(1) blur(6px);
+    transform: scale(0.82) translateY(8px);
   }
 }
 
@@ -6886,7 +7400,7 @@
   }
 
   .main-grid {
-    grid-template-columns: minmax(0, 1fr) 220px;
+    grid-template-columns: minmax(0, 1fr) 160px;
   }
 
   .shop-layout {
@@ -7081,19 +7595,10 @@
   }
 
   .info-panel {
-    position: absolute;
-    z-index: 120;
     top: 8px;
     right: 8px;
     bottom: 8px;
     width: min(280px, calc(100vw - 96px));
-    box-shadow: -16px 0 42px rgb(0 0 0 / 34%);
-    opacity: 0;
-    pointer-events: none;
-    transform: translateX(calc(100% + 16px));
-    transition:
-      opacity 180ms ease,
-      transform 180ms ease;
   }
 
   .combat-playback {
@@ -7109,13 +7614,6 @@
 
   .combat-playback-controls {
     justify-content: center;
-  }
-
-  .info-panel.is-open,
-  .info-panel[data-open="true"] {
-    opacity: 1;
-    pointer-events: auto;
-    transform: translateX(0);
   }
 
   .mobile-info-close {

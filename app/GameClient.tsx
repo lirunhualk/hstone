@@ -2100,6 +2100,13 @@ function UnitCard({
   newlyGenerated = false,
   locked = false,
   disabled = false,
+  combatShieldBurst = false,
+  combatDeadDissolve = false,
+  combatCharging = false,
+  combatColliding = false,
+  combatRebounding = false,
+  combatChargeX = 0,
+  combatChargeY = 0,
   dragHandlers,
   inspectionHandlers,
   testId,
@@ -2121,7 +2128,14 @@ function UnitCard({
   combatHit?: boolean;
   combatDamageLabel?: string;
   combatShieldBreaking?: boolean;
+  combatShieldBurst?: boolean;
   combatDead?: boolean;
+  combatDeadDissolve?: boolean;
+  combatCharging?: boolean;
+  combatColliding?: boolean;
+  combatRebounding?: boolean;
+  combatChargeX?: number;
+  combatChargeY?: number;
   combatStartOfCombat?: boolean;
   combatAvenge?: boolean;
   combatTrigger?: boolean;
@@ -2199,7 +2213,17 @@ function UnitCard({
       }${combatHit ? " is-hit" : ""}${
         combatShieldBreaking ? " is-shield-breaking" : ""
       }${
+        combatShieldBurst ? " is-shield-burst" : ""
+      }${
         combatDead ? " is-dead" : ""
+      }${
+        combatDeadDissolve ? " is-dead-dissolve" : ""
+      }${
+        combatCharging ? " is-charging" : ""
+      }${
+        combatColliding ? " is-colliding" : ""
+      }${
+        combatRebounding ? " is-rebounding" : ""
       }${
         combatStartOfCombat ? " is-start-of-combat-trigger" : ""
       }${
@@ -2298,7 +2322,29 @@ function UnitCard({
       onClick={onClick}
       onKeyDown={onKeyDown}
       disabled={disabled}
-      style={{ "--card-hue": TRIBE_HUE[unit.tribe] } as CSSProperties}
+      style={
+        {
+          "--card-hue": TRIBE_HUE[unit.tribe],
+          ...(combatCharging || combatColliding
+            ? {
+                "--charge-x": `${combatChargeX ?? 0}px`,
+                "--charge-y": `${combatChargeY ?? 0}px`,
+              }
+            : {}),
+          ...(combatRebounding
+            ? {
+                "--bounce-x": `${combatChargeX ?? 0}px`,
+                "--bounce-y": `${combatChargeY ?? 0}px`,
+              }
+            : {}),
+          ...(combatColliding
+            ? {
+                "--hit-x": `${-(combatChargeX ?? 0)}px`,
+                "--hit-y": `${-(combatChargeY ?? 0)}px`,
+              }
+            : {}),
+        } as CSSProperties
+      }
       {...mergeCardPointerHandlers(inspectionHandlers, dragHandlers)}
     >
       <UnitCardFace unit={unit} keywordVisuals={keywordVisuals} />
@@ -6827,7 +6873,9 @@ export default function GameClient() {
           )}
         </div>
         <div
-          className="hud-hero-power"
+          className={`hud-hero-power${
+            game.phase === "combat" && displayedHumanArmor > 0 ? "" : ""
+          }`}
           aria-label={
             humanHeroPower
               ? `${humanHero?.name ?? "英雄"}，英雄技能 ${humanHeroPower.name}：${
@@ -6838,6 +6886,11 @@ export default function GameClient() {
           data-testid="human-hero-power"
           title={humanHeroPowerStatus ?? "尚未获得英雄技能"}
         >
+          {humanHero && (
+            <span className="hero-hud-portrait" aria-hidden="true">
+              <CardArtwork unit={humanHero} kind="portrait" />
+            </span>
+          )}
           <small>{humanHero?.name ?? "英雄技能"}</small>
           <strong>{humanHeroPower?.name ?? "无"}</strong>
           <span>
@@ -7029,7 +7082,9 @@ export default function GameClient() {
               <div className="shop-actions">
                 <button
                   type="button"
-                  className="action-button secondary"
+                  className={`tavern-control${
+                    human.tavernTier >= 6 ? "" : ""
+                  }`}
                   data-testid="upgrade-tavern"
                   disabled={
                     game.phase !== "recruit" ||
@@ -7039,13 +7094,23 @@ export default function GameClient() {
                   }
                   onClick={() => send({ type: "UPGRADE_TAVERN" })}
                 >
-                  {human.tavernTier >= 6
-                    ? "酒馆已满级"
-                    : `升至 ${human.tavernTier + 1}星 · ${upgradeCost}`}
+                  <span className="tavern-control-icon" aria-hidden="true">★</span>
+                  <span className="tavern-control-label">
+                    <strong>
+                      {human.tavernTier >= 6
+                        ? "酒馆已满级"
+                        : `升至 ${human.tavernTier + 1}星`}
+                    </strong>
+                  </span>
+                  {human.tavernTier < 6 && (
+                    <span className="tavern-control-cost">
+                      {upgradeCost}
+                    </span>
+                  )}
                 </button>
                 <button
                   type="button"
-                  className="action-button secondary"
+                  className="tavern-control"
                   data-testid="refresh-shop"
                   disabled={
                     game.phase !== "recruit" ||
@@ -7054,27 +7119,37 @@ export default function GameClient() {
                   }
                   onClick={() => send({ type: "REFRESH_SHOP" })}
                 >
-                  {refreshCost === 0
-                    ? "刷新 · 免费"
-                    : refreshQuote?.currency === "health"
-                      ? `刷新 · ${refreshCost}生命`
-                      : `刷新 · ${refreshCost}`}
-                  {human.heroRefreshAvailable
-                    ? "（英雄首次免费）"
-                    : ""}
-                  {human.freeRefreshes > 0
-                    ? `（免费剩余 ${human.freeRefreshes}）`
-                    : ""}
-                  {(refreshQuote?.remainingHealthRefreshes ?? 0) > 0
-                    ? `（生命刷新剩余 ${refreshQuote?.remainingHealthRefreshes}）`
-                    : ""}
-                  {human.helpfulRefreshes > 0
-                    ? `（有用剩余 ${human.helpfulRefreshes}）`
-                    : ""}
+                  <span className="tavern-control-icon" aria-hidden="true">↻</span>
+                  <span className="tavern-control-label">
+                    <strong>刷新</strong>
+                    {human.freeRefreshes > 0 ? (
+                      <span>免费剩余 {human.freeRefreshes}</span>
+                    ) : human.heroRefreshAvailable ? (
+                      <span>英雄首次免费</span>
+                    ) : (refreshQuote?.remainingHealthRefreshes ?? 0) > 0 ? (
+                      <span>生命刷新剩余 {refreshQuote?.remainingHealthRefreshes}</span>
+                    ) : human.helpfulRefreshes > 0 ? (
+                      <span>有用 {human.helpfulRefreshes}</span>
+                    ) : null}
+                  </span>
+                  {refreshCost > 0 && (
+                    <span
+                      className={`tavern-control-cost${
+                        refreshCost === 0 ? " is-free" : ""
+                      }${
+                        refreshQuote?.currency === "health" ? " is-health" : ""
+                      }`}
+                    >
+                      {refreshCost}
+                    </span>
+                  )}
+                  {refreshCost === 0 && (
+                    <span className="tavern-control-cost is-free">免费</span>
+                  )}
                 </button>
                 <button
                   type="button"
-                  className={`action-button secondary${
+                  className={`tavern-control${
                     human.frozen ? " is-active" : ""
                   }`}
                   data-testid="freeze-shop"
@@ -7084,7 +7159,13 @@ export default function GameClient() {
                   }
                   onClick={() => send({ type: "TOGGLE_FREEZE" })}
                 >
-                  {human.frozen ? "解冻酒馆" : "冻结酒馆"}
+                  <span className="tavern-control-icon" aria-hidden="true">❄</span>
+                  <span className="tavern-control-label">
+                    <strong>{human.frozen ? "已冻结" : "冻结"}</strong>
+                    {human.frozen ? <span>点击解冻</span> : <span>保留当前报价</span>}
+                  </span>
+                  <span className="tavern-control-frost" aria-hidden="true" />
+                  <span className="tavern-control-ice-edge" aria-hidden="true" />
                 </button>
               </div>
               <div className="card-row" data-testid="shop-row">
@@ -7821,7 +7902,7 @@ export default function GameClient() {
                 : ""
             }`}
             aria-label="手牌"
-            aria-hidden={game.phase !== "recruit"}
+            aria-hidden={false}
             inert={interactionLocked || game.phase !== "recruit"}
             aria-describedby="buy-drop-description"
             data-drop-cost={selectedOfferCost}
