@@ -35362,7 +35362,7 @@ export function heroPowerActiveCost(effect: HeroPowerDefinition["effect"]): numb
     case "activeStealAllTavernCards": return 11;
     case "activeUnlockZergTier": return 6;
     case "activeBuildCustomUndead": return 3;
-    case "chooseSecret": return 2;
+    case "chooseSecret": return 0;
     default: return 99;
   }
 }
