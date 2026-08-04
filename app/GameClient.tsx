@@ -7730,6 +7730,17 @@ export default function GameClient() {
                         战斗事件 {revealedBattleEventCount} /{" "}
                         {playbackEventCount}
                       </span>
+                      <div className="combat-playback-bar" aria-hidden="true">
+                        <div
+                          className="combat-playback-bar-fill"
+                          style={{
+                            width:
+                              playbackEventCount > 0
+                                ? `${(revealedBattleEventCount / playbackEventCount) * 100}%`
+                                : "0%",
+                          }}
+                        />
+                      </div>
                       <strong>
                         {currentBattleEvent?.type === "attack" && (
                           <span

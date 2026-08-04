@@ -6517,6 +6517,23 @@ button.hud-hero-power.is-unaffordable .hero-power-cost-badge {
   letter-spacing: 0.05em;
 }
 
+.combat-playback-bar {
+  width: 100%;
+  height: 3px;
+  margin-top: 6px;
+  border-radius: 2px;
+  background: rgb(255 255 255 / 8%);
+  overflow: hidden;
+}
+
+.combat-playback-bar-fill {
+  height: 100%;
+  border-radius: 2px;
+  background: linear-gradient(90deg, var(--accent), rgb(50 215 196 / 88%));
+  box-shadow: 0 0 6px rgb(50 215 196 / 38%);
+  transition: width 180ms ease;
+}
+
 .combat-playback-controls {
   display: flex;
   align-items: center;
