@@ -38,6 +38,7 @@ import {
   getHeroDefinition,
   getHeroPowerDefinition,
   heroesAvailableForTribes,
+  heroPowerCanBeManuallyActivated,
   identityEligibleHeroPowers,
 } from "./hero-powers.ts";
 import {
@@ -34055,9 +34056,28 @@ function settleEliminations(state: GameState): void {
   }
 }
 
-function applyEndOfTurnHeroPower(player: PlayerState): void {
+function applyEndOfTurnHeroPower(
+  state: GameState,
+  player: PlayerState,
+): void {
   if (playerHasHeroPower(player, "freezeEndTurnSmallerTavern")) {
     player.frozen = true;
+  }
+  if (
+    playerHasHeroPower(player, "activeEndOfTurnScalingBuff") &&
+    player.board.length > 0
+  ) {
+    const buffCount = heroPowerCounter(player, "cthunBuff");
+    if (buffCount > 0) {
+      const target =
+        player.board[randomIndex(state, player.board.length)];
+      target.attack += buffCount;
+      target.health += buffCount;
+      observeRecruitFriendlyAttackGain(player, target, buffCount);
+      observeRecruitFriendlyHealthGain(player, target, buffCount);
+      reconcileConditionalMinion(target);
+      refreshDynamicMinionDescription(target, player);
+    }
   }
 }
 
@@ -34077,7 +34097,7 @@ function endTurn(state: GameState): void {
     deferTriplesUntilNextRecruit(state, human);
     applyEndOfTurnEffects(state, human);
     applyEndOfTurnTrinkets(state, human);
-    applyEndOfTurnHeroPower(human);
+    applyEndOfTurnHeroPower(state, human);
     reconcileConditionalMinions(human);
     human.hand = human.hand.filter(
       (card) =>
@@ -34096,7 +34116,7 @@ function endTurn(state: GameState): void {
     deferTriplesUntilNextRecruit(state, player);
     applyEndOfTurnEffects(state, player);
     applyEndOfTurnTrinkets(state, player);
-    applyEndOfTurnHeroPower(player);
+    applyEndOfTurnHeroPower(state, player);
     reconcileConditionalMinions(player);
     player.hand = player.hand.filter(
       (card) =>
@@ -34706,6 +34726,27 @@ function beginNextRecruit(state: GameState): void {
     }
     player.tavernSpellsCastThisTurn = 0;
     player.darkmoonReservePricesDiscount = 0;
+    player.heroPowerActiveThisTurn = false;
+    if (playerHasHeroPower(player, "activeRollDiceForGold")) {
+      const cooldown = heroPowerCounter(player, "snakeEyesCooldown");
+      if (cooldown > 0) {
+        setHeroPowerCounter(player, "snakeEyesCooldown", cooldown - 1);
+      }
+    }
+    if (playerHasHeroPower(player, "activeCopyLastTavernSpell")) {
+      const curr = heroPowerCounter(player, "nobundoRound");
+      setHeroPowerCounter(player, "nobundoRound", curr + 1);
+    }
+    if (playerHasHeroPower(player, "activeStealAllTavernCards")) {
+      const curr = heroPowerCounter(player, "togwaggleDiscount");
+      setHeroPowerCounter(player, "togwaggleDiscount", curr + 1);
+    }
+    if (playerHasHeroPower(player, "activeStealFirstKillNextCombat")) {
+      setHeroPowerCounter(player, "rafaamActive", 0);
+    }
+    if (playerHasHeroPower(player, "activeBetOnWinner")) {
+      setHeroPowerCounter(player, "barovBetActive", 0);
+    }
     applyStartOfTurnTrinkets(state, player);
     player.cardsPlayedThisTurn = 0;
     player.goldSpentThisTurn = 0;
@@ -34938,6 +34979,7 @@ export function createGame(
     playerSpellsCast: 0,
     battlecriesTriggered: 0,
     heroPowerExtraTriggers: 0,
+    heroPowerActiveThisTurn: false,
     darkmoonReservePricesDiscount: 0,
     pendingTickatusTagPrizes: 0,
     cardsPlayedThisTurn: 0,
@@ -35142,6 +35184,702 @@ export function createLobbyGame(
   return state;
 }
 
+function heroPowerActiveCost(effect: HeroPowerDefinition["effect"]): number {
+  switch (effect) {
+    case "activeRandomTavernSpell": return 1;
+    case "activeRollDiceForGold": return 1;
+    case "activeEndOfTurnScalingBuff": return 1;
+    case "activeRandomBuffChooseUpgrade": return 1;
+    case "increaseGoldCap": return 3;
+    case "activeShrinkMinionToHand": return 2;
+    case "activeReplaceHigherTier": return 1;
+    case "activeDoubleHealthTavernMinion": return 2;
+    case "activeRefreshHigherTier": return 1;
+    case "activeStealTavernCardDamage": return 2;
+    case "activeGiveDivineShield": return 1;
+    case "activeScalingTargetBuff": return 1;
+    case "activeDiscoverCurrentTierCostIncreases": return 1;
+    case "activeDiscoverMagneticMech": return 1;
+    case "activeDiscoverDragonTier4": return 1;
+    case "activeDiscoverRotatingTribe": return 2;
+    case "activeDiscoverFromNextOpponent": return 2;
+    case "activeDiscoverDeadMinionCopy": return 2;
+    case "activeDiscoverBuddy": return 3;
+    case "activeGetPirateCostReduces": return 3;
+    case "activeCopyLastTavernSpell": return 3;
+    case "activeRefreshOpponentMinions": return 1;
+    case "activeStealFirstKillNextCombat": return 1;
+    case "activeLockCardUnlockLater": return 1;
+    case "activeDigForGolden": return 1;
+    case "activeBetOnWinner": return 1;
+    case "activeFindMissingTriple": return 3;
+    case "activeKillUndeadForUndead": return 1;
+    case "activeStealAllTavernCards": return 11;
+    case "activeUnlockZergTier": return 6;
+    case "activeBuildCustomUndead": return 3;
+    default: return 99;
+  }
+}
+
+function activateHeroPower(
+  state: GameState,
+  player: PlayerState,
+  targetInstanceId?: string,
+): boolean {
+  if (
+    !player.heroPowerId ||
+    !heroPowerCanBeManuallyActivated(player.heroPowerId)
+  ) {
+    return false;
+  }
+  if (player.heroPowerActiveThisTurn) {
+    return false;
+  }
+  const definition = getHeroPowerDefinition(player.heroPowerId);
+  const effect = definition.effect;
+
+  let baseCost = heroPowerActiveCost(effect);
+
+  if (playerHasHeroPower(player, "activeStealAllTavernCards")) {
+    const discount = heroPowerCounter(player, "togwaggleDiscount");
+    baseCost = Math.max(1, 11 - discount);
+  }
+  if (playerHasHeroPower(player, "activeCopyLastTavernSpell")) {
+    const discount = Math.max(0, heroPowerCounter(player, "nobundoRound"));
+    baseCost = Math.max(1, 3 - discount);
+  }
+  if (playerHasHeroPower(player, "activeGetPirateCostReduces")) {
+    const discount = heroPowerCounter(player, "patchesDiscount");
+    baseCost = Math.max(1, 3 - discount);
+  }
+  if (playerHasHeroPower(player, "activeDiscoverCurrentTierCostIncreases")) {
+    const uses = heroPowerCounter(player, "eliseUses");
+    baseCost = 1 + uses;
+  }
+
+  if (player.gold < baseCost) {
+    return false;
+  }
+
+  if (
+    playerHasHeroPower(player, "activeRollDiceForGold") &&
+    heroPowerCounter(player, "snakeEyesCooldown") > 0
+  ) {
+    return false;
+  }
+
+  player.gold -= baseCost;
+  player.goldSpentThisTurn += baseCost;
+  player.heroPowerActiveThisTurn = true;
+
+  switch (effect) {
+    case "activeRandomTavernSpell": {
+      const spell = drawTavernSpell(state, player.tavernTier);
+      if (spell) {
+        addCardToHand(state, player, spell);
+      }
+      break;
+    }
+    case "activeRollDiceForGold": {
+      const roll = randomIndex(state, 6) + 1;
+      player.gold += roll;
+      setHeroPowerCounter(player, "snakeEyesCooldown", roll);
+      break;
+    }
+    case "activeEndOfTurnScalingBuff": {
+      setHeroPowerCounter(
+        player,
+        "cthunBuff",
+        heroPowerCounter(player, "cthunBuff") + 1,
+      );
+      break;
+    }
+    case "activeRandomBuffChooseUpgrade": {
+      if (player.board.length > 0) {
+        const target =
+          player.board[randomIndex(state, player.board.length)];
+        target.attack += 1;
+        target.health += 1;
+        observeRecruitFriendlyAttackGain(player, target, 1);
+        observeRecruitFriendlyHealthGain(player, target, 1);
+        reconcileConditionalMinion(target);
+        refreshDynamicMinionDescription(target, player);
+      }
+      break;
+    }
+    case "increaseGoldCap": {
+      player.maxGold += 1;
+      break;
+    }
+    case "activeShrinkMinionToHand": {
+      if (!targetInstanceId) {
+        return false;
+      }
+      const shopIndex = player.shop.findIndex(
+        (m) => m.instanceId === targetInstanceId,
+      );
+      if (shopIndex < 0 || player.hand.length >= MAX_HAND_SIZE) {
+        return false;
+      }
+      const [minion] = player.shop.splice(shopIndex, 1);
+      minion.attack = 2;
+      minion.health = 2;
+      minion.sellValue = 1;
+      minion.golden = false;
+      minion.grantsTripleReward = false;
+      minion.cardId = getMinionDefinition(minion.definitionId).cardId;
+      minion.name = getMinionDefinition(minion.definitionId).name;
+      addCardToHand(state, player, minion);
+      fillShop(state, player);
+      break;
+    }
+    case "activeReplaceHigherTier": {
+      if (!targetInstanceId) {
+        return false;
+      }
+      const shopIndex = player.shop.findIndex(
+        (m) => m.instanceId === targetInstanceId,
+      );
+      if (shopIndex < 0) {
+        return false;
+      }
+      const currentTier = player.shop[shopIndex].tier;
+      const maxTier = Math.min(6, player.tavernTier);
+      if (currentTier >= maxTier) {
+        return false;
+      }
+      const replacement = drawMatchingFromPool(
+        state,
+        player.tavernTier,
+        (d) =>
+          d.tier > currentTier &&
+          d.tier <= maxTier &&
+          d.id !== player.shop[shopIndex].definitionId,
+      );
+      if (replacement) {
+        player.shop.splice(shopIndex, 1);
+        player.shop.splice(shopIndex, 0, replacement);
+        reconcileConditionalMinion(replacement);
+        refreshDynamicMinionDescription(replacement, player);
+      }
+      break;
+    }
+    case "activeDoubleHealthTavernMinion": {
+      if (!targetInstanceId) {
+        return false;
+      }
+      const shopIndex = player.shop.findIndex(
+        (m) => m.instanceId === targetInstanceId,
+      );
+      if (shopIndex < 0 || player.hand.length >= MAX_HAND_SIZE) {
+        return false;
+      }
+      const [minion] = player.shop.splice(shopIndex, 1);
+      minion.health *= 2;
+      minion.sellValue = 1;
+      addCardToHand(state, player, minion);
+      fillShop(state, player);
+      break;
+    }
+    case "activeRefreshHigherTier": {
+      player.helpfulRefreshes += 1;
+      player.lastHelpfulRefreshKind = "highTier";
+      refreshShop(state, player);
+      break;
+    }
+    case "activeStealTavernCardDamage": {
+      if (!targetInstanceId) {
+        return false;
+      }
+      const shopIndex = player.shop.findIndex(
+        (m) => m.instanceId === targetInstanceId,
+      );
+      if (shopIndex < 0 || player.hand.length >= MAX_HAND_SIZE) {
+        return false;
+      }
+      const [minion] = player.shop.splice(shopIndex, 1);
+      addCardToHand(state, player, minion);
+      fillShop(state, player);
+      player.health -= 2;
+      break;
+    }
+    case "activeGiveDivineShield": {
+      if (!targetInstanceId) {
+        return false;
+      }
+      const target = player.board.find(
+        (m) => m.instanceId === targetInstanceId,
+      );
+      if (!target) {
+        return false;
+      }
+      target.divineShield = true;
+      reconcileConditionalMinion(target);
+      refreshDynamicMinionDescription(target, player);
+      break;
+    }
+    case "activeScalingTargetBuff": {
+      if (!targetInstanceId) {
+        return false;
+      }
+      const target = player.board.find(
+        (m) => m.instanceId === targetInstanceId,
+      );
+      if (!target) {
+        return false;
+      }
+      const baseBuff = 2 + heroPowerCounter(player, "edwinBuff");
+      target.attack += baseBuff;
+      target.health += baseBuff;
+      observeRecruitFriendlyAttackGain(player, target, baseBuff);
+      observeRecruitFriendlyHealthGain(player, target, baseBuff);
+      reconcileConditionalMinion(target);
+      refreshDynamicMinionDescription(target, player);
+      break;
+    }
+    case "activeDiscoverCurrentTierCostIncreases": {
+      setHeroPowerCounter(
+        player,
+        "eliseUses",
+        heroPowerCounter(player, "eliseUses") + 1,
+      );
+      beginDiscoverInteraction(
+        state,
+        player,
+        "hero-power-elise",
+        { exactTier: player.tavernTier },
+        1,
+        { kind: "hand" },
+        "tavernSpellCast",
+      );
+      break;
+    }
+    case "activeDiscoverMagneticMech": {
+      if (player.tavernTier < 4) {
+        return false;
+      }
+      beginDiscoverInteraction(
+        state,
+        player,
+        "hero-power-millificent",
+        {
+          maximumTier: player.tavernTier,
+          tribe: "mech",
+        } as DiscoverFilter,
+        1,
+        { kind: "hand" },
+        "tavernSpellCast",
+      );
+      break;
+    }
+    case "activeDiscoverDragonTier4": {
+      if (player.tavernTier < 4) {
+        return false;
+      }
+      beginDiscoverInteraction(
+        state,
+        player,
+        "hero-power-alexstrasza",
+        {
+          maximumTier: player.tavernTier,
+          tribe: "dragon",
+        } as DiscoverFilter,
+        1,
+        { kind: "hand" },
+        "tavernSpellCast",
+      );
+      break;
+    }
+    case "activeDiscoverRotatingTribe": {
+      const tribes: Tribe[] = [
+        "beast",
+        "demon",
+        "dragon",
+        "elemental",
+        "mech",
+        "murloc",
+        "naga",
+        "pirate",
+        "quilboar",
+        "undead",
+      ];
+      const tribe = tribes[state.round % tribes.length];
+      beginDiscoverInteraction(
+        state,
+        player,
+        "hero-power-rat-king",
+        { maximumTier: player.tavernTier, tribe } as DiscoverFilter,
+        1,
+        { kind: "hand" },
+        "tavernSpellCast",
+      );
+      break;
+    }
+    case "activeDiscoverFromNextOpponent": {
+      if (heroPowerCounter(player, "scabbsUsed") >= 1) {
+        return false;
+      }
+      const opponent = findNextOpponentForHeroPower(state, player);
+      if (!opponent || opponent.board.length === 0) {
+        return false;
+      }
+      const candidates: BoardMinionInstance[] = [];
+      for (const m of opponent.board.slice(0, 3)) {
+        const def = getMinionDefinition(m.definitionId);
+        const copy = createMinionInstance(state, m.definitionId, 0);
+        copy.cardId = def.cardId;
+        copy.name = def.name;
+        copy.attack = def.attack;
+        copy.health = def.health;
+        copy.golden = false;
+        copy.grantsTripleReward = false;
+        copy.sellValue = 1;
+        copy.effectCounters = {};
+        candidates.push(copy);
+      }
+      if (candidates.length === 0) {
+        return false;
+      }
+      setHeroPowerCounter(player, "scabbsUsed", 1);
+      state.pendingInteraction = {
+        kind: "discover",
+        interactionId: nextInteractionId(state),
+        playerId: player.id,
+        sourceInstanceId: "hero-power-scabbs",
+        options: candidates,
+        filter: {} as DiscoverFilter,
+        remainingDiscoveries: 1,
+        destination: { kind: "hand" },
+      };
+      break;
+    }
+    case "activeDiscoverDeadMinionCopy": {
+      if (state.round < 3 || heroPowerCounter(player, "sylvanasUsed") >= 1) {
+        return false;
+      }
+      const lastBattle = state.lastBattle;
+      if (!lastBattle || !lastBattle.events) {
+        return false;
+      }
+      const deathEvents = lastBattle.events.filter(
+        (e): e is BattleEvent & { minion: MinionInstance } =>
+          e.type === "death" && e.minion !== undefined,
+      );
+      if (deathEvents.length === 0) {
+        return false;
+      }
+      const options: BoardMinionInstance[] = [];
+      for (const event of deathEvents.slice(0, 3)) {
+        const m = event.minion as BoardMinionInstance;
+        const def = getMinionDefinition(m.definitionId);
+        const copy = createMinionInstance(state, m.definitionId, 0);
+        copy.cardId = def.cardId;
+        copy.name = def.name;
+        copy.attack = def.attack;
+        copy.health = def.health;
+        copy.golden = false;
+        copy.grantsTripleReward = false;
+        copy.sellValue = 1;
+        copy.effectCounters = {};
+        options.push(copy);
+      }
+      if (options.length > 0) {
+        setHeroPowerCounter(player, "sylvanasUsed", 1);
+        state.pendingInteraction = {
+          kind: "discover",
+          interactionId: nextInteractionId(state),
+          playerId: player.id,
+          sourceInstanceId: "hero-power-sylvanas",
+          options,
+          filter: {} as DiscoverFilter,
+          remainingDiscoveries: 1,
+          destination: { kind: "hand" },
+        };
+      }
+      break;
+    }
+    case "activeDiscoverBuddy": {
+      if (player.tavernTier < 2) {
+        return false;
+      }
+      const buddyDefId = getBuddyDefinitionIdForHeroPower(
+        player.heroPowerId,
+      );
+      if (!buddyDefId) {
+        return false;
+      }
+      const buddy = createMinionInstance(state, buddyDefId, 0);
+      if (buddy) {
+        buddy.sellValue = 1;
+        addCardToHand(state, player, buddy);
+      }
+      break;
+    }
+    case "activeGetPirateCostReduces": {
+      const pirate = drawMatchingFromPool(
+        state,
+        player.tavernTier,
+        (d) => d.tier <= player.tavernTier && definitionHasTribe(d, "pirate"),
+      );
+      if (pirate) {
+        addCardToHand(state, player, pirate);
+      }
+      break;
+    }
+    case "activeCopyLastTavernSpell": {
+      if (!player.lastTavernSpellDefinitionId) {
+        return false;
+      }
+      addGeneratedTavernSpellToHand(
+        state,
+        player,
+        player.lastTavernSpellDefinitionId,
+      );
+      break;
+    }
+    case "activeRefreshOpponentMinions": {
+      const opponent = findNextOpponentForHeroPower(state, player);
+      if (!opponent || opponent.board.length === 0) {
+        return false;
+      }
+      releaseShop(state, player);
+      const copies: BoardMinionInstance[] = [];
+      for (const m of opponent.board) {
+        const copy = structuredClone(m);
+        copy.instanceId = `minion-${state.nextInstanceId++}`;
+        copy.golden = false;
+        copy.grantsTripleReward = false;
+        copy.sellValue = 1;
+        copies.push(copy);
+      }
+      const shopSize = playerHasHeroPower(
+        player,
+        "twoGoldMinionRefresh",
+      )
+        ? 4
+        : 5;
+      player.shop = copies.slice(0, shopSize);
+      while (player.shop.length < shopSize) {
+        const filler = drawMatchingFromPool(
+          state,
+          player.tavernTier,
+          (d) => d.tier <= player.tavernTier,
+        );
+        if (filler) {
+          player.shop.push(filler);
+        } else {
+          break;
+        }
+      }
+      for (const minion of player.shop) {
+        reconcileConditionalMinion(minion);
+        refreshDynamicMinionDescription(minion, player);
+      }
+      break;
+    }
+    case "activeStealFirstKillNextCombat": {
+      setHeroPowerCounter(player, "rafaamActive", 1);
+      break;
+    }
+    case "activeLockCardUnlockLater": {
+      if (!targetInstanceId) {
+        return false;
+      }
+      const shopIndex = player.shop.findIndex(
+        (m) => m.instanceId === targetInstanceId,
+      );
+      if (shopIndex < 0) {
+        return false;
+      }
+      const maievSlots = heroPowerCounter(player, "maievSlots");
+      if (maievSlots >= 2) {
+        return false;
+      }
+      setHeroPowerCounter(player, "maievSlots", maievSlots + 1);
+      break;
+    }
+    case "activeDigForGolden": {
+      const digs = heroPowerCounter(player, "eudoraDigs") + 1;
+      setHeroPowerCounter(player, "eudoraDigs", digs);
+      if (digs >= 4) {
+        setHeroPowerCounter(player, "eudoraDigs", 0);
+        const golden = drawMatchingFromPool(
+          state,
+          player.tavernTier,
+          (d) => d.tier <= player.tavernTier,
+        );
+        if (golden) {
+          const def = getMinionDefinition(golden.definitionId);
+          golden.golden = true;
+          golden.cardId = def.goldenCardId ?? def.cardId;
+          golden.name = `金色·${def.name}`;
+          golden.attack = def.attack * 2;
+          golden.health = def.health * 2;
+          golden.sellValue = 1;
+          golden.grantsTripleReward = false;
+          addCardToHand(state, player, golden);
+        }
+      }
+      break;
+    }
+    case "activeBetOnWinner": {
+      if (heroPowerCounter(player, "barovBetActive") >= 1) {
+        return false;
+      }
+      const otherPlayers = state.players.filter(
+        (p) => p.alive && p.id !== player.id,
+      );
+      if (otherPlayers.length === 0) {
+        return false;
+      }
+      const target =
+        otherPlayers[randomIndex(state, otherPlayers.length)];
+      setHeroPowerCounter(player, "barovBetActive", 1);
+      setHeroPowerCounter(
+        player,
+        "barovBetTargetId",
+        // Store as hash of player id for tracking
+        parseInt(target.id.replace("player-", ""), 10),
+      );
+      break;
+    }
+    case "activeFindMissingTriple": {
+      const wishes = heroPowerCounter(player, "zephrysWishes");
+      if (wishes <= 0) {
+        return false;
+      }
+      let found = false;
+      for (const card of player.hand) {
+        if (card.kind !== "minion") {
+          continue;
+        }
+        const matches = player.hand.filter(
+          (c) =>
+            c.kind === "minion" &&
+            c.definitionId === card.definitionId &&
+            c.instanceId !== card.instanceId,
+        );
+        if (matches.length >= 1 && player.hand.length < MAX_HAND_SIZE) {
+          const copy = createMinionInstance(
+            state,
+            card.definitionId,
+            0,
+          );
+          copy.sellValue = 1;
+          addCardToHand(state, player, copy);
+          setHeroPowerCounter(
+            player,
+            "zephrysWishes",
+            wishes - 1,
+          );
+          found = true;
+          break;
+        }
+      }
+      if (!found) {
+        player.gold += baseCost;
+        player.goldSpentThisTurn -= baseCost;
+        player.heroPowerActiveThisTurn = false;
+        return false;
+      }
+      break;
+    }
+    case "activeKillUndeadForUndead": {
+      if (player.tavernTier < 2) {
+        return false;
+      }
+      const undeadIndex = player.board.findIndex((m) =>
+        m.tribes.includes("undead"),
+      );
+      if (undeadIndex < 0) {
+        return false;
+      }
+      player.board.splice(undeadIndex, 1);
+      const undead = drawMatchingFromPool(
+        state,
+        player.tavernTier,
+        (d) =>
+          d.tier <= player.tavernTier &&
+          definitionHasTribe(d, "undead"),
+      );
+      if (undead && player.hand.length < MAX_HAND_SIZE) {
+        addCardToHand(state, player, undead);
+      }
+      break;
+    }
+    case "activeStealAllTavernCards": {
+      if (player.shop.length === 0) {
+        return false;
+      }
+      for (const minion of [...player.shop]) {
+        if (player.hand.length < MAX_HAND_SIZE) {
+          minion.sellValue = 1;
+          addCardToHand(state, player, minion);
+        }
+      }
+      player.shop = [];
+      fillShop(state, player);
+      break;
+    }
+    case "activeUnlockZergTier": {
+      const currentTier = heroPowerCounter(player, "kerriganTier");
+      if (currentTier >= 2) {
+        return false;
+      }
+      setHeroPowerCounter(
+        player,
+        "kerriganTier",
+        currentTier + 1,
+      );
+      break;
+    }
+    case "activeBuildCustomUndead": {
+      const works = heroPowerCounter(player, "putricideWorks");
+      if (works <= 0) {
+        return false;
+      }
+      setHeroPowerCounter(player, "putricideWorks", works - 1);
+      if (works === 3) {
+        beginDiscoverInteraction(
+          state,
+          player,
+          "hero-power-putricide-first",
+          {
+            maximumTier: player.tavernTier,
+            tribe: "undead",
+          } as DiscoverFilter,
+          1,
+          {
+            kind: "customUndeadFirst",
+            sourceTrinketDefinitionId: "hero-power-putricide",
+          },
+          "tavernSpellCast",
+        );
+      }
+      break;
+    }
+    default:
+      return false;
+  }
+
+  applyGoldThresholdTrinket(state, player);
+  return true;
+}
+
+function findNextOpponentForHeroPower(
+  state: GameState,
+  player: PlayerState,
+): PlayerState | undefined {
+  return (
+    state.players.find(
+      (p) => p.alive && p.id === player.lastOpponentId,
+    ) ??
+    state.players.find(
+      (p) => p.alive && p.id !== player.id,
+    )
+  );
+}
+
 function reduceGame(
   state: GameState,
   action: GameAction,
@@ -35248,6 +35986,13 @@ function reduceGame(
         next,
         player,
         action.cardInstanceId,
+        action.targetInstanceId,
+      );
+      break;
+    case "ACTIVATE_HERO_POWER":
+      accepted = activateHeroPower(
+        next,
+        player,
         action.targetInstanceId,
       );
       break;

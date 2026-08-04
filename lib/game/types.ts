@@ -1849,6 +1849,8 @@ export interface PlayerState {
   battlecriesTriggered?: number;
   /** Permanent extra Hero Power triggers accumulated from Yogg's wheel. */
   heroPowerExtraTriggers?: number;
+  /** Whether the active hero power has been used this recruit turn. */
+  heroPowerActiveThisTurn?: boolean;
   /** Every successfully played hand card this Recruit turn. */
   cardsPlayedThisTurn: number;
   /** Gold actually deducted during this Recruit turn. */
