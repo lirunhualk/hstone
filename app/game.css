@@ -978,6 +978,48 @@
     cubic-bezier(0.18, 0.82, 0.28, 1) both;
 }
 
+.shop-panel .unit-card::after {
+  content: "";
+  position: absolute;
+  z-index: 5;
+  inset: 0;
+  pointer-events: none;
+  border-radius: var(--card-radius);
+  background: linear-gradient(
+    105deg,
+    transparent 36%,
+    rgb(255 255 255 / 7%) 40%,
+    rgb(255 255 255 / 13%) 43%,
+    rgb(255 255 255 / 7%) 46%,
+    transparent 50%
+  );
+  animation: shop-shine-sweep 4.2s ease-in-out infinite;
+  animation-delay: calc(var(--shine-offset, 0) * 1s);
+}
+
+@keyframes shop-shine-sweep {
+  0%, 100% {
+    opacity: 0;
+    background-position: -100% 0;
+  }
+  8% {
+    opacity: 1;
+  }
+  14% {
+    opacity: 0;
+  }
+  100% {
+    background-position: 200% 0;
+  }
+}
+
+.shop-panel .unit-card:nth-child(1) { --shine-offset: 0; }
+.shop-panel .unit-card:nth-child(2) { --shine-offset: 1.4; }
+.shop-panel .unit-card:nth-child(3) { --shine-offset: 2.8; }
+.shop-panel .unit-card:nth-child(4) { --shine-offset: 4.2; }
+.shop-panel .unit-card:nth-child(5) { --shine-offset: 5.6; }
+.shop-panel .unit-card:nth-child(6) { --shine-offset: 7.0; }
+
 .shop-panel .card-row > :nth-child(2) {
   animation-delay: 32ms;
 }
@@ -2698,6 +2740,25 @@
   box-shadow:
     0 -74px 0 rgb(50 215 196 / 5%),
     0 -148px 0 rgb(155 140 255 / 5%);
+}
+
+.game-shell[data-phase="combat"] .board-panel,
+.game-shell.combat-phase .board-panel {
+  background:
+    radial-gradient(ellipse at center, rgb(255 107 115 / 5%), transparent 64%),
+    radial-gradient(ellipse at 50% 70%, rgb(255 140 60 / 4%), transparent 68%),
+    linear-gradient(180deg, rgb(24 12 14 / 92%), rgb(12 8 10 / 96%));
+  transition: background 320ms ease;
+}
+
+.game-shell[data-phase="combat"] .board-panel::before {
+  position: absolute;
+  z-index: 1;
+  inset: 0;
+  pointer-events: none;
+  content: "";
+  border: 1px solid rgb(255 90 80 / 14%);
+  border-radius: inherit;
 }
 
 .board {
