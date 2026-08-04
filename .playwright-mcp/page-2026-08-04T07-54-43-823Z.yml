@@ -1,0 +1,758 @@
+- generic [active] [ref=f18e1]:
+  - generic [ref=f18e4]:
+    - list [ref=f18e5]:
+      - listitem [ref=f18e6]:
+        - link "首页" [ref=f18e7] [cursor=pointer]:
+          - /url: //www.bilibili.com
+      - listitem [ref=f18e15]:
+        - link "番剧" [ref=f18e16] [cursor=pointer]:
+          - /url: //www.bilibili.com/anime/
+      - listitem [ref=f18e17]:
+        - link "直播" [ref=f18e18] [cursor=pointer]:
+          - /url: //live.bilibili.com
+      - listitem [ref=f18e19]:
+        - link "游戏中心" [ref=f18e21] [cursor=pointer]:
+          - /url: //game.bilibili.com/platform
+      - listitem [ref=f18e22]:
+        - link "会员购" [ref=f18e23] [cursor=pointer]:
+          - /url: //show.bilibili.com/platform/home.html?msource=pc_web
+      - listitem [ref=f18e24]:
+        - link "漫画" [ref=f18e25] [cursor=pointer]:
+          - /url: //manga.bilibili.com?from=bill_top_mnav
+      - listitem [ref=f18e26]:
+        - link "赛事" [ref=f18e27] [cursor=pointer]:
+          - /url: //www.bilibili.com/match/home/
+      - listitem
+    - list [ref=f18e28]:
+      - listitem [ref=f18e29] [cursor=pointer]:
+        - listitem [ref=f18e30]:
+          - generic [ref=f18e31]: 登录
+          - generic [ref=f18e35]:
+            - paragraph [ref=f18e36]: 登录后你可以：
+            - generic [ref=f18e37]:
+              - generic [ref=f18e38]: 免费看高清视频
+              - generic [ref=f18e44]: 多端同步播放记录
+              - generic [ref=f18e49]: 发表弹幕/评论
+              - generic [ref=f18e57]: 热门番剧影视看不停
+            - generic [ref=f18e62]: 立即登录
+            - generic [ref=f18e63]: 首次使用？ 点我注册
+      - listitem [ref=f18e64] [cursor=pointer]:
+        - listitem [ref=f18e66]:
+          - link [ref=f18e67]:
+            - /url: //account.bilibili.com/big
+      - listitem [ref=f18e72] [cursor=pointer]
+      - listitem [ref=f18e77] [cursor=pointer]
+      - listitem [ref=f18e85] [cursor=pointer]
+      - listitem [ref=f18e90] [cursor=pointer]
+      - listitem [ref=f18e94] [cursor=pointer]
+      - listitem [ref=f18e100] [cursor=pointer]:
+        - listitem [ref=f18e101]
+  - generic [ref=f18e109]:
+    - generic [ref=f18e110]:
+      - generic [ref=f18e114]:
+        - textbox "输入关键字搜索" [ref=f18e120]: 炉石传说战棋 结束回合 战斗
+        - button "搜索" [ref=f18e121] [cursor=pointer]
+      - navigation [ref=f18e124]:
+        - list [ref=f18e125]:
+          - listitem [ref=f18e126]:
+            - generic [ref=f18e127] [cursor=pointer]: 综合
+          - listitem [ref=f18e129]:
+            - generic [ref=f18e130] [cursor=pointer]:
+              - generic [ref=f18e131]: 视频
+              - generic [ref=f18e132]: 99+
+          - listitem [ref=f18e133]:
+            - generic [ref=f18e134] [cursor=pointer]:
+              - generic [ref=f18e135]: 番剧
+              - generic [ref=f18e136]: "0"
+          - listitem [ref=f18e137]:
+            - generic [ref=f18e138] [cursor=pointer]:
+              - generic [ref=f18e139]: 影视
+              - generic [ref=f18e140]: "0"
+          - listitem [ref=f18e141]:
+            - generic [ref=f18e142] [cursor=pointer]:
+              - generic [ref=f18e143]: 直播
+              - generic [ref=f18e144]: "75"
+          - listitem [ref=f18e145]:
+            - generic [ref=f18e146] [cursor=pointer]:
+              - generic [ref=f18e147]: 专栏
+              - generic [ref=f18e148]: 99+
+          - listitem [ref=f18e149]:
+            - generic [ref=f18e150] [cursor=pointer]:
+              - generic [ref=f18e151]: 用户
+              - generic [ref=f18e152]: "0"
+      - separator [ref=f18e154]
+      - generic [ref=f18e157]:
+        - generic [ref=f18e158]:
+          - button "综合排序" [ref=f18e159] [cursor=pointer]
+          - button "最多播放" [ref=f18e160] [cursor=pointer]
+          - button "最新发布" [ref=f18e161] [cursor=pointer]
+          - button "最多弹幕" [ref=f18e162] [cursor=pointer]
+          - button "最多收藏" [ref=f18e163] [cursor=pointer]
+        - button "更多筛选" [ref=f18e164] [cursor=pointer]
+    - generic [ref=f18e169]:
+      - generic [ref=f18e170]:
+        - generic [ref=f18e173]:
+          - link [ref=f18e174] [cursor=pointer]:
+            - /url: //www.bilibili.com/video/BV1m8V26LEoH/
+            - generic [ref=f18e175]:
+              - img "畸变马林的宝藏匣！饰品全贪+完美运营=8回合宣布吃鸡！12回合结束战斗！" [ref=f18e178]
+              - generic:
+                - generic:
+                  - generic:
+                    - generic: "852"
+                    - generic: "0"
+                  - generic: 04:25
+          - generic [ref=f18e180]:
+            - link [ref=f18e181] [cursor=pointer]:
+              - /url: //www.bilibili.com/video/BV1m8V26LEoH/
+              - heading [level=3] [ref=f18e182]:
+                - text: 畸变马林的宝藏匣！饰品全贪+完美运营=8
+                - emphasis [ref=f18e183]: 回合
+                - text: 宣布吃鸡！12
+                - emphasis [ref=f18e184]: 回合结束战斗
+                - text: ！
+            - link "惜缘不悔 · 06-03" [ref=f18e186] [cursor=pointer]:
+              - /url: //space.bilibili.com/29217192
+              - generic [ref=f18e191]: 惜缘不悔
+              - generic [ref=f18e192]: · 06-03
+        - generic [ref=f18e195]:
+          - link [ref=f18e196] [cursor=pointer]:
+            - /url: //www.bilibili.com/video/BV1NzAazoEMT/
+            - generic [ref=f18e197]:
+              - img "酒馆战棋：回合结束之战斗龙" [ref=f18e200]
+              - generic:
+                - generic:
+                  - generic:
+                    - generic: "220"
+                    - generic: "1"
+                  - generic: 00:48
+          - generic [ref=f18e202]:
+            - link [ref=f18e203] [cursor=pointer]:
+              - /url: //www.bilibili.com/video/BV1NzAazoEMT/
+              - heading [level=3] [ref=f18e204]:
+                - text: 酒馆
+                - emphasis [ref=f18e205]: 战棋
+                - text: ：
+                - emphasis [ref=f18e206]: 回合结束
+                - text: 之
+                - emphasis [ref=f18e207]: 战斗
+                - text: 龙
+            - link "炉石烟火 · 02-28" [ref=f18e209] [cursor=pointer]:
+              - /url: //space.bilibili.com/288820049
+              - generic [ref=f18e214]: 炉石烟火
+              - generic [ref=f18e215]: · 02-28
+        - generic [ref=f18e218]:
+          - link [ref=f18e219] [cursor=pointer]:
+            - /url: //www.bilibili.com/video/BV1LcmfBCEU3/
+            - generic [ref=f18e220]:
+              - img "第 9 回合就结束战斗？这局稳吃到没反应😱｜ Jeef｜机翻｜炉石酒馆战棋" [ref=f18e223]
+              - generic:
+                - generic:
+                  - generic:
+                    - generic: "312"
+                    - generic: "0"
+                  - generic: 18:45
+          - generic [ref=f18e225]:
+            - link [ref=f18e226] [cursor=pointer]:
+              - /url: //www.bilibili.com/video/BV1LcmfBCEU3/
+              - heading [level=3] [ref=f18e227]:
+                - text: 第 9
+                - emphasis [ref=f18e228]: 回合
+                - text: 就
+                - emphasis [ref=f18e229]: 结束战斗
+                - text: ？这局稳吃到没反应😱｜ Jeef｜机翻｜
+                - emphasis [ref=f18e230]: 炉石
+                - text: 酒馆
+                - emphasis [ref=f18e231]: 战棋
+            - link "炉石小意 · 2025-12-14" [ref=f18e233] [cursor=pointer]:
+              - /url: //space.bilibili.com/3546828943395525
+              - generic [ref=f18e238]: 炉石小意
+              - generic [ref=f18e239]: · 2025-12-14
+        - generic [ref=f18e242]:
+          - link [ref=f18e243] [cursor=pointer]:
+            - /url: //www.bilibili.com/video/BV153SuB6EAh/
+            - generic [ref=f18e244]:
+              - img "展示神力，十回合十六张动物低语者，十二回合结束战斗" [ref=f18e247]
+              - generic:
+                - generic:
+                  - generic:
+                    - generic: "2163"
+                    - generic: "1"
+                  - generic: 03:31
+          - generic [ref=f18e249]:
+            - link [ref=f18e250] [cursor=pointer]:
+              - /url: //www.bilibili.com/video/BV153SuB6EAh/
+              - heading [level=3] [ref=f18e251]:
+                - text: 展示神力，十
+                - emphasis [ref=f18e252]: 回合
+                - text: 十六张动物低语者，十二
+                - emphasis [ref=f18e253]: 回合结束战斗
+            - link "锅贴雪碧 · 2025-11-27" [ref=f18e255] [cursor=pointer]:
+              - /url: //space.bilibili.com/175022512
+              - generic [ref=f18e260]: 锅贴雪碧
+              - generic [ref=f18e261]: · 2025-11-27
+        - generic [ref=f18e264]:
+          - link [ref=f18e265] [cursor=pointer]:
+            - /url: //www.bilibili.com/video/BV1P1UCBHEZF/
+            - generic [ref=f18e266]:
+              - img "郭枫荷：b-box12回合就结束战斗，超快吃鸡" [ref=f18e269]
+              - generic:
+                - generic:
+                  - generic:
+                    - generic: "767"
+                    - generic: "0"
+                  - generic: 22:29
+          - generic [ref=f18e271]:
+            - link [ref=f18e272] [cursor=pointer]:
+              - /url: //www.bilibili.com/video/BV1P1UCBHEZF/
+              - heading [level=3] [ref=f18e273]:
+                - text: 郭枫荷：b-box12
+                - emphasis [ref=f18e274]: 回合
+                - text: 就
+                - emphasis [ref=f18e275]: 结束战斗
+                - text: ，超快吃鸡
+            - link "不但修改 · 2025-11-24" [ref=f18e277] [cursor=pointer]:
+              - /url: //space.bilibili.com/3493104577415728
+              - generic [ref=f18e282]: 不但修改
+              - generic [ref=f18e283]: · 2025-11-24
+        - generic [ref=f18e286]:
+          - link [ref=f18e287] [cursor=pointer]:
+            - /url: //www.bilibili.com/video/BV1x5y3BUEPg/
+            - generic [ref=f18e288]:
+              - img "9回合9bbox 梆梆两拳结束战斗【点金箭最强英雄】" [ref=f18e291]
+              - generic:
+                - generic:
+                  - generic:
+                    - generic: 1.8万
+                    - generic: "46"
+                  - generic: 08:48
+          - generic [ref=f18e293]:
+            - link [ref=f18e294] [cursor=pointer]:
+              - /url: //www.bilibili.com/video/BV1x5y3BUEPg/
+              - heading [level=3] [ref=f18e295]:
+                - text: "9"
+                - emphasis [ref=f18e296]: 回合
+                - text: 9bbox 梆梆两拳
+                - emphasis [ref=f18e297]: 结束战斗
+                - text: 【点金箭最强英雄】
+            - link "炉石Kimmy · 2025-11-18" [ref=f18e299] [cursor=pointer]:
+              - /url: //space.bilibili.com/6422770
+              - generic [ref=f18e304]: 炉石Kimmy
+              - generic [ref=f18e305]: · 2025-11-18
+        - generic [ref=f18e308]:
+          - link [ref=f18e309] [cursor=pointer]:
+            - /url: //www.bilibili.com/video/BV1o2HrzmEGD/
+            - generic [ref=f18e310]:
+              - img "沙皇快节奏压死，13回合结束战斗！" [ref=f18e313]
+              - generic:
+                - generic:
+                  - generic:
+                    - generic: 2.5万
+                    - generic: "78"
+                  - generic: 15:59
+          - generic [ref=f18e315]:
+            - link [ref=f18e316] [cursor=pointer]:
+              - /url: //www.bilibili.com/video/BV1o2HrzmEGD/
+              - heading [level=3] [ref=f18e317]:
+                - text: 沙皇快节奏压死，13
+                - emphasis [ref=f18e318]: 回合结束战斗
+                - text: ！
+            - link "炉石郭枫荷 · 2025-09-12" [ref=f18e320] [cursor=pointer]:
+              - /url: //space.bilibili.com/485457586
+              - generic [ref=f18e325]: 炉石郭枫荷
+              - generic [ref=f18e326]: · 2025-09-12
+        - generic [ref=f18e329]:
+          - link [ref=f18e330] [cursor=pointer]:
+            - /url: //www.bilibili.com/video/BV1t9ggzpEFE/
+            - generic [ref=f18e331]:
+              - img "【衣锦夜行】力排众议！十二回合强势结束战斗！吹哥原话：我发现我们之间的分歧越来越多了！" [ref=f18e334]
+              - generic:
+                - generic:
+                  - generic:
+                    - generic: 8.1万
+                    - generic: "334"
+                  - generic: 19:31
+          - generic [ref=f18e336]:
+            - link [ref=f18e337] [cursor=pointer]:
+              - /url: //www.bilibili.com/video/BV1t9ggzpEFE/
+              - heading [level=3] [ref=f18e338]:
+                - text: 【衣锦夜行】力排众议！十二
+                - emphasis [ref=f18e339]: 回合
+                - text: 强势
+                - emphasis [ref=f18e340]: 结束战斗
+                - text: ！吹哥原话：我发现我们之间的分歧越来越多了！
+            - link "一斤牙龈切片师 · 2025-07-18" [ref=f18e342] [cursor=pointer]:
+              - /url: //space.bilibili.com/398212342
+              - generic [ref=f18e347]: 一斤牙龈切片师
+              - generic [ref=f18e348]: · 2025-07-18
+        - generic [ref=f18e351]:
+          - link [ref=f18e352] [cursor=pointer]:
+            - /url: //www.bilibili.com/video/BV1s1MdzBE9o/
+            - generic [ref=f18e353]:
+              - img "郭枫荷：伙伴局降维打击，12回合结束战斗！" [ref=f18e356]
+              - generic:
+                - generic:
+                  - generic:
+                    - generic: 2.1万
+                    - generic: "22"
+                  - generic: 16:54
+          - generic [ref=f18e358]:
+            - link [ref=f18e359] [cursor=pointer]:
+              - /url: //www.bilibili.com/video/BV1s1MdzBE9o/
+              - heading [level=3] [ref=f18e360]:
+                - text: 郭枫荷：伙伴局降维打击，12
+                - emphasis [ref=f18e361]: 回合结束战斗
+                - text: ！
+            - link "牛马帝阮 · 2025-07-13" [ref=f18e363] [cursor=pointer]:
+              - /url: //space.bilibili.com/3546908794554555
+              - generic [ref=f18e368]: 牛马帝阮
+              - generic [ref=f18e369]: · 2025-07-13
+        - generic [ref=f18e372]:
+          - link [ref=f18e373] [cursor=pointer]:
+            - /url: //www.bilibili.com/video/BV1fETBzuEUY/
+            - generic [ref=f18e374]:
+              - img "一回合一个小朋友，狂蝠暴风吸入，十二回合结束战斗" [ref=f18e377]
+              - generic:
+                - generic:
+                  - generic:
+                    - generic: "1152"
+                    - generic: "1"
+                  - generic: 05:32
+          - generic [ref=f18e379]:
+            - link [ref=f18e380] [cursor=pointer]:
+              - /url: //www.bilibili.com/video/BV1fETBzuEUY/
+              - heading [level=3] [ref=f18e381]:
+                - text: 一
+                - emphasis [ref=f18e382]: 回合
+                - text: 一个小朋友，狂蝠暴风吸入，十二
+                - emphasis [ref=f18e383]: 回合结束战斗
+            - link "厌倦吃饭老蜜蜂 · 2025-06-10" [ref=f18e385] [cursor=pointer]:
+              - /url: //space.bilibili.com/417253683
+              - generic [ref=f18e390]: 厌倦吃饭老蜜蜂
+              - generic [ref=f18e391]: · 2025-06-10
+        - generic [ref=f18e394]:
+          - link [ref=f18e395] [cursor=pointer]:
+            - /url: //www.bilibili.com/video/BV16VEHzZE1K/
+            - generic [ref=f18e396]:
+              - img "小孩无敌：海鲜乱炖流，黄金残片给了张这个，12回合结束战斗！" [ref=f18e399]
+              - generic:
+                - generic:
+                  - generic:
+                    - generic: 3.9万
+                    - generic: "31"
+                  - generic: 19:52
+          - generic [ref=f18e401]:
+            - link [ref=f18e402] [cursor=pointer]:
+              - /url: //www.bilibili.com/video/BV16VEHzZE1K/
+              - heading [level=3] [ref=f18e403]:
+                - text: 小孩无敌：海鲜乱炖流，黄金残片给了张这个，12
+                - emphasis [ref=f18e404]: 回合结束战斗
+                - text: ！
+            - link "账号已注销 · 2025-05-15" [ref=f18e406] [cursor=pointer]:
+              - /url: //space.bilibili.com/335592910
+              - generic [ref=f18e411]: 账号已注销
+              - generic [ref=f18e412]: · 2025-05-15
+        - generic [ref=f18e415]:
+          - link [ref=f18e416] [cursor=pointer]:
+            - /url: //www.bilibili.com/video/BV1sLVKzCEeU/
+            - generic [ref=f18e417]:
+              - img "小孩无敌：金刚血魔吃茶，12回合结束战斗！" [ref=f18e420]
+              - generic:
+                - generic:
+                  - generic:
+                    - generic: "6052"
+                    - generic: "6"
+                  - generic: 18:18
+          - generic [ref=f18e422]:
+            - link [ref=f18e423] [cursor=pointer]:
+              - /url: //www.bilibili.com/video/BV1sLVKzCEeU/
+              - heading [level=3] [ref=f18e424]:
+                - text: 小孩无敌：金刚血魔吃茶，12
+                - emphasis [ref=f18e425]: 回合结束战斗
+                - text: ！
+            - link "账号已注销 · 2025-05-05" [ref=f18e427] [cursor=pointer]:
+              - /url: //space.bilibili.com/335592910
+              - generic [ref=f18e432]: 账号已注销
+              - generic [ref=f18e433]: · 2025-05-05
+        - generic [ref=f18e436]:
+          - link [ref=f18e437] [cursor=pointer]:
+            - /url: //www.bilibili.com/video/BV1pvL4zMEEE/
+            - generic [ref=f18e438]:
+              - 'img "预览32.2（七）：野猪抉择体系、回合结束体系退环境，新的战斗宝石三倍体系是亮点#炉石传说##酒馆战棋# #大神炉石4月全民创作季#" [ref=f18e441]'
+              - generic:
+                - generic:
+                  - generic:
+                    - generic: 1.3万
+                    - generic: "13"
+                  - generic: 01:34
+          - generic [ref=f18e443]:
+            - link [ref=f18e444] [cursor=pointer]:
+              - /url: //www.bilibili.com/video/BV1pvL4zMEEE/
+              - heading [level=3] [ref=f18e445]:
+                - text: 预览32.2（七）：野猪抉择体系、
+                - emphasis [ref=f18e446]: 回合结束
+                - text: 体系退环境，新的
+                - emphasis [ref=f18e447]: 战斗
+                - text: 宝石三倍体系是亮点#
+                - emphasis [ref=f18e448]: 炉石传说
+                - text: "##酒馆"
+                - emphasis [ref=f18e449]: 战棋
+                - text: "# #大神"
+                - emphasis [ref=f18e450]: 炉石
+                - text: 4月全民创作季#
+            - link "炉石豆哥 · 2025-04-23" [ref=f18e452] [cursor=pointer]:
+              - /url: //space.bilibili.com/1714902358
+              - generic [ref=f18e457]: 炉石豆哥
+              - generic [ref=f18e458]: · 2025-04-23
+        - generic [ref=f18e461]:
+          - link [ref=f18e462] [cursor=pointer]:
+            - /url: //www.bilibili.com/video/BV1hFQWYQEhw/
+            - generic [ref=f18e463]:
+              - img "【夜吹的战棋日记1614】大威恶魔，十二回合结束战斗！" [ref=f18e466]
+              - generic:
+                - generic:
+                  - generic:
+                    - generic: 2.3万
+                    - generic: "89"
+                  - generic: 17:06
+          - generic [ref=f18e468]:
+            - link [ref=f18e469] [cursor=pointer]:
+              - /url: //www.bilibili.com/video/BV1hFQWYQEhw/
+              - heading [level=3] [ref=f18e470]:
+                - text: 【夜吹的
+                - emphasis [ref=f18e471]: 战棋
+                - text: 日记1614】大威恶魔，十二
+                - emphasis [ref=f18e472]: 回合结束战斗
+                - text: ！
+            - link "高冷难神衣锦夜行 · 2025-03-12" [ref=f18e474] [cursor=pointer]:
+              - /url: //space.bilibili.com/383684359
+              - generic [ref=f18e479]: 高冷难神衣锦夜行
+              - generic [ref=f18e480]: · 2025-03-12
+        - generic [ref=f18e483]:
+          - link [ref=f18e484] [cursor=pointer]:
+            - /url: //www.bilibili.com/video/BV1M19iY4ELe/
+            - generic [ref=f18e485]:
+              - img "郭枫荷：马林神仙局，12回合战斗结束！" [ref=f18e488]
+              - generic:
+                - generic:
+                  - generic:
+                    - generic: "9440"
+                    - generic: "14"
+                  - generic: 20:28
+          - generic [ref=f18e490]:
+            - link [ref=f18e491] [cursor=pointer]:
+              - /url: //www.bilibili.com/video/BV1M19iY4ELe/
+              - heading [level=3] [ref=f18e492]:
+                - text: 郭枫荷：马林神仙局，12
+                - emphasis [ref=f18e493]: 回合战斗结束
+                - text: ！
+            - link "账号已注销 · 2025-03-03" [ref=f18e495] [cursor=pointer]:
+              - /url: //space.bilibili.com/335592910
+              - generic [ref=f18e500]: 账号已注销
+              - generic [ref=f18e501]: · 2025-03-03
+        - generic [ref=f18e504]:
+          - link [ref=f18e505] [cursor=pointer]:
+            - /url: //www.bilibili.com/video/BV1JpCBY9EBq/
+            - generic [ref=f18e506]:
+              - img "【安德罗妮郭枫荷】9回合战斗结束了！嗯？" [ref=f18e509]
+              - generic:
+                - generic:
+                  - generic:
+                    - generic: "9094"
+                    - generic: "30"
+                  - generic: 28:40
+          - generic [ref=f18e511]:
+            - link [ref=f18e512] [cursor=pointer]:
+              - /url: //www.bilibili.com/video/BV1JpCBY9EBq/
+              - heading [level=3] [ref=f18e513]:
+                - text: 【安德罗妮郭枫荷】9
+                - emphasis [ref=f18e514]: 回合战斗结束
+                - text: 了！嗯？
+            - link "一只石敢当 · 2024-12-26" [ref=f18e516] [cursor=pointer]:
+              - /url: //space.bilibili.com/3546783332436473
+              - generic [ref=f18e521]: 一只石敢当
+              - generic [ref=f18e522]: · 2024-12-26
+        - generic [ref=f18e525]:
+          - link [ref=f18e526] [cursor=pointer]:
+            - /url: //www.bilibili.com/video/BV1e5USY4EyV/
+            - generic [ref=f18e527]:
+              - img "【快攻速通】第4回合只留一个随从 13回合结束战斗" [ref=f18e530]
+              - generic:
+                - generic:
+                  - generic:
+                    - generic: 3.7万
+                    - generic: "132"
+                  - generic: 10:02
+          - generic [ref=f18e532]:
+            - link [ref=f18e533] [cursor=pointer]:
+              - /url: //www.bilibili.com/video/BV1e5USY4EyV/
+              - heading [level=3] [ref=f18e534]:
+                - text: 【快攻速通】第4
+                - emphasis [ref=f18e535]: 回合
+                - text: 只留一个随从 13
+                - emphasis [ref=f18e536]: 回合结束战斗
+            - link "炉石Kimmy · 2024-11-21" [ref=f18e538] [cursor=pointer]:
+              - /url: //space.bilibili.com/6422770
+              - generic [ref=f18e543]: 炉石Kimmy
+              - generic [ref=f18e544]: · 2024-11-21
+        - generic [ref=f18e547]:
+          - link [ref=f18e548] [cursor=pointer]:
+            - /url: //www.bilibili.com/video/BV1LExae3Ed9/
+            - generic [ref=f18e549]:
+              - img "司机弃牌流：柔心海妖战斗中攒塑造法术，回合结束司机肖像弃掉给全体贴宝石" [ref=f18e552]
+              - generic:
+                - generic:
+                  - generic:
+                    - generic: 2.9万
+                    - generic: "2"
+                  - generic: 00:49
+          - generic [ref=f18e554]:
+            - link [ref=f18e555] [cursor=pointer]:
+              - /url: //www.bilibili.com/video/BV1LExae3Ed9/
+              - heading [level=3] [ref=f18e556]:
+                - text: 司机弃牌流：柔心海妖
+                - emphasis [ref=f18e557]: 战斗
+                - text: 中攒塑造法术，
+                - emphasis [ref=f18e558]: 回合结束
+                - text: 司机肖像弃掉给全体贴宝石
+            - link "炉石豆哥 · 2024-10-01" [ref=f18e560] [cursor=pointer]:
+              - /url: //space.bilibili.com/1714902358
+              - generic [ref=f18e565]: 炉石豆哥
+              - generic [ref=f18e566]: · 2024-10-01
+        - generic [ref=f18e569]:
+          - link [ref=f18e570] [cursor=pointer]:
+            - /url: //www.bilibili.com/video/BV16T42167BS/
+            - generic [ref=f18e571]:
+              - img "贸易大王一碰出铜须！13回合结束战斗！" [ref=f18e574]
+              - generic:
+                - generic:
+                  - generic:
+                    - generic: "2394"
+                    - generic: "6"
+                  - generic: 11:31
+          - generic [ref=f18e576]:
+            - link [ref=f18e577] [cursor=pointer]:
+              - /url: //www.bilibili.com/video/BV16T42167BS/
+              - heading [level=3] [ref=f18e578]:
+                - text: 贸易大王一碰出铜须！13
+                - emphasis [ref=f18e579]: 回合结束战斗
+                - text: ！
+            - link "萌萌哒条码 · 2024-08-01" [ref=f18e581] [cursor=pointer]:
+              - /url: //space.bilibili.com/112179938
+              - generic [ref=f18e586]: 萌萌哒条码
+              - generic [ref=f18e587]: · 2024-08-01
+        - generic [ref=f18e590]:
+          - link [ref=f18e591] [cursor=pointer]:
+            - /url: //www.bilibili.com/video/BV1Ex4y1p7JR/
+            - generic [ref=f18e592]:
+              - img "【一人养猪，一人抄之，此可行也】10回合结束战斗" [ref=f18e595]
+              - generic:
+                - generic:
+                  - generic:
+                    - generic: "168"
+                    - generic: "0"
+                  - generic: 10:33
+          - generic [ref=f18e597]:
+            - link [ref=f18e598] [cursor=pointer]:
+              - /url: //www.bilibili.com/video/BV1Ex4y1p7JR/
+              - heading [level=3] [ref=f18e599]:
+                - text: 【一人养猪，一人抄之，此可行也】10
+                - emphasis [ref=f18e600]: 回合结束战斗
+            - link "王炸小馒头 · 2024-05-25" [ref=f18e602] [cursor=pointer]:
+              - /url: //space.bilibili.com/1802933886
+              - generic [ref=f18e607]: 王炸小馒头
+              - generic [ref=f18e608]: · 2024-05-25
+        - generic [ref=f18e611]:
+          - link [ref=f18e612] [cursor=pointer]:
+            - /url: //www.bilibili.com/video/BV1Vp42127PD/
+            - generic [ref=f18e613]:
+              - img "好吧我也不知道怎么玩了（刷新纪录12回合结束战斗）" [ref=f18e616]
+              - generic:
+                - generic:
+                  - generic:
+                    - generic: "124"
+                    - generic: "0"
+                  - generic: 10:38
+          - generic [ref=f18e618]:
+            - link [ref=f18e619] [cursor=pointer]:
+              - /url: //www.bilibili.com/video/BV1Vp42127PD/
+              - heading [level=3] [ref=f18e620]:
+                - text: 好吧我也不知道怎么玩了（刷新纪录12
+                - emphasis [ref=f18e621]: 回合结束战斗
+                - text: ）
+            - link "陪灭霸种田 · 2024-04-01" [ref=f18e623] [cursor=pointer]:
+              - /url: //space.bilibili.com/280853336
+              - generic [ref=f18e628]: 陪灭霸种田
+              - generic [ref=f18e629]: · 2024-04-01
+        - generic [ref=f18e632]:
+          - link [ref=f18e633] [cursor=pointer]:
+            - /url: //www.bilibili.com/video/BV1gK411i7mF/
+            - generic [ref=f18e634]:
+              - img "12回合结束战斗，大范一个技能60+60+！" [ref=f18e637]
+              - generic:
+                - generic:
+                  - generic:
+                    - generic: 2.1万
+                    - generic: "60"
+                  - generic: 05:42
+          - generic [ref=f18e639]:
+            - link [ref=f18e640] [cursor=pointer]:
+              - /url: //www.bilibili.com/video/BV1gK411i7mF/
+              - heading [level=3] [ref=f18e641]:
+                - text: "12"
+                - emphasis [ref=f18e642]: 回合结束战斗
+                - text: ，大范一个技能60+60+！
+            - link "矮矮的桔子 · 2024-01-13" [ref=f18e644] [cursor=pointer]:
+              - /url: //space.bilibili.com/251569233
+              - generic [ref=f18e649]: 矮矮的桔子
+              - generic [ref=f18e650]: · 2024-01-13
+        - generic [ref=f18e653]:
+          - link [ref=f18e654] [cursor=pointer]:
+            - /url: //www.bilibili.com/video/BV1yg4y1U7kp/
+            - generic [ref=f18e655]:
+              - img "最胡酒馆，四回合结束战斗，酒馆速通第一人!" [ref=f18e658]
+              - generic:
+                - generic:
+                  - generic:
+                    - generic: "181"
+                    - generic: "0"
+                  - generic: 02:53
+          - generic [ref=f18e660]:
+            - link [ref=f18e661] [cursor=pointer]:
+              - /url: //www.bilibili.com/video/BV1yg4y1U7kp/
+              - heading [level=3] [ref=f18e662]:
+                - text: 最胡酒馆，四
+                - emphasis [ref=f18e663]: 回合结束战斗
+                - text: ，酒馆速通第一人!
+            - link "LD殿下哟 · 2024-01-09" [ref=f18e665] [cursor=pointer]:
+              - /url: //space.bilibili.com/287134701
+              - generic [ref=f18e670]: LD殿下哟
+              - generic [ref=f18e671]: · 2024-01-09
+        - generic [ref=f18e674]:
+          - link [ref=f18e675] [cursor=pointer]:
+            - /url: //www.bilibili.com/video/BV1Tz4y1G7mT/
+            - generic [ref=f18e676]:
+              - img "更新27.4.2：邪能元素回归，奥秘伙伴改为回合结束，斯尼德伙伴改为战斗开始" [ref=f18e679]
+              - generic:
+                - generic:
+                  - generic:
+                    - generic: 1.1万
+                    - generic: "5"
+                  - generic: 02:35
+          - generic [ref=f18e681]:
+            - link [ref=f18e682] [cursor=pointer]:
+              - /url: //www.bilibili.com/video/BV1Tz4y1G7mT/
+              - heading [level=3] [ref=f18e683]:
+                - text: 更新27.4.2：邪能元素回归，奥秘伙伴改为
+                - emphasis [ref=f18e684]: 回合结束
+                - text: ，斯尼德伙伴改为
+                - emphasis [ref=f18e685]: 战斗
+                - text: 开始
+            - link "炉石豆哥 · 2023-09-29" [ref=f18e687] [cursor=pointer]:
+              - /url: //space.bilibili.com/1714902358
+              - generic [ref=f18e692]: 炉石豆哥
+              - generic [ref=f18e693]: · 2023-09-29
+      - generic [ref=f18e696]:
+        - button "上一页" [disabled] [ref=f18e697]
+        - button "1" [ref=f18e698] [cursor=pointer]
+        - button "2" [ref=f18e699] [cursor=pointer]
+        - button "下一页" [ref=f18e700] [cursor=pointer]
+  - generic [ref=f18e705]:
+    - generic [ref=f18e706]:
+      - generic [ref=f18e707]:
+        - generic [ref=f18e708]: bilibili
+        - generic [ref=f18e709]:
+          - link "关于我们" [ref=f18e710] [cursor=pointer]:
+            - /url: //www.bilibili.com/blackboard/aboutUs.html
+          - link "联系我们" [ref=f18e711] [cursor=pointer]:
+            - /url: //www.bilibili.com/blackboard/contact.html
+          - link "用户协议" [ref=f18e712] [cursor=pointer]:
+            - /url: //www.bilibili.com/protocal/licence.html
+          - link "加入我们" [ref=f18e713] [cursor=pointer]:
+            - /url: //www.bilibili.com/blackboard/join.html
+          - link "隐私协议" [ref=f18e714] [cursor=pointer]:
+            - /url: //www.bilibili.com/blackboard/privacy-pc.html
+          - link "bilibili认证" [ref=f18e715] [cursor=pointer]:
+            - /url: //account.bilibili.com/account/official/home
+          - link "Investor Relations" [ref=f18e716] [cursor=pointer]:
+            - /url: //ir.bilibili.com/
+      - generic [ref=f18e717]:
+        - generic [ref=f18e718]: 传送门
+        - generic [ref=f18e719]:
+          - link "协议汇总" [ref=f18e720] [cursor=pointer]:
+            - /url: //www.bilibili.com/blackboard/topic/activity-cn8bxPLzz.html
+          - link "活动中心" [ref=f18e721] [cursor=pointer]:
+            - /url: //www.bilibili.com/blackboard/activity-list.html
+          - link "活动专题页" [ref=f18e722] [cursor=pointer]:
+            - /url: //www.bilibili.com/blackboard/topic_list.html
+          - link "侵权申诉" [ref=f18e723] [cursor=pointer]:
+            - /url: //www.bilibili.com/v/copyright/intro/
+          - link "帮助中心" [ref=f18e724] [cursor=pointer]:
+            - /url: //www.bilibili.com/blackboard/help.html
+          - link "社区中心" [ref=f18e725] [cursor=pointer]:
+            - /url: https://www.bilibili.com/blackboard/activity-5zJxM3spoS.html
+          - link "壁纸站" [ref=f18e726] [cursor=pointer]:
+            - /url: //space.bilibili.com/6823116#/album
+          - link "广告合作" [ref=f18e727] [cursor=pointer]:
+            - /url: //e.bilibili.com/
+          - link "名人堂" [ref=f18e728] [cursor=pointer]:
+            - /url: //www.bilibili.com/blackboard/activity-S1jfy69Jz.html
+          - link "MCN管理中心" [ref=f18e729] [cursor=pointer]:
+            - /url: //mcn.bilibili.com/studio/mcn/entry
+          - link "高级弹幕" [ref=f18e730] [cursor=pointer]:
+            - /url: //www.bilibili.com/video/BV1Xx411c7cH/
+          - link "品牌号官网" [ref=f18e731] [cursor=pointer]:
+            - /url: //b.bilibili.com/
+      - generic [ref=f18e732]:
+        - link [ref=f18e734] [cursor=pointer]:
+          - /url: //app.bilibili.com/
+          - paragraph [ref=f18e738]: 下载APP
+        - link [ref=f18e740] [cursor=pointer]:
+          - /url: //love.bilibili.com/
+          - paragraph [ref=f18e747]: 公益
+        - link [ref=f18e749] [cursor=pointer]:
+          - /url: //weibo.com/bilibiliweb
+          - paragraph [ref=f18e753]: 官方微博
+        - paragraph [ref=f18e759]: 官方微信
+    - generic [ref=f18e762]:
+      - generic [ref=f18e763]:
+        - link "营业执照" [ref=f18e764] [cursor=pointer]:
+          - /url: //i0.hdslb.com/bfs/activity-plat/static/20240516/9ccf041718e5d6d6dfaebc91b85c791c/gd85E6tDco.jpg
+        - text: 信息网络传播视听节目许可证：0910417
+        - link "网络文化经营许可证 沪网文【2025】0258-085号" [ref=f18e765] [cursor=pointer]:
+          - /url: //i0.hdslb.com/bfs/activity-plat/static/20260209/3b3c5705bda98d50983f6f47df360fef/K4t52YryBV.jpeg
+        - text: 广播电视节目制作经营许可证：（沪）字第01248号增值电信业务经营许可证 沪B2-20100043
+      - generic [ref=f18e766]:
+        - link "互联网ICP备案：沪ICP备13002172号-3" [ref=f18e767] [cursor=pointer]:
+          - /url: //beian.miit.gov.cn/
+        - link "出版物经营许可证 沪批字第U6699 号" [ref=f18e768] [cursor=pointer]:
+          - /url: //i0.hdslb.com/bfs/activity-plat/static/20240516/9ccf041718e5d6d6dfaebc91b85c791c/4ainzbFKao.jpg
+        - text: 互联网药品信息服务资格证 沪-非经营性-2022-0011营业性演出许可证 沪市文演（经）00-2253 |
+      - generic [ref=f18e769]:
+        - link "不良信息举报邮箱：help@bilibili.com" [ref=f18e770] [cursor=pointer]:
+          - /url: mailto:help@bilibili.com
+        - link "涉未成年举报邮箱：teenprotect@bilibili.com" [ref=f18e771] [cursor=pointer]:
+          - /url: mailto:teenprotect@bilibili.com
+        - text: 不良信息举报电话：4006262233转3
+        - link "上海互联网举报中心 |" [ref=f18e773] [cursor=pointer]:
+          - /url: http://www.shjbzx.cn/
+        - link "12345政务服务便民热线 |" [ref=f18e774] [cursor=pointer]:
+          - /url: http://www.sh12345.gov.cn/
+      - generic [ref=f18e775]:
+        - link "沪公网安备31011002002436号 |" [ref=f18e777] [cursor=pointer]:
+          - /url: http://www.beian.gov.cn/portal/registerSystemInfo?recordcode=31011002002436
+        - link "儿童色情信息举报专区 |" [ref=f18e778] [cursor=pointer]:
+          - /url: mailto:userreport@bilibili.com
+        - link "扫黄打非举报" [ref=f18e779] [cursor=pointer]:
+          - /url: https://bzpt.shdf.gov.cn/www/shouye/gzfw/wsjb/index.shtml
+      - generic [ref=f18e780]:
+        - link "网信算备310110764385705230011号" [ref=f18e781] [cursor=pointer]:
+          - /url: https://beian.cac.gov.cn/api/static/fileUpload/principalOrithm/additional/user_699bbd78-36f4-459c-aeb0-bf98a2a562d8_6185ea2c-c84c-404a-9280-c5465af05948.pdf
+        - link "网信算备310110764385702230013号" [ref=f18e782] [cursor=pointer]:
+          - /url: https://beian.cac.gov.cn/api/static/fileUpload/principalOrithm/additional/user_699bbd78-36f4-459c-aeb0-bf98a2a562d8_e03e6855-76a6-43fb-b799-d090e7fce25d.pdf
+      - generic [ref=f18e783]:
+        - text: 网上有害信息举报专区：
+        - link "中国互联网违法和不良信息举报中心" [ref=f18e785] [cursor=pointer]:
+          - /url: https://www.12377.cn/
+        - text: 亲爱的市民朋友，上海警方反诈劝阻电话"96110"系专门针对避免您财产被骗受损而设，请您一旦收到来电，立即接听。
+      - generic [ref=f18e786]: 公司名称：上海宽娱数码科技有限公司 |公司地址：上海市杨浦区政立路489号 |电话：021-25099888
