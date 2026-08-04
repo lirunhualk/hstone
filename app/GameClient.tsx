@@ -39,6 +39,8 @@ import {
   getHeroPowerDefinition,
   getHeroPowerProgressText,
   getSystemEventDefinition,
+  heroPowerActiveCost,
+  heroPowerCanBeManuallyActivated,
   getTrinketAliasKind,
   getTrinketDefinition,
   getTrinketProgressText,
@@ -4152,6 +4154,11 @@ export default function GameClient() {
         humanHeroPowerProgress ? ` · ${humanHeroPowerProgress}` : ""
       }`
     : null;
+  const humanHeroPowerActive =
+    humanHeroPower !== null &&
+    heroPowerCanBeManuallyActivated(humanHeroPower.id);
+  const humanHeroPowerUsedThisTurn =
+    human.heroPowerActiveThisTurn === true;
   const systemEvent = game.systemEventId
     ? getSystemEventDefinition(game.systemEventId)
     : null;
@@ -4293,6 +4300,15 @@ export default function GameClient() {
   const interactionLocked =
     game.pendingInteraction !== null ||
     queuedRecruitBloodGemPulse?.kind === "bloodGemPulse";
+  const humanHeroPowerCanActivate =
+    humanHeroPowerActive &&
+    !humanHeroPowerUsedThisTurn &&
+    !interactionLocked &&
+    game.phase === "recruit";
+  const humanHeroPowerCost =
+    humanHeroPower ? heroPowerActiveCost(humanHeroPower.effect) : 99;
+  const humanHeroPowerAffordable =
+    humanHeroPowerCost <= human.gold;
   const modalInteractionLocked = interactionRequiresModalBackdrop(
     game.pendingInteraction,
   );
@@ -6943,34 +6959,76 @@ export default function GameClient() {
             </span>
           )}
         </div>
-        <div
-          className={`hud-hero-power${
-            game.phase === "combat" && displayedHumanArmor > 0 ? "" : ""
-          }`}
-          aria-label={
-            humanHeroPower
-              ? `${humanHero?.name ?? "英雄"}，英雄技能 ${humanHeroPower.name}：${
-                  humanHeroPowerStatus ?? humanHeroPower.description
-                }`
-              : "英雄与英雄技能：无"
-          }
-          data-testid="human-hero-power"
-          title={humanHeroPowerStatus ?? "尚未获得英雄技能"}
-        >
-          {humanHero && (
-            <span className="hero-hud-portrait" aria-hidden="true">
-              <CardArtwork unit={humanHero} kind="portrait" />
+        {humanHeroPowerCanActivate ? (
+          <button
+            type="button"
+            className={`hud-hero-power${
+              humanHeroPowerAffordable ? " is-affordable" : " is-unaffordable"
+            }`}
+            aria-label={
+              humanHeroPower
+                ? `${humanHero?.name ?? "英雄"}，英雄技能 ${humanHeroPower.name} · 费用 ${humanHeroPowerCost} 金币：${humanHeroPowerStatus ?? humanHeroPower.description}`
+                : "英雄与英雄技能：无"
+            }
+            data-testid="human-hero-power"
+            title={`${humanHeroPower?.name ?? "英雄技能"} · ${humanHeroPowerCost} 金币${humanHeroPowerAffordable ? "" : " · 金币不足"}`}
+            onClick={() => send({ type: "ACTIVATE_HERO_POWER" })}
+            disabled={!humanHeroPowerAffordable}
+          >
+            {humanHero && (
+              <span className="hero-hud-portrait" aria-hidden="true">
+                <CardArtwork unit={humanHero} kind="portrait" />
+              </span>
+            )}
+            <small>{humanHero?.name ?? "英雄技能"}</small>
+            <strong>{humanHeroPower?.name ?? "无"}</strong>
+            <span>
+              {humanHeroPowerStatus ??
+                (game.lobbySystemsEnabled
+                  ? "等待选择英雄"
+                  : "旧存档沿用中立英雄")}
             </span>
-          )}
-          <small>{humanHero?.name ?? "英雄技能"}</small>
-          <strong>{humanHeroPower?.name ?? "无"}</strong>
-          <span>
-            {humanHeroPowerStatus ??
-              (game.lobbySystemsEnabled
-                ? "等待选择英雄"
-                : "旧存档沿用中立英雄")}
-          </span>
-        </div>
+            <span className="hero-power-cost-badge">
+              {humanHeroPowerCost} 币
+            </span>
+          </button>
+        ) : (
+          <div
+            className={`hud-hero-power${
+              humanHeroPowerActive ? " is-used" : ""
+            }`}
+            aria-label={
+              humanHeroPower
+                ? `${humanHero?.name ?? "英雄"}，英雄技能 ${humanHeroPower.name}：${humanHeroPowerStatus ?? humanHeroPower.description}`
+                : "英雄与英雄技能：无"
+            }
+            data-testid="human-hero-power"
+            title={
+              humanHeroPowerUsedThisTurn
+                ? "本轮已使用英雄技能"
+                : humanHeroPowerActive
+                  ? "英雄技能无法使用（战斗阶段或锁定中）"
+                  : humanHeroPowerStatus ?? "尚未获得英雄技能"
+            }
+          >
+            {humanHero && (
+              <span className="hero-hud-portrait" aria-hidden="true">
+                <CardArtwork unit={humanHero} kind="portrait" />
+              </span>
+            )}
+            <small>{humanHero?.name ?? "英雄技能"}</small>
+            <strong>{humanHeroPower?.name ?? "无"}</strong>
+            <span>
+              {humanHeroPowerStatus ??
+                (game.lobbySystemsEnabled
+                  ? "等待选择英雄"
+                  : "旧存档沿用中立英雄")}
+            </span>
+            {humanHeroPowerUsedThisTurn && (
+              <span className="hero-power-used-label">已使用</span>
+            )}
+          </div>
+        )}
         {systemEvent && (
           <button
             type="button"
@@ -9760,7 +9818,9 @@ export default function GameClient() {
                     >
                       <CardArtwork unit={option} kind="portrait" />
                       <span className="hero-power-choice-type">
-                        被动英雄技能
+                        {heroPowerCanBeManuallyActivated(option.id)
+                          ? "主动英雄技能"
+                          : "被动英雄技能"}
                       </span>
                       <strong>{option.name}</strong>
                       <span className="hero-power-choice-copy">

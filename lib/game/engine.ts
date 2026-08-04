@@ -210,6 +210,7 @@ export {
   getHeroPowerProgressText,
   getHeroDefinition,
   getHeroPowerDefinition,
+  heroPowerCanBeManuallyActivated,
   heroesAvailableForTribes,
   isHeroDefinitionId,
   isHeroPowerDefinitionId,
@@ -35184,7 +35185,7 @@ export function createLobbyGame(
   return state;
 }
 
-function heroPowerActiveCost(effect: HeroPowerDefinition["effect"]): number {
+export function heroPowerActiveCost(effect: HeroPowerDefinition["effect"]): number {
   switch (effect) {
     case "activeRandomTavernSpell": return 1;
     case "activeRollDiceForGold": return 1;

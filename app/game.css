@@ -370,6 +370,90 @@
   white-space: nowrap;
 }
 
+button.hud-hero-power {
+  cursor: pointer;
+  touch-action: manipulation;
+  transition:
+    border-color 140ms ease,
+    box-shadow 140ms ease,
+    filter 140ms ease,
+    transform 100ms ease;
+}
+
+button.hud-hero-power.is-affordable {
+  border-color: rgb(50 215 196 / 62%);
+  box-shadow:
+    inset 0 1px 0 rgb(255 255 255 / 8%),
+    0 0 0 2px rgb(50 215 196 / 18%),
+    0 0 18px rgb(50 215 196 / 14%);
+}
+
+button.hud-hero-power.is-affordable:hover:not(:disabled) {
+  border-color: rgb(50 215 196 / 86%);
+  box-shadow:
+    inset 0 1px 0 rgb(255 255 255 / 12%),
+    0 0 0 3px rgb(50 215 196 / 32%),
+    0 0 26px rgb(50 215 196 / 24%);
+  filter: brightness(1.12);
+  transform: translateY(-2px);
+}
+
+button.hud-hero-power:disabled,
+button.hud-hero-power.is-unaffordable {
+  cursor: not-allowed;
+  opacity: 0.58;
+}
+
+.hud-hero-power.is-used {
+  opacity: 0.55;
+}
+
+.hero-power-cost-badge {
+  position: absolute;
+  z-index: 5;
+  right: 4px;
+  top: 4px;
+  display: inline-flex;
+  min-width: 24px;
+  min-height: 18px;
+  align-items: center;
+  justify-content: center;
+  padding: 2px 5px;
+  border: 1px solid rgb(246 190 85 / 52%);
+  border-radius: 6px;
+  color: #2b1b04;
+  background: linear-gradient(135deg, #ffe39b, var(--gold));
+  font-size: 9px;
+  font-weight: 900;
+  line-height: 1;
+}
+
+button.hud-hero-power.is-unaffordable .hero-power-cost-badge {
+  border-color: rgb(255 107 115 / 48%);
+  color: #ffe4e7;
+  background: rgb(148 28 28 / 88%);
+}
+
+.hero-power-used-label {
+  position: absolute;
+  z-index: 5;
+  right: 4px;
+  top: 4px;
+  display: inline-flex;
+  min-width: 32px;
+  min-height: 18px;
+  align-items: center;
+  justify-content: center;
+  padding: 2px 6px;
+  border: 1px solid rgb(155 140 255 / 48%);
+  border-radius: 6px;
+  color: #ded8ff;
+  background: rgb(55 45 110 / 86%);
+  font-size: 9px;
+  font-weight: 900;
+  line-height: 1;
+}
+
 .hero-hud-portrait {
   position: absolute;
   left: -8px;
