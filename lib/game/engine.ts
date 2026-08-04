@@ -21417,6 +21417,136 @@ function sellAiMaturePatientScouts(
   return sold;
 }
 
+function tryActivateAiHeroPower(
+  state: GameState,
+  player: PlayerState,
+): void {
+  if (
+    !player.heroPowerId ||
+    !heroPowerCanBeManuallyActivated(player.heroPowerId)
+  ) {
+    return;
+  }
+  if (player.heroPowerActiveThisTurn) {
+    return;
+  }
+  const definition = getHeroPowerDefinition(player.heroPowerId);
+  const targetMode = heroPowerNeedsTarget(definition.effect);
+  const cost = heroPowerActiveCost(definition.effect);
+  if (cost > player.gold) {
+    return;
+  }
+
+  if (!targetMode) {
+    activateHeroPower(state, player);
+    return;
+  }
+
+  if (targetMode === "board" && player.board.length > 0) {
+    const targetInstanceId = selectAiHeroPowerBoardTarget(
+      state,
+      player,
+      definition.effect,
+    );
+    if (targetInstanceId) {
+      activateHeroPower(state, player, targetInstanceId);
+    }
+    return;
+  }
+
+  if (targetMode === "shop" && player.shop.length > 0) {
+    const targetShopIndex = selectAiHeroPowerShopTarget(
+      player,
+      definition.effect,
+    );
+    if (targetShopIndex >= 0) {
+      activateHeroPower(
+        state,
+        player,
+        player.shop[targetShopIndex].instanceId,
+      );
+    }
+  }
+}
+
+function selectAiHeroPowerBoardTarget(
+  state: GameState,
+  player: PlayerState,
+  effect: HeroPowerDefinition["effect"],
+): string | null {
+  if (player.board.length === 0) return null;
+
+  switch (effect) {
+    case "activeGiveDivineShield": {
+      const candidates = player.board.filter(
+        (m) => !m.divineShield && !m.venomous && !m.poisonous,
+      );
+      if (candidates.length === 0) return null;
+      candidates.sort((a, b) => b.attack - a.attack);
+      return candidates[0].instanceId;
+    }
+    case "activeScalingTargetBuff": {
+      const candidates = [...player.board];
+      if (candidates.length === 0) return null;
+      candidates.sort(
+        (a, b) =>
+          minionScore(player, b) * (b.golden ? 1.5 : 1) -
+          minionScore(player, a) * (a.golden ? 1.5 : 1),
+      );
+      return candidates[0].instanceId;
+    }
+    case "activeKillUndeadForUndead": {
+      const candidates = player.board.filter((m) => {
+        const def = getMinionDefinition(m.definitionId);
+        return def.tribe === "undead" || (def.tribes ?? []).includes("undead");
+      });
+      const weakest = candidates.sort(
+        (a, b) => minionScore(player, a) - minionScore(player, b),
+      )[0];
+      return weakest?.instanceId ?? null;
+    }
+    default:
+      return null;
+  }
+}
+
+function selectAiHeroPowerShopTarget(
+  player: PlayerState,
+  effect: HeroPowerDefinition["effect"],
+): number {
+  if (player.shop.length === 0) return -1;
+
+  switch (effect) {
+    case "activeShrinkMinionToHand":
+    case "activeDoubleHealthTavernMinion":
+    case "activeStealTavernCardDamage":
+    case "activeLockCardUnlockLater": {
+      let bestIndex = -1;
+      let bestScore = Number.NEGATIVE_INFINITY;
+      for (let i = 0; i < player.shop.length; i++) {
+        const score = minionScore(player, player.shop[i]);
+        if (score > bestScore) {
+          bestScore = score;
+          bestIndex = i;
+        }
+      }
+      return bestIndex;
+    }
+    case "activeReplaceHigherTier": {
+      for (let i = 0; i < player.shop.length; i++) {
+        const minion = player.shop[i];
+        if (minion.tier < Math.min(6, player.tavernTier)) {
+          const score = -minionScore(player, minion);
+          return i;
+        }
+      }
+      return -1;
+    }
+    default:
+      return -1;
+  }
+}
+
 function runAiRecruit(state: GameState, player: PlayerState): void {
   const profile = getAiStrategyProfile(player.id);
   let actions = 0;
@@ -21424,6 +21554,8 @@ function runAiRecruit(state: GameState, player: PlayerState): void {
   playAiHand(state, player);
   actions += sellAiMaturePatientScouts(state, player);
   actions += sellAiLossBonusMinions(state, player);
+
+  tryActivateAiHeroPower(state, player);
 
   if (
     shouldUpgradeAiTavernWithResidual(
