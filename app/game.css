@@ -2605,6 +2605,24 @@
   font-weight: 900;
 }
 
+.card-tier::after {
+  position: absolute;
+  z-index: -1;
+  inset: -2px;
+  border-radius: 9px;
+  content: "";
+  background: linear-gradient(135deg, rgb(246 190 85 / 60%), transparent 44%, transparent 56%, rgb(255 220 140 / 40%));
+  opacity: 0;
+  animation: tier-star-glimmer 3.6s ease-in-out infinite;
+  animation-delay: calc(var(--tier-glimmer-offset, 0) * 1s);
+}
+
+@keyframes tier-star-glimmer {
+  0%, 100% { opacity: 0; transform: scale(0.92); }
+  14% { opacity: 0.55; }
+  24% { opacity: 0; transform: scale(1.08); }
+}
+
 .shop-purchase-cost {
   position: absolute;
   z-index: 6;
