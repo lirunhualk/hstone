@@ -605,7 +605,7 @@ export const HERO_POWER_DEFINITIONS = [
     name: "神奇魔术",
     description: "选择一个奥秘。将其置入战场。",
     effect: "chooseSecret",
-    activation: "passive"
+    activation: "active"
   },
   {
     id: "hero-power-tb_baconshop_hp_022",

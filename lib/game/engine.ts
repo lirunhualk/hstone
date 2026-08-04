@@ -35362,6 +35362,7 @@ export function heroPowerActiveCost(effect: HeroPowerDefinition["effect"]): numb
     case "activeStealAllTavernCards": return 11;
     case "activeUnlockZergTier": return 6;
     case "activeBuildCustomUndead": return 3;
+    case "chooseSecret": return 2;
     default: return 99;
   }
 }
@@ -36023,6 +36024,18 @@ function activateHeroPower(
           "tavernSpellCast",
         );
       }
+      break;
+    }
+    case "chooseSecret": {
+      beginDiscoverInteraction(
+        state,
+        player,
+        "hero-power-akazamzarak",
+        { maximumTier: player.tavernTier },
+        1,
+        { kind: "hand" },
+        "tavernSpellCast",
+      );
       break;
     }
     default:
