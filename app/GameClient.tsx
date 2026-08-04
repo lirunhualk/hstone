@@ -7430,6 +7430,11 @@ export default function GameClient() {
                           ? tavernSpellCastFeedback.token
                           : undefined
                       }
+                      heroPowerTarget={
+                        heroPowerTargeting &&
+                        humanHeroPowerTargetMode === "shop" &&
+                        heroPowerTargetValidIds.has(offer.unit.instanceId)
+                      }
                       dragEnabled={
                         canBuyMinionOffer(offer.shopIndex) &&
                         !activeSpellTargetIds.includes(
@@ -7494,6 +7499,14 @@ export default function GameClient() {
                             selectedHandTavernSpell.instanceId,
                             offer.unit.instanceId,
                           );
+                          return;
+                        }
+                        if (
+                          heroPowerTargeting &&
+                          humanHeroPowerTargetMode === "shop" &&
+                          heroPowerTargetValidIds.has(offer.unit.instanceId)
+                        ) {
+                          onHeroPowerTargetClick(offer.unit.instanceId);
                           return;
                         }
                         selectCard({
