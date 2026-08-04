@@ -1286,6 +1286,48 @@
   animation: keyword-windfury-spin 3.4s linear infinite;
 }
 
+.keyword-vfx-cleave {
+  z-index: 5;
+  inset: 18% 8% 28%;
+  pointer-events: none;
+  opacity: 0.76;
+}
+
+.keyword-vfx-cleave::before,
+.keyword-vfx-cleave::after {
+  position: absolute;
+  top: 16%;
+  bottom: 22%;
+  width: 4px;
+  content: "";
+  border-radius: 2px;
+  background: linear-gradient(180deg, rgb(255 190 70 / 90%), rgb(255 130 30 / 60%) 70%, transparent);
+  box-shadow: 0 0 8px rgb(255 150 40 / 50%);
+  transform: rotate(-18deg);
+}
+
+.keyword-vfx-cleave::before {
+  left: 24%;
+}
+
+.keyword-vfx-cleave::after {
+  right: 24%;
+  transform: rotate(18deg);
+}
+
+.keyword-vfx-cleave .keyword-vfx-cleave-center {
+  position: absolute;
+  top: 10%;
+  bottom: 16%;
+  left: 50%;
+  width: 5px;
+  content: "";
+  border-radius: 2px;
+  background: linear-gradient(180deg, rgb(255 210 90 / 95%), rgb(255 150 50 / 72%) 70%, transparent);
+  box-shadow: 0 0 10px rgb(255 160 50 / 56%);
+  transform: translateX(-50%);
+}
+
 .keyword-vfx-windfury::after {
   position: absolute;
   inset: 33%;
@@ -6268,6 +6310,18 @@
   font-size: 15px;
   font-weight: 850;
   transform: translate(-50%, -50%);
+  animation: combat-banner-enter 420ms cubic-bezier(0.22, 1, 0.36, 1) both;
+}
+
+@keyframes combat-banner-enter {
+  0% {
+    opacity: 0;
+    transform: translate(-50%, -50%) scale(0.85) translateY(14px);
+  }
+  100% {
+    opacity: 1;
+    transform: translate(-50%, -50%) scale(1) translateY(0);
+  }
 }
 
 .combat-banner-copy {
@@ -6451,6 +6505,16 @@
 .game-shell[data-phase="result"] .slot,
 .game-shell.combat-phase .slot {
   height: min(23dvh, 192px);
+}
+
+.game-shell[data-phase="combat"] .board-row:first-child::after {
+  content: "";
+  display: block;
+  height: 2px;
+  margin: 4px 8px;
+  background:
+    linear-gradient(90deg, transparent, rgb(246 190 85 / 55%) 20% 80%, transparent);
+  box-shadow: 0 0 12px rgb(246 190 85 / 30%);
 }
 
 .unit-card.is-attacking {
