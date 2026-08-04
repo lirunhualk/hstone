@@ -11005,34 +11005,100 @@ function applyAfterMinionPurchasedHeroPower(
       player.gold += 1;
     }
   }
-  if (
-    !playerHasHeroPower(
-      player,
-      "tavernCoinAfterThreeMinions",
-    )
-  ) {
-    return;
+  if (playerHasHeroPower(player, "tavernCoinAfterThreeMinions")) {
+    const progress = heroPowerCounter(player, "kaelthasMinions") + 1;
+    if (progress >= 3) {
+      setHeroPowerCounter(player, "kaelthasMinions", 0);
+      for (
+        let trigger = 0;
+        trigger < heroPowerTriggerMultiplier(player) &&
+        player.hand.length < MAX_HAND_SIZE;
+        trigger += 1
+      ) {
+        addCardToHand(
+          state,
+          player,
+          createTavernSpell(
+            state,
+            getTavernSpellDefinition("tavern-spell-tavern-coin"),
+          ),
+        );
+      }
+    } else {
+      setHeroPowerCounter(player, "kaelthasMinions", progress);
+    }
   }
-  const progress = heroPowerCounter(player, "kaelthasMinions") + 1;
-  if (progress < 3) {
-    setHeroPowerCounter(player, "kaelthasMinions", progress);
-    return;
+  if (playerHasHeroPower(player, "growingTavernBuff")) {
+    const remaining = heroPowerCounter(player, "saurfangBuys") - 1;
+    if (remaining <= 0) {
+      const buff = heroPowerCounter(player, "saurfangBuff") + 1;
+      setHeroPowerCounter(player, "saurfangBuff", buff);
+      setHeroPowerCounter(player, "saurfangBuys", 4);
+      const multiplier = heroPowerTriggerMultiplier(player);
+      player.tavernMinionAttackBonus += multiplier;
+      player.tavernMinionHealthBonus += multiplier;
+      for (const shopMinion of player.shop) {
+        reconcileWhereverMinion(
+          shopMinion,
+          player.astralAutomatonsSummoned ?? 0,
+          player.eternalKnightsDied ?? 0,
+          player.tavernSpellsCast ?? 0,
+          player.deathrattlesTriggered ?? 0,
+          player.magnetizationsThisGame ?? 0,
+        );
+        refreshDynamicMinionDescription(shopMinion, player);
+      }
+    } else {
+      setHeroPowerCounter(player, "saurfangBuys", remaining);
+    }
   }
-  setHeroPowerCounter(player, "kaelthasMinions", 0);
-  for (
-    let trigger = 0;
-    trigger < heroPowerTriggerMultiplier(player) &&
-    player.hand.length < MAX_HAND_SIZE;
-    trigger += 1
-  ) {
-    addCardToHand(
-      state,
-      player,
-      createTavernSpell(
-        state,
-        getTavernSpellDefinition("tavern-spell-tavern-coin"),
-      ),
-    );
+  if (playerHasHeroPower(player, "totalCardsForSulfuras")) {
+    if (!heroPowerCounter(player, "ragnarosActive")) {
+      const progress = heroPowerCounter(player, "sulfurasCards") + 1;
+      if (progress >= 16) {
+        setHeroPowerCounter(player, "ragnarosActive", 1);
+        setHeroPowerCounter(player, "sulfurasCards", 0);
+        const multiplier = heroPowerTriggerMultiplier(player);
+        player.tavernMinionAttackBonus += 3 * multiplier;
+        player.tavernMinionHealthBonus += 3 * multiplier;
+        for (const shopMinion of player.shop) {
+          reconcileWhereverMinion(
+            shopMinion,
+            player.astralAutomatonsSummoned ?? 0,
+            player.eternalKnightsDied ?? 0,
+            player.tavernSpellsCast ?? 0,
+            player.deathrattlesTriggered ?? 0,
+            player.magnetizationsThisGame ?? 0,
+          );
+          refreshDynamicMinionDescription(shopMinion, player);
+        }
+      } else {
+        setHeroPowerCounter(player, "sulfurasCards", progress);
+      }
+    }
+  }
+  if (playerHasHeroPower(player, "battlecryPurchasesForBrann")) {
+    const definition = getMinionDefinition(minion.definitionId);
+    if (
+      heroPowerCounter(player, "brannBuys") >= 0 &&
+      definition.battlecry &&
+      definition.battlecry.length > 0
+    ) {
+      const progress = heroPowerCounter(player, "brannBuys") + 1;
+      if (progress >= 4 && player.hand.length < MAX_HAND_SIZE) {
+        setHeroPowerCounter(player, "brannBuys", -1);
+        const brann = createMinionInstance(
+          state,
+          BRANN_BRONZEBEARD_DEFINITION_ID,
+          0,
+        );
+        brann.sellValue = 1;
+        brann.grantsTripleReward = false;
+        addCardToHand(state, player, brann);
+      } else {
+        setHeroPowerCounter(player, "brannBuys", progress);
+      }
+    }
   }
 }
 
@@ -11358,6 +11424,46 @@ function sellMinionTransaction(
       "smartSavingsGold",
       heroPowerCounter(player, "smartSavingsGold") + triggerCount,
     );
+  }
+  if (playerHasHeroPower(player, "sellMinionsForRandomMurloc")) {
+    const remaining = heroPowerCounter(player, "flurglSells") - 1;
+    if (remaining <= 0) {
+      setHeroPowerCounter(player, "flurglSells", 5);
+      for (
+        let trigger = 0;
+        trigger < heroPowerTriggerMultiplier(player) &&
+        player.hand.length < MAX_HAND_SIZE;
+        trigger += 1
+      ) {
+        const murloc = drawMatchingFromPool(
+          state,
+          player.tavernTier,
+          (d) => d.tribe === "murloc" || !!(d.tribes && d.tribes.includes("murloc")),
+        );
+        if (murloc) {
+          murloc.sellValue = 1;
+          murloc.grantsTripleReward = false;
+          addCardToHand(state, player, murloc);
+        }
+      }
+    } else {
+      setHeroPowerCounter(player, "flurglSells", remaining);
+    }
+  }
+  if (
+    playerHasHeroPower(player, "hatPassesOnSell") &&
+    effectCounter(minion, "derylHat", 0) >= 1
+  ) {
+    setEffectCounter(minion, "derylHat", 0);
+    if (player.board.length > 0) {
+      const targetIndex = Math.floor(nextRandom(state) * player.board.length);
+      const target = player.board[targetIndex];
+      target.attack += 1;
+      target.health += 1;
+      setEffectCounter(target, "derylHat", 1);
+      reconcileConditionalMinion(target);
+      refreshDynamicMinionDescription(target, player);
+    }
   }
   applyAfterMinionSoldTrinkets(state, player);
   return minion;
@@ -12083,6 +12189,13 @@ function playMinion(
   }
   if (state.pendingInteraction === null) {
     finishCardPlayed(state, player);
+  }
+  if (playerHasHeroPower(player, "hatPassesOnSell")) {
+    minion.attack += 1;
+    minion.health += 1;
+    setEffectCounter(minion, "derylHat", 1);
+    reconcileConditionalMinion(minion);
+    refreshDynamicMinionDescription(minion, player);
   }
   return true;
 }
@@ -14540,6 +14653,8 @@ function heroPowerAiScore(
       return 7;
     case "buffLeftmostCombatKeywords":
       return player.board.length > 0 ? 8 : 5;
+    default:
+      return definition.activation === "active" ? 6 : 5;
   }
 }
 
@@ -31904,6 +32019,37 @@ function resolveCombatDeaths(context: CombatContext): void {
           minion: deathSnapshot,
           message: `${death.minion.name}被消灭。`,
         });
+        const lethalSource =
+          context.lethalDamageSources[death.ownerId]?.[
+            death.minion.instanceId
+          ];
+        if (lethalSource && lethalSource.ownerId !== death.ownerId) {
+          const killerOwnerId = lethalSource.ownerId;
+          if (
+            context.ghostOwnerId !== killerOwnerId
+          ) {
+            const killerOwner = findPlayer(context.state, killerOwnerId);
+            if (
+              killerOwner &&
+              playerHasHeroPower(killerOwner, "permanentAttackOnKill") &&
+              context.boards[killerOwnerId]?.some(
+                (m) => m.instanceId === lethalSource.instanceId,
+              )
+            ) {
+              const multiplier = heroPowerTriggerMultiplier(killerOwner);
+              const ledger =
+                context.retainedCombatEnchantments[killerOwnerId];
+              const retained = (ledger[lethalSource.instanceId] ??= {
+                attack: 0,
+                health: 0,
+                bloodGemAttack: 0,
+                bloodGemHealth: 0,
+                keywords: new Set(),
+              });
+              retained.attack += multiplier;
+            }
+          }
+        }
       }
       for (const death of deaths) {
         removeCombatAuraSource(context, death);
@@ -32375,6 +32521,457 @@ function applyStartOfCombatHeroPowers(
           });
         }
       }
+      }
+    }
+    if (playerHasHeroPower(owner, "combatBuffFlanks")) {
+      const board = context.boards[owner.id];
+      const leftmost = board[0];
+      const rightmost = board.length > 1 ? board[board.length - 1] : undefined;
+      const targets: MinionInstance[] = [];
+      if (leftmost) {
+        targets.push(leftmost);
+      }
+      if (rightmost) {
+        targets.push(rightmost);
+      }
+      const uniqueTargets = targets.filter(
+        (m, i, arr) => arr.findIndex((t) => t.instanceId === m.instanceId) === i,
+      );
+      for (
+        let trigger = 0;
+        trigger < heroPowerTriggerMultiplier(owner);
+        trigger += 1
+      ) {
+        pushBattleEvent(context.events, {
+          type: "startOfCombat",
+          actorPlayerId: owner.id,
+          message: `${owner.name}的"左膀右臂"触发。`,
+        });
+        for (const target of uniqueTargets) {
+          const triggeredHealth = healthGainedFromExternalAttack(target, 2);
+          target.attack += 2;
+          target.health += 1 + triggeredHealth;
+          if (triggeredHealth > 0) {
+            adjustCombatMaximumHealth(
+              context,
+              owner.id,
+              target,
+              1 + triggeredHealth,
+            );
+          }
+          reconcileConditionalMinion(target);
+          const persistentOwner = persistentOwners.get(owner.id);
+          const persistentTarget = persistentOwner?.board.find(
+            (minion) => minion.instanceId === target.instanceId,
+          );
+          if (persistentTarget) {
+            persistentTarget.attack += 2;
+            persistentTarget.health += 1;
+            reconcileConditionalMinion(persistentTarget);
+            refreshDynamicMinionDescription(
+              persistentTarget,
+              persistentOwner,
+            );
+          }
+          pushBattleEvent(context.events, {
+            type: "buff",
+            actorPlayerId: owner.id,
+            targetPlayerId: owner.id,
+            targetInstanceId: target.instanceId,
+            attackDelta: 2,
+            healthDelta: 1 + triggeredHealth,
+            minion: cloneMinion(target),
+            retained: persistentTarget !== undefined,
+            message: `左膀右臂使${target.name}永久获得+2/+1${triggeredHealth > 0 ? `，并在本场战斗中触发+${triggeredHealth}生命值` : ""}。`,
+          });
+        }
+      }
+      for (const target of uniqueTargets) {
+        if (target.health > 0 && target.attack > 0) {
+          performImmediateAttack(context, owner.id, target);
+        }
+      }
+    }
+    if (playerHasHeroPower(owner, "combatBuffPerTribe")) {
+      const board = context.boards[owner.id];
+      const spentThreshold = 10;
+      const goldSpent = owner.goldSpentThisTurn;
+      const scale = 1 + Math.floor(goldSpent / spentThreshold);
+      const buffAttack = 1 * scale;
+      const buffHealth = 1 * scale;
+      const seenTribes = new Set<Tribe>();
+      const buffTargets: MinionInstance[] = [];
+      for (const minion of board) {
+        for (const tribe of minion.tribes) {
+          if (tribe === "neutral" || tribe === "all") {
+            continue;
+          }
+          if (!seenTribes.has(tribe)) {
+            seenTribes.add(tribe);
+            buffTargets.push(minion);
+            break;
+          }
+        }
+      }
+      for (
+        let trigger = 0;
+        trigger < heroPowerTriggerMultiplier(owner);
+        trigger += 1
+      ) {
+        pushBattleEvent(context.events, {
+          type: "startOfCombat",
+          actorPlayerId: owner.id,
+          message: `${owner.name}的"蜡油战队"触发。`,
+        });
+        for (const target of buffTargets) {
+          const triggeredHealth = healthGainedFromExternalAttack(
+            target,
+            buffAttack,
+          );
+          target.attack += buffAttack;
+          target.health += buffHealth + triggeredHealth;
+          if (triggeredHealth > 0) {
+            adjustCombatMaximumHealth(
+              context,
+              owner.id,
+              target,
+              buffHealth + triggeredHealth,
+            );
+          }
+          reconcileConditionalMinion(target);
+          const persistentOwner = persistentOwners.get(owner.id);
+          const persistentTarget = persistentOwner?.board.find(
+            (minion) => minion.instanceId === target.instanceId,
+          );
+          if (persistentTarget) {
+            persistentTarget.attack += buffAttack;
+            persistentTarget.health += buffHealth;
+            reconcileConditionalMinion(persistentTarget);
+            refreshDynamicMinionDescription(
+              persistentTarget,
+              persistentOwner,
+            );
+          }
+          pushBattleEvent(context.events, {
+            type: "buff",
+            actorPlayerId: owner.id,
+            targetPlayerId: owner.id,
+            targetInstanceId: target.instanceId,
+            attackDelta: buffAttack,
+            healthDelta: buffHealth + triggeredHealth,
+            minion: cloneMinion(target),
+            retained: persistentTarget !== undefined,
+            message: `蜡油战队使${target.name}永久获得+${buffAttack}/+${buffHealth}${triggeredHealth > 0 ? `，并在本场战斗中触发+${triggeredHealth}生命值` : ""}。`,
+          });
+        }
+      }
+    }
+    if (playerHasHeroPower(owner, "combatLowestAttackDeathrattle")) {
+      const board = context.boards[owner.id];
+      let lowestAttackMinion: MinionInstance | undefined;
+      let lowestAttackValue = Infinity;
+      for (const minion of board) {
+        if (minion.attack < lowestAttackValue) {
+          lowestAttackValue = minion.attack;
+          lowestAttackMinion = minion;
+        }
+      }
+      if (!lowestAttackMinion) {
+        continue;
+      }
+      for (
+        let trigger = 0;
+        trigger < heroPowerTriggerMultiplier(owner);
+        trigger += 1
+      ) {
+        pushBattleEvent(context.events, {
+          type: "startOfCombat",
+          actorPlayerId: owner.id,
+          targetPlayerId: owner.id,
+          targetInstanceId: lowestAttackMinion.instanceId,
+          message: `${owner.name}的"香氛护命匣"触发。`,
+        });
+        const deathrattleKey = `tamsinDeathrattle:${lowestAttackMinion.instanceId}`;
+        const existing =
+          context.trinketCombatCounters[owner.id][deathrattleKey] ?? 0;
+        context.trinketCombatCounters[owner.id][deathrattleKey] =
+          existing + 1;
+        pushBattleEvent(context.events, {
+          type: "buff",
+          actorPlayerId: owner.id,
+          targetPlayerId: owner.id,
+          targetInstanceId: lowestAttackMinion.instanceId,
+          attackDelta: 0,
+          healthDelta: 0,
+          minion: cloneMinion(lowestAttackMinion),
+          message: `香氛护命匣使${lowestAttackMinion.name}获得亡语：使你的其他随从获得本随从的属性值。`,
+        });
+      }
+    }
+    if (playerHasHeroPower(owner, "combatKillAndResummon")) {
+      const board = context.boards[owner.id];
+      const targetKey = `teronTarget:${owner.id}`;
+      const storedTargetId =
+        context.trinketCombatCounters[owner.id][targetKey];
+      let target: MinionInstance | undefined;
+      if (storedTargetId) {
+        target = board.find(
+          (minion) => minion.instanceId === String(storedTargetId),
+        );
+      }
+      if (!target) {
+        continue;
+      }
+      for (
+        let trigger = 0;
+        trigger < heroPowerTriggerMultiplier(owner);
+        trigger += 1
+      ) {
+        pushBattleEvent(context.events, {
+          type: "startOfCombat",
+          actorPlayerId: owner.id,
+          targetPlayerId: owner.id,
+          targetInstanceId: target.instanceId,
+          message: `${owner.name}的"飞速复活"触发，消灭了${target.name}。`,
+        });
+        const storedCopy = cloneMinion(target);
+        const storedDataKey = `teronStoredData:${owner.id}`;
+        context.trinketCombatCounters[owner.id][storedDataKey] = 1;
+        const armedKey = `teronArmed:${owner.id}`;
+        context.trinketCombatCounters[owner.id][armedKey] = 1;
+        const targetIndex = board.findIndex(
+          (minion) => minion.instanceId === target!.instanceId,
+        );
+        if (targetIndex >= 0) {
+          const removed = board.splice(targetIndex, 1)[0];
+          removeCombatAuraSource(context, {
+            minion: removed,
+            index: targetIndex,
+            ownerId: owner.id,
+            adjacentInstanceIds: [board[targetIndex - 1], board[targetIndex]]
+              .filter(
+                (neighbor): neighbor is MinionInstance =>
+                  neighbor !== undefined && neighbor.health > 0,
+              )
+              .map((neighbor) => neighbor.instanceId),
+          });
+          const deathSnapshot = cloneMinion(removed);
+          deathSnapshot.health = 0;
+          pushBattleEvent(context.events, {
+            type: "death",
+            actorPlayerId: owner.id,
+            actorInstanceId: removed.instanceId,
+            minion: deathSnapshot,
+            message: `${removed.name}被飞速复活消灭。`,
+          });
+          const dead: DeadMinion[] = [
+            {
+              minion: removed,
+              index: targetIndex,
+              ownerId: owner.id,
+              adjacentInstanceIds: [],
+            },
+          ];
+          for (const death of dead) {
+            observeCombatFriendlyDeath(context, death);
+          }
+        }
+      }
+    }
+    if (playerHasHeroPower(owner, "combatSummonHighestAttackDelayed")) {
+      const shouldActivate =
+        (owner.systemEventCounters.round ?? 0) >= 7;
+      if (shouldActivate) {
+        const armedKey = `drektharArmed:${owner.id}`;
+        context.trinketCombatCounters[owner.id][armedKey] = 1;
+        for (
+          let trigger = 0;
+          trigger < heroPowerTriggerMultiplier(owner);
+          trigger += 1
+        ) {
+          pushBattleEvent(context.events, {
+            type: "startOfCombat",
+            actorPlayerId: owner.id,
+            message: `${owner.name}的"霜狼热血"触发。`,
+          });
+          const board = context.boards[owner.id];
+          let highestAttack = -1;
+          for (const minion of board) {
+            if (minion.attack > highestAttack) {
+              highestAttack = minion.attack;
+            }
+          }
+          if (highestAttack < 0) {
+            continue;
+          }
+          if (!rejectCombatSummonForFullBoard(context, owner.id)) {
+            const candidates = board.filter(
+              (minion) => minion.attack === highestAttack,
+            );
+            if (candidates.length > 0) {
+              const source =
+                candidates.length > 1
+                  ? candidates[
+                      randomIndex(context.state, candidates.length)
+                    ]
+                  : candidates[0];
+              const summoned = cloneOwnedMinionForCombat(
+                context.state,
+                source as BoardMinionInstance,
+              );
+              insertCombatMinion(
+                context,
+                owner.id,
+                summoned,
+                board.length,
+                source,
+                `${owner.name}的霜狼热血召唤了${summoned.name}（攻击力最高）的复制。`,
+              );
+            }
+          }
+        }
+      }
+    }
+    if (playerHasHeroPower(owner, "combatSummonHighestHealthDelayed")) {
+      const shouldActivate =
+        (owner.systemEventCounters.round ?? 0) >= 7;
+      if (shouldActivate) {
+        const armedKey = `vanndarArmed:${owner.id}`;
+        context.trinketCombatCounters[owner.id][armedKey] = 1;
+        for (
+          let trigger = 0;
+          trigger < heroPowerTriggerMultiplier(owner);
+          trigger += 1
+        ) {
+          pushBattleEvent(context.events, {
+            type: "startOfCombat",
+            actorPlayerId: owner.id,
+            message: `${owner.name}的"雷矛之力"触发。`,
+          });
+          const board = context.boards[owner.id];
+          let highestHealth = -1;
+          for (const minion of board) {
+            if (minion.health > highestHealth) {
+              highestHealth = minion.health;
+            }
+          }
+          if (highestHealth < 0) {
+            continue;
+          }
+          if (!rejectCombatSummonForFullBoard(context, owner.id)) {
+            const candidates = board.filter(
+              (minion) => minion.health === highestHealth,
+            );
+            if (candidates.length > 0) {
+              const source =
+                candidates.length > 1
+                  ? candidates[
+                      randomIndex(context.state, candidates.length)
+                    ]
+                  : candidates[0];
+              const summoned = cloneOwnedMinionForCombat(
+                context.state,
+                source as BoardMinionInstance,
+              );
+              insertCombatMinion(
+                context,
+                owner.id,
+                summoned,
+                board.length,
+                source,
+                `${owner.name}的雷矛之力召唤了${summoned.name}（生命值最高）的复制。`,
+              );
+            }
+          }
+        }
+      }
+    }
+    if (playerHasHeroPower(owner, "combatSummonTentacleScaling")) {
+      const tentacleSoldKey = "ozumatTentacle";
+      const soldCount = heroPowerCounter(owner, tentacleSoldKey);
+      const baseAttack = 2 + soldCount;
+      const baseHealth = 2 + soldCount;
+      const armedKey = `ozumatArmed:${owner.id}`;
+      context.trinketCombatCounters[owner.id][armedKey] = 1;
+      const statKey = `ozumatStats:${owner.id}`;
+      context.trinketCombatCounters[owner.id][statKey] =
+        baseAttack * 1000 + baseHealth;
+      for (
+        let trigger = 0;
+        trigger < heroPowerTriggerMultiplier(owner);
+        trigger += 1
+      ) {
+        pushBattleEvent(context.events, {
+          type: "startOfCombat",
+          actorPlayerId: owner.id,
+          message: `${owner.name}的"触须"已准备（${baseAttack}/${baseHealth}）。`,
+        });
+      }
+    }
+    if (playerHasHeroPower(owner, "revengeSummonScalingWhelp")) {
+      const whelpSoldKey = "onyxiaRevenge";
+      const scale = heroPowerCounter(owner, whelpSoldKey);
+      const baseAttack = 1 + scale;
+      const baseHealth = 1 + scale;
+      const threshold = 4;
+      const armedKey = `onyxiaAvenge:${owner.id}`;
+      const progressKey = `onyxiaAvengeProgress:${owner.id}`;
+      context.trinketCombatCounters[owner.id][armedKey] = threshold;
+      context.trinketCombatCounters[owner.id][progressKey] = 0;
+      const statKey = `onyxiaWhelpStats:${owner.id}`;
+      context.trinketCombatCounters[owner.id][statKey] =
+        baseAttack * 1000 + baseHealth;
+      for (
+        let trigger = 0;
+        trigger < heroPowerTriggerMultiplier(owner);
+        trigger += 1
+      ) {
+        pushBattleEvent(context.events, {
+          type: "startOfCombat",
+          actorPlayerId: owner.id,
+          message: `${owner.name}的"巢母"已准备（${baseAttack}/${baseHealth}雏龙，复仇${threshold}）。`,
+        });
+      }
+    }
+    if (playerHasHeroPower(owner, "combatSummonCurrentTier")) {
+      const tier = owner.tavernTier;
+      const candidates = MINION_DEFINITIONS.filter(
+        (definition) =>
+          definition.tier === tier &&
+          definitionIsAvailable(definition, context.state.activeTribes),
+      );
+      if (candidates.length > 0) {
+        for (
+          let trigger = 0;
+          trigger < heroPowerTriggerMultiplier(owner);
+          trigger += 1
+        ) {
+          pushBattleEvent(context.events, {
+            type: "startOfCombat",
+            actorPlayerId: owner.id,
+            message: `${owner.name}的"禁锢"触发。`,
+          });
+          if (!rejectCombatSummonForFullBoard(context, owner.id)) {
+            const chosen =
+              candidates[
+                randomIndex(context.state, candidates.length)
+              ];
+            const summoned = createMinionInstance(
+              context.state,
+              chosen.id,
+              0,
+            );
+            const board = context.boards[owner.id];
+            insertCombatMinion(
+              context,
+              owner.id,
+              summoned,
+              board.length,
+              summoned,
+              `${owner.name}召唤了当前等级${tier}的${summoned.name}。`,
+            );
+          }
+        }
       }
     }
     if (playerHasHeroPower(owner, "buffLeftmostCombatKeywords")) {
@@ -33278,6 +33875,15 @@ function beginNextRecruit(state: GameState): void {
     player.pendingNextTurnGold = 0;
     if (playerHasHeroPower(player, "goldAfterSellNextTurn")) {
       setHeroPowerCounter(player, "smartSavingsGold", 0);
+    }
+    if (playerHasHeroPower(player, "goldPerTurnOnce")) {
+      if (heroPowerCounter(player, "kraggUsed") === 0) {
+        const bonus = heroPowerCounter(player, "kraggBonus") + 1;
+        setHeroPowerCounter(player, "kraggBonus", bonus);
+        const multiplier = heroPowerTriggerMultiplier(player);
+        player.gold += (2 + bonus) * multiplier;
+        setHeroPowerCounter(player, "kraggUsed", 1);
+      }
     }
     if (playerHasHeroPower(player, "growingTavernSpellBuff")) {
       const nextImprovementRound = Math.max(

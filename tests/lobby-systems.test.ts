@@ -331,7 +331,7 @@ test("createGame remains legacy-neutral", () => {
 });
 
 test("the 16-Hero pool deals a stable four-Hero offer and seven unique AI Heroes", () => {
-  assert.equal(HERO_DEFINITIONS.length, 16);
+  assert.equal(HERO_DEFINITIONS.length, 120);
   const first = createLobbyGame(24680);
   const second = createLobbyGame(24680);
   const firstChoice = first.pendingInteraction;

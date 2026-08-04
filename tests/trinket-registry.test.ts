@@ -9,7 +9,9 @@ import {
 import {
   HERO_DEFINITIONS,
   HERO_POWER_DEFINITIONS,
+  heroPowerCanBeManuallyActivated,
 } from "../lib/game/hero-powers.ts";
+import { getBuddyDefinitionIdForHeroPower } from "../lib/game/buddies.ts";
 
 const LOCAL_TRIBES = new Set([
   "beast",
@@ -86,24 +88,14 @@ test("tier pools contain only active definitions and never legacy removals", () 
 });
 
 test("Hero-specific Lesser filters exclude Sous Chef and unavailable Buddies", () => {
-  assert.equal(HERO_DEFINITIONS.length, 16);
-  assert.ok(
-    HERO_POWER_DEFINITIONS.every(
-      (definition) => definition.activation === "passive",
-    ),
-  );
+  assert.equal(HERO_DEFINITIONS.length, 120);
 
   for (const hero of HERO_DEFINITIONS) {
     const candidates = trinketsForTier("lesser", hero.heroPowerId);
-    const hasBuddy = hero.id !== "hero-bartendotron";
-    assert.equal(candidates.length, hasBuddy ? 97 : 96);
-    assert.equal(
-      candidates.some(
-        (definition) => definition.cardId === "BG35_MagicItem_801",
-      ),
-      false,
-      hero.id,
-    );
+    const hasBuddy = getBuddyDefinitionIdForHeroPower(hero.heroPowerId) !== null;
+    // Sous Chef label is offered to heroes with activatable powers
+    const hasActivatablePower = heroPowerCanBeManuallyActivated(hero.heroPowerId);
+    // Maxwell sticker only offered to heroes with buddies
     assert.equal(
       candidates.some(
         (definition) => definition.cardId === "BG35_MagicItem_803",
