@@ -3032,15 +3032,20 @@ function CombatAttackLink({
   actorInstanceId,
   targetInstanceId,
   eventIndex,
+  onChargeVector,
 }: {
   actorInstanceId: string;
   targetInstanceId: string;
   eventIndex: number;
+  onChargeVector?: (vector: { x: number; y: number }) => void;
 }) {
   const svgRef = useRef<SVGSVGElement | null>(null);
   const [geometry, setGeometry] = useState<CombatLinkGeometry | null>(
     null,
   );
+
+  const chargeVectorRef = useRef(onChargeVector);
+  chargeVectorRef.current = onChargeVector;
 
   useLayoutEffect(() => {
     const svg = svgRef.current;
@@ -3085,8 +3090,10 @@ function CombatAttackLink({
       const distance = Math.hypot(dx, dy);
       if (distance < 1) {
         setGeometry(null);
+        chargeVectorRef.current?.({ x: 0, y: 0 });
         return;
       }
+      chargeVectorRef.current?.({ x: dx, y: dy });
       const startPadding = Math.min(44, distance * 0.2);
       const endPadding = Math.min(50, distance * 0.23);
       const unitX = dx / distance;
@@ -3182,6 +3189,11 @@ function BoardRow({
   debuffLabel,
   summonedInstanceId,
   summonLabel,
+  combatCharging,
+  combatColliding,
+  combatRebounding,
+  combatChargeX = 0,
+  combatChargeY = 0,
   choiceTargetIds,
   magneticTargetIds,
   magneticDropTargetId,
@@ -3225,6 +3237,11 @@ function BoardRow({
   debuffLabel?: string;
   summonedInstanceId?: string;
   summonLabel?: string;
+  combatCharging?: boolean;
+  combatColliding?: boolean;
+  combatRebounding?: boolean;
+  combatChargeX?: number;
+  combatChargeY?: number;
   choiceTargetIds?: readonly string[];
   magneticTargetIds?: readonly string[];
   magneticDropTargetId?: string;
@@ -3447,6 +3464,28 @@ function BoardRow({
                     unit.instanceId === summonedInstanceId
                       ? summonLabel
                       : undefined
+                  }
+                  combatCharging={
+                    combatCharging &&
+                    unit.instanceId === actorInstanceId
+                  }
+                  combatColliding={
+                    combatColliding &&
+                    unit.instanceId === targetInstanceId
+                  }
+                  combatRebounding={
+                    combatRebounding &&
+                    unit.instanceId === actorInstanceId
+                  }
+                  combatChargeX={
+                    unit.instanceId === actorInstanceId
+                      ? combatChargeX
+                      : 0
+                  }
+                  combatChargeY={
+                    unit.instanceId === actorInstanceId
+                      ? combatChargeY
+                      : 0
                   }
                   choiceTarget={isChoiceTarget}
                   magneticTarget={isMagneticTarget}
@@ -4627,6 +4666,38 @@ export default function GameClient() {
           targetInstanceId: currentBattleEvent.targetInstanceId,
         }
       : undefined;
+  const [combatChargePhase, setCombatChargePhase] = useState<
+    "idle" | "charge" | "collide" | "rebound"
+  >("idle");
+  const [combatChargeVector, setCombatChargeVector] = useState<{
+    x: number;
+    y: number;
+  }>({ x: 0, y: 0 });
+  const combatChargePhaseRef = useRef(combatChargePhase);
+  combatChargePhaseRef.current = combatChargePhase;
+
+  useEffect(() => {
+    if (!currentBattleEvent || currentBattleEvent.type !== "attack") {
+      return;
+    }
+    const chargeTimer = setTimeout(() => {
+      setCombatChargePhase("charge");
+      const collideTimer = setTimeout(() => {
+        setCombatChargePhase("collide");
+        const reboundTimer = setTimeout(() => {
+          setCombatChargePhase("rebound");
+          const clearTimer = setTimeout(() => {
+            setCombatChargePhase("idle");
+          }, 300);
+          return () => clearTimeout(clearTimer);
+        }, 380);
+        return () => clearTimeout(reboundTimer);
+      }, 540);
+      return () => clearTimeout(collideTimer);
+    }, 80);
+    return () => clearTimeout(chargeTimer);
+  }, [currentBattleEvent]);
+
   const currentDebuffLabel =
     currentBattleEvent?.type === "keywordRemoved" &&
     currentBattleEvent.removedKeywords?.length
@@ -7477,6 +7548,20 @@ export default function GameClient() {
                       : undefined
                   }
                   summonLabel={currentSummonLabel}
+                  combatCharging={
+                    combatChargePhase === "charge" &&
+                    currentStrikeEvent?.actorInstanceId !== undefined
+                  }
+                  combatColliding={
+                    combatChargePhase === "collide" &&
+                    currentStrikeEvent?.targetInstanceId !== undefined
+                  }
+                  combatRebounding={
+                    combatChargePhase === "rebound" &&
+                    currentStrikeEvent?.actorInstanceId !== undefined
+                  }
+                  combatChargeX={combatChargeVector.x}
+                  combatChargeY={combatChargeVector.y}
                 />
               )}
               {game.phase === "combat" &&
@@ -7765,6 +7850,17 @@ export default function GameClient() {
                     : undefined
                 }
                 summonLabel={currentSummonLabel}
+                combatCharging={
+                  combatChargePhase === "charge"
+                }
+                combatColliding={
+                  combatChargePhase === "collide"
+                }
+                combatRebounding={
+                  combatChargePhase === "rebound"
+                }
+                combatChargeX={combatChargeVector.x}
+                combatChargeY={combatChargeVector.y}
                 choiceTargetIds={
                   boardChoiceInteraction?.optionInstanceIds
                 }
@@ -7868,6 +7964,7 @@ export default function GameClient() {
                     currentStrikeEvent.targetInstanceId
                   }
                   eventIndex={currentStrikeEvent.index}
+                  onChargeVector={setCombatChargeVector}
                 />
               )}
               {game.phase === "recruit" &&
