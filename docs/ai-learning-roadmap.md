@@ -132,6 +132,8 @@ step(actionToken) -> { observation, legalActions, accepted, ownBattle, rewardSig
 
 100/300 回合诊断发现，少量大厅会在只剩两名 AI 后长期互相打不掉血；此时目标策略往往早已淘汰并拥有精确名次，简单要求整个大厅 `gameOver` 会错误丢弃有效样本。搜索器因此不把存活者填成某个虚假排名，也不使用完成局子集，而是使用上述 partial-identification bounds；只有最不利解释也过线才允许接受。
 
+**draw 根因已修复**（`2849ed6`）：`simulateBattle` 中第 61 回合起每回合额外递增 1 点战斗伤害（`damage += max(0, round - 60)`），确保任何大厅终会结束。下一训练周期（304）需将 `maxRounds` 从 100 提升至 150，在 `ai-training-screen-registration.ts` 中更新 `startSeed`/`maxRounds`/ID，并同步 `benchmark-ai.ts` 的预检断言。
+
 `scripts/ai-policy-artifact.ts` 已能把一次基准、完整七策略 profile、训练/留出 schedule、接受证据、内容/策略/evaluator/profile hash 冻结成 canonical SHA-256 artifact。validator 会拒绝缺失或重复策略、hash 漂移、种子重叠，以及没有完整 24-seed 留出门禁却声称 `accepted=true` 的结果；它不会自动写历史池或修改 live policy。下一步是把多个已验证 artifact 组成真实对手池、加入简单 balanced 基线和只评一次的独立最终 gate；之后才能复用同一 evaluator 做多坐标或进化搜索。
 
 Hearthstone 研究已表明，竞争式进化可以直接优化数据驱动代理；MCTS 加监督状态评估也能提高搜索质量和效率：[Optimizing Hearthstone Agents using an Evolutionary Algorithm](https://arxiv.org/abs/2410.19681)、[Improving Hearthstone AI by Combining MCTS and Supervised Learning Algorithms](https://arxiv.org/abs/1808.04794)。这些论文研究的是传统 Hearthstone，不应把其数值结果直接外推到酒馆战棋，但方法顺序具有参考价值。
