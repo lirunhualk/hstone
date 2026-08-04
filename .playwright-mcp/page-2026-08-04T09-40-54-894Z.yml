@@ -1,0 +1,411 @@
+- generic [ref=e2]:
+  - generic [ref=e496]:
+    - list [ref=e497]:
+      - listitem [ref=e498]:
+        - link "首页" [ref=e499] [cursor=pointer]:
+          - /url: //www.bilibili.com
+      - listitem [ref=e507]:
+        - link "番剧" [ref=e508] [cursor=pointer]:
+          - /url: //www.bilibili.com/anime/
+      - listitem [ref=e509]:
+        - link "直播" [ref=e510] [cursor=pointer]:
+          - /url: //live.bilibili.com
+      - listitem [ref=e511]:
+        - link "游戏中心" [ref=e513] [cursor=pointer]:
+          - /url: //game.bilibili.com/platform
+      - listitem [ref=e514]:
+        - link "会员购" [ref=e515] [cursor=pointer]:
+          - /url: //show.bilibili.com/platform/home.html?msource=pc_web
+      - listitem [ref=e516]:
+        - link "漫画" [ref=e517] [cursor=pointer]:
+          - /url: //manga.bilibili.com?from=bill_top_mnav
+      - listitem [ref=e518]:
+        - link "赛事" [ref=e519] [cursor=pointer]:
+          - /url: //www.bilibili.com/match/home/
+      - listitem
+    - textbox "雀傀" [ref=e524]
+    - list [ref=e528]:
+      - listitem [ref=e529] [cursor=pointer]:
+        - listitem [ref=e530]:
+          - generic [ref=e531]: 登录
+      - listitem [ref=e533] [cursor=pointer]:
+        - listitem [ref=e535]:
+          - link [ref=e536]:
+            - /url: //account.bilibili.com/big
+      - listitem [ref=e541] [cursor=pointer]
+      - listitem [ref=e546] [cursor=pointer]
+      - listitem [ref=e554] [cursor=pointer]
+      - listitem [ref=e559] [cursor=pointer]
+      - listitem [ref=e563] [cursor=pointer]
+      - listitem [ref=e569] [cursor=pointer]:
+        - listitem [ref=e570]
+  - generic [ref=e32]:
+    - generic [ref=e33]:
+      - generic [ref=e34]:
+        - heading "【炉石瓦莉拉】最爱跳蛙的人 伤跳蛙最深" [level=1] [ref=e37]
+        - generic [ref=e39]:
+          - generic [ref=e40]: 2.0万
+          - generic [ref=e43]: "143"
+          - generic [ref=e46]: 2026-08-03 17:30:00
+      - generic "哔哩哔哩播放器" [ref=e57]:
+        - generic [ref=e58]:
+          - generic: 技能是四块钱
+          - generic [ref=e585]:
+            - generic [ref=e586]:
+              - button "播放/暂停" [ref=e587]
+              - generic [ref=e600]: 00:15 / 23:59
+            - generic [ref=e602]:
+              - button "清晰度" [ref=e603]:
+                - generic [ref=e604] [cursor=pointer]: 自动
+              - button "倍速" [ref=e605]
+              - generic "字幕" [ref=e607]
+              - button "音量" [ref=e610]
+              - button "设置" [ref=e625]
+              - button "画中画" [ref=e633]
+              - button "宽屏" [ref=e644]
+              - button "网页全屏" [ref=e652]
+              - button "全屏" [ref=e660]
+        - generic [ref=e64]:
+          - generic [ref=e709]: 54人正在看
+          - generic [ref=e711]:
+            - generic "弹幕显示隐藏" [ref=e712] [cursor=pointer]:
+              - checkbox [checked] [ref=e714]
+            - generic [ref=e719]:
+              - generic [ref=e720]:
+                - generic [ref=e721]:
+                  - text: 请先
+                  - link "登录" [ref=e722] [cursor=pointer]:
+                    - /url: javascript:void(0);
+                  - text: 或
+                  - link "注册" [ref=e723] [cursor=pointer]:
+                    - /url: //passport.bilibili.com/login?register_page=1
+                - link "弹幕礼仪" [ref=e725] [cursor=pointer]:
+                  - /url: //www.bilibili.com/blackboard/help.html#/?qid=359&pid=357
+              - generic [ref=e728]: 发送
+      - generic [ref=e67]:
+        - generic [ref=e69]:
+          - generic "点赞（Q）" [ref=e71] [cursor=pointer]: "770"
+          - generic "投币（W）" [ref=e76] [cursor=pointer]: "116"
+          - generic "收藏（E）" [ref=e81] [cursor=pointer]: "28"
+          - generic [ref=e85]: "8"
+        - generic [ref=e91]:
+          - generic [ref=e735] [cursor=pointer]: 稿件举报
+          - generic [ref=e741] [cursor=pointer]:
+            - generic [ref=e742]: 记笔记
+            - text: 
+      - generic [ref=e95]: 新浪微博：@炉石传说瓦莉拉 直播地址：虎牙100270 网易云：炉石传说瓦莉拉
+      - generic [ref=e98]:
+        - link "瓦莉拉" [ref=e101] [cursor=pointer]:
+          - /url: //search.bilibili.com/all?keyword=%E7%93%A6%E8%8E%89%E6%8B%89&from_source=video_tag
+        - link "炉石传说" [ref=e104] [cursor=pointer]:
+          - /url: //search.bilibili.com/all?keyword=%E7%82%89%E7%9F%B3%E4%BC%A0%E8%AF%B4&from_source=video_tag
+        - link "炉石" [ref=e107] [cursor=pointer]:
+          - /url: //search.bilibili.com/all?keyword=%E7%82%89%E7%9F%B3&from_source=video_tag
+        - link "电子竞技" [ref=e110] [cursor=pointer]:
+          - /url: //search.bilibili.com/all?keyword=%E7%94%B5%E5%AD%90%E7%AB%9E%E6%8A%80&from_source=video_tag
+        - link "逗鱼时刻" [ref=e113] [cursor=pointer]:
+          - /url: //search.bilibili.com/all?keyword=%E9%80%97%E9%B1%BC%E6%97%B6%E5%88%BB&from_source=video_tag
+        - link "自走棋" [ref=e116] [cursor=pointer]:
+          - /url: //search.bilibili.com/all?keyword=%E8%87%AA%E8%B5%B0%E6%A3%8B&from_source=video_tag
+        - link "酒馆战棋" [ref=e119] [cursor=pointer]:
+          - /url: //search.bilibili.com/all?keyword=%E9%85%92%E9%A6%86%E6%88%98%E6%A3%8B&from_source=video_tag
+        - link "瓦娘" [ref=e122] [cursor=pointer]:
+          - /url: //search.bilibili.com/all?keyword=%E7%93%A6%E5%A8%98&from_source=video_tag
+      - generic [ref=e752]:
+        - link:
+          - /url: //cm.bilibili.com/cm/api/fees/pc/sync/v2?msg=a%7C2629%2Cb%7Cbilibili%2Cc%7C1%2Cd%7C1%2Ce%7CCLHExRkQq5W98AEYwZvdrgogZCgBMInxiQI4xRRCHjE3ODU4MzY0NDAyMDVxMTBhODhhODNhOTJxOTU5OEiNlZbh%2FDNSBuS4iua1t1oG5LiK5rW3YgbkuK3lm71oZHAAeICAgICgOYABA4gBAJIBJjI0MDk6ODkxZjoyNzY1OjI3MDo0OWM0OjkwYWI6NTliNjoyZDI3oAFkqAEFsgEgzpiWhpJGvfrmdRUsOapdK%2FDTMlIbN%2FdEcVR45JDflly6AbwFaHR0cHM6Ly93d3cudXBkcmVhbS5jbj9ic291cmNlPWJpbGlfYWQmdHJhY2tpZD1wYmFlcy5uTG4xYWJFUjNtRTZBV0REb2tKWkJBV0JMRnEyM0k3b0NZNHBBMGhiVmZsNDhmMVhCS2pIRWtlOUh6TFFmZGtVRnBVRHdxOG5fdE5oNFY0emNFWnJvWFdVSXRZUHVjekNYbEVObDV1R1BoZXJNd0VMeFY2LTBHeUZ2Nl8wSnBLY0RObFpGTHdoUzNlbTZPQWltTUdubW15a0w4aDZNNFRscmswNjdSalppWkZJWk1nVHRITXBLVTJpUnUzU0E3bTRHam1rYTE3dUprckdKeS0yR0JOWk93JmZyb21fYmNnPWJjZ18xMl8yNzU2NDU1NzM0JnRyYWNrX2lkPXBiYWVzLm5MbjFhYkVSM21FNkFXRERva0paQkFXQkxGcTIzSTdvQ1k0cEEwaGJWZmw0OGYxWEJLakhFa2U5SHpMUWZka1VGcFVEd3E4bl90Tmg0VjR6Y0Vacm9YV1VJdFlQdWN6Q1hsRU5sNXVHUGhlck13RUx4VjYtMEd5RnY2XzBKcEtjRE5sWkZMd2hTM2VtNk9BaW1NR25tbXlrTDhoNk00VGxyazA2N1JqWmlaRklaTWdUdEhNcEtVMmlSdTNTQTdtNEdqbWthMTd1SmtyR0p5LTJHQk5aT3cmY2FpZD1fX0NBSURfXyZyZXNvdXJjZV9pZD1fX1JFU09VUkNFSURfXyZzb3VyY2VfaWQ9MjYyOSZmcm9tX3NwbWlkPV9fRlJPTVNQTUlEX18mcmVxdWVzdF9pZD0xNzg1ODM2NDQwMjA1cTEwYTg4YTgzYTkycTk1OTgmY3JlYXRpdmVfaWQ9Mjc1NjQ1NTczNCZsaW5rZWRfY3JlYXRpdmVfaWQ9Mjc4MjM1MDc4NcIBATLSAQDYAcoD4AHAmgzoAfCKDPABiLSA0IDOGvgBZIACAogC1s7mM5ICAJgCrb0qoALeBKgCj4ECsAIhuAIAwALAlrECyAKQTuoCAPgCAIgDAJIDAKgDALADALgDAMIDDEJWMXFGTVg2YUViWMgDANIDxwF7IjEiOiIyNzgyMzUwNzg1IiwiMTIiOiIyNjI5IiwiMTMiOiIzNDcxOTgyIiwiMTYiOiIzNDcxOTgyXzAiLCIyIjoiNDM1NjIzMyIsIjI0IjoiMSIsIjI1IjoiMTAzOCIsIjI2IjoiMjMxMSIsIjI4IjoiZjIxYWJjNGZiODA3YWUzMTkwMTNmNjZmYWZmZDg3MjEiLCIzIjoiNDM1NjIzMyIsIjQiOiIxMDM4IiwiNSI6IjIzMTEiLCI2IjoiNDM1NjIzMyJ94AMA6AMA8AMA%2BgMDdWdjggRAdXBfbWlkOjEwODYzNTk5MCxhdl9pZDoxMTcwMjk0MzY2NjAyMzIsYnZfaWQ6QlYxcUZNWDZhRWJYLGNfaWQ6MIgEZJAEAJgEAaAEAqoEBAgAEASqBAcIp4SbVRABuAQKwAQAygQA0AQA2AQA4gSYAjU2LnsicHNJZCI6MTQyMDI0LCJ2MiI6IkFLZ05MV1N2LVhRV25JQTdEdVIzMzdpMi1mdzFDTkF3cDlUS004OTF0czQ4UkN4QnNqSlFOV0ZZd1NmNTdLVEQycjFFdjlmMUdhMEVIM0FsUUNQcDdvNFVZTlNwNTR4MG40eDRURGtVc0xJZ3VLUEQydWd2WTBYMUJRRlBIdVJwRHluNDl4eDB6c3I5SEQtU29Mak1WM0Z0dVB3ckIzRV9fZk41cE5DV3N5Q255c1dza0ppd2tlWExpVFVmREV0NU1BIn07NjMueyJwc0lkIjoxNDE5MTEsInYyIjoiQks5SCJ9OzcwLnsicHNJZCI6MTE0NzgwLCJ2MiI6IkFBIn3oBADwBAD6BKIDeyJhY2NlbGVyYXRlX2ZhY3RvciI6MS4wLCJhY2NlbGVyYXRlX2lkIjowLCJhZF90eXBlX2ZpeCI6ImNwbSIsImJpel90eXBlIjoxMiwiYml6X3R5cGVfZml4IjozLCJjcGEiOiJ7XCJjcGFfbGV2ZWxcIjowLFwiY3BhX3NldFwiOjB9IiwiY3BhVGFyZ2V0VHlwZSI6MCwiZnJvbVRyYWNraWQiOiIiLCJpYWFfY2hlYXRfZmxvdyI6MCwiaW5uZXIiOjEsImlzX2NvbW1lcmNlIjoxLCJpc19vY3BjX2FudG91X29jcG0iOjAsImlzX3RyYWNraW5nX3VybHMiOjAsIm1pbmlfZ2FtZV9pZCI6IiIsIm1pbmlfZ2FtZV9wb3NpdGlvbl9pZCI6IiIsIm1vZGVsU2NvcmUiOiJ7XCJjdHJcIjpcIjUuNDcwNzAxXCIsXCJmaW5hbF9wY3RyXCI6XCI1LjQ3MDcwMVwiLFwiZmluYWxfcGN2clwiOlwiMTAwMDAuMDAwMDAwXCJ9IiwidmlkZW9fdXBfbWlkIjowfYAFAJAFJZAFO5AFQ5AFapAFjgKQBZoCkAXDApAF%2BgKQBf8CkAWIA5AFlAOQBacDkAXNA5AF4AOQBfUDkAX4A5AF%2FwOQBZUFkAXGBZAFgAaQBYEGkAWCBpAFkwaQBZUGkAWNB5AFwgeQBdQHkAX5B5AFgQiQBaERkAX5EaAFALgFAMAF7vTTAcgFCeAFBOgFAPIFYENBeGxBRUFjUm0wQVFCeEdkUUFBZ0QrZ0FZWHBoTzRCcUFHMjJyQ2lDckFCQWUwQkFBQ0FQL1VCQUFDQVA1MENBQUNBUDZVQ0FBQ0FQNjBDQUFDQVA3VUNBQUNBUHc9PfgFhemE7gGABv%2BT69wDiAa22rCiCpAGAJgGBqgGhemE7gE%3D%2Cf%7Cclick_sync_3%2Cg%7C1%2Ch%7C1%2Ci%7C%2Cj%7C%2Ck%7C1785836440018%2Cl%7C2625%2Cm%7C1785836438711%2Cn%7C1%2Co%7C0%2Cp%7Cad_card&ts=1785836440018&spm_id_from=333.788.right_bottom.adfloor-2625.click
+      - generic [ref=e759]:
+        - generic [ref=e760]: 评论
+        - generic [ref=e761]: 正在玩命加载…
+    - generic:
+      - generic:
+        - generic [ref=e126]:
+          - link [ref=e129] [cursor=pointer]:
+            - /url: //space.bilibili.com/108635990/?spm_id_from=333.788.upinfo.head.click
+          - generic [ref=e130]:
+            - generic [ref=e133]:
+              - link "炉石传说瓦莉拉" [ref=e134] [cursor=pointer]:
+                - /url: //space.bilibili.com/108635990/?spm_id_from=333.788.upinfo.detail.click
+              - link " 发消息" [ref=e135] [cursor=pointer]:
+                - /url: //message.bilibili.com/?spm_id_from=333.788.upinfo.detail.click#whisper/mid108635990
+                - generic [ref=e136]: 
+                - text: 发消息
+            - generic [ref=e138]:
+              - generic [ref=e139] [cursor=pointer]: 充电
+              - generic [ref=e770] [cursor=pointer]: 关注 31.9万
+        - generic [ref=e141]: 弹幕列表
+        - link "豆包-AI功能升级,更擅长处理复杂问题 6万人感兴趣" [ref=e790] [cursor=pointer]:
+          - /url: //cm.bilibili.com/cm/api/fees/pc/sync/v2?msg=a%7C4331%2Cb%7Cbilibili%2Cc%7C1%2Cd%7C1%2Ce%7CCM6viBkQ2dmC%2BgEY3Mm03gogCygBMPmxhwI46yFCHjE3ODU4MzY0NDAyMDVxMTBhODhhODNhOTJxOTU5OEiNlZbh%2FDNSBuS4iua1t1oG5LiK5rW3YgbkuK3lm71oZHAAeICAgICgOYABAYgBAJIBJjI0MDk6ODkxZjoyNzY1OjI3MDo0OWM0OjkwYWI6NTliNjoyZDI3oAEtqAEDsgEgT0EvoDeZk%2BCp9ATHOuHkCAK5nJnj4ppKTAA%2BHS3Wy4m6Af4DaHR0cHM6Ly93d3cuZG91YmFvLmNvbS9kb3dubG9hZC9kZXNrdG9wP3VnX2Fwa190b2tlbj1OSk5ERSZhZF9wbGF0Zm9ybV9pZD1iaWxpYmlsaV9sZWFkJnRyYWNrX2lkPXBiYWVzLm5MbjFhYkVSM21FNkFXRERva0paQkFXQkxGcTIzSTdvQ1k0cEEwaGJWZmw0OGYxWEJLakhFa2U5SHpMUWZka1VGcFVEd3E4bl90Tmg0VjR6Y0Vacm9YV1VJdFlQdWN6Q1hsRU5sNXVHUGhmTlV5VktDN3pmV2ltWW5JNEdiZnVZYzV4YzFqU2NhTjZPZVphb3lxUUxsZW8wcFQ2dk95em1idzlINmY3aHFDbUk0bS12emZmYkY2cDZhb2hlNHkyWjVwZXpiUWZNRFRzdzExblJVMVFlaHcmdWdfc2VtdmVyPXYxLjAuMCZjYWlkPV9fQ0FJRF9fJnJlc291cmNlX2lkPV9fUkVTT1VSQ0VJRF9fJnNvdXJjZV9pZD00MzMxJnJlcXVlc3RfaWQ9MTc4NTgzNjQ0MDIwNXExMGE4OGE4M2E5MnE5NTk4JmZyb21fc3BtaWQ9X19GUk9NU1BNSURfXyZjcmVhdGl2ZV9pZD0yNjk4NDU3ODQ5JmxpbmtlZF9jcmVhdGl2ZV9pZD0yODgyMzQ4MjUywgEBMtIBANgBygPgAaSWiyXoAfPZ2yTwAYi0gNCAzhr4AQuAAgSIAtbO5jOSAgCYAv6nS6ACuAqoAq2dI7ACtgW4AgDAAsCEPcgCauoCAPgC97kBiAMAkgMAqAMAsAMAuAMAwgMMQlYxcUZNWDZhRWJYyAMA0gPLAXsiMSI6IjI4ODIzNDgyNTIiLCIxMiI6IjQzMzEiLCIxMyI6IjE5ODM0NTIiLCIxNiI6IjE5ODM0NTJfMjM3OTkiLCIyIjoiNDMxNTM4NSIsIjI0IjoiMSIsIjI1IjoiMTAzOCIsIjI2IjoiMjMxMSIsIjI4IjoiYWUxOTBhNjNhOTZkMTBmOTc2NzEyZTgwOWViZDRmMTkiLCIzIjoiNDMxNTM4NSIsIjQiOiIxMDM4IiwiNSI6IjIzMTEiLCI2IjoiNDMxNTM4NSJ94AMA6AMA8AMA%2BgMDdWdjggRAdXBfbWlkOjEwODYzNTk5MCxhdl9pZDoxMTcwMjk0MzY2NjAyMzIsYnZfaWQ6QlYxcUZNWDZhRWJYLGNfaWQ6MIgELZAEAJgEAaAEAaoEBwiUv6xMEASqBAcIkcLXVBABuAQKwAQCygQA0AQA2AQA4gSYAjU2LnsicHNJZCI6MTQyMDI0LCJ2MiI6IkFLZ05MV1N2LVhRV25JQTdEdVIzMzdpMi1mdzFDTkF3cDlUS004OTF0czQ4UkN4QnNqSlFOV0ZZd1NmNTdLVEQycjFFdjlmMUdhMEVIM0FsUUNQcDdvNFVZTlNwNTR4MG40eDRURGtVc0xJZ3VLUEQydWd2WTBYMUJRRlBIdVJwRHluNDl4eDB6c3I5SEQtU29Mak1WM0Z0dVB3ckIzRV9fZk41cE5DV3N5Q255c1dza0ppd2tlWExpVFVmREV0NU1BIn07NjMueyJwc0lkIjoxNDE5MTEsInYyIjoiQks5SCJ9OzcwLnsicHNJZCI6MTE0NzgwLCJ2MiI6IkFBIn3oBADwBAD6BKQFeyJhY2NlbGVyYXRlX2ZhY3RvciI6MS4wLCJhY2NlbGVyYXRlX2lkIjowLCJhZF90eXBlX2ZpeCI6ImNwbSIsImFkdnZfaW5mbyI6IntcImFkanVzdF9iZWZvcmVfY29zdFwiOlwiMTEuMDYzXCIsXCJhZGp1c3RfcmF0aW9cIjpcIjEuMDAwXCIsXCJiYWxhbmNlcl9pZFwiOjAsXCJiYWxhbmNlcl9yYXRpb1wiOlwiMC4wMDBcIixcImNoYXJnZV9leHBfa2V5X2RlcHRoXCI6XCJcIixcImNoYXJnZV9leHBfa2V5X2xpZ2h0XCI6XCJfZmx5X2NwYV9vbmxpbmVfY2hhcmdlOVwiLFwiY29zdF9kaWZmXCI6XCIwLjAwMFwifSIsImJpel90eXBlIjoxMiwiYml6X3R5cGVfZml4IjozLCJjcGEiOiJ7XCJjcGFfbGV2ZWxcIjoyLFwiY3BhX3NldFwiOjQ0Njd9IiwiY3BhVGFyZ2V0VHlwZSI6MiwiZnJvbVRyYWNraWQiOiIiLCJpYWFfY2hlYXRfZmxvdyI6MCwiaW5uZXIiOjAsImlzX2NvbW1lcmNlIjoxLCJpc19vY3BjX2FudG91X29jcG0iOjAsImlzX3RyYWNraW5nX3VybHMiOjAsIm1pbmlfZ2FtZV9pZCI6IiIsIm1pbmlfZ2FtZV9wb3NpdGlvbl9pZCI6IiIsIm1vZGVsU2NvcmUiOiJ7XCJjdHJcIjpcIjMuODU1MDg1XCIsXCJjdnJfbDBcIjpcIjEwNi4wOTk1MDNcIixcImZpbmFsX3BjdHJcIjpcIjMuODU1MDg1XCIsXCJmaW5hbF9wY3ZyXCI6XCIxMDYuMDk5NTAzXCJ9IiwidmlkZW9fdXBfbWlkIjowfYAFAJAFKJAFM5AFQ5AFSJAFSZAFU5AFcpAFc5AFjAGQBbMBkAW0AZAF0AGQBdEBkAXXAZAF2AGQBYkCkAWOApAFmgKQBZ8CkAWpApAFqgKQBcACkAXCApAFwwKQBcUCkAXLApAFzgKQBdMCkAXWApAF1wKQBdgCkAXZApAF2gKQBd8CkAXhApAF4wKQBeQCkAXlApAF5gKQBfACkAX1ApAF%2BwKQBf8CkAWNA5AFkAOQBZQDkAWYA5AFmQOQBZoDkAWbA5AFoAOQBaUDkAWnA5AFrAOQBbADkAW2A5AFtwOQBbwDkAW9A5AFwAOQBcEDkAXNA5AF0AOQBdQDkAXgA5AF5gOQBfMDkAX1A5AF%2BAOQBfoDkAX7A5AF%2FwOQBbQEkAXtBJAFxgWQBdkFkAXfBZAFjwaQBaYGkAW6BpAF%2BwaQBZMHkAWhB5AFogeQBcQHkAXUB5AF8AeQBYEIkAW3CJAFvQiQBcgIkAXLEJAFmBGQBaERkAWvEZAFyBGQBZcSkAWfEpAFphKQBbISoAUAuAUCwAXch3nIBQngBQToBQDyBYABQ0F3UUFTanpJakFDVlF3Q01VRmw4akxVUW0wQVFCeEdkUUFBZ0QrVkFmSXkxRUtnQWRMRmd1a0JxQUg1NWR5R0NyQUJBY0FCOHlMSUFRTHRBUUFBZ0QvMUFRQUFnRCtkQWdBQWdEK2xBZ0FBZ0QrdEFnQUFnRCsxQWdBQWdEOD34BdLFgukBgAb%2Fk%2BvcA4gG%2BeXchgqQBgCYBgaoBtLFgukB%2Cf%7Cclick_sync_3%2Cg%7C1%2Ch%7C1%2Ci%7C%2Cj%7C%2Ck%7C1785836440020%2Cl%7C4330%2Cm%7C1785836438711%2Cn%7C1%2Co%7C0%2Cp%7Cad_card&ts=1785836440020&spm_id_from=333.788.right_bottom.adfloor-4330.click
+          - generic [ref=e795]:
+            - generic "豆包-AI功能升级,更擅长处理复杂问题" [ref=e796]
+            - generic [ref=e797]: 6万人感兴趣
+        - generic [ref=e158]:
+          - generic [ref=e159]:
+            - generic [ref=e160]:
+              - generic [ref=e161]:
+                - generic [ref=e162]: 接下来播放
+                - generic [ref=e163] [cursor=pointer]: 自动连播
+              - generic [ref=e168]:
+                - generic [ref=e170]:
+                  - link [ref=e805] [cursor=pointer]:
+                    - /url: /video/BV1ETfvBrEJr/?spm_id_from=333.788.recommend_more_video.-1&trackid=web_related_0.router-related-2589621-tj4lz.1785836440219.133
+                    - img "和好闺蜜撕逼be like" [ref=e807]
+                  - generic [ref=e808]: 00:16
+                - generic [ref=e173]:
+                  - link [ref=e174] [cursor=pointer]:
+                    - /url: /video/BV1ETfvBrEJr/?spm_id_from=333.788.recommend_more_video.-1&trackid=web_related_0.router-related-2589621-tj4lz.1785836440219.133
+                    - paragraph [ref=e175]: 和好闺蜜撕逼be like
+                  - link "Arisus_" [ref=e177] [cursor=pointer]:
+                    - /url: //space.bilibili.com/188730995/
+                  - generic [ref=e180]: 17.9万 11
+            - generic [ref=e184]:
+              - generic [ref=e186]:
+                - generic [ref=e188]:
+                  - link [ref=e820] [cursor=pointer]:
+                    - /url: /video/BV1hDXvBSEVV/?spm_id_from=333.788.recommend_more_video.0&trackid=web_related_0.router-related-2589621-tj4lz.1785836440219.133
+                    - img "全自动鸡哥炸弹！你根本没有出手的机会！" [ref=e822]
+                  - generic [ref=e823]: 06:16
+                - generic [ref=e191]:
+                  - link [ref=e192] [cursor=pointer]:
+                    - /url: /video/BV1hDXvBSEVV/?spm_id_from=333.788.recommend_more_video.0&trackid=web_related_0.router-related-2589621-tj4lz.1785836440219.133
+                    - paragraph [ref=e193]: 全自动鸡哥炸弹！你根本没有出手的机会！
+                  - link "矮矮的桔子" [ref=e195] [cursor=pointer]:
+                    - /url: //space.bilibili.com/251569233/
+                  - generic [ref=e198]: 6.2万 226
+              - generic [ref=e202]:
+                - generic [ref=e204]:
+                  - link [ref=e835] [cursor=pointer]:
+                    - /url: /video/BV1sisyeWEY4/?spm_id_from=333.788.recommend_more_video.1&trackid=web_related_0.router-related-2589621-tj4lz.1785836440219.133
+                    - img "12瑞文跳蛙，一出手就是巅峰" [ref=e837]
+                  - generic [ref=e838]: 02:31
+                - generic [ref=e207]:
+                  - link [ref=e208] [cursor=pointer]:
+                    - /url: /video/BV1sisyeWEY4/?spm_id_from=333.788.recommend_more_video.1&trackid=web_related_0.router-related-2589621-tj4lz.1785836440219.133
+                    - paragraph [ref=e209]: 12瑞文跳蛙，一出手就是巅峰
+                  - link "难道只有我单身" [ref=e211] [cursor=pointer]:
+                    - /url: //space.bilibili.com/2018838620/
+                  - generic [ref=e214]: 71.3万 176
+              - generic [ref=e218]:
+                - generic [ref=e220]:
+                  - link [ref=e850] [cursor=pointer]:
+                    - /url: /video/BV1vCNn6wEVW/?spm_id_from=333.788.recommend_more_video.2&trackid=web_related_0.router-related-2589621-tj4lz.1785836440219.133
+                    - img "史上最强 VS 现代最强" [ref=e852]
+                  - generic [ref=e853]: 01:17
+                - generic [ref=e223]:
+                  - link [ref=e224] [cursor=pointer]:
+                    - /url: /video/BV1vCNn6wEVW/?spm_id_from=333.788.recommend_more_video.2&trackid=web_related_0.router-related-2589621-tj4lz.1785836440219.133
+                    - paragraph [ref=e225]: 史上最强 VS 现代最强
+                  - link "我空条承太郎没有被削" [ref=e227] [cursor=pointer]:
+                    - /url: //space.bilibili.com/550960786/
+                  - generic [ref=e230]: 6.6万 29
+              - generic [ref=e234]:
+                - generic [ref=e236]:
+                  - link [ref=e865] [cursor=pointer]:
+                    - /url: /video/BV1XRYmzdEcZ/?spm_id_from=333.788.recommend_more_video.3&trackid=web_related_0.router-related-2589621-tj4lz.1785836440219.133
+                    - img "受不了了龟甲，和你爆了" [ref=e867]
+                  - generic [ref=e868]: 01:18
+                - generic [ref=e239]:
+                  - link [ref=e240] [cursor=pointer]:
+                    - /url: /video/BV1XRYmzdEcZ/?spm_id_from=333.788.recommend_more_video.3&trackid=web_related_0.router-related-2589621-tj4lz.1785836440219.133
+                    - paragraph [ref=e241]: 受不了了龟甲，和你爆了
+                  - link "Sa-1ieri" [ref=e243] [cursor=pointer]:
+                    - /url: //space.bilibili.com/39347801/
+                  - generic [ref=e246]: 30.5万 87
+              - generic [ref=e250]:
+                - generic [ref=e252]:
+                  - link [ref=e880] [cursor=pointer]:
+                    - /url: /video/BV1bZMX6XEfj/?spm_id_from=333.788.recommend_more_video.4&trackid=web_related_0.router-related-2589621-tj4lz.1785836440219.133
+                    - img "【炉石瓦莉拉】跟野猪瓦抢鸡吃？" [ref=e882]
+                  - generic [ref=e883]: 16:05
+                - generic [ref=e255]:
+                  - link [ref=e256] [cursor=pointer]:
+                    - /url: /video/BV1bZMX6XEfj/?spm_id_from=333.788.recommend_more_video.4&trackid=web_related_0.router-related-2589621-tj4lz.1785836440219.133
+                    - paragraph [ref=e257]: 【炉石瓦莉拉】跟野猪瓦抢鸡吃？
+                  - link "炉石传说瓦莉拉" [ref=e259] [cursor=pointer]:
+                    - /url: //space.bilibili.com/108635990/
+                  - generic [ref=e262]: 1.1万 159
+              - generic [ref=e266]:
+                - generic [ref=e268]:
+                  - link [ref=e895] [cursor=pointer]:
+                    - /url: /video/BV1rD3S6rEzf/?spm_id_from=333.788.recommend_more_video.5&trackid=web_related_0.router-related-2589621-tj4lz.1785836440219.133
+                    - img "随便贴个磁力就500+500+？新版本机械大爹！" [ref=e897]
+                  - generic [ref=e898]: 02:03
+                - generic [ref=e271]:
+                  - link [ref=e272] [cursor=pointer]:
+                    - /url: /video/BV1rD3S6rEzf/?spm_id_from=333.788.recommend_more_video.5&trackid=web_related_0.router-related-2589621-tj4lz.1785836440219.133
+                    - paragraph [ref=e273]: 随便贴个磁力就500+500+？新版本机械大爹！
+                  - link "矮矮的桔子" [ref=e275] [cursor=pointer]:
+                    - /url: //space.bilibili.com/251569233/
+                  - generic [ref=e278]: 5.7万 41
+              - generic [ref=e282]:
+                - generic [ref=e284]:
+                  - link [ref=e910] [cursor=pointer]:
+                    - /url: /video/BV1WsMX6LEBB/?spm_id_from=333.788.recommend_more_video.6&trackid=web_related_0.router-related-2589621-tj4lz.1785836440219.133
+                    - img "开局全员自选7本，但我能无限复制！" [ref=e912]
+                  - generic [ref=e913]: 02:12
+                - generic [ref=e287]:
+                  - link [ref=e288] [cursor=pointer]:
+                    - /url: /video/BV1WsMX6LEBB/?spm_id_from=333.788.recommend_more_video.6&trackid=web_related_0.router-related-2589621-tj4lz.1785836440219.133
+                    - paragraph [ref=e289]: 开局全员自选7本，但我能无限复制！
+                  - link "矮矮的桔子" [ref=e291] [cursor=pointer]:
+                    - /url: //space.bilibili.com/251569233/
+                  - generic [ref=e294]: 3.9万 15
+              - generic [ref=e298]:
+                - generic [ref=e300]:
+                  - link [ref=e925] [cursor=pointer]:
+                    - /url: /video/BV1PsdkBaEcU/?spm_id_from=333.788.recommend_more_video.7&trackid=web_related_0.router-related-2589621-tj4lz.1785836440219.133
+                    - img "跳蛙vs背靠背" [ref=e927]
+                  - generic [ref=e928]: 01:00
+                - generic [ref=e303]:
+                  - link [ref=e304] [cursor=pointer]:
+                    - /url: /video/BV1PsdkBaEcU/?spm_id_from=333.788.recommend_more_video.7&trackid=web_related_0.router-related-2589621-tj4lz.1785836440219.133
+                    - paragraph [ref=e305]: 跳蛙vs背靠背
+                  - link "华丽之虎皮青椒" [ref=e307] [cursor=pointer]:
+                    - /url: //space.bilibili.com/279014857/
+                  - generic [ref=e310]: 6.2万 13
+              - generic [ref=e314]:
+                - generic [ref=e316]:
+                  - link [ref=e940] [cursor=pointer]:
+                    - /url: /video/BV1GVN16fEAy/?spm_id_from=333.788.recommend_more_video.8&trackid=web_related_0.router-related-2589621-tj4lz.1785836440219.133
+                    - img "如何把饲料塞入酒馆？" [ref=e942]
+                  - generic [ref=e943]: 02:04
+                - generic [ref=e319]:
+                  - link [ref=e320] [cursor=pointer]:
+                    - /url: /video/BV1GVN16fEAy/?spm_id_from=333.788.recommend_more_video.8&trackid=web_related_0.router-related-2589621-tj4lz.1785836440219.133
+                    - paragraph [ref=e321]: 如何把饲料塞入酒馆？
+                  - link "大大怪怪怪将军" [ref=e323] [cursor=pointer]:
+                    - /url: //space.bilibili.com/254803796/
+                  - generic [ref=e326]: 10.7万 69
+              - generic [ref=e330]:
+                - generic [ref=e332]:
+                  - link [ref=e955] [cursor=pointer]:
+                    - /url: /video/BV1UzGG67EYB/?spm_id_from=333.788.recommend_more_video.9&trackid=web_related_0.router-related-2589621-tj4lz.1785836440219.133
+                    - img "开局金健身搏猪，新赛季野猪人三种玩法全部展示" [ref=e957]
+                  - generic [ref=e958]: 12:31
+                - generic [ref=e335]:
+                  - link [ref=e336] [cursor=pointer]:
+                    - /url: /video/BV1UzGG67EYB/?spm_id_from=333.788.recommend_more_video.9&trackid=web_related_0.router-related-2589621-tj4lz.1785836440219.133
+                    - paragraph [ref=e337]: 开局金健身搏猪，新赛季野猪人三种玩法全部展示
+                  - link "大大怪怪怪将军" [ref=e339] [cursor=pointer]:
+                    - /url: //space.bilibili.com/254803796/
+                  - generic [ref=e342]: 8.4万 415
+              - generic [ref=e346]:
+                - generic [ref=e348]:
+                  - link [ref=e970] [cursor=pointer]:
+                    - /url: /video/BV1uEXxBDEsh/?spm_id_from=333.788.recommend_more_video.10&trackid=web_related_0.router-related-2589621-tj4lz.1785836440219.133
+                    - img "好久没关注瓦莉拉了 这是瓦莉拉小助理吗？" [ref=e972]
+                  - generic [ref=e973]: 00:08
+                - generic [ref=e351]:
+                  - link [ref=e352] [cursor=pointer]:
+                    - /url: /video/BV1uEXxBDEsh/?spm_id_from=333.788.recommend_more_video.10&trackid=web_related_0.router-related-2589621-tj4lz.1785836440219.133
+                    - paragraph [ref=e353]: 好久没关注瓦莉拉了 这是瓦莉拉小助理吗？
+                  - link "零三八六" [ref=e355] [cursor=pointer]:
+                    - /url: //space.bilibili.com/3706951651297867/
+                  - generic [ref=e358]: 18.8万 1
+              - generic [ref=e362]:
+                - generic [ref=e364]:
+                  - link [ref=e985] [cursor=pointer]:
+                    - /url: /video/BV1D1jC6EEPm/?spm_id_from=333.788.recommend_more_video.11&trackid=web_related_0.router-related-2589621-tj4lz.1785836440219.133
+                    - img "至今人们都还不知道大众之选能有多神" [ref=e987]
+                  - generic [ref=e988]: 01:13
+                - generic [ref=e367]:
+                  - link [ref=e368] [cursor=pointer]:
+                    - /url: /video/BV1D1jC6EEPm/?spm_id_from=333.788.recommend_more_video.11&trackid=web_related_0.router-related-2589621-tj4lz.1785836440219.133
+                    - paragraph [ref=e369]: 至今人们都还不知道大众之选能有多神
+                  - link "炉石栀月玲兔" [ref=e371] [cursor=pointer]:
+                    - /url: //space.bilibili.com/486753288/
+                  - generic [ref=e374]: 3.9万 13
+              - generic [ref=e378]:
+                - generic [ref=e380]:
+                  - link [ref=e1000] [cursor=pointer]:
+                    - /url: /video/BV1PG9sYnE2e/?spm_id_from=333.788.recommend_more_video.12&trackid=web_related_0.router-related-2589621-tj4lz.1785836440219.133
+                    - img "【炉石瓦莉拉】3费吃鸡的局" [ref=e1002]
+                  - generic [ref=e1003]: 14:17
+                - generic [ref=e383]:
+                  - link [ref=e384] [cursor=pointer]:
+                    - /url: /video/BV1PG9sYnE2e/?spm_id_from=333.788.recommend_more_video.12&trackid=web_related_0.router-related-2589621-tj4lz.1785836440219.133
+                    - paragraph [ref=e385]: 【炉石瓦莉拉】3费吃鸡的局
+                  - link "炉石传说瓦莉拉" [ref=e387] [cursor=pointer]:
+                    - /url: //space.bilibili.com/108635990/
+                  - generic [ref=e390]: 22.3万 384
+              - generic [ref=e394]:
+                - generic [ref=e396]:
+                  - link [ref=e1015] [cursor=pointer]:
+                    - /url: /video/BV1xZGu6BE5B/?spm_id_from=333.788.recommend_more_video.13&trackid=web_related_0.router-related-2589621-tj4lz.1785836440219.133
+                    - img "一张法术3000+3000+！新版本亡灵新玩法！大哥流亡灵！" [ref=e1017]
+                  - generic [ref=e1018]: 01:18
+                - generic [ref=e399]:
+                  - link [ref=e400] [cursor=pointer]:
+                    - /url: /video/BV1xZGu6BE5B/?spm_id_from=333.788.recommend_more_video.13&trackid=web_related_0.router-related-2589621-tj4lz.1785836440219.133
+                    - paragraph [ref=e401]: 一张法术3000+3000+！新版本亡灵新玩法！大哥流亡灵！
+                  - link "矮矮的桔子" [ref=e403] [cursor=pointer]:
+                    - /url: //space.bilibili.com/251569233/
+                  - generic [ref=e406]: 7.2万 30
+              - generic [ref=e410]:
+                - generic [ref=e412]:
+                  - link [ref=e1030] [cursor=pointer]:
+                    - /url: /video/BV1fBJw6XE57/?spm_id_from=333.788.recommend_more_video.14&trackid=web_related_0.router-related-2589621-tj4lz.1785836440219.133
+                    - img "酒馆里还卖无面？这版本奇怪的东西越来越多了！" [ref=e1032]
+                  - generic [ref=e1033]: 10:28
+                - generic [ref=e415]:
+                  - link [ref=e416] [cursor=pointer]:
+                    - /url: /video/BV1fBJw6XE57/?spm_id_from=333.788.recommend_more_video.14&trackid=web_related_0.router-related-2589621-tj4lz.1785836440219.133
+                    - paragraph [ref=e417]: 酒馆里还卖无面？这版本奇怪的东西越来越多了！
+                  - link "大大怪怪怪将军" [ref=e419] [cursor=pointer]:
+                    - /url: //space.bilibili.com/254803796/
+                  - generic [ref=e422]: 9.6万 287
+              - generic [ref=e426]:
+                - generic [ref=e428]:
+                  - link [ref=e1045] [cursor=pointer]:
+                    - /url: /video/BV1TV3d6wEPk/?spm_id_from=333.788.recommend_more_video.15&trackid=web_related_0.router-related-2589621-tj4lz.1785836440219.133
+                    - img "真-无限炸弹！最难针对的永动复生！" [ref=e1047]
+                  - generic [ref=e1048]: 03:19
+                - generic [ref=e431]:
+                  - link [ref=e432] [cursor=pointer]:
+                    - /url: /video/BV1TV3d6wEPk/?spm_id_from=333.788.recommend_more_video.15&trackid=web_related_0.router-related-2589621-tj4lz.1785836440219.133
+                    - paragraph [ref=e433]: 真-无限炸弹！最难针对的永动复生！
+                  - link "佐助Sama" [ref=e435] [cursor=pointer]:
+                    - /url: //space.bilibili.com/2571478/
+                  - generic [ref=e438]: 3751 4
+              - generic [ref=e442]:
+                - generic [ref=e444]:
+                  - link [ref=e1060] [cursor=pointer]:
+                    - /url: /video/BV1CyMQ6kEDe/?spm_id_from=333.788.recommend_more_video.16&trackid=web_related_0.router-related-2589621-tj4lz.1785836440219.133
+                    - img "柯洁炸鱼之爱心阵法对手开局70目优势，被捷豹谈笑间逆转局部瞬间崩盘，这比LOL开局送10个人头翻盘离谱？网友:差距没那么小" [ref=e1062]
+                  - generic [ref=e1063]: 11:41
+                - generic [ref=e447]:
+                  - link [ref=e448] [cursor=pointer]:
+                    - /url: /video/BV1CyMQ6kEDe/?spm_id_from=333.788.recommend_more_video.16&trackid=web_related_0.router-related-2589621-tj4lz.1785836440219.133
+                    - paragraph [ref=e449]: 柯洁炸鱼之爱心阵法对手开局70目优势，被捷豹谈笑间逆转局部瞬间崩盘，这比LOL开局送10个人头翻盘离谱？网友:差距没那么小
+                  - link "江户川难嗑瓜子" [ref=e451] [cursor=pointer]:
+                    - /url: //space.bilibili.com/140894738/
+                  - generic [ref=e454]: 85.8万 578
+              - generic [ref=e458]:
+                - generic [ref=e460]:
+                  - link [ref=e1075] [cursor=pointer]:
+                    - /url: /video/BV1P5396XEHX/?spm_id_from=333.788.recommend_more_video.17&trackid=web_related_0.router-related-2589621-tj4lz.1785836440219.133
+                    - img "开局全自动展开，7本黑赐有点强！" [ref=e1077]
+                  - generic [ref=e1078]: 07:01
+                - generic [ref=e463]:
+                  - link [ref=e464] [cursor=pointer]:
+                    - /url: /video/BV1P5396XEHX/?spm_id_from=333.788.recommend_more_video.17&trackid=web_related_0.router-related-2589621-tj4lz.1785836440219.133
+                    - paragraph [ref=e465]: 开局全自动展开，7本黑赐有点强！
+                  - link "大大怪怪怪将军" [ref=e467] [cursor=pointer]:
+                    - /url: //space.bilibili.com/254803796/
+                  - generic [ref=e470]: 4.1万 354
+              - generic [ref=e474]:
+                - generic [ref=e476]:
+                  - link [ref=e1090] [cursor=pointer]:
+                    - /url: /video/BV1xWMR69EZ8/?spm_id_from=333.788.recommend_more_video.18&trackid=web_related_0.router-related-2589621-tj4lz.1785836440219.133
+                    - img "最轮椅的一集！当我把这玩意洗进酒馆……" [ref=e1092]
+                  - generic [ref=e1093]: 01:34
+                - generic [ref=e479]:
+                  - link [ref=e480] [cursor=pointer]:
+                    - /url: /video/BV1xWMR69EZ8/?spm_id_from=333.788.recommend_more_video.18&trackid=web_related_0.router-related-2589621-tj4lz.1785836440219.133
+                    - paragraph [ref=e481]: 最轮椅的一集！当我把这玩意洗进酒馆……
+                  - link "矮矮的桔子" [ref=e483] [cursor=pointer]:
+                    - /url: //space.bilibili.com/251569233/
+                  - generic [ref=e486]: 2.3万 11
+            - generic [ref=e489] [cursor=pointer]: 展开
+          - link "高能对决 等你来投票！" [ref=e1106] [cursor=pointer]:
+            - /url: https://www.bilibili.com/blackboard/era/OpzMrsNqwSukZqNc.html?spm_id_from=333.788.right_bottom.adfloor-3038.click
