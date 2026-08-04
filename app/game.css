@@ -7032,6 +7032,29 @@
   }
 }
 
+.unit-card.is-magnetized {
+  animation: magnetic-fuse 480ms cubic-bezier(0.22, 1, 0.36, 1);
+}
+
+@keyframes magnetic-fuse {
+  0% {
+    filter: brightness(1);
+    box-shadow: 0 0 0 0 rgb(91 184 255 / 0%);
+  }
+  30% {
+    filter: brightness(1.8) saturate(0.6);
+    box-shadow:
+      0 0 0 10px rgb(91 184 255 / 80%),
+      0 0 40px rgb(91 184 255 / 60%),
+      0 0 60px rgb(255 215 0 / 40%);
+    transform: scale(1.06);
+  }
+  100% {
+    filter: brightness(1);
+    box-shadow: 0 0 0 0 rgb(91 184 255 / 0%);
+  }
+}
+
 @keyframes recruit-resource-spend {
   0%,
   100% {
