@@ -18,6 +18,7 @@ import {
   isHeroDefinitionId,
   isHeroPowerDefinitionId,
 } from "./hero-powers.ts";
+import { isHeroSecretDefinitionId } from "./hero-secrets.ts";
 import {
   GREATER_TRINKET_ROUND,
   LESSER_TRINKET_ROUND,
@@ -224,6 +225,30 @@ function repairPendingMysteryCubeReplacements(
     }
     if (player.pendingMysteryCubeReplacementIds === undefined) {
       player.pendingMysteryCubeReplacementIds = [];
+    }
+  }
+  return true;
+}
+
+function repairHeroSecrets(value: Record<string, unknown>): boolean {
+  if (!Array.isArray(value.players)) {
+    return false;
+  }
+  for (const player of value.players) {
+    if (!isRecord(player)) {
+      return false;
+    }
+    if (player.secretIds === undefined) {
+      player.secretIds = [];
+      continue;
+    }
+    if (
+      !Array.isArray(player.secretIds) ||
+      !player.secretIds.every(
+        (id) => typeof id === "string" && isHeroSecretDefinitionId(id),
+      )
+    ) {
+      return false;
     }
   }
   return true;
@@ -2288,6 +2313,7 @@ export function normalizePersistedGameState(value: unknown): unknown {
       repairV42State(value) &&
       repairSpellPool(value) &&
       repairHumanScoutingReports(value) &&
+      repairHeroSecrets(value) &&
       repairHeroPowerCounters(value) &&
       repairHeroRefreshAvailability(value) &&
       repairTrinketSelections(value) &&
@@ -2302,6 +2328,7 @@ export function normalizePersistedGameState(value: unknown): unknown {
     repairInitialHealth(migrated) &&
     repairGhostHandSnapshots(migrated) &&
     repairV42State(migrated) &&
+    repairHeroSecrets(migrated) &&
     repairHeroPowerCounters(migrated) &&
     repairHeroRefreshAvailability(migrated) &&
     repairTrinketSelections(migrated) &&

@@ -403,7 +403,12 @@ type AssertNever<Value extends never> = Value;
 export type AiTrainingPlayerStateCoverage = AssertNever<
   Exclude<
     keyof PlayerState,
-    keyof AiTrainingRecruitObservation | "id" | "lastOpponentId" | "systemEventCounters" | "heroPowerActiveThisTurn"
+    | keyof AiTrainingRecruitObservation
+    | "id"
+    | "lastOpponentId"
+    | "systemEventCounters"
+    | "heroPowerActiveThisTurn"
+    | "secretIds"
   >
 >;
 
@@ -797,6 +802,10 @@ function observePendingInteraction(
       observation.remainingDiscoveries =
         interaction.remainingChoices ?? null;
       observation.completionSource = interaction.completionSource ?? null;
+      return observation;
+    case "secretChoice":
+      observation.definitionId = interaction.definitionId;
+      observation.optionIds = [...interaction.optionIds];
       return observation;
     case "heroChoice":
       observation.optionIds = [...interaction.optionIds];

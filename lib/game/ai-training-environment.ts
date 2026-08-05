@@ -225,6 +225,7 @@ function pendingOptionIds(interaction: PendingInteraction): string[] {
     case "tavernSpellChoice":
     case "spellcraftChoice":
     case "heroPowerChoice":
+    case "secretChoice":
     case "heroChoice":
     case "trinketChoice":
     case "minionChoice":

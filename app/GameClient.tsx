@@ -37,6 +37,7 @@ import {
   getTavernRefreshQuote,
   getHeroDefinition,
   getHeroPowerDefinition,
+  getHeroSecretDefinition,
   getHeroPowerProgressText,
   getSystemEventDefinition,
   heroPowerActiveCost,
@@ -1248,6 +1249,12 @@ function pendingInteractionMatchesPlayer(
         );
       })
     );
+  }
+  if (
+    interaction.kind !== "target" &&
+    interaction.kind !== "magnetizeTarget"
+  ) {
+    return false;
   }
   return (
     boardIds.has(interaction.sourceInstanceId) &&
@@ -4157,6 +4164,9 @@ export default function GameClient() {
   const humanHeroPower = human.heroPowerId
     ? getHeroPowerDefinition(human.heroPowerId)
     : null;
+  const humanSecrets = human.secretIds.map((secretId) =>
+    getHeroSecretDefinition(secretId),
+  );
   const humanHeroPowerProgress = human.heroPowerId
     ? getHeroPowerProgressText(
         human.heroPowerId,
@@ -4167,6 +4177,10 @@ export default function GameClient() {
   const humanHeroPowerStatus = humanHeroPower
     ? `${humanHeroPower.description}${
         humanHeroPowerProgress ? ` · ${humanHeroPowerProgress}` : ""
+      }${
+        humanSecrets.length > 0
+          ? ` · 当前奥秘：${humanSecrets.map((secret) => secret.name).join("、")}`
+          : ""
       }`
     : null;
   const humanHeroPowerActive =
@@ -4304,6 +4318,8 @@ export default function GameClient() {
     humanInteraction?.kind === "heroPowerChoice"
       ? humanInteraction
       : null;
+  const secretChoiceInteraction =
+    humanInteraction?.kind === "secretChoice" ? humanInteraction : null;
   const minionChoiceInteraction =
     humanInteraction?.kind === "minionChoice"
       ? humanInteraction
@@ -4427,6 +4443,10 @@ export default function GameClient() {
               ? document.querySelector<HTMLElement>(
                   '[data-testid="hero-power-choice-0"]',
                 )
+            : humanInteraction.kind === "secretChoice"
+              ? document.querySelector<HTMLElement>(
+                  '[data-testid="secret-choice-0"]',
+                )
             : humanInteraction.kind === "minionChoice"
               ? document.querySelector<HTMLElement>(
                   humanInteraction.definitionId === "BG32_237"
@@ -4435,15 +4455,18 @@ export default function GameClient() {
                       ? '[data-testid="adaptable-beetle-reborn"]'
                       : '[data-testid="fearless-foodie-improve"]',
                 )
-            : Array.from(
-                document.querySelectorAll<HTMLElement>(
-                  "[data-unit-instance-id]",
-                ),
-              ).find(
-                (element) =>
-                  element.dataset.unitInstanceId ===
-                  humanInteraction.optionInstanceIds[0],
-              );
+            : humanInteraction.kind === "target" ||
+                humanInteraction.kind === "magnetizeTarget"
+              ? Array.from(
+                  document.querySelectorAll<HTMLElement>(
+                    "[data-unit-instance-id]",
+                  ),
+                ).find(
+                  (element) =>
+                    element.dataset.unitInstanceId ===
+                    humanInteraction.optionInstanceIds[0],
+                )
+              : null;
         focusTarget?.focus();
       });
       return () => window.cancelAnimationFrame(focusFrame);
@@ -9933,6 +9956,61 @@ export default function GameClient() {
                   );
                 },
               )}
+            </div>
+          </div>
+        </div>
+      )}
+
+      {secretChoiceInteraction && (
+        <div
+          className="overlay interaction-overlay"
+          role="dialog"
+          aria-modal="true"
+          aria-labelledby="secret-choice-title"
+          aria-describedby="secret-choice-description"
+          data-testid="secret-choice-dialog"
+          onKeyDown={trapModalFocus}
+        >
+          <div className="modal hero-power-choice-modal">
+            <span className="discover-kicker">发现 · 奥秘</span>
+            <h2
+              className="discover-title"
+              id="secret-choice-title"
+            >
+              神奇魔术 · 选择一个奥秘
+            </h2>
+            <p
+              className="discover-copy"
+              id="secret-choice-description"
+            >
+              选择后会立刻进入你的英雄奥秘区，并在之后的招募或战斗中按卡面触发一次。
+            </p>
+            <div className="hero-power-choice-options">
+              {secretChoiceInteraction.optionIds.map((optionId, index) => {
+                const option = getHeroSecretDefinition(optionId);
+                return (
+                  <button
+                    type="button"
+                    className="hero-power-choice"
+                    data-testid={`secret-choice-${index}`}
+                    key={option.id}
+                    onClick={() =>
+                      send({
+                        type: "RESOLVE_INTERACTION",
+                        interactionId: secretChoiceInteraction.interactionId,
+                        optionInstanceId: option.id,
+                      })
+                    }
+                  >
+                    <CardArtwork unit={option} kind="portrait" />
+                    <span className="hero-power-choice-type">奥秘</span>
+                    <strong>{option.name}</strong>
+                    <span className="hero-power-choice-copy">
+                      {option.description}
+                    </span>
+                  </button>
+                );
+              })}
             </div>
           </div>
         </div>

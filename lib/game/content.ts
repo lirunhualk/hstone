@@ -7,7 +7,7 @@ import trinketFeatureSnapshot from "./generated/battlegrounds-trinkets-36.0.3-24
 import { BUDDY_MINION_DEFINITIONS } from "./buddies.ts";
 import type { MinionDefinition, Tribe } from "./types.ts";
 
-export const CURRENT_ROSTER_VERSION = "battlegrounds-36.0.3-247416-v50";
+export const CURRENT_ROSTER_VERSION = "battlegrounds-36.0.3-247416-v51";
 /** Compatibility alias for existing save and engine imports. */
 export const CLASSIC_ROSTER_VERSION = CURRENT_ROSTER_VERSION;
 
@@ -584,6 +584,31 @@ const LEGACY_FIXTURE_DEFINITIONS: readonly MinionDefinition[] = [
     attack: 1,
     health: 1,
     description: "由瘟疫鼠群召唤。",
+    collectible: false,
+  },
+  {
+    id: "BG_EX1_554t",
+    cardId: "BG_EX1_554t",
+    goldenCardId: "BG_EX1_554t_G",
+    name: "蛇",
+    tier: 1,
+    tribe: "beast",
+    attack: 1,
+    health: 1,
+    description: "由毒蛇陷阱召唤。",
+    collectible: false,
+  },
+  {
+    id: "BG_EX1_170",
+    cardId: "BG_EX1_170",
+    goldenCardId: "BG_EX1_170_G",
+    name: "帝王眼镜蛇",
+    tier: 1,
+    tribe: "beast",
+    attack: 2,
+    health: 3,
+    poisonous: true,
+    description: "由眼镜蛇陷阱召唤。",
     collectible: false,
   },
   {

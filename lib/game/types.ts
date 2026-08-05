@@ -1799,6 +1799,8 @@ export interface PlayerState {
   heroId: string | null;
   /** Persistent Lesser and Greater Trinkets bought this game. */
   trinketIds: string[];
+  /** Active Battlegrounds Secrets granted by hero powers. */
+  secretIds: string[];
   /** Per-Trinket periodic progress, keyed by definition ID. */
   trinketCounters: Record<string, number>;
   /** Per-SystemEvent turn tracking, keyed by counter name. */
@@ -2160,6 +2162,43 @@ export interface PendingHeroPowerChoiceInteraction
   remainingChoices?: number;
 }
 
+export type HeroSecretEffect =
+  | "venomstrikeTrap"
+  | "snakeTrap"
+  | "splittingImage"
+  | "effigy"
+  | "autodefenseMatrix"
+  | "avengeSecret"
+  | "redemption"
+  | "handOfSalvation"
+  | "iceBlock"
+  | "competitiveSpirit"
+  | "reckoning"
+  | "packTactics";
+
+export type HeroSecretTrigger =
+  | "friendlyAttacked"
+  | "friendlyDied"
+  | "heroLethalDamage"
+  | "startOfTurn"
+  | "enemyDealsDamage";
+
+export interface HeroSecretDefinition {
+  id: string;
+  cardId: string;
+  name: string;
+  description: string;
+  effect: HeroSecretEffect;
+  trigger: HeroSecretTrigger;
+}
+
+export interface PendingSecretChoiceInteraction
+  extends PendingInteractionBase {
+  kind: "secretChoice";
+  definitionId: string;
+  optionIds: string[];
+}
+
 export interface PendingDarkmoonPrizeDiscoverInteraction
   extends PendingInteractionBase {
   kind: "darkmoonPrizeDiscover";
@@ -2215,6 +2254,7 @@ export type PendingInteraction =
   | PendingTavernSpellChoiceInteraction
   | PendingSpellcraftChoiceInteraction
   | PendingHeroPowerChoiceInteraction
+  | PendingSecretChoiceInteraction
   | PendingDarkmoonPrizeDiscoverInteraction
   | PendingHeroChoiceInteraction
   | PendingTrinketChoiceInteraction

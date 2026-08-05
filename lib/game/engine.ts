@@ -42,6 +42,10 @@ import {
   identityEligibleHeroPowers,
 } from "./hero-powers.ts";
 import {
+  HERO_SECRET_DEFINITIONS,
+  getHeroSecretDefinition,
+} from "./hero-secrets.ts";
+import {
   GREATER_TRINKET_ROUND,
   LESSER_TRINKET_ROUND,
   SYSTEM_EVENT_DEFINITIONS,
@@ -127,6 +131,7 @@ import type {
   PendingCardPlayedEvent,
   PendingDiscoverInteraction,
   PendingInteraction,
+  PendingSecretChoiceInteraction,
   TavernSpellChoiceId,
   PlayerId,
   PlayerState,
@@ -215,6 +220,12 @@ export {
   isHeroDefinitionId,
   isHeroPowerDefinitionId,
 } from "./hero-powers.ts";
+
+export {
+  HERO_SECRET_DEFINITIONS,
+  getHeroSecretDefinition,
+  isHeroSecretDefinitionId,
+} from "./hero-secrets.ts";
 
 export {
   ACTIVE_TRINKET_DEFINITIONS,
@@ -322,6 +333,8 @@ const GEOMAGUS_ROOGUG_DEFINITION_ID = "BG28_583" as const;
 const COMPOSER_BRISTLEBACK_DEFINITION_ID = "BG26_157" as const;
 const TIDE_RAISER_DEFINITION_ID = "BG34_920" as const;
 const BEETLE_TOKEN_DEFINITION_ID = "live-beetle-token" as const;
+const SNAKE_TRAP_TOKEN_DEFINITION_ID = "BG_EX1_554t" as const;
+const VENOMSTRIKE_TRAP_TOKEN_DEFINITION_ID = "BG_EX1_170" as const;
 const DEATHLY_STRIKER_DEFINITION_ID = "BG31_835" as const;
 const STITCHED_SALVAGER_DEFINITION_ID = "BG31_999" as const;
 const CONSOLATION_COIN_CARD_ID = "BG28_521t" as const;
@@ -764,6 +777,138 @@ function cloneMinionAsGeneratedCopy(
   return copy;
 }
 
+function cloneCombatMinionAsGeneratedCopy(
+  state: GameState,
+  source: MinionInstance,
+): BoardMinionInstance {
+  const copy = cloneMinion(source);
+  copy.instanceId = `minion-${state.nextInstanceId}`;
+  state.nextInstanceId += 1;
+  copy.poolCopies = 0;
+  delete copy.poolCopiesOnPurchase;
+  delete copy.poolCopiesByDefinitionId;
+  copy.attachments = copy.attachments.map(clearAttachmentPoolCopies);
+  return copy;
+}
+
+function activeHeroSecretDefinitions(
+  player: Pick<PlayerState, "secretIds">,
+) {
+  return player.secretIds.map((secretId) => getHeroSecretDefinition(secretId));
+}
+
+function removeHeroSecret(
+  player: PlayerState,
+  secretId: string,
+): boolean {
+  const index = player.secretIds.indexOf(secretId);
+  if (index < 0) {
+    return false;
+  }
+  player.secretIds.splice(index, 1);
+  return true;
+}
+
+function availableHeroSecrets(player: PlayerState) {
+  const owned = new Set(player.secretIds);
+  return HERO_SECRET_DEFINITIONS.filter(
+    (definition) => !owned.has(definition.id),
+  );
+}
+
+function chooseHeroSecretOptionIds(
+  state: GameState,
+  player: PlayerState,
+): string[] {
+  const candidates = [...availableHeroSecrets(player)];
+  shuffleInPlace(state, candidates);
+  return candidates.slice(0, 3).map((definition) => definition.id);
+}
+
+function evaluateHeroSecretOption(
+  player: PlayerState,
+  secretId: string,
+): number {
+  const secret = getHeroSecretDefinition(secretId);
+  switch (secret.effect) {
+    case "iceBlock":
+      return player.health + player.armor <= 15 ? 1000 : 30;
+    case "competitiveSpirit":
+      return player.board.length * 6;
+    case "autodefenseMatrix":
+      return player.board.some((minion) => !minion.divineShield) ? 45 : 5;
+    case "splittingImage":
+      return player.board.length > 0 ? 42 : 0;
+    case "packTactics":
+      return player.board.length > 0 ? 40 : 0;
+    case "snakeTrap":
+      return Math.max(0, MAX_BOARD_SIZE - player.board.length) >= 2 ? 36 : 8;
+    case "venomstrikeTrap":
+      return player.board.length < MAX_BOARD_SIZE ? 38 : 6;
+    case "redemption":
+      return player.board.length < MAX_BOARD_SIZE && player.board.length > 0 ? 34 : 4;
+    case "handOfSalvation":
+      return player.board.length < MAX_BOARD_SIZE && player.board.length >= 2 ? 33 : 4;
+    case "effigy":
+      return player.board.length < MAX_BOARD_SIZE && player.board.length > 0 ? 32 : 4;
+    case "avengeSecret":
+      return player.board.length >= 2 ? 31 : 3;
+    case "reckoning":
+      return 28;
+    default:
+      return 1;
+  }
+}
+
+function bestHeroSecretOptionId(
+  player: PlayerState,
+  optionIds: readonly string[],
+): string | undefined {
+  let bestId: string | undefined;
+  let bestScore = Number.NEGATIVE_INFINITY;
+  for (const optionId of optionIds) {
+    const score = evaluateHeroSecretOption(player, optionId);
+    if (score > bestScore) {
+      bestScore = score;
+      bestId = optionId;
+    }
+  }
+  return bestId;
+}
+
+function beginSecretChoice(
+  state: GameState,
+  player: PlayerState,
+  sourceInstanceId: string,
+  definitionId: string,
+): boolean {
+  if (player.isHuman && state.pendingInteraction !== null) {
+    return false;
+  }
+  const optionIds = chooseHeroSecretOptionIds(state, player);
+  if (optionIds.length === 0) {
+    return false;
+  }
+  if (!player.isHuman) {
+    const selected = bestHeroSecretOptionId(player, optionIds);
+    if (!selected) {
+      return false;
+    }
+    player.secretIds.push(selected);
+    return true;
+  }
+  const interaction: PendingSecretChoiceInteraction = {
+    kind: "secretChoice",
+    interactionId: nextInteractionId(state),
+    playerId: player.id,
+    sourceInstanceId,
+    definitionId,
+    optionIds,
+  };
+  state.pendingInteraction = interaction;
+  return true;
+}
+
 function collectAttachmentEffectSources(
   attachment: MagneticAttachment,
   sources: MinionEffectSource[],
@@ -1004,6 +1149,37 @@ function consumeSafeBadgeForLethalCombatDamage(
   }
   player.trinketCounters[badge.id] = 0;
   return badge;
+}
+
+function consumeIceBlockSecretForLethalCombatDamage(
+  player: PlayerState,
+  amount: number,
+) {
+  const safeAmount = Math.max(0, amount);
+  if (safeAmount <= 0 || safeAmount < player.armor + player.health) {
+    return null;
+  }
+  const secret = activeHeroSecretDefinitions(player).find(
+    (candidate) => candidate.effect === "iceBlock",
+  );
+  if (!secret) {
+    return null;
+  }
+  removeHeroSecret(player, secret.id);
+  return secret;
+}
+
+function triggerStartOfTurnHeroSecrets(
+  state: GameState,
+  player: PlayerState,
+): void {
+  for (const secret of [...activeHeroSecretDefinitions(player)]) {
+    if (secret.effect !== "competitiveSpirit") {
+      continue;
+    }
+    buffMinions(player.board, 1, 1, player.board, player);
+    removeHeroSecret(player, secret.id);
+  }
 }
 
 /**
@@ -19418,6 +19594,24 @@ function resolvePendingInteraction(
     return next;
   }
 
+  if (pending.kind === "secretChoice") {
+    if (!pending.optionIds.includes(action.optionInstanceId)) {
+      return state;
+    }
+    const next = cloneState(state);
+    const nextPlayer = findPlayer(next, pending.playerId);
+    const nextPending = next.pendingInteraction;
+    if (!nextPlayer || nextPending?.kind !== "secretChoice") {
+      return state;
+    }
+    if (nextPlayer.secretIds.includes(action.optionInstanceId)) {
+      return state;
+    }
+    nextPlayer.secretIds.push(action.optionInstanceId);
+    next.pendingInteraction = null;
+    return next;
+  }
+
   if (pending.kind === "heroChoice") {
     if (!pending.optionIds.includes(action.optionInstanceId)) {
       return state;
@@ -22150,6 +22344,8 @@ interface CombatContext {
   >;
   /** Per-combat Trinket progress; persistent growth is mirrored separately. */
   trinketCombatCounters: Record<PlayerId, Record<string, number>>;
+  /** Per-combat friendly death counts for secret timing such as Hand of Salvation. */
+  secretFriendlyDeaths: Record<PlayerId, number>;
   /** Minions granted Hoggy Bank's temporary Deathrattle this combat. */
   hoggyBankDeathrattles: Record<PlayerId, Set<string>>;
   /** Minions granted Rusty Trident's temporary Deathrattle this combat. */
@@ -22229,6 +22425,261 @@ function persistentCombatOwner(
   }
   const owner = findPlayer(context.state, ownerId);
   return owner?.alive ? owner : undefined;
+}
+
+function insertSecretCombatCopy(
+  context: CombatContext,
+  ownerId: PlayerId,
+  source: MinionInstance,
+  copy: BoardMinionInstance,
+  insertAt: number,
+  message: string,
+): MinionInstance | null {
+  applyCurrentBeetleBonus(context, ownerId, copy);
+  return insertCombatMinion(context, ownerId, copy, insertAt, source, message);
+}
+
+function resummonDeadMinionForSecret(
+  context: CombatContext,
+  death: DeadMinion,
+  source: MinionInstance,
+  message: string,
+  restoredHealth: number,
+): MinionInstance | null {
+  if (rejectCombatSummonForFullBoard(context, death.ownerId)) {
+    return null;
+  }
+  const copy = cloneCombatMinionAsGeneratedCopy(context.state, death.minion);
+  copy.health = Math.max(1, restoredHealth);
+  copy.reborn = false;
+  return insertSecretCombatCopy(
+    context,
+    death.ownerId,
+    source,
+    copy,
+    death.index,
+    message,
+  );
+}
+
+function resolveFriendlyAttackedHeroSecrets(
+  context: CombatContext,
+  ownerId: PlayerId,
+  target: MinionInstance,
+  attacker: MinionInstance,
+  insertAt: number,
+): void {
+  const owner = persistentCombatOwner(context, ownerId);
+  if (!owner) {
+    return;
+  }
+  for (const secret of [...activeHeroSecretDefinitions(owner)]) {
+    if (secret.trigger !== "friendlyAttacked") {
+      continue;
+    }
+    if (secret.effect === "autodefenseMatrix") {
+      if (target.divineShield) {
+        continue;
+      }
+      target.divineShield = true;
+      removeHeroSecret(owner, secret.id);
+      pushBattleEvent(context.events, {
+        type: "trigger",
+        actorPlayerId: ownerId,
+        targetPlayerId: ownerId,
+        targetInstanceId: target.instanceId,
+        minion: cloneMinion(target),
+        message: `${owner.name}的${secret.name}使${target.name}获得了圣盾。`,
+      });
+      continue;
+    }
+    if (rejectCombatSummonForFullBoard(context, ownerId)) {
+      continue;
+    }
+    if (secret.effect === "venomstrikeTrap") {
+      removeHeroSecret(owner, secret.id);
+      summonCombatMinion(
+        context,
+        ownerId,
+        VENOMSTRIKE_TRAP_TOKEN_DEFINITION_ID,
+        Math.min(insertAt + 1, context.boards[ownerId].length),
+        target,
+      );
+      continue;
+    }
+    if (secret.effect === "snakeTrap") {
+      removeHeroSecret(owner, secret.id);
+      for (let count = 0; count < 3; count += 1) {
+        if (rejectCombatSummonForFullBoard(context, ownerId)) {
+          break;
+        }
+        summonCombatMinion(
+          context,
+          ownerId,
+          SNAKE_TRAP_TOKEN_DEFINITION_ID,
+          Math.min(insertAt + 1 + count, context.boards[ownerId].length),
+          target,
+        );
+      }
+      continue;
+    }
+    if (secret.effect === "splittingImage") {
+      removeHeroSecret(owner, secret.id);
+      const copy = cloneCombatMinionAsGeneratedCopy(context.state, target);
+      insertSecretCombatCopy(
+        context,
+        ownerId,
+        target,
+        copy,
+        Math.min(insertAt + 1, context.boards[ownerId].length),
+        `${secret.name}召唤了${copy.name}的复制。`,
+      );
+      continue;
+    }
+    if (secret.effect === "packTactics") {
+      removeHeroSecret(owner, secret.id);
+      const copy = cloneCombatMinionAsGeneratedCopy(context.state, target);
+      copy.attack = 3;
+      copy.health = 3;
+      insertSecretCombatCopy(
+        context,
+        ownerId,
+        target,
+        copy,
+        Math.min(insertAt + 1, context.boards[ownerId].length),
+        `${secret.name}召唤了${copy.name}的3/3复制。`,
+      );
+    }
+  }
+}
+
+function resolveFriendlyDiedHeroSecrets(
+  context: CombatContext,
+  death: DeadMinion,
+): void {
+  const owner = persistentCombatOwner(context, death.ownerId);
+  if (!owner) {
+    return;
+  }
+  context.secretFriendlyDeaths[death.ownerId] += 1;
+  for (const secret of [...activeHeroSecretDefinitions(owner)]) {
+    if (secret.trigger !== "friendlyDied") {
+      continue;
+    }
+    if (secret.effect === "avengeSecret") {
+      const candidates = context.boards[death.ownerId].filter(
+        (minion) => minion.health > 0,
+      );
+      if (candidates.length === 0) {
+        continue;
+      }
+      const target = candidates[randomIndex(context.state, candidates.length)];
+      applyCombatEnchantingGain(context, death.ownerId, target, {
+        attack: 3,
+        health: 2,
+      });
+      removeHeroSecret(owner, secret.id);
+      pushBattleEvent(context.events, {
+        type: "buff",
+        actorPlayerId: death.ownerId,
+        targetPlayerId: death.ownerId,
+        targetInstanceId: target.instanceId,
+        attackDelta: 3,
+        healthDelta: 2,
+        minion: cloneMinion(target),
+        message: `${owner.name}的${secret.name}使${target.name}获得+3/+2。`,
+      });
+      continue;
+    }
+    if (secret.effect === "redemption") {
+      if (rejectCombatSummonForFullBoard(context, death.ownerId)) {
+        continue;
+      }
+      removeHeroSecret(owner, secret.id);
+      resummonDeadMinionForSecret(
+        context,
+        death,
+        death.minion,
+        `${secret.name}使${death.minion.name}以1点生命值返回战场。`,
+        1,
+      );
+      continue;
+    }
+    if (secret.effect === "handOfSalvation") {
+      if (context.secretFriendlyDeaths[death.ownerId] !== 2) {
+        continue;
+      }
+      if (rejectCombatSummonForFullBoard(context, death.ownerId)) {
+        continue;
+      }
+      removeHeroSecret(owner, secret.id);
+      resummonDeadMinionForSecret(
+        context,
+        death,
+        death.minion,
+        `${secret.name}复活了${death.minion.name}。`,
+        combatMaximumHealth(context, death.ownerId, death.minion),
+      );
+      continue;
+    }
+    if (secret.effect === "effigy") {
+      if (rejectCombatSummonForFullBoard(context, death.ownerId)) {
+        continue;
+      }
+      const candidates = MINION_DEFINITIONS.filter(
+        (candidate) =>
+          definitionIsAvailable(candidate, context.state.activeTribes) &&
+          candidate.tier === death.minion.tier,
+      );
+      if (candidates.length === 0) {
+        continue;
+      }
+      removeHeroSecret(owner, secret.id);
+      const choice = candidates[randomIndex(context.state, candidates.length)];
+      summonCombatMinion(
+        context,
+        death.ownerId,
+        choice.id,
+        death.index,
+        death.minion,
+      );
+    }
+  }
+}
+
+function resolveEnemyDealsDamageHeroSecrets(
+  context: CombatContext,
+  observation: CombatDamageObservation,
+): void {
+  if (observation.amount < 3) {
+    return;
+  }
+  const owner = persistentCombatOwner(context, observation.targetOwnerId);
+  if (!owner) {
+    return;
+  }
+  const secret = activeHeroSecretDefinitions(owner).find(
+    (candidate) => candidate.effect === "reckoning",
+  );
+  if (!secret) {
+    return;
+  }
+  removeHeroSecret(owner, secret.id);
+  observation.source.health = 0;
+  context.lethalDamageSources[observation.sourceOwnerId][
+    observation.source.instanceId
+  ] = {
+    ownerId: observation.targetOwnerId,
+    instanceId: observation.target.instanceId,
+  };
+  pushBattleEvent(context.events, {
+    type: "trigger",
+    actorPlayerId: observation.targetOwnerId,
+    targetPlayerId: observation.sourceOwnerId,
+    targetInstanceId: observation.source.instanceId,
+    minion: cloneMinion(observation.source),
+    message: `${owner.name}的${secret.name}消灭了${observation.source.name}。`,
+  });
 }
 
 function combatTrinketByCardId(
@@ -26023,6 +26474,7 @@ interface CombatDamageObservation {
   source: MinionInstance;
   targetOwnerId: PlayerId;
   target: MinionInstance;
+  amount: number;
   friendlyDamagedObservers: readonly CapturedFriendlyDamagedObserver[];
   friendlyDamageDealtObservers: readonly CapturedFriendlyDamageDealtObserver[];
 }
@@ -26033,6 +26485,7 @@ function captureCombatDamageObservation(
   source: MinionInstance,
   targetOwnerId: PlayerId,
   target: MinionInstance,
+  amount: number,
 ): CombatDamageObservation {
   const friendlyDamagedObservers: CapturedFriendlyDamagedObserver[] = [];
   const friendlyDamageDealtObservers: CapturedFriendlyDamageDealtObserver[] =
@@ -26078,6 +26531,7 @@ function captureCombatDamageObservation(
     source,
     targetOwnerId,
     target,
+    amount,
     friendlyDamagedObservers,
     friendlyDamageDealtObservers,
   };
@@ -26262,6 +26716,7 @@ function triggerCombatDamageObservation(
   );
   triggerFriendlyDamagedObservers(context, observation);
   triggerFriendlyDamageDealtObservers(context, observation);
+  resolveEnemyDealsDamageHeroSecrets(context, observation);
 }
 
 function resolveCombatHandBuff(
@@ -26398,6 +26853,7 @@ function dealCombatDamage(
     source,
     targetOwnerId,
     target,
+    amount,
   );
   if (!deferDamageObservers) {
     triggerCombatDamageObservation(context, observation);
@@ -29856,6 +30312,13 @@ function performAttackStrike(
     amount: attacker.attack,
     message: `${attacker.name}${options.immediate ? "立即攻击" : "攻击"}${target.name}${options.windfuryStrike ? "（风怒）" : ""}。`,
   });
+  resolveFriendlyAttackedHeroSecrets(
+    context,
+    enemyId,
+    target,
+    attacker,
+    targetIndex,
+  );
   if (attacker.stealth) {
     attacker.stealth = false;
     pushBattleEvent(context.events, {
@@ -30623,6 +31086,7 @@ function dealFriendlyTrinketDamage(
     target,
     ownerId,
     target,
+    amount,
   );
   return {
     ...observation,
@@ -32529,6 +32993,9 @@ function resolveCombatDeaths(context: CombatContext): void {
         resolveOneDeathrattle(context, death);
       }
       for (const death of deaths) {
+        resolveFriendlyDiedHeroSecrets(context, death);
+      }
+      for (const death of deaths) {
         if (!death.minion.reborn) {
           continue;
         }
@@ -33643,6 +34110,10 @@ function simulateBattle(
       [playerA.id]: {},
       [playerB.id]: {},
     },
+    secretFriendlyDeaths: {
+      [playerA.id]: 0,
+      [playerB.id]: 0,
+    },
     hoggyBankDeathrattles: {
       [playerA.id]: new Set(),
       [playerB.id]: new Set(),
@@ -33869,6 +34340,19 @@ function simulateBattle(
       damageToPlayerB += Math.max(0, state.round - 60);
     }
     if (!isGhost) {
+      const iceBlock = consumeIceBlockSecretForLethalCombatDamage(
+        playerB,
+        damageToPlayerB,
+      );
+      if (iceBlock) {
+        damageToPlayerB = 0;
+        pushBattleEvent(events, {
+          type: "trigger",
+          actorPlayerId: playerB.id,
+          targetPlayerId: playerB.id,
+          message: `${playerB.name}的${iceBlock.name}触发了，防止了致命伤害。`,
+        });
+      }
       const safeBadge = consumeSafeBadgeForLethalCombatDamage(
         playerB,
         damageToPlayerB,
@@ -33924,6 +34408,19 @@ function simulateBattle(
       boardB.reduce((total, minion) => total + minion.tier, 0);
     if (state.round > 60) {
       damageToPlayerA += Math.max(0, state.round - 60);
+    }
+    const iceBlock = consumeIceBlockSecretForLethalCombatDamage(
+      playerA,
+      damageToPlayerA,
+    );
+    if (iceBlock) {
+      damageToPlayerA = 0;
+      pushBattleEvent(events, {
+        type: "trigger",
+        actorPlayerId: playerA.id,
+        targetPlayerId: playerA.id,
+        message: `${playerA.name}的${iceBlock.name}触发了，防止了致命伤害。`,
+      });
     }
     const safeBadge = consumeSafeBadgeForLethalCombatDamage(
       playerA,
@@ -35053,6 +35550,7 @@ function beginNextRecruit(state: GameState): void {
         // TODO: activate greater time warp game mode
       }
     }
+    triggerStartOfTurnHeroSecrets(state, player);
     applyStartOfTurnEffects(state, player);
     applyGoldThresholdTrinket(state, player);
     if (player.frozen) {
@@ -35094,6 +35592,7 @@ export function createGame(
     heroPowerCounters: {},
     heroId: null,
     trinketIds: [],
+    secretIds: [],
     trinketCounters: {},
     systemEventCounters: {},
     trinketSelections: {},
@@ -36027,15 +36526,12 @@ function activateHeroPower(
       break;
     }
     case "chooseSecret": {
-      beginDiscoverInteraction(
-        state,
-        player,
-        "hero-power-akazamzarak",
-        { maximumTier: player.tavernTier },
-        1,
-        { kind: "hand" },
-        "tavernSpellCast",
-      );
+      if (!beginSecretChoice(state, player, "hero-power-akazamzarak", definition.id)) {
+        player.gold += baseCost;
+        player.goldSpentThisTurn -= baseCost;
+        player.heroPowerActiveThisTurn = false;
+        return false;
+      }
       break;
     }
     default:
