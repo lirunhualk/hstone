@@ -228,7 +228,7 @@ function buyOfferedTavernSpell(
 test("v46 exposes exact complete rules for Arena Performer, Magicfin Mycologist, Wrathscale Rogue, and the Apprentice", () => {
   assert.equal(
     CURRENT_ROSTER_VERSION,
-    "battlegrounds-36.0.3-247416-v50",
+    "battlegrounds-36.0.3-247416-v52",
   );
 
   const arena = getMinionDefinition("BG28_550");

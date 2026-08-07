@@ -233,7 +233,7 @@ function runCombat(
 }
 
 test("v43 exposes complete ordinary and Golden rules for the four-card batch", () => {
-  assert.equal(CURRENT_ROSTER_VERSION, "battlegrounds-36.0.3-247416-v50");
+  assert.equal(CURRENT_ROSTER_VERSION, "battlegrounds-36.0.3-247416-v52");
   for (const definitionId of COMPLETED_CARD_IDS) {
     const definition = getMinionDefinition(definitionId);
     assert.equal(definition.effectSupport, "complete", definitionId);

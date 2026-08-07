@@ -20,7 +20,7 @@ export type EffectSupport = "complete" | "partial";
 
 export type TavernTier = 1 | 2 | 3 | 4 | 5 | 6;
 
-/** Tier 7 minions are effect-generated and never unlock a Tavern upgrade. */
+/** Minion and exceptional Tavern tiers, including Norgannon's Tier 7 unlock. */
 export type MinionTier = TavernTier | 7;
 
 export type TierParity = "odd" | "even";
@@ -1385,7 +1385,7 @@ export interface TripleRewardSpellInstance extends MinionInstance {
   kind: "tripleReward";
   cardId: "TB_BaconShop_Triples_01";
   definitionId: "triple-reward";
-  tier: TavernTier;
+  tier: MinionTier;
 }
 
 export type SpellFamily =
@@ -1817,7 +1817,8 @@ export interface PlayerState {
   pendingSystemSpellIds: string[];
   /** Remaining free Tavern Spell purchases granted this turn. */
   freeTavernSpellPurchases: number;
-  tavernTier: TavernTier;
+  /** Current Tavern level; Norgannon lobbies may unlock level 7. */
+  tavernTier: MinionTier;
   gold: number;
   board: BoardMinionInstance[];
   hand: HandCardInstance[];
@@ -2049,11 +2050,15 @@ export interface PendingMagnetizeTargetInteraction
 
 export interface DiscoverFilter {
   exactTier?: MinionTier;
-  maximumTier?: TavernTier;
+  maximumTier?: MinionTier;
   tribe?: Tribe;
+  /** Restricts offers to minions with the printed Magnetic keyword. */
+  magnetic?: boolean;
   ability?: "battlecry" | "deathrattle";
   /** Excludes typeless minions while still allowing dual-type and All minions. */
   requiresMinionType?: boolean;
+  /** Reserves real shared-pool copies instead of generating pool-free offers. */
+  usesSharedPool?: boolean;
 }
 
 export type DiscoverDestination =

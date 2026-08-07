@@ -2,9 +2,116 @@
 // Total: 120 heroes, 120 hero powers
 // Based on HearthstoneJSON build 247416 (patch 36.0.3)
 
-import type { HeroDefinition, HeroPowerDefinition, HeroPowerEffect, Tribe } from "./types.ts";
+import type {
+  HeroDefinition,
+  HeroPowerDefinition,
+  HeroPowerEffect,
+  Tribe,
+} from "./types.ts";
 
 export const HERO_OFFER_SIZE = 4;
+
+/**
+ * Registry entries retained for card-data completeness but not exposed to a
+ * live lobby until their complete engine path is implemented.
+ */
+export const UNSUPPORTED_HERO_POWER_EFFECTS = new Set<HeroPowerEffect>([
+  "unknown",
+  "swapTwoMinionsAttack",
+  "chooseHeroPowerEachTurn",
+  "chooseFlightPath",
+  "sellDevourStats",
+  "cookMinionsForDiscover",
+  "removeTavernShootEnemy",
+  "chooseElementInvoke",
+  "nagaExpedition",
+  "deadMinionsForMech",
+  "refreshCopyHighestFreeze",
+  "revengeSummonScalingWhelp",
+  "combatSummonTentacleScaling",
+  "combatLowestAttackDeathrattle",
+  "skipTurnForDiscovers",
+  "holmesGuessMinion",
+  "chooseQuestAtStart",
+  "discoverTier7ForGoldSpent",
+  "oncePerGameExactCopy",
+  "timeWarpAtTurn8",
+  "timeWarpAtTurn5",
+  "triggerBattlecry",
+  "giveMinionReborn",
+  "dealDamageForPortal",
+  "skipTwoTurnsForDiscovers",
+  "oncePerGameGolden",
+  "startDiscoverHeroPower",
+  "removeDiscoverLowerTier",
+  "deadHeroDiscoverMinion",
+  "activeLockCardUnlockLater",
+  "activeBetOnWinner",
+  "swapNonGoldenWithTavern",
+  "collectDarkmoonTickets",
+  "periodicDarkmoonPrizes",
+  "startChooseProtossMinion",
+  "combatKillAndResummon",
+  "activeUnlockZergTier",
+  "activeStealFirstKillNextCombat",
+  "activeRandomBuffChooseUpgrade",
+  "activeRefreshHigherTier",
+  "activeReplaceHigherTier",
+  "activeStealTavernCardDamage",
+  "activeBuildCustomUndead",
+  "alternatingStatBuff",
+  "copyLeftmostHandCard",
+  "startWithVehicleSummon",
+  "startWithBattlecruiser",
+  "startWithDeathrattleFish",
+  "turnStartRandomSpell",
+  "goldPerTurnOnce",
+  "activeScalingTargetBuff",
+  "totalCardsForSulfuras",
+  "activeDiscoverBuddy",
+  "activeKillUndeadForUndead",
+  "activeFindMissingTriple",
+  "activeDiscoverRotatingTribe",
+  "activeDiscoverDeadMinionCopy",
+  "activeDiscoverFromNextOpponent",
+  "activeRefreshOpponentMinions",
+  "combatSummonHighestAttackDelayed",
+  "combatSummonHighestHealthDelayed",
+  "activeGetPirateCostReduces",
+  "activeEndOfTurnScalingBuff",
+  "increaseGoldCap",
+  "activeStealAllTavernCards",
+  "activeDoubleHealthTavernMinion",
+  "easyTripleCoin",
+  "combatBuffFlanks",
+  "combatBuffPerTribe",
+  "afterThreePurchasesGetCopy",
+  "battlecryPurchasesForBrann",
+  "activeRandomTavernSpell",
+  "activeRollDiceForGold",
+  "activeShrinkMinionToHand",
+  "buyTierTripleReward",
+  "hatPassesOnSell",
+  "refreshRandomKeyword",
+  "sellMinionsForRandomMurloc",
+  "activeDigForGolden",
+  "activeCopyLastTavernSpell",
+  "nextTavernSpellDiscountDelayed",
+  "chooseTrinketAtTurn5",
+  "chooseGreaterTrinketAtTurn8",
+  "activeGiveDivineShield",
+  "chooseSecret",
+  "discoverHeroPowerAtTurn4",
+]);
+
+const IDENTITY_INELIGIBLE_HERO_POWER_EFFECTS = new Set<HeroPowerEffect>([
+  "bonusStartingHealth",
+  "startWithAmalgam",
+  "growingTavernBuff",
+  "chooseTrinketAtTurn5",
+  "chooseGreaterTrinketAtTurn8",
+  "discoverHeroPowerAtTurn4",
+]);
 
 export const HERO_POWER_COUNTER_KEYS = {
   smartSavingsGold: "smartSavingsGold",
@@ -109,7 +216,7 @@ export const HERO_POWER_DEFINITIONS = [
     name: "血脉连接",
     description: "获取2张鲜血宝石。（每回合两次。）",
     effect: "getBloodGemsPerTurn",
-    activation: "active"
+    activation: "passive"
   },
   {
     id: "hero-power-bg20_hero_201p",
@@ -549,7 +656,7 @@ export const HERO_POWER_DEFINITIONS = [
     name: "理财之道",
     description: "在你出售一个随从后，下回合获得1枚铸币。0在你出售一个随从后，下回合获得1枚铸币。（已储存0枚）",
     effect: "goldAfterSellNextTurn",
-    activation: "active"
+    activation: "passive"
   },
   {
     id: "hero-power-experienced-bartender",
@@ -1936,6 +2043,12 @@ export function heroPowerCanBeManuallyActivated(definitionId: string): boolean {
   return getHeroPowerDefinition(definitionId).activation === "active";
 }
 
+export function heroPowerIsPlayable(definitionId: string): boolean {
+  return !UNSUPPORTED_HERO_POWER_EFFECTS.has(
+    getHeroPowerDefinition(definitionId).effect,
+  );
+}
+
 export function isHeroPowerDefinitionId(definitionId: string): boolean {
   return HERO_POWER_BY_ID.has(definitionId);
 }
@@ -1957,31 +2070,49 @@ const TRIBE_BOUND_HERO_POWERS: Record<string, readonly Tribe[]> = {
   "hero-power-yo-ho-ogre": ["pirate"],
 };
 
+function heroPowerIsAvailableForTribes(
+  heroPowerId: string,
+  activeTribes: readonly Tribe[],
+): boolean {
+  const tribes = TRIBE_BOUND_HERO_POWERS[heroPowerId];
+  if (!tribes || tribes.length === 0) return true;
+  return tribes.some((tribe) => activeTribes.includes(tribe));
+}
+
 export function heroIsAvailableForTribes(
   definition: HeroDefinition,
   activeTribes: readonly Tribe[],
 ): boolean {
-  const tribes = TRIBE_BOUND_HERO_POWERS[definition.heroPowerId];
-  if (!tribes || tribes.length === 0) return true;
-  return tribes.some((tribe) => activeTribes.includes(tribe));
+  return heroPowerIsAvailableForTribes(
+    definition.heroPowerId,
+    activeTribes,
+  );
 }
 
 export function heroesAvailableForTribes(
   activeTribes: readonly Tribe[],
 ): HeroDefinition[] {
   return HERO_DEFINITIONS
-    .filter((d) => heroIsAvailableForTribes(d as unknown as HeroDefinition, activeTribes))
+    .filter(
+      (d) =>
+        heroPowerIsPlayable(d.heroPowerId) &&
+        heroIsAvailableForTribes(d as unknown as HeroDefinition, activeTribes),
+    )
     .map((d) => ({ ...(d as unknown as HeroDefinition), associatedTribes: undefined }));
 }
 
 export function identityEligibleHeroPowers(
   currentHeroPowerId: string | null,
+  activeTribes: readonly Tribe[],
 ): HeroPowerDefinition[] {
   return HERO_POWER_DEFINITIONS
     .filter(
       (d) =>
         d.id !== currentHeroPowerId &&
-        (d as any).identityEligible !== false,
+        !UNSUPPORTED_HERO_POWER_EFFECTS.has(d.effect) &&
+        !IDENTITY_INELIGIBLE_HERO_POWER_EFFECTS.has(d.effect) &&
+        heroPowerIsAvailableForTribes(d.id, activeTribes) &&
+        (d as unknown as HeroPowerDefinition).identityEligible !== false,
     )
     .map((d) => ({ ...d } as unknown as HeroPowerDefinition));
 }

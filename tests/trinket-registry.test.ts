@@ -8,7 +8,6 @@ import {
 } from "../lib/game/lobby-systems.ts";
 import {
   HERO_DEFINITIONS,
-  HERO_POWER_DEFINITIONS,
   heroPowerCanBeManuallyActivated,
 } from "../lib/game/hero-powers.ts";
 import { getBuddyDefinitionIdForHeroPower } from "../lib/game/buddies.ts";
@@ -95,6 +94,13 @@ test("Hero-specific Lesser filters exclude Sous Chef and unavailable Buddies", (
     const hasBuddy = getBuddyDefinitionIdForHeroPower(hero.heroPowerId) !== null;
     // Sous Chef label is offered to heroes with activatable powers
     const hasActivatablePower = heroPowerCanBeManuallyActivated(hero.heroPowerId);
+    assert.equal(
+      candidates.some(
+        (definition) => definition.cardId === "BG35_MagicItem_801",
+      ),
+      hasActivatablePower,
+      hero.id,
+    );
     // Maxwell sticker only offered to heroes with buddies
     assert.equal(
       candidates.some(

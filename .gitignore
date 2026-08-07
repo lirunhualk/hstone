@@ -229,6 +229,10 @@ __marimo__/
 /coverage/
 /outputs/
 /work/
+/.playwright-mcp/
+/bilibili-game-reference.png
+/bilibili-search-tutorial.html
+/bilibili-video-page.png
 .env*
 npm-debug.log*
 .codex-dev*.log

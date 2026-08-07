@@ -14,7 +14,11 @@ import {
   gameReducer,
   gameTransition,
   getAiStrategyProfile,
+  getHeroPowerAiScore,
+  getHeroPowerDefinition,
   getTavernSpellDefinition,
+  getTrinketAiScore,
+  getTrinketDefinition,
   getUpgradeCost,
   planAiBoardOrder,
   scoreMinionForAi,
@@ -197,6 +201,38 @@ test("seven AI players receive stable, distinct strategy profiles", () => {
     true,
     "new experimental switches remain inert in every live profile",
   );
+});
+
+test("AI upgrade-related Hero Power and Trinket scores honor the Norgannon Tier 7 cap", () => {
+  const state = createGame(0xa170);
+  const player = playerById(state, "player-1");
+  player.tavernTier = 6;
+  state.lobbySystemsEnabled = false;
+  state.systemEventId = null;
+
+  const upgradeHeroPowers = [
+    "hero-power-experienced-bartender",
+    "hero-power-ever-blooming",
+    "hero-power-manastorm",
+    "hero-power-avalanche",
+  ].map(getHeroPowerDefinition);
+  const oilcan = getTrinketDefinition("lesser-trinket-oilcan");
+  const heroScores = () =>
+    upgradeHeroPowers.map((definition) =>
+      getHeroPowerAiScore(state, player, definition),
+    );
+
+  assert.deepEqual(heroScores(), [1, 1, 6, 1]);
+  assert.equal(getTrinketAiScore(state, player, oilcan), 2);
+
+  state.lobbySystemsEnabled = true;
+  state.systemEventId = "system-event-norgannon";
+  assert.deepEqual(heroScores(), [9, 8, 8, 8]);
+  assert.equal(getTrinketAiScore(state, player, oilcan), 12);
+
+  player.tavernTier = 7;
+  assert.deepEqual(heroScores(), [1, 1, 6, 1]);
+  assert.equal(getTrinketAiScore(state, player, oilcan), 2);
 });
 
 test("benchmark profile overrides are scoped, validated, and restored", () => {
@@ -2062,6 +2098,26 @@ test("upgrade decisions react to health, board pressure, and strategy", () => {
     "low Health alone should not stop a genuinely strong board from leveling",
   );
 
+});
+
+test("Norgannon lets a healthy AI schedule the Tier 7 upgrade", () => {
+  const context = {
+    profile: getAiStrategyProfile("player-1"),
+    round: 12,
+    tavernTier: 6 as const,
+    health: 35,
+    armor: 10,
+    gold: 10,
+    upgradeCost: 10,
+    boardSize: 7,
+    bestShopScore: 10,
+    weakestBoardScore: 20,
+  };
+  assert.equal(shouldAiUpgrade(context), false);
+  assert.equal(
+    shouldAiUpgrade({ ...context, maximumTavernTier: 7 }),
+    true,
+  );
 });
 
 test("fixed tier-six experiments are inert by default and obey every boundary", () => {

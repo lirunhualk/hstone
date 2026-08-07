@@ -30,19 +30,19 @@ import {
   getLegalSpellcraftTargetIds,
   getLegalTavernSpellTargetIds,
   getAiStrategyProfile,
+  getHeroPowerActivationQuote,
   getScheduledOpponent,
   getMinionPurchaseCost,
   getMinionPurchaseQuote,
   getMinionSellValue,
+  getMaximumTavernTier,
   getTavernRefreshQuote,
   getHeroDefinition,
   getHeroPowerDefinition,
   getHeroSecretDefinition,
   getHeroPowerProgressText,
   getSystemEventDefinition,
-  heroPowerActiveCost,
   heroPowerCanBeManuallyActivated,
-  heroPowerNeedsTarget,
   getTrinketAliasKind,
   getTrinketDefinition,
   getTrinketProgressText,
@@ -77,6 +77,10 @@ import {
   type TripleRewardSpellInstance,
   type Tribe,
 } from "../lib/game/engine";
+import {
+  isPersistedSecretChoiceInteraction,
+  persistedSecretChoiceMatchesPlayer,
+} from "../lib/game/client-save";
 import {
   CURRENT_ROSTER_VERSION,
   TRIBE_NAMES,
@@ -879,6 +883,9 @@ function isPendingInteraction(
           value.remainingChoices > 0))
     );
   }
+  if (value.kind === "secretChoice") {
+    return isPersistedSecretChoiceInteraction(value);
+  }
   if (value.kind === "minionChoice") {
     const foodieNormalOptions =
       Array.isArray(value.optionIds) &&
@@ -1198,6 +1205,9 @@ function pendingInteractionMatchesPlayer(
       interaction.optionIds.length > 0 &&
       interaction.optionIds.every(isHeroPowerDefinitionId)
     );
+  }
+  if (interaction.kind === "secretChoice") {
+    return persistedSecretChoiceMatchesPlayer(interaction, player);
   }
   if (interaction.kind === "minionChoice") {
     const source = player.board.find(
@@ -3056,9 +3066,6 @@ function CombatAttackLink({
     null,
   );
 
-  const chargeVectorRef = useRef(onChargeVector);
-  chargeVectorRef.current = onChargeVector;
-
   useLayoutEffect(() => {
     const svg = svgRef.current;
     const board = svg?.closest(".board") as HTMLElement | null;
@@ -3102,10 +3109,10 @@ function CombatAttackLink({
       const distance = Math.hypot(dx, dy);
       if (distance < 1) {
         setGeometry(null);
-        chargeVectorRef.current?.({ x: 0, y: 0 });
+        onChargeVector?.({ x: 0, y: 0 });
         return;
       }
-      chargeVectorRef.current?.({ x: dx, y: dy });
+      onChargeVector?.({ x: dx, y: dy });
       const startPadding = Math.min(44, distance * 0.2);
       const endPadding = Math.min(50, distance * 0.23);
       const unitX = dx / distance;
@@ -3130,7 +3137,7 @@ function CombatAttackLink({
       resizeObserver.disconnect();
       window.removeEventListener("resize", updateGeometry);
     };
-  }, [actorInstanceId, eventIndex, targetInstanceId]);
+  }, [actorInstanceId, eventIndex, onChargeVector, targetInstanceId]);
 
   return (
     <svg
@@ -3573,7 +3580,8 @@ function BoardRow({
                   onKeyDown={
                     (isTavernSpellTarget && onTavernSpellTarget) ||
                     (isBloodGemTarget && onBloodGemTarget) ||
-                    (isMagneticTarget && onMagneticTarget)
+                    (isMagneticTarget && onMagneticTarget) ||
+                    (isHeroPowerTarget && onHeroPowerTarget)
                       ? (event) => {
                           if (
                             event.key !== "Enter" &&
@@ -3589,8 +3597,10 @@ function BoardRow({
                             onTavernSpellTarget(unit.instanceId);
                           } else if (isBloodGemTarget && onBloodGemTarget) {
                             onBloodGemTarget(unit.instanceId);
-                          } else {
+                          } else if (isMagneticTarget && onMagneticTarget) {
                             onMagneticTarget?.(unit.instanceId);
+                          } else {
+                            onHeroPowerTarget?.(unit.instanceId);
                           }
                         }
                       : undefined
@@ -4331,49 +4341,58 @@ export default function GameClient() {
   const interactionLocked =
     game.pendingInteraction !== null ||
     queuedRecruitBloodGemPulse?.kind === "bloodGemPulse";
-  const humanHeroPowerCanActivate =
+  const humanHeroPowerQuote =
     humanHeroPowerActive &&
     !humanHeroPowerUsedThisTurn &&
     !interactionLocked &&
-    game.phase === "recruit";
-  const humanHeroPowerCost =
-    humanHeroPower ? heroPowerActiveCost(humanHeroPower.effect) : 99;
+    game.phase === "recruit"
+      ? getHeroPowerActivationQuote(game, human.id)
+      : null;
+  const humanHeroPowerCanActivate = humanHeroPowerQuote !== null;
+  const humanHeroPowerCost = humanHeroPowerQuote?.cost ?? 99;
   const humanHeroPowerAffordable =
-    humanHeroPowerCost <= human.gold;
+    humanHeroPowerQuote?.affordable ?? false;
+  const humanHeroPowerUsable = humanHeroPowerQuote?.usable ?? false;
   const humanHeroPowerTargetMode =
-    humanHeroPower ? heroPowerNeedsTarget(humanHeroPower.effect) : null;
+    humanHeroPowerQuote?.targetKind ?? null;
   const [heroPowerTargeting, setHeroPowerTargeting] = useState(false);
-  const heroPowerTargetValidIds = useMemo(() => {
+  const heroPowerTargetValidIds = (() => {
     if (
       !heroPowerTargeting ||
-      !humanHeroPowerTargetMode ||
-      !humanHeroPower
+      !humanHeroPowerTargetMode
     ) {
       return new Set<string>();
     }
-    if (humanHeroPowerTargetMode === "shop") {
-      return new Set(human.shop.map((m) => m.instanceId));
-    }
-    return new Set(human.board.map((m) => m.instanceId));
-  }, [heroPowerTargeting, humanHeroPowerTargetMode, humanHeroPower, human.shop, human.board]);
+    const candidates =
+      humanHeroPowerTargetMode === "shop" ? human.shop : human.board;
+    return new Set(
+      candidates
+        .filter(
+          (candidate) =>
+            getHeroPowerActivationQuote(
+              game,
+              human.id,
+              candidate.instanceId,
+            )?.usable === true,
+        )
+        .map((candidate) => candidate.instanceId),
+    );
+  })();
 
-  const doActivateHeroPower = useCallback(
-    (targetInstanceId?: string) => {
-      if (!humanHeroPowerCanActivate || !humanHeroPowerAffordable) return;
-      if (humanHeroPowerTargetMode && !targetInstanceId) {
-        setHeroPowerTargeting(true);
-        return;
-      }
-      setHeroPowerTargeting(false);
-      send({ type: "ACTIVATE_HERO_POWER", targetInstanceId });
-    },
-    [
-      humanHeroPowerCanActivate,
-      humanHeroPowerAffordable,
-      humanHeroPowerTargetMode,
-      send,
-    ],
-  );
+  const doActivateHeroPower = (targetInstanceId?: string) => {
+    if (!humanHeroPowerCanActivate) return;
+    const quote = targetInstanceId
+      ? getHeroPowerActivationQuote(game, human.id, targetInstanceId)
+      : humanHeroPowerQuote;
+    if (!quote?.usable) return;
+    if (quote.targetKind && !targetInstanceId) {
+      setSelection(null);
+      setHeroPowerTargeting(true);
+      return;
+    }
+    setHeroPowerTargeting(false);
+    send({ type: "ACTIVATE_HERO_POWER", targetInstanceId });
+  };
 
   useEffect(() => {
     if (!heroPowerTargeting) return;
@@ -4386,13 +4405,10 @@ export default function GameClient() {
     return () => window.removeEventListener("keydown", onKeyDown);
   }, [heroPowerTargeting]);
 
-  const onHeroPowerTargetClick = useCallback(
-    (instanceId: string) => {
-      if (!heroPowerTargeting) return;
-      doActivateHeroPower(instanceId);
-    },
-    [heroPowerTargeting, doActivateHeroPower],
-  );
+  const onHeroPowerTargetClick = (instanceId: string) => {
+    if (!heroPowerTargeting) return;
+    doActivateHeroPower(instanceId);
+  };
   const modalInteractionLocked = interactionRequiresModalBackdrop(
     game.pendingInteraction,
   );
@@ -4773,37 +4789,45 @@ export default function GameClient() {
           targetInstanceId: currentBattleEvent.targetInstanceId,
         }
       : undefined;
-  const [combatChargePhase, setCombatChargePhase] = useState<
-    "idle" | "charge" | "collide" | "rebound"
-  >("idle");
+  const currentAttackEventIndex =
+    currentBattleEvent?.type === "attack" ? currentBattleEvent.index : null;
+  const [combatChargeState, setCombatChargeState] = useState<{
+    eventIndex: number;
+    phase: "charge" | "collide" | "rebound";
+  } | null>(null);
+  const combatChargePhase =
+    currentAttackEventIndex !== null &&
+    combatChargeState?.eventIndex === currentAttackEventIndex
+      ? combatChargeState.phase
+      : "idle";
   const [combatChargeVector, setCombatChargeVector] = useState<{
     x: number;
     y: number;
   }>({ x: 0, y: 0 });
-  const combatChargePhaseRef = useRef(combatChargePhase);
-  combatChargePhaseRef.current = combatChargePhase;
 
   useEffect(() => {
-    if (!currentBattleEvent || currentBattleEvent.type !== "attack") {
+    if (currentAttackEventIndex === null) {
       return;
     }
-    const chargeTimer = setTimeout(() => {
-      setCombatChargePhase("charge");
-      const collideTimer = setTimeout(() => {
-        setCombatChargePhase("collide");
-        const reboundTimer = setTimeout(() => {
-          setCombatChargePhase("rebound");
-          const clearTimer = setTimeout(() => {
-            setCombatChargePhase("idle");
-          }, 300);
-          return () => clearTimeout(clearTimer);
-        }, 380);
-        return () => clearTimeout(reboundTimer);
-      }, 540);
-      return () => clearTimeout(collideTimer);
-    }, 80);
-    return () => clearTimeout(chargeTimer);
-  }, [currentBattleEvent]);
+    const schedulePhase = (
+      phase: "charge" | "collide" | "rebound",
+      delayAtNormalSpeed: number,
+    ) =>
+      window.setTimeout(() => {
+        setCombatChargeState({ eventIndex: currentAttackEventIndex, phase });
+      }, delayAtNormalSpeed / battleSpeed);
+    const timers = [
+      schedulePhase("charge", 40),
+      schedulePhase("collide", 400),
+      schedulePhase("rebound", 560),
+      window.setTimeout(() => {
+        setCombatChargeState(null);
+      }, 740 / battleSpeed),
+    ];
+    return () => {
+      timers.forEach((timer) => window.clearTimeout(timer));
+    };
+  }, [battleSpeed, currentAttackEventIndex]);
 
   const currentDebuffLabel =
     currentBattleEvent?.type === "keywordRemoved" &&
@@ -5009,6 +5033,7 @@ export default function GameClient() {
     (infoTab === "scouting" && selectedStandingPlayer !== null) ||
     (infoTab === "battle" && battle !== null);
   const upgradeCost = getUpgradeCost(game, human.id);
+  const maximumTavernTier = getMaximumTavernTier(game);
   const selectedMinionPurchaseQuote =
     selection?.zone === "shop"
       ? getMinionPurchaseQuote(game, human.id, selection.index)
@@ -6909,6 +6934,14 @@ export default function GameClient() {
       }${
         activeRecruitPresentation ? " has-recruit-presentation" : ""
       }`}
+      style={
+        {
+          "--combat-attack-duration": `${320 / battleSpeed}ms`,
+          "--combat-charge-duration": `${360 / battleSpeed}ms`,
+          "--combat-collision-duration": `${160 / battleSpeed}ms`,
+          "--combat-rebound-duration": `${180 / battleSpeed}ms`,
+        } as CSSProperties
+      }
       data-phase={game.phase}
       data-loaded={loaded}
       data-dragging={dragSession?.active === true}
@@ -7036,7 +7069,7 @@ export default function GameClient() {
           data-testid="human-tavern-tier"
         >
           <small>酒馆</small>
-          <strong>{human.tavernTier} / 6</strong>
+          <strong>{human.tavernTier} / {maximumTavernTier}</strong>
           {activeRecruitUpgrade?.kind === "tavernUpgrade" && (
             <span
               className="tavern-tier-burst"
@@ -7062,9 +7095,9 @@ export default function GameClient() {
                 : "英雄与英雄技能：无"
             }
             data-testid="human-hero-power"
-            title={`${humanHeroPower?.name ?? "英雄技能"} · ${humanHeroPowerCost} 金币${humanHeroPowerAffordable ? "" : " · 金币不足"}`}
+            title={`${humanHeroPower?.name ?? "英雄技能"} · ${humanHeroPowerCost} 金币${!humanHeroPowerAffordable ? " · 金币不足" : !humanHeroPowerUsable ? " · 当前条件不满足" : ""}`}
             onClick={() => doActivateHeroPower()}
-            disabled={!humanHeroPowerAffordable || heroPowerTargeting}
+            disabled={!humanHeroPowerUsable || heroPowerTargeting}
           >
             {humanHero && (
               <span className="hero-hud-portrait" aria-hidden="true">
@@ -7302,14 +7335,12 @@ export default function GameClient() {
               <div className="shop-actions">
                 <button
                   type="button"
-                  className={`tavern-control${
-                    human.tavernTier >= 6 ? "" : ""
-                  }`}
+                  className="tavern-control"
                   data-testid="upgrade-tavern"
                   disabled={
                     game.phase !== "recruit" ||
                     interactionLocked ||
-                    human.tavernTier >= 6 ||
+                    human.tavernTier >= maximumTavernTier ||
                     human.gold < upgradeCost
                   }
                   onClick={() => send({ type: "UPGRADE_TAVERN" })}
@@ -7317,12 +7348,12 @@ export default function GameClient() {
                   <span className="tavern-control-icon" aria-hidden="true">★</span>
                   <span className="tavern-control-label">
                     <strong>
-                      {human.tavernTier >= 6
+                      {human.tavernTier >= maximumTavernTier
                         ? "酒馆已满级"
                         : `升至 ${human.tavernTier + 1}星`}
                     </strong>
                   </span>
-                  {human.tavernTier < 6 && (
+                  {human.tavernTier < maximumTavernTier && (
                     <span className="tavern-control-cost">
                       {upgradeCost}
                     </span>

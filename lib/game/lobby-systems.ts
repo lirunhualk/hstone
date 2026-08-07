@@ -235,6 +235,38 @@ export interface SystemEventDefinition {
   effect: SystemEventEffect;
 }
 
+/**
+ * Registry-only events whose current local rule path is incomplete or violates
+ * shared-pool/timing invariants. Keep them loadable for old saves, but never
+ * deal them into a newly created lobby.
+ */
+export const UNSUPPORTED_SYSTEM_EVENT_EFFECTS = new Set<SystemEventEffect>([
+  "buyOneGetOne",
+  "immediateFormation",
+  "scoutsHonor",
+  "tierMatchOnly",
+  "assemblyLine",
+  "goldenArena",
+  "extraSpellPerRefresh",
+  "gladiatorSpoils",
+  "gargonnisStorm",
+  "overseersOrb",
+  "wisdomballAnomaly",
+  "yoggArena",
+  "upgradePrize",
+  "vault",
+  "mysteryFlower",
+  "circusPrize",
+  "continuingEducation",
+  "herosCall",
+  "risingTide",
+  "incubating",
+  "facelessEvery4",
+  "bringBuddies",
+  "dualUniverse",
+  "emergencyLanding",
+]);
+
 /** Official Anomalies that can coexist with this local Trinket ruleset. */
 export const SYSTEM_EVENT_DEFINITIONS = [
   {
@@ -513,7 +545,7 @@ export const SYSTEM_EVENT_DEFINITIONS = [
   },
   {
     id: "system-event-faceless",
-    cardId: "BG27_Anomaly_119",
+    cardId: "BG27_Anomaly_577",
     name: "无面无间",
     description: "每4回合获得一个「无面操纵者」。",
     effect: "facelessEvery4",
@@ -540,6 +572,12 @@ export const SYSTEM_EVENT_DEFINITIONS = [
     effect: "emergencyLanding",
   },
 ] as const satisfies readonly SystemEventDefinition[];
+
+/** Events eligible for newly created lobbies; the full registry remains for saves. */
+export const PLAYABLE_SYSTEM_EVENT_DEFINITIONS =
+  SYSTEM_EVENT_DEFINITIONS.filter(
+    (definition) => !UNSUPPORTED_SYSTEM_EVENT_EFFECTS.has(definition.effect),
+  );
 
 export const SYSTEM_TAVERN_SPELL_DEFINITIONS = [
   {

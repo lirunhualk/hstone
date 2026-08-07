@@ -6806,7 +6806,8 @@ button.hud-hero-power.is-unaffordable .hero-power-cost-badge {
 
 .unit-card.is-attacking {
   z-index: 8;
-  animation: card-attack 320ms cubic-bezier(0.25, 0.9, 0.35, 1);
+  animation: card-attack var(--combat-attack-duration, 320ms)
+    cubic-bezier(0.25, 0.9, 0.35, 1);
 }
 
 .board-row[data-side="enemy"] .unit-card.is-attacking {
@@ -6815,17 +6816,20 @@ button.hud-hero-power.is-unaffordable .hero-power-cost-badge {
 
 .unit-card.is-charging {
   z-index: 10;
-  animation: card-attack-charge 520ms cubic-bezier(0.25, 0.9, 0.35, 1);
+  animation: card-attack-charge var(--combat-charge-duration, 360ms)
+    cubic-bezier(0.25, 0.9, 0.35, 1);
 }
 
 .unit-card.is-colliding {
   z-index: 11;
-  animation: card-attack-collision 360ms cubic-bezier(0.2, 0.85, 0.3, 1);
+  animation: card-attack-collision var(--combat-collision-duration, 160ms)
+    cubic-bezier(0.2, 0.85, 0.3, 1);
 }
 
 .unit-card.is-rebounding {
   z-index: 9;
-  animation: card-attack-rebound 280ms ease-out;
+  animation: card-attack-rebound var(--combat-rebound-duration, 180ms)
+    ease-out;
 }
 
 .unit-card.is-shield-burst {
@@ -8361,18 +8365,19 @@ button.hud-hero-power.is-unaffordable .hero-power-cost-badge {
     font-size: 13px;
   }
 
-  .game-layout {
-    grid-template-columns: 1fr;
-    grid-template-rows:
-      auto
-      minmax(0, 1.6fr)
-      auto
-      auto;
+  .main-grid {
+    grid-template-columns: minmax(0, 1fr);
+    grid-template-rows: minmax(0, 1fr) auto;
+    gap: 4px;
+    padding: 4px;
+  }
+
+  .play-column {
+    grid-template-rows: auto minmax(0, 1.6fr) auto;
     grid-template-areas:
       "shop"
       "board"
-      "hand"
-      "side";
+      "hand";
     gap: 4px;
   }
 
@@ -8389,7 +8394,8 @@ button.hud-hero-power.is-unaffordable .hero-power-cost-badge {
   }
 
   .side-rail {
-    grid-area: side;
+    grid-row: 2;
+    grid-column: 1;
   }
 
   .standings {

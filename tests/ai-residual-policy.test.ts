@@ -133,7 +133,7 @@ function provider(
 }
 
 test("exports a versioned contract and fixed 0.90 override threshold", () => {
-  assert.equal(AI_RESIDUAL_CONTEXT_VERSION, 1);
+  assert.equal(AI_RESIDUAL_CONTEXT_VERSION, 2);
   assert.equal(AI_RESIDUAL_OVERRIDE_THRESHOLD, 0.9);
 
   const result = withAiResidualPolicyOverrides(
@@ -463,7 +463,7 @@ test("rejects invalid contexts before calling a provider", () => {
   let calls = 0;
   const invalidVersion = {
     ...upgradeContext(),
-    contextVersion: 2,
+    contextVersion: 1,
   } as unknown as AiUpgradeMacroContext;
   const nonFinite = {
     ...upgradeContext(),

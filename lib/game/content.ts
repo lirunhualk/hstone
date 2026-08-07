@@ -7,7 +7,7 @@ import trinketFeatureSnapshot from "./generated/battlegrounds-trinkets-36.0.3-24
 import { BUDDY_MINION_DEFINITIONS } from "./buddies.ts";
 import type { MinionDefinition, Tribe } from "./types.ts";
 
-export const CURRENT_ROSTER_VERSION = "battlegrounds-36.0.3-247416-v51";
+export const CURRENT_ROSTER_VERSION = "battlegrounds-36.0.3-247416-v52";
 /** Compatibility alias for existing save and engine imports. */
 export const CLASSIC_ROSTER_VERSION = CURRENT_ROSTER_VERSION;
 
@@ -4521,7 +4521,7 @@ export const LIVE_MINION_DEFINITIONS: readonly MinionDefinition[] =
     LIVE_ROSTER.minions.map((card) => createLiveDefinition(card)),
   );
 
-/** Current Tier 7 pool. These cards exist only for effect-generated rewards. */
+/** Current Tier 7 roster, shared by Norgannon shops and generated rewards. */
 export const TIER_SEVEN_MINION_DEFINITIONS: readonly MinionDefinition[] =
   Object.freeze(
     LIVE_ROSTER.tierSevenMinions.map((card) =>

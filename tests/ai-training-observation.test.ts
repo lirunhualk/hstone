@@ -192,6 +192,9 @@ test("training observation is an immutable JSON privacy boundary", () => {
     ),
   ];
   controlled.lastOpponentId = hiddenOpponent.id;
+  controlled.heroPowerActiveThisTurn = true;
+  controlled.secretIds = ["secret-splitting-image"];
+  controlled.systemEventCounters = { savedGold: 5 };
   state.seed = 0x5eed5eed;
   state.rngState = 0x12345678;
   state.pool.POOL_SECRET_CANARY = 123456;
@@ -228,13 +231,16 @@ test("training observation is an immutable JSON privacy boundary", () => {
   const stateBefore = JSON.stringify(state);
   const observation = createAiTrainingObservation(state, controlledSeat);
   assert.equal(JSON.stringify(state), stateBefore);
-  assert.equal(observation.schemaVersion, 1);
+  assert.equal(observation.schemaVersion, 3);
   assert.equal(observation.controlledSeat, controlledSeat);
   assert.equal(observation.own.board[0]?.name, "OWN_BOARD_ALLOWED");
   assert.equal(observation.own.board[0]?.venomous, true);
   assert.equal(observation.own.board[0]?.temporaryVenomous, true);
   assert.equal(observation.own.hand[0]?.name, "OWN_HAND_ALLOWED");
   assert.equal(observation.own.shop[0]?.name, "OWN_SHOP_ALLOWED");
+  assert.equal(observation.own.heroPowerActiveThisTurn, true);
+  assert.deepEqual(observation.own.secretIds, ["secret-splitting-image"]);
+  assert.deepEqual(observation.own.systemEventCounters, { savedGold: 5 });
   assert.equal(observation.own.pendingSpellcraft[0]?.rewardTier, 5);
   assert.deepEqual(observation.own.pendingInteraction?.source, {
     zone: "board",
@@ -289,6 +295,55 @@ test("training observation is an immutable JSON privacy boundary", () => {
       >
     ).pop();
   }, TypeError);
+});
+
+test("discover filter observation preserves pool and Magnetic constraints", () => {
+  const state = createGame(0x7a04);
+  const controlledSeat = state.players.findIndex((player) => player.isHuman);
+  assert.notEqual(controlledSeat, -1);
+  const controlled = state.players[controlledSeat];
+  const option = structuredClone(firstAvailableMinion(state));
+  state.pendingInteraction = {
+    kind: "discover",
+    interactionId: "discover-filter-observation",
+    playerId: controlled.id,
+    sourceInstanceId: option.instanceId,
+    options: [option],
+    filter: {
+      exactTier: 7,
+      maximumTier: 7,
+      tribe: "mech",
+      magnetic: true,
+      ability: "battlecry",
+      requiresMinionType: true,
+      usesSharedPool: true,
+    },
+    remainingDiscoveries: 1,
+    destination: { kind: "hand" },
+  };
+
+  const observation = createAiTrainingObservation(state, controlledSeat);
+  assert.deepEqual(observation.own.pendingInteraction?.filter, {
+    exactTier: 7,
+    maximumTier: 7,
+    tribe: "mech",
+    magnetic: true,
+    ability: "battlecry",
+    requiresMinionType: true,
+    usesSharedPool: true,
+  });
+
+  state.pendingInteraction.filter = {};
+  const defaultObservation = createAiTrainingObservation(state, controlledSeat);
+  assert.deepEqual(defaultObservation.own.pendingInteraction?.filter, {
+    exactTier: null,
+    maximumTier: null,
+    tribe: null,
+    magnetic: false,
+    ability: null,
+    requiresMinionType: false,
+    usesSharedPool: false,
+  });
 });
 
 test("AI seat receives only its personally observed previous opponent", () => {

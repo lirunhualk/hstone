@@ -2,9 +2,11 @@ import {
   canMagnetize,
   createGame,
   gameTransition,
+  getHeroPowerActivationQuote,
   getLegalSpellcraftTargetIds,
   getLegalTavernSpellTargetIds,
   getMinionPurchaseQuote,
+  getMaximumTavernTier,
   getTavernRefreshQuote,
   getTavernSpellPurchaseQuote,
   getUpgradeCost,
@@ -17,6 +19,10 @@ import {
   type AiTrainingObservation,
   type DeepReadonly,
 } from "./ai-training.ts";
+import {
+  createInitialHeroPowerCounters,
+  heroPowerIsPlayable,
+} from "./hero-powers.ts";
 import { DEFAULT_INITIAL_HEALTH } from "./setup.ts";
 import { spellcraftNeedsTarget } from "./spellcraft.ts";
 import { tavernSpellNeedsTarget } from "./tavern-spells.ts";
@@ -29,7 +35,12 @@ import type {
   PlayerState,
 } from "./types.ts";
 
-export const AI_TRAINING_ENVIRONMENT_VERSION = 3 as const;
+export const AI_TRAINING_ENVIRONMENT_VERSION = 4 as const;
+
+export interface AiTrainingEnvironmentConfiguration {
+  /** Optional implemented power assigned to the controlled seat for training. */
+  heroPowerId?: string | null;
+}
 
 export type AiTrainingPlannerDisposition =
   | "deterministic"
@@ -161,12 +172,31 @@ function controlledPlayer(state: GameState): PlayerState {
 function configureControlledSeat(
   state: GameState,
   controlledSeat: number,
+  configuration: AiTrainingEnvironmentConfiguration = {},
 ): void {
   validateControlledSeat(state, controlledSeat);
   state.humanPlayerId = state.players[controlledSeat].id;
   state.players.forEach((player, seat) => {
     player.isHuman = seat === controlledSeat;
   });
+  if (configuration.heroPowerId !== undefined) {
+    const player = state.players[controlledSeat];
+    if (configuration.heroPowerId === null) {
+      player.heroPowerId = null;
+      player.heroPowerCounters = {};
+    } else {
+      if (!heroPowerIsPlayable(configuration.heroPowerId)) {
+        throw new RangeError(
+          `Unsupported training Hero Power: ${configuration.heroPowerId}`,
+        );
+      }
+      player.heroPowerId = configuration.heroPowerId;
+      player.heroPowerCounters = createInitialHeroPowerCounters(
+        configuration.heroPowerId,
+      );
+    }
+    player.heroPowerActiveThisTurn = false;
+  }
 }
 
 function reference(
@@ -467,6 +497,51 @@ function recruitCandidates(state: GameState): CandidateAction[] {
     }
   });
 
+  const heroPowerQuote = getHeroPowerActivationQuote(
+    state,
+    player.id,
+  );
+  if (
+    heroPowerQuote?.affordable &&
+    heroPowerQuote.usable
+  ) {
+    const cost = {
+      currency: "gold" as const,
+      amount: heroPowerQuote.cost,
+    };
+    if (heroPowerQuote.targetKind === null) {
+      candidates.push(
+        candidate(
+          { type: "ACTIVATE_HERO_POWER" },
+          { cost },
+        ),
+      );
+    } else {
+      const targets =
+        heroPowerQuote.targetKind === "shop"
+          ? player.shop.map((_minion, index) => reference("shop", index))
+          : player.board.map((_minion, index) => reference("board", index));
+      for (const target of targets) {
+        const targetInstanceId =
+          target.zone === "shop"
+            ? player.shop[target.index].instanceId
+            : player.board[target.index].instanceId;
+        const targetQuote = getHeroPowerActivationQuote(
+          state,
+          player.id,
+          targetInstanceId,
+        );
+        if (!targetQuote?.usable) continue;
+        candidates.push(
+          candidate(
+            { type: "ACTIVATE_HERO_POWER", targetInstanceId },
+            { target, cost },
+          ),
+        );
+      }
+    }
+  }
+
   const refreshQuote = getTavernRefreshQuote(state, player.id);
   if (refreshQuote?.affordable) {
     candidates.push(
@@ -483,7 +558,10 @@ function recruitCandidates(state: GameState): CandidateAction[] {
   }
   candidates.push(candidate({ type: "TOGGLE_FREEZE" }));
   const upgradeCost = getUpgradeCost(state, player.id);
-  if (player.tavernTier < 6 && player.gold >= upgradeCost) {
+  if (
+    player.tavernTier < getMaximumTavernTier(state) &&
+    player.gold >= upgradeCost
+  ) {
     candidates.push(
       candidate(
         { type: "UPGRADE_TAVERN" },
@@ -663,6 +741,7 @@ export class AiTrainingEnvironment {
   #state: GameState;
   #controlledSeat: number;
   #initialHealth: number;
+  #configuration: AiTrainingEnvironmentConfiguration;
   #stateRevision: number;
   #actionMasks: Map<ActionMaskScope, CachedActionMask>;
 
@@ -670,20 +749,23 @@ export class AiTrainingEnvironment {
     seed: number,
     controlledSeat = 0,
     initialHealth = DEFAULT_INITIAL_HEALTH,
+    configuration: AiTrainingEnvironmentConfiguration = {},
     internalFork?: InternalForkSnapshot,
   ) {
     if (internalFork?.token === INTERNAL_FORK_TOKEN) {
       this.#state = internalFork.state;
       this.#controlledSeat = controlledSeat;
       this.#initialHealth = initialHealth;
+      this.#configuration = { ...configuration };
       this.#stateRevision = internalFork.stateRevision;
       this.#actionMasks = new Map(internalFork.actionMasks);
       return;
     }
     this.#state = createGame(seed, initialHealth);
-    configureControlledSeat(this.#state, controlledSeat);
+    configureControlledSeat(this.#state, controlledSeat, configuration);
     this.#controlledSeat = controlledSeat;
     this.#initialHealth = this.#state.initialHealth;
+    this.#configuration = { ...configuration };
     this.#stateRevision = 0;
     this.#actionMasks = new Map();
   }
@@ -692,12 +774,14 @@ export class AiTrainingEnvironment {
     seed: number,
     controlledSeat = this.#controlledSeat,
     initialHealth = this.#initialHealth,
+    configuration = this.#configuration,
   ): DeepReadonly<AiTrainingObservation> {
     const state = createGame(seed, initialHealth);
-    configureControlledSeat(state, controlledSeat);
+    configureControlledSeat(state, controlledSeat, configuration);
     this.#state = state;
     this.#controlledSeat = controlledSeat;
     this.#initialHealth = state.initialHealth;
+    this.#configuration = { ...configuration };
     this.#stateRevision += 1;
     this.#actionMasks.clear();
     return this.observe();
@@ -713,6 +797,7 @@ export class AiTrainingEnvironment {
       0,
       this.#controlledSeat,
       this.#initialHealth,
+      this.#configuration,
       {
         token: INTERNAL_FORK_TOKEN,
         state: structuredClone(this.#state),

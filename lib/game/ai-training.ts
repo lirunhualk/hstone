@@ -22,7 +22,7 @@ import type {
   Tribe,
 } from "./types.ts";
 
-export const AI_TRAINING_OBSERVATION_VERSION = 1 as const;
+export const AI_TRAINING_OBSERVATION_VERSION = 3 as const;
 
 export type DeepReadonly<T> = T extends readonly (infer Item)[]
   ? readonly DeepReadonly<Item>[]
@@ -163,10 +163,12 @@ export type AiTrainingCardObservation =
 
 export interface AiTrainingDiscoverFilterObservation {
   exactTier: MinionTier | null;
-  maximumTier: TavernTier | null;
+  maximumTier: MinionTier | null;
   tribe: Tribe | null;
+  magnetic: boolean;
   ability: "battlecry" | "deathrattle" | null;
   requiresMinionType: boolean;
+  usesSharedPool: boolean;
 }
 
 export type AiTrainingDiscoverDestinationObservation =
@@ -260,14 +262,17 @@ export interface AiTrainingRecruitObservation {
   alive: boolean;
   heroPowerId: string | null;
   heroPowerCounters: Record<string, number>;
+  heroPowerActiveThisTurn: boolean;
   heroId: string | null;
+  secretIds: string[];
   trinketIds: string[];
   trinketCounters: Record<string, number>;
+  systemEventCounters: Record<string, number>;
   trinketSelections: Record<string, string>;
   pendingMysteryCubeReplacementIds: string[];
   pendingSystemSpellIds: string[];
   freeTavernSpellPurchases: number;
-  tavernTier: TavernTier;
+  tavernTier: MinionTier;
   gold: number;
   board: AiTrainingMinionObservation[];
   hand: AiTrainingCardObservation[];
@@ -362,7 +367,7 @@ export interface AiTrainingPublicPlayerObservation {
   alive: boolean;
   heroId: string | null;
   heroPowerId: string | null;
-  tavernTier: TavernTier;
+  tavernTier: MinionTier;
   eliminatedRound: number | null;
   placement: number | null;
   lastRoundResult: AiTrainingPublicRoundResultObservation | null;
@@ -406,9 +411,6 @@ export type AiTrainingPlayerStateCoverage = AssertNever<
     | keyof AiTrainingRecruitObservation
     | "id"
     | "lastOpponentId"
-    | "systemEventCounters"
-    | "heroPowerActiveThisTurn"
-    | "secretIds"
   >
 >;
 
@@ -626,8 +628,10 @@ function observeFilter(
     exactTier: filter.exactTier ?? null,
     maximumTier: filter.maximumTier ?? null,
     tribe: filter.tribe ?? null,
+    magnetic: filter.magnetic ?? false,
     ability: filter.ability ?? null,
     requiresMinionType: filter.requiresMinionType ?? false,
+    usesSharedPool: filter.usesSharedPool ?? false,
   };
 }
 
@@ -856,9 +860,12 @@ function observeRecruitState(
     alive: player.alive,
     heroPowerId: player.heroPowerId,
     heroPowerCounters: cloneNumberRecord(player.heroPowerCounters),
+    heroPowerActiveThisTurn: player.heroPowerActiveThisTurn ?? false,
     heroId: player.heroId,
+    secretIds: [...player.secretIds],
     trinketIds: [...player.trinketIds],
     trinketCounters: cloneNumberRecord(player.trinketCounters),
+    systemEventCounters: cloneNumberRecord(player.systemEventCounters),
     trinketSelections: cloneStringRecord(player.trinketSelections),
     pendingMysteryCubeReplacementIds: [
       ...player.pendingMysteryCubeReplacementIds,
