@@ -7,7 +7,8 @@ export type MinionKeywordVisualKind =
   | "poisonous"
   | "venomous"
   | "windfury"
-  | "reborn";
+  | "reborn"
+  | "cleave";
 
 export interface MinionKeywordVisual {
   kind: MinionKeywordVisualKind;
@@ -23,6 +24,7 @@ export type MinionKeywordVisualState = Pick<
   | "venomous"
   | "windfury"
   | "reborn"
+  | "cleave"
 >;
 
 const KEYWORD_VISUALS: ReadonlyArray<{
@@ -41,6 +43,7 @@ const KEYWORD_VISUALS: ReadonlyArray<{
   { kind: "venomous", field: "venomous", label: "烈毒" },
   { kind: "windfury", field: "windfury", label: "风怒" },
   { kind: "reborn", field: "reborn", label: "复生" },
+  { kind: "cleave", field: "cleave", label: "顺劈" },
 ];
 
 /**

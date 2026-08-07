@@ -1,5 +1,6 @@
 import {
   CURRENT_ROSTER_VERSION,
+  TIER_SEVEN_MINION_DEFINITIONS,
   TRIBE_NAMES,
   getMinionDefinition,
 } from "./content.ts";
@@ -18,6 +19,7 @@ import {
   isHeroDefinitionId,
   isHeroPowerDefinitionId,
 } from "./hero-powers.ts";
+import { isHeroSecretDefinitionId } from "./hero-secrets.ts";
 import {
   GREATER_TRINKET_ROUND,
   LESSER_TRINKET_ROUND,
@@ -122,8 +124,16 @@ export const LEGACY_SCHEMA_11_CONTENT_VERSION_V48 =
   "battlegrounds-36.0.3-247416-v48";
 export const LEGACY_SCHEMA_11_CONTENT_VERSION_V49 =
   "battlegrounds-36.0.3-247416-v49";
+export const LEGACY_SCHEMA_11_CONTENT_VERSION_V50 =
+  "battlegrounds-36.0.3-247416-v50";
+export const LEGACY_SCHEMA_11_CONTENT_VERSION_V51 =
+  "battlegrounds-36.0.3-247416-v51";
 
 const SPELL_POOL_COPIES_BY_TIER = [0, 5, 7, 9, 11, 7, 5] as const;
+const NORGANNON_TIER_SEVEN_POOL_COPIES = 5;
+const TIER_SEVEN_MINION_DEFINITION_IDS = new Set(
+  TIER_SEVEN_MINION_DEFINITIONS.map((definition) => definition.id),
+);
 const HERO_POWER_COUNTER_KEY_SET = new Set<string>(
   Object.values(HERO_POWER_COUNTER_KEYS),
 );
@@ -134,6 +144,112 @@ function isRecord(value: unknown): value is Record<string, unknown> {
 
 function isTribe(value: unknown): value is Tribe {
   return typeof value === "string" && Object.hasOwn(TRIBE_NAMES, value);
+}
+
+function tierSevenDefinitionMatchesActiveTribes(
+  definition: (typeof TIER_SEVEN_MINION_DEFINITIONS)[number],
+  activeTribes: readonly Tribe[],
+): boolean {
+  const cardTribes =
+    definition.tribes ??
+    (definition.tribe === "neutral" ? [] : [definition.tribe]);
+  const associatedTribes = definition.associatedTribes ?? [];
+  if (cardTribes.length === 0 && associatedTribes.length === 0) {
+    return true;
+  }
+  if (cardTribes.includes("all")) {
+    return true;
+  }
+  return [...cardTribes, ...associatedTribes].some((tribe) =>
+    activeTribes.includes(tribe),
+  );
+}
+
+function hasSharedTierSevenPoolOwnership(value: unknown): boolean {
+  const pending: unknown[] = [value];
+  while (pending.length > 0) {
+    const current = pending.pop();
+    if (Array.isArray(current)) {
+      pending.push(...current);
+      continue;
+    }
+    if (!isRecord(current)) {
+      continue;
+    }
+    const ownership = current.poolCopiesByDefinitionId;
+    if (
+      isRecord(ownership) &&
+      !Array.isArray(ownership) &&
+      Object.entries(ownership).some(
+        ([definitionId, copies]) =>
+          TIER_SEVEN_MINION_DEFINITION_IDS.has(definitionId) &&
+          typeof copies === "number" &&
+          copies > 0,
+      )
+    ) {
+      return true;
+    }
+    if (
+      typeof current.definitionId === "string" &&
+      TIER_SEVEN_MINION_DEFINITION_IDS.has(current.definitionId) &&
+      typeof current.poolCopies === "number" &&
+      current.poolCopies > 0
+    ) {
+      return true;
+    }
+    pending.push(...Object.values(current));
+  }
+  return false;
+}
+
+function repairLegacyV51NorgannonTierSevenPool(
+  value: Record<string, unknown>,
+): boolean {
+  if (
+    value.lobbySystemsEnabled !== true ||
+    value.systemEventId !== "system-event-norgannon"
+  ) {
+    return true;
+  }
+  const pool = value.pool;
+  const activeTribes = value.activeTribes;
+  if (
+    !isRecord(pool) ||
+    Array.isArray(pool) ||
+    !Array.isArray(activeTribes) ||
+    !activeTribes.every(isTribe)
+  ) {
+    return false;
+  }
+  const tierSevenPoolCounts = TIER_SEVEN_MINION_DEFINITIONS.map(
+    (definition) => pool[definition.id],
+  );
+  if (
+    tierSevenPoolCounts.some(
+      (count) =>
+        typeof count !== "number" ||
+        !Number.isInteger(count) ||
+        count < 0,
+    )
+  ) {
+    return false;
+  }
+
+  // Published v51 Norgannon games initialized every shared Tier 7 count to
+  // zero, so they could not acquire a pool-owned Tier 7. Any non-zero pool
+  // count or ownership metadata is evidence of a valid ledger and is retained.
+  if (
+    tierSevenPoolCounts.some((count) => (count as number) > 0) ||
+    hasSharedTierSevenPoolOwnership(value)
+  ) {
+    return true;
+  }
+  for (const definition of TIER_SEVEN_MINION_DEFINITIONS) {
+    if (tierSevenDefinitionMatchesActiveTribes(definition, activeTribes)) {
+      pool[definition.id] = NORGANNON_TIER_SEVEN_POOL_COPIES;
+    }
+  }
+  return true;
 }
 
 function isTrinketOfferBoardUnit(
@@ -179,6 +295,7 @@ function migrateLegacyLobbySystems(
     player.heroPowerCounters = {};
     player.trinketIds = [];
     player.trinketCounters = {};
+    player.systemEventCounters = {};
     player.trinketSelections = {};
     player.pendingMysteryCubeReplacementIds = [];
     player.pendingSystemSpellIds = [];
@@ -223,6 +340,60 @@ function repairPendingMysteryCubeReplacements(
     }
     if (player.pendingMysteryCubeReplacementIds === undefined) {
       player.pendingMysteryCubeReplacementIds = [];
+    }
+  }
+  return true;
+}
+
+function repairHeroSecrets(value: Record<string, unknown>): boolean {
+  if (!Array.isArray(value.players)) {
+    return false;
+  }
+  for (const player of value.players) {
+    if (!isRecord(player)) {
+      return false;
+    }
+    if (player.secretIds === undefined) {
+      player.secretIds = [];
+      continue;
+    }
+    if (
+      !Array.isArray(player.secretIds) ||
+      !player.secretIds.every(
+        (id) => typeof id === "string" && isHeroSecretDefinitionId(id),
+      )
+    ) {
+      return false;
+    }
+  }
+  return true;
+}
+
+function repairSystemEventCounters(
+  value: Record<string, unknown>,
+): boolean {
+  if (!Array.isArray(value.players)) {
+    return false;
+  }
+  for (const player of value.players) {
+    if (!isRecord(player)) {
+      return false;
+    }
+    if (player.systemEventCounters === undefined) {
+      player.systemEventCounters = {};
+      continue;
+    }
+    if (
+      !isRecord(player.systemEventCounters) ||
+      Array.isArray(player.systemEventCounters) ||
+      !Object.values(player.systemEventCounters).every(
+        (count) =>
+          typeof count === "number" &&
+          Number.isInteger(count) &&
+          count >= 0,
+      )
+    ) {
+      return false;
     }
   }
   return true;
@@ -633,6 +804,11 @@ function hasValidLobbySystemPlayerState(value: unknown): boolean {
 function hasValidLobbySystemState(
   value: Record<string, unknown>,
 ): boolean {
+  const maximumTavernTier =
+    value.lobbySystemsEnabled === true &&
+    value.systemEventId === "system-event-norgannon"
+      ? 7
+      : 6;
   return (
     typeof value.lobbySystemsEnabled === "boolean" &&
     (value.lobbySystemsEnabled
@@ -640,7 +816,15 @@ function hasValidLobbySystemState(
         isSystemEventDefinitionId(value.systemEventId)
       : value.systemEventId === null) &&
     Array.isArray(value.players) &&
-    value.players.every(hasValidLobbySystemPlayerState)
+    value.players.every(
+      (player) =>
+        hasValidLobbySystemPlayerState(player) &&
+        isRecord(player) &&
+        typeof player.tavernTier === "number" &&
+        Number.isInteger(player.tavernTier) &&
+        player.tavernTier >= 1 &&
+        player.tavernTier <= maximumTavernTier,
+    )
   );
 }
 
@@ -2020,7 +2204,9 @@ export function migrateSchema11GameState(value: unknown): unknown {
       value.contentVersion !== LEGACY_SCHEMA_11_CONTENT_VERSION_V46 &&
       value.contentVersion !== LEGACY_SCHEMA_11_CONTENT_VERSION_V47 &&
       value.contentVersion !== LEGACY_SCHEMA_11_CONTENT_VERSION_V48 &&
-      value.contentVersion !== LEGACY_SCHEMA_11_CONTENT_VERSION_V49) ||
+      value.contentVersion !== LEGACY_SCHEMA_11_CONTENT_VERSION_V49 &&
+      value.contentVersion !== LEGACY_SCHEMA_11_CONTENT_VERSION_V50 &&
+      value.contentVersion !== LEGACY_SCHEMA_11_CONTENT_VERSION_V51) ||
     !Array.isArray(value.players)
   ) {
     return null;
@@ -2059,6 +2245,8 @@ export function migrateSchema11GameState(value: unknown): unknown {
       LEGACY_SCHEMA_11_CONTENT_VERSION_V47,
       LEGACY_SCHEMA_11_CONTENT_VERSION_V48,
       LEGACY_SCHEMA_11_CONTENT_VERSION_V49,
+      LEGACY_SCHEMA_11_CONTENT_VERSION_V50,
+      LEGACY_SCHEMA_11_CONTENT_VERSION_V51,
     ].includes(value.contentVersion as string);
     const preserveCurrentFields = [
       LEGACY_SCHEMA_11_CONTENT_VERSION_V19,
@@ -2092,6 +2280,8 @@ export function migrateSchema11GameState(value: unknown): unknown {
       LEGACY_SCHEMA_11_CONTENT_VERSION_V47,
       LEGACY_SCHEMA_11_CONTENT_VERSION_V48,
       LEGACY_SCHEMA_11_CONTENT_VERSION_V49,
+      LEGACY_SCHEMA_11_CONTENT_VERSION_V50,
+      LEGACY_SCHEMA_11_CONTENT_VERSION_V51,
     ].includes(value.contentVersion as string);
     const preserveTavernTierBuffs =
       value.contentVersion === LEGACY_SCHEMA_11_CONTENT_VERSION_V35 ||
@@ -2108,7 +2298,9 @@ export function migrateSchema11GameState(value: unknown): unknown {
       value.contentVersion === LEGACY_SCHEMA_11_CONTENT_VERSION_V46 ||
       value.contentVersion === LEGACY_SCHEMA_11_CONTENT_VERSION_V47 ||
       value.contentVersion === LEGACY_SCHEMA_11_CONTENT_VERSION_V48 ||
-      value.contentVersion === LEGACY_SCHEMA_11_CONTENT_VERSION_V49;
+      value.contentVersion === LEGACY_SCHEMA_11_CONTENT_VERSION_V49 ||
+      value.contentVersion === LEGACY_SCHEMA_11_CONTENT_VERSION_V50 ||
+      value.contentVersion === LEGACY_SCHEMA_11_CONTENT_VERSION_V51;
     const preservePendingSpellcraft =
       value.contentVersion === LEGACY_SCHEMA_11_CONTENT_VERSION_V17 ||
       preservePersistentFields;
@@ -2123,7 +2315,9 @@ export function migrateSchema11GameState(value: unknown): unknown {
       value.contentVersion === LEGACY_SCHEMA_11_CONTENT_VERSION_V46 ||
       value.contentVersion === LEGACY_SCHEMA_11_CONTENT_VERSION_V47 ||
       value.contentVersion === LEGACY_SCHEMA_11_CONTENT_VERSION_V48 ||
-      value.contentVersion === LEGACY_SCHEMA_11_CONTENT_VERSION_V49;
+      value.contentVersion === LEGACY_SCHEMA_11_CONTENT_VERSION_V49 ||
+      value.contentVersion === LEGACY_SCHEMA_11_CONTENT_VERSION_V50 ||
+      value.contentVersion === LEGACY_SCHEMA_11_CONTENT_VERSION_V51;
     const preserveLobbySystems =
       value.contentVersion === LEGACY_SCHEMA_11_CONTENT_VERSION_V40 ||
       value.contentVersion === LEGACY_SCHEMA_11_CONTENT_VERSION_V41 ||
@@ -2134,13 +2328,17 @@ export function migrateSchema11GameState(value: unknown): unknown {
       value.contentVersion === LEGACY_SCHEMA_11_CONTENT_VERSION_V46 ||
       value.contentVersion === LEGACY_SCHEMA_11_CONTENT_VERSION_V47 ||
       value.contentVersion === LEGACY_SCHEMA_11_CONTENT_VERSION_V48 ||
-      value.contentVersion === LEGACY_SCHEMA_11_CONTENT_VERSION_V49;
+      value.contentVersion === LEGACY_SCHEMA_11_CONTENT_VERSION_V49 ||
+      value.contentVersion === LEGACY_SCHEMA_11_CONTENT_VERSION_V50 ||
+      value.contentVersion === LEGACY_SCHEMA_11_CONTENT_VERSION_V51;
     const preservePlayerSpellHistory =
       value.contentVersion === LEGACY_SCHEMA_11_CONTENT_VERSION_V45 ||
       value.contentVersion === LEGACY_SCHEMA_11_CONTENT_VERSION_V46 ||
       value.contentVersion === LEGACY_SCHEMA_11_CONTENT_VERSION_V47 ||
       value.contentVersion === LEGACY_SCHEMA_11_CONTENT_VERSION_V48 ||
-      value.contentVersion === LEGACY_SCHEMA_11_CONTENT_VERSION_V49;
+      value.contentVersion === LEGACY_SCHEMA_11_CONTENT_VERSION_V49 ||
+      value.contentVersion === LEGACY_SCHEMA_11_CONTENT_VERSION_V50 ||
+      value.contentVersion === LEGACY_SCHEMA_11_CONTENT_VERSION_V51;
     const migrated: unknown = JSON.parse(JSON.stringify(value));
     if (
       !isRecord(migrated) ||
@@ -2208,7 +2406,10 @@ export function migrateSchema11GameState(value: unknown): unknown {
       (!preserveLobbySystems && !migrateLegacyLobbySystems(migrated)) ||
       !repairInitialHealth(migrated) ||
       !repairHumanScoutingReports(migrated) ||
-      !repairV42State(migrated)
+      !repairV42State(migrated) ||
+      !repairSystemEventCounters(migrated) ||
+      (value.contentVersion === LEGACY_SCHEMA_11_CONTENT_VERSION_V51 &&
+        !repairLegacyV51NorgannonTierSevenPool(migrated))
     ) {
       return null;
     }
@@ -2287,6 +2488,8 @@ export function normalizePersistedGameState(value: unknown): unknown {
       repairV42State(value) &&
       repairSpellPool(value) &&
       repairHumanScoutingReports(value) &&
+      repairHeroSecrets(value) &&
+      repairSystemEventCounters(value) &&
       repairHeroPowerCounters(value) &&
       repairHeroRefreshAvailability(value) &&
       repairTrinketSelections(value) &&
@@ -2301,6 +2504,8 @@ export function normalizePersistedGameState(value: unknown): unknown {
     repairInitialHealth(migrated) &&
     repairGhostHandSnapshots(migrated) &&
     repairV42State(migrated) &&
+    repairHeroSecrets(migrated) &&
+    repairSystemEventCounters(migrated) &&
     repairHeroPowerCounters(migrated) &&
     repairHeroRefreshAvailability(migrated) &&
     repairTrinketSelections(migrated) &&

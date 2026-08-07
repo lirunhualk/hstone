@@ -20,7 +20,7 @@ export type EffectSupport = "complete" | "partial";
 
 export type TavernTier = 1 | 2 | 3 | 4 | 5 | 6;
 
-/** Tier 7 minions are effect-generated and never unlock a Tavern upgrade. */
+/** Minion and exceptional Tavern tiers, including Norgannon's Tier 7 unlock. */
 export type MinionTier = TavernTier | 7;
 
 export type TierParity = "odd" | "even";
@@ -1385,7 +1385,7 @@ export interface TripleRewardSpellInstance extends MinionInstance {
   kind: "tripleReward";
   cardId: "TB_BaconShop_Triples_01";
   definitionId: "triple-reward";
-  tier: TavernTier;
+  tier: MinionTier;
 }
 
 export type SpellFamily =
@@ -1602,7 +1602,108 @@ export type HeroPowerEffect =
   | "freeFourthTavernSpell"
   | "growingTavernSpellBuff"
   | "buffAllCombatMinionsAttack"
-  | "buffLeftmostCombatKeywords";
+  | "buffLeftmostCombatKeywords"
+  | "permanentAttackOnKill"
+  | "growingTavernBuff"
+  | "swapTwoMinionsAttack"
+  | "chooseHeroPowerEachTurn"
+  | "buyTierTripleReward"
+  | "afterThreePurchasesGetCopy"
+  | "combatLowestAttackDeathrattle"
+  | "chooseFlightPath"
+  | "sellDevourStats"
+  | "cookMinionsForDiscover"
+  | "startWithVehicleSummon"
+  | "removeTavernShootEnemy"
+  | "chooseElementInvoke"
+  | "combatSummonHighestAttackDelayed"
+  | "combatSummonHighestHealthDelayed"
+  | "refreshCopyHighestFreeze"
+  | "nagaExpedition"
+  | "deadMinionsForMech"
+  | "skipTurnForDiscovers"
+  | "revengeSummonScalingWhelp"
+  | "combatSummonTentacleScaling"
+  | "holmesGuessMinion"
+  | "spellcraftPerTurn"
+  | "chooseQuestAtStart"
+  | "refreshRandomKeyword"
+  | "combatKillAndResummon"
+  | "alternatingStatBuff"
+  | "copyLeftmostHandCard"
+  | "discoverTier7ForGoldSpent"
+  | "chooseTrinketAtTurn5"
+  | "oncePerGameExactCopy"
+  | "nextTavernSpellDiscountDelayed"
+  | "startWithBattlecruiser"
+  | "startChooseProtossMinion"
+  | "increaseGoldCap"
+  | "chooseGreaterTrinketAtTurn8"
+  | "attacksForTriple"
+  | "timeWarpAtTurn8"
+  | "refreshToTavernSpells"
+  | "easyTripleCoin"
+  | "timeWarpAtTurn5"
+  | "discoverHeroPowerAtTurn4"
+  | "totalCardsForSulfuras"
+  | "skipTwoTurnsForDiscovers"
+  | "chooseSecret"
+  | "triggerBattlecry"
+  | "giveMinionReborn"
+  | "startWithAmalgam"
+  | "turnStartRandomSpell"
+  | "hatPassesOnSell"
+  | "dealDamageForPortal"
+  | "giveBananasEveryone"
+  | "startDiscoverHeroPower"
+  | "oncePerGameGolden"
+  | "battlecryPurchasesForBrann"
+  | "sellMinionsForRandomMurloc"
+  | "replaceCardSameTier"
+  | "attacksForFirstFreeBuy"
+  | "removeDiscoverLowerTier"
+  | "goldPerTurnOnce"
+  | "deadHeroDiscoverMinion"
+  | "swapNonGoldenWithTavern"
+  | "collectDarkmoonTickets"
+  | "startWithDeathrattleFish"
+  | "periodicDarkmoonPrizes"
+  | "combatSummonCurrentTier"
+  | "combatBuffFlanks"
+  | "combatBuffPerTribe"
+  | "getBloodGemsPerTurn"
+  | "delayedRewardAfterPurchases"
+  | "activeShrinkMinionToHand"
+  | "activeRandomBuffChooseUpgrade"
+  | "activeDiscoverFromNextOpponent"
+  | "activeStealAllTavernCards"
+  | "activeDiscoverDeadMinionCopy"
+  | "activeBuildCustomUndead"
+  | "activeDiscoverBuddy"
+  | "activeRollDiceForGold"
+  | "activeRandomTavernSpell"
+  | "activeCopyLastTavernSpell"
+  | "activeUnlockZergTier"
+  | "activeScalingTargetBuff"
+  | "activeReplaceHigherTier"
+  | "activeDiscoverRotatingTribe"
+  | "activeGiveDivineShield"
+  | "activeDiscoverMagneticMech"
+  | "activeGetPirateCostReduces"
+  | "activeStealTavernCardDamage"
+  | "activeRefreshHigherTier"
+  | "activeEndOfTurnScalingBuff"
+  | "activeDoubleHealthTavernMinion"
+  | "activeDiscoverCurrentTierCostIncreases"
+  | "activeStealFirstKillNextCombat"
+  | "activeRefreshOpponentMinions"
+  | "activeDiscoverDragonTier4"
+  | "activeLockCardUnlockLater"
+  | "activeDigForGolden"
+  | "activeBetOnWinner"
+  | "activeFindMissingTriple"
+  | "activeKillUndeadForUndead"
+  | "unknown";
 
 export interface HeroPowerDefinition {
   id: string;
@@ -1620,6 +1721,8 @@ export interface HeroDefinition {
   cardId: string;
   name: string;
   heroPowerId: string;
+  /** Starting armor granted when the hero is assigned. */
+  armor: number;
   /** At least one associated type must be active for this hero to be offered. */
   associatedTribes?: readonly Tribe[];
 }
@@ -1696,8 +1799,12 @@ export interface PlayerState {
   heroId: string | null;
   /** Persistent Lesser and Greater Trinkets bought this game. */
   trinketIds: string[];
+  /** Active Battlegrounds Secrets granted by hero powers. */
+  secretIds: string[];
   /** Per-Trinket periodic progress, keyed by definition ID. */
   trinketCounters: Record<string, number>;
+  /** Per-SystemEvent turn tracking, keyed by counter name. */
+  systemEventCounters: Record<string, number>;
   /** Same-turn Tavern Spell discount granted by Reserve Prices. */
   darkmoonReservePricesDiscount?: number;
   /** Tickatus Tag rewards queued behind another modal interaction. */
@@ -1710,7 +1817,8 @@ export interface PlayerState {
   pendingSystemSpellIds: string[];
   /** Remaining free Tavern Spell purchases granted this turn. */
   freeTavernSpellPurchases: number;
-  tavernTier: TavernTier;
+  /** Current Tavern level; Norgannon lobbies may unlock level 7. */
+  tavernTier: MinionTier;
   gold: number;
   board: BoardMinionInstance[];
   hand: HandCardInstance[];
@@ -1744,6 +1852,8 @@ export interface PlayerState {
   battlecriesTriggered?: number;
   /** Permanent extra Hero Power triggers accumulated from Yogg's wheel. */
   heroPowerExtraTriggers?: number;
+  /** Whether the active hero power has been used this recruit turn. */
+  heroPowerActiveThisTurn?: boolean;
   /** Every successfully played hand card this Recruit turn. */
   cardsPlayedThisTurn: number;
   /** Gold actually deducted during this Recruit turn. */
@@ -1940,11 +2050,15 @@ export interface PendingMagnetizeTargetInteraction
 
 export interface DiscoverFilter {
   exactTier?: MinionTier;
-  maximumTier?: TavernTier;
+  maximumTier?: MinionTier;
   tribe?: Tribe;
+  /** Restricts offers to minions with the printed Magnetic keyword. */
+  magnetic?: boolean;
   ability?: "battlecry" | "deathrattle";
   /** Excludes typeless minions while still allowing dual-type and All minions. */
   requiresMinionType?: boolean;
+  /** Reserves real shared-pool copies instead of generating pool-free offers. */
+  usesSharedPool?: boolean;
 }
 
 export type DiscoverDestination =
@@ -2053,6 +2167,43 @@ export interface PendingHeroPowerChoiceInteraction
   remainingChoices?: number;
 }
 
+export type HeroSecretEffect =
+  | "venomstrikeTrap"
+  | "snakeTrap"
+  | "splittingImage"
+  | "effigy"
+  | "autodefenseMatrix"
+  | "avengeSecret"
+  | "redemption"
+  | "handOfSalvation"
+  | "iceBlock"
+  | "competitiveSpirit"
+  | "reckoning"
+  | "packTactics";
+
+export type HeroSecretTrigger =
+  | "friendlyAttacked"
+  | "friendlyDied"
+  | "heroLethalDamage"
+  | "startOfTurn"
+  | "enemyDealsDamage";
+
+export interface HeroSecretDefinition {
+  id: string;
+  cardId: string;
+  name: string;
+  description: string;
+  effect: HeroSecretEffect;
+  trigger: HeroSecretTrigger;
+}
+
+export interface PendingSecretChoiceInteraction
+  extends PendingInteractionBase {
+  kind: "secretChoice";
+  definitionId: string;
+  optionIds: string[];
+}
+
 export interface PendingDarkmoonPrizeDiscoverInteraction
   extends PendingInteractionBase {
   kind: "darkmoonPrizeDiscover";
@@ -2108,6 +2259,7 @@ export type PendingInteraction =
   | PendingTavernSpellChoiceInteraction
   | PendingSpellcraftChoiceInteraction
   | PendingHeroPowerChoiceInteraction
+  | PendingSecretChoiceInteraction
   | PendingDarkmoonPrizeDiscoverInteraction
   | PendingHeroChoiceInteraction
   | PendingTrinketChoiceInteraction
@@ -2237,7 +2389,8 @@ export type GameAction =
   | { type: "UPGRADE_TAVERN" }
   | { type: "MOVE_MINION"; fromIndex: number; toIndex: number }
   | { type: "END_TURN" }
-  | { type: "CONTINUE" };
+  | { type: "CONTINUE" }
+  | { type: "ACTIVATE_HERO_POWER"; targetInstanceId?: string };
 
 /**
  * One real Recruit-phase Blood Gem resolution. These snapshots are emitted in

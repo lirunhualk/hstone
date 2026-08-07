@@ -7,7 +7,7 @@ import trinketFeatureSnapshot from "./generated/battlegrounds-trinkets-36.0.3-24
 import { BUDDY_MINION_DEFINITIONS } from "./buddies.ts";
 import type { MinionDefinition, Tribe } from "./types.ts";
 
-export const CURRENT_ROSTER_VERSION = "battlegrounds-36.0.3-247416-v50";
+export const CURRENT_ROSTER_VERSION = "battlegrounds-36.0.3-247416-v52";
 /** Compatibility alias for existing save and engine imports. */
 export const CLASSIC_ROSTER_VERSION = CURRENT_ROSTER_VERSION;
 
@@ -584,6 +584,31 @@ const LEGACY_FIXTURE_DEFINITIONS: readonly MinionDefinition[] = [
     attack: 1,
     health: 1,
     description: "由瘟疫鼠群召唤。",
+    collectible: false,
+  },
+  {
+    id: "BG_EX1_554t",
+    cardId: "BG_EX1_554t",
+    goldenCardId: "BG_EX1_554t_G",
+    name: "蛇",
+    tier: 1,
+    tribe: "beast",
+    attack: 1,
+    health: 1,
+    description: "由毒蛇陷阱召唤。",
+    collectible: false,
+  },
+  {
+    id: "BG_EX1_170",
+    cardId: "BG_EX1_170",
+    goldenCardId: "BG_EX1_170_G",
+    name: "帝王眼镜蛇",
+    tier: 1,
+    tribe: "beast",
+    attack: 2,
+    health: 3,
+    poisonous: true,
+    description: "由眼镜蛇陷阱召唤。",
     collectible: false,
   },
   {
@@ -1306,6 +1331,50 @@ export const LIVE_TOKEN_DEFINITIONS: readonly MinionDefinition[] =
       health: 1,
       description: "由两个亡灵组件制造而成。无法三连。",
       canTriple: false,
+      collectible: false,
+    },
+    {
+      id: "sneed-vehicle-token",
+      cardId: "sneed-vehicle-token",
+      name: "伐木机",
+      tier: 1,
+      tribe: "mech",
+      tribes: ["mech"],
+      associatedTribes: [],
+      effectSupport: "complete",
+      attack: 2,
+      health: 1,
+      description:
+        "可以召唤你手牌中生命值最高的随从并使其获得圣盾。",
+      collectible: false,
+    },
+    {
+      id: "raynor-battlecruiser-token",
+      cardId: "raynor-battlecruiser-token",
+      name: "战列巡航舰",
+      tier: 1,
+      tribe: "mech",
+      tribes: ["mech"],
+      associatedTribes: [],
+      effectSupport: "partial",
+      printedMechanics: ["TRIGGER_VISUAL"],
+      attack: 2,
+      health: 2,
+      description: "每当酒馆刷新时，在其中添加一项战列巡航舰升级。",
+      collectible: false,
+    },
+    {
+      id: "kerrigan-zerg-larva-token",
+      cardId: "kerrigan-zerg-larva-token",
+      name: "幼虫",
+      tier: 1,
+      tribe: "beast",
+      tribes: ["beast"],
+      associatedTribes: [],
+      effectSupport: "complete",
+      attack: 2,
+      health: 2,
+      description: "由凯瑞甘的孵化池召唤。",
       collectible: false,
     },
   ] satisfies readonly MinionDefinition[]);
@@ -4452,7 +4521,7 @@ export const LIVE_MINION_DEFINITIONS: readonly MinionDefinition[] =
     LIVE_ROSTER.minions.map((card) => createLiveDefinition(card)),
   );
 
-/** Current Tier 7 pool. These cards exist only for effect-generated rewards. */
+/** Current Tier 7 roster, shared by Norgannon shops and generated rewards. */
 export const TIER_SEVEN_MINION_DEFINITIONS: readonly MinionDefinition[] =
   Object.freeze(
     LIVE_ROSTER.tierSevenMinions.map((card) =>

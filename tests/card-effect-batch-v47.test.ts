@@ -148,7 +148,7 @@ function prepareDuel(
 test("v47 exposes complete Spacefarer and Kalecgos rules", () => {
   assert.equal(
     CURRENT_ROSTER_VERSION,
-    "battlegrounds-36.0.3-247416-v50",
+    "battlegrounds-36.0.3-247416-v52",
   );
   const spacefarer = getMinionDefinition("BG31_820");
   assert.equal(spacefarer.effectSupport, "complete");

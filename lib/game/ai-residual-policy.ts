@@ -1,4 +1,4 @@
-import type { PlayerId, TavernTier } from "./types.ts";
+import type { MinionTier, PlayerId } from "./types.ts";
 
 /**
  * Engine-independent boundary for optional residual AI policies.
@@ -8,7 +8,7 @@ import type { PlayerId, TavernTier } from "./types.ts";
  * failure falls back atomically to `legacyChoice`.
  */
 
-export const AI_RESIDUAL_CONTEXT_VERSION = 1 as const;
+export const AI_RESIDUAL_CONTEXT_VERSION = 2 as const;
 export const AI_RESIDUAL_OVERRIDE_THRESHOLD = 0.9 as const;
 
 export const AI_RESIDUAL_FORBIDDEN_CONTEXT_KEYS = Object.freeze([
@@ -55,7 +55,7 @@ interface AiResidualMacroContextBase<
   readonly policyVersion: string;
   readonly profileId: string;
   readonly round: number;
-  readonly tavernTier: TavernTier;
+  readonly tavernTier: MinionTier;
   readonly health: number;
   readonly armor: number;
   readonly gold: number;
@@ -467,7 +467,7 @@ function hasValidBaseFields(context: AiResidualMacroContext): boolean {
     context.profileId.length === 0 ||
     context.profileId.length > 128 ||
     !isIntegerInRange(context.round, 0) ||
-    !isIntegerInRange(context.tavernTier, 1, 6) ||
+    !isIntegerInRange(context.tavernTier, 1, 7) ||
     !isIntegerInRange(context.health, 0) ||
     !isIntegerInRange(context.armor, 0) ||
     !isIntegerInRange(context.gold, 0) ||
@@ -511,7 +511,7 @@ function hasValidKindFields(context: AiResidualMacroContext): boolean {
         isNullableFiniteNumber(context.weakestBoardScore) &&
         isNullableFiniteNumber(context.bestAffordableSpellScore) &&
         (!exposesUpgradeNow ||
-          (context.tavernTier < 6 && context.gold >= context.upgradeCost))
+          (context.tavernTier < 7 && context.gold >= context.upgradeCost))
       );
     }
     case "refresh": {

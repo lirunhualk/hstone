@@ -120,6 +120,34 @@ function prepareLockedCombat(state: GameState): void {
   }
 }
 
+function createLateRoundDrawState(
+  seed: number,
+  health: number,
+): GameState {
+  const state = createGame(seed, health);
+  const template = humanPlayer(state).shop[0];
+  assert.ok(template);
+  prepareLockedCombat(state);
+  state.round = 61;
+  for (const [index, player] of state.players.entries()) {
+    player.alive = index < 2;
+    player.isHuman = index < 2;
+    player.health = health;
+    player.armor = 0;
+    player.heroPowerId = null;
+    player.board = index < 2
+      ? [
+          fixtureMinion(template, `fatigue-draw-${index}`, {
+            attack: 0,
+            health: 1_000,
+            tier: 1,
+          }),
+        ]
+      : [];
+  }
+  return state;
+}
+
 function createGameWithTribe(
   tribe: GameState["activeTribes"][number],
   startingSeed: number,
@@ -483,6 +511,8 @@ test("classic rule fixtures remain available but never enter the live pool", () 
       ["sky-pirate-token", "BGS_061t"],
       ["damaged-golem-token", "BG_EX1_556t"],
       ["rat-token", "BG_CFM_316t"],
+      ["BG_EX1_554t", "BG_EX1_554t"],
+      ["BG_EX1_170", "BG_EX1_170"],
       ["guard-bot-token", "BOT_218t"],
       ["robosaur-token", "BOT_537t"],
       ["hyena-token", "BG_EX1_534t"],
@@ -2209,3 +2239,138 @@ test("combat damage eliminates players and CONTINUE ends a dead human's game", (
   assert.equal(gameOver.phase, "gameOver");
   assert.equal(gameOver.round, 1);
 });
+
+test("late-round combat fatigue damages both players after a draw", () => {
+  const state = createLateRoundDrawState(8_081, 40);
+  const combat = gameReducer(state, { type: "END_TURN" });
+  const battle = combat.lastBattle;
+  assert.ok(battle);
+  assert.equal(battle.winnerId, null);
+  assert.equal(battle.damageToPlayerA, 1);
+  assert.equal(battle.damageToPlayerB, 1);
+  assert.equal(combat.players[0].health, 39);
+  assert.equal(combat.players[1].health, 39);
+  const fatigueEvents = battle.events.filter(
+    (event) => event.type === "heroDamage" && event.amount === 1,
+  );
+  assert.equal(fatigueEvents.length, 2);
+  assert.deepEqual(
+    new Set(fatigueEvents.map((event) => event.targetPlayerId)),
+    new Set([combat.players[0].id, combat.players[1].id]),
+  );
+});
+
+test("increasing draw fatigue guarantees a stalled two-player game ends", () => {
+  let state = createLateRoundDrawState(8_082, 2);
+
+  state = gameReducer(state, { type: "END_TURN" });
+  assert.equal(state.lastBattle?.winnerId, null);
+  assert.equal(state.players[0].health, 1);
+  assert.equal(state.players[1].health, 1);
+
+  state = gameReducer(state, { type: "CONTINUE" });
+  assert.equal(state.phase, "recruit");
+  assert.equal(state.round, 62);
+  state = gameReducer(state, { type: "END_TURN" });
+  assert.equal(state.lastBattle?.winnerId, null);
+  assert.equal(state.players[0].alive, false);
+  assert.equal(state.players[1].alive, false);
+
+  state = gameReducer(state, { type: "CONTINUE" });
+  assert.equal(state.phase, "gameOver");
+});
+
+const delayedCombatSummonHeroPowers = [
+  {
+    heroName: "Drek'Thar",
+    heroPowerId: "hero-power-bg22_hero_002p",
+    powerName: "霜狼热血",
+    sourceInstanceId: "delayed-high-attack",
+  },
+  {
+    heroName: "Vanndar",
+    heroPowerId: "hero-power-bg22_hero_003p",
+    powerName: "雷矛之力",
+    sourceInstanceId: "delayed-high-health",
+  },
+] as const;
+
+const delayedCombatSummonRoundBoundaries = [
+  { round: 6, staleCounter: 99, expectedSummons: 0 },
+  { round: 7, staleCounter: 0, expectedSummons: 1 },
+] as const;
+
+for (const heroPowerCase of delayedCombatSummonHeroPowers) {
+  for (const boundary of delayedCombatSummonRoundBoundaries) {
+    test(`${heroPowerCase.heroName}'s delayed combat summon respects real round ${boundary.round}`, () => {
+      const state = createGame(
+        0xd700 + boundary.round + heroPowerCase.heroPowerId.length,
+      );
+      const owner = humanPlayer(state);
+      const opponent = state.players.find((player) => player.id !== owner.id);
+      const template = owner.shop[0];
+      assert.ok(opponent);
+      assert.ok(template);
+      prepareLockedCombat(state);
+      state.round = boundary.round;
+
+      for (const player of state.players) {
+        const participates = player.id === owner.id || player.id === opponent.id;
+        player.alive = participates;
+        player.isHuman = participates;
+        player.health = 100;
+        player.armor = 0;
+        player.heroPowerId = null;
+        player.board = [];
+      }
+      owner.heroPowerId = heroPowerCase.heroPowerId;
+      owner.systemEventCounters.round = boundary.staleCounter;
+      owner.board = [
+        definitionMinion(
+          template,
+          "defender-of-argus",
+          "delayed-high-attack",
+          { attack: 9, health: 2 },
+        ),
+        definitionMinion(
+          template,
+          "defender-of-argus",
+          "delayed-high-health",
+          { attack: 2, health: 9 },
+        ),
+      ];
+      opponent.board = [
+        definitionMinion(
+          template,
+          "defender-of-argus",
+          "delayed-opponent",
+          { attack: 0, health: 100 },
+        ),
+      ];
+
+      const combat = gameReducer(state, { type: "END_TURN" });
+      const battle = combat.lastBattle;
+      assert.ok(battle);
+      const triggerEvents = battle.events.filter(
+        (event) =>
+          event.type === "startOfCombat" &&
+          event.actorPlayerId === owner.id &&
+          event.message.includes(heroPowerCase.powerName),
+      );
+      const summonEvents = battle.events.filter(
+        (event) =>
+          event.type === "summon" &&
+          event.actorPlayerId === owner.id &&
+          event.message.includes(heroPowerCase.powerName),
+      );
+      assert.equal(triggerEvents.length, boundary.expectedSummons);
+      assert.equal(summonEvents.length, boundary.expectedSummons);
+      if (boundary.expectedSummons === 1) {
+        assert.equal(
+          summonEvents[0]?.actorInstanceId,
+          heroPowerCase.sourceInstanceId,
+        );
+      }
+    });
+  }
+}

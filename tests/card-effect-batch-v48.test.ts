@@ -159,7 +159,7 @@ function prepareDuel(
 test("v48 exposes complete ordinary and Golden Sandstorm and Radiant rules", () => {
   assert.equal(
     CURRENT_ROSTER_VERSION,
-    "battlegrounds-36.0.3-247416-v50",
+    "battlegrounds-36.0.3-247416-v52",
   );
 
   const sandstorm = getMinionDefinition("BG32_841");

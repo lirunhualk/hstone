@@ -1,11 +1,22 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 
-import { createGame, createLobbyGame } from "../lib/game/engine.ts";
+import {
+  CURRENT_ROSTER_VERSION,
+  TIER_SEVEN_MINION_DEFINITIONS,
+} from "../lib/game/content.ts";
+import {
+  createGame,
+  createLobbyGame,
+  gameReducer,
+} from "../lib/game/engine.ts";
 import {
   LEGACY_SCHEMA_10_CONTENT_VERSION,
   LEGACY_SCHEMA_11_CONTENT_VERSION_V39,
   LEGACY_SCHEMA_11_CONTENT_VERSION_V40,
+  LEGACY_SCHEMA_11_CONTENT_VERSION_V49,
+  LEGACY_SCHEMA_11_CONTENT_VERSION_V50,
+  LEGACY_SCHEMA_11_CONTENT_VERSION_V51,
   normalizePersistedGameState,
 } from "../lib/game/save.ts";
 import type { GameState } from "../lib/game/types.ts";
@@ -13,6 +24,25 @@ import type { GameState } from "../lib/game/types.ts";
 function jsonClone<T>(value: T): T {
   return JSON.parse(JSON.stringify(value)) as T;
 }
+
+test("current saves accept Tier 7 only for Norgannon", () => {
+  const norgannon = createLobbyGame(0x40a9);
+  norgannon.systemEventId = "system-event-norgannon";
+  norgannon.players[0]!.tavernTier = 7 as GameState["players"][number]["tavernTier"];
+  const normalized = normalizePersistedGameState(
+    jsonClone(norgannon),
+  ) as GameState | null;
+  assert.ok(normalized);
+  assert.equal(normalized.players[0]?.tavernTier, 7);
+
+  const ordinary = jsonClone(norgannon);
+  ordinary.systemEventId = "system-event-golden-arrow";
+  assert.equal(normalizePersistedGameState(ordinary), null);
+
+  const invalid = jsonClone(norgannon);
+  invalid.players[0]!.tavernTier = 8 as GameState["players"][number]["tavernTier"];
+  assert.equal(normalizePersistedGameState(invalid), null);
+});
 
 test("v39 saves disable lobby systems without replacing hero powers", () => {
   const legacy = createGame(0x40aa);
@@ -122,6 +152,8 @@ test("v40 lobby saves retain their hero choice, event, and system cards", () => 
       .heroRefreshAvailable;
     delete (player as Partial<GameState["players"][number]>)
       .heroPowerCounters;
+    delete (player as Partial<GameState["players"][number]>)
+      .systemEventCounters;
   }
 
   const normalized = normalizePersistedGameState(
@@ -154,6 +186,180 @@ test("v40 lobby saves retain their hero choice, event, and system cards", () => 
         ),
     ),
   );
+  assert.ok(
+    normalized.players.every(
+      (player) => Object.keys(player.systemEventCounters).length === 0,
+    ),
+  );
+});
+
+test("v49 saves repair missing system-event counters before Refresh", () => {
+  const legacy = createGame(0x40b3);
+  legacy.contentVersion = LEGACY_SCHEMA_11_CONTENT_VERSION_V49;
+  for (const player of legacy.players) {
+    delete (player as Partial<GameState["players"][number]>)
+      .systemEventCounters;
+  }
+
+  const normalized = normalizePersistedGameState(
+    jsonClone(legacy),
+  ) as GameState | null;
+
+  assert.ok(normalized);
+  assert.equal(normalized.contentVersion, CURRENT_ROSTER_VERSION);
+  assert.ok(
+    normalized.players.every(
+      (player) => Object.keys(player.systemEventCounters).length === 0,
+    ),
+  );
+  assert.doesNotThrow(() =>
+    gameReducer(normalized, { type: "REFRESH_SHOP" }),
+  );
+});
+
+test("v50 JSON saves migrate to the current version with system-event defaults", () => {
+  const legacy = createGame(0x40b4);
+  legacy.contentVersion = LEGACY_SCHEMA_11_CONTENT_VERSION_V50;
+  for (const player of legacy.players) {
+    delete (player as Partial<GameState["players"][number]>)
+      .secretIds;
+    delete (player as Partial<GameState["players"][number]>)
+      .systemEventCounters;
+  }
+
+  const normalized = normalizePersistedGameState(
+    jsonClone(legacy),
+  ) as GameState | null;
+
+  assert.ok(normalized);
+  assert.equal(normalized.contentVersion, CURRENT_ROSTER_VERSION);
+  assert.ok(
+    normalized.players.every(
+      (player) =>
+        player.secretIds.length === 0 &&
+        Object.keys(player.systemEventCounters).length === 0,
+    ),
+  );
+});
+
+test("v51 Norgannon saves restore the shared Tier 7 pool", () => {
+  const legacy = createLobbyGame(43);
+  assert.equal(legacy.systemEventId, "system-event-norgannon");
+  const expectedPool = Object.fromEntries(
+    TIER_SEVEN_MINION_DEFINITIONS.map((definition) => [
+      definition.id,
+      legacy.pool[definition.id],
+    ]),
+  );
+  assert.ok(Object.values(expectedPool).some((count) => count === 5));
+
+  legacy.contentVersion = LEGACY_SCHEMA_11_CONTENT_VERSION_V51;
+  for (const definition of TIER_SEVEN_MINION_DEFINITIONS) {
+    legacy.pool[definition.id] = 0;
+  }
+
+  const normalized = normalizePersistedGameState(
+    jsonClone(legacy),
+  ) as GameState | null;
+
+  assert.ok(normalized);
+  assert.equal(normalized.contentVersion, CURRENT_ROSTER_VERSION);
+  for (const definition of TIER_SEVEN_MINION_DEFINITIONS) {
+    assert.equal(
+      normalized.pool[definition.id],
+      expectedPool[definition.id],
+      definition.id,
+    );
+  }
+});
+
+test("v51 Norgannon migration preserves existing Tier 7 ledgers", () => {
+  const current = createLobbyGame(43);
+  assert.equal(current.systemEventId, "system-event-norgannon");
+  const [first, second] = TIER_SEVEN_MINION_DEFINITIONS.filter(
+    (definition) => current.pool[definition.id] === 5,
+  );
+  assert.ok(first && second);
+
+  const poolLedger = jsonClone(current);
+  poolLedger.contentVersion = LEGACY_SCHEMA_11_CONTENT_VERSION_V51;
+  for (const definition of TIER_SEVEN_MINION_DEFINITIONS) {
+    poolLedger.pool[definition.id] = 0;
+  }
+  poolLedger.pool[first.id] = 3;
+  const poolLedgerNormalized = normalizePersistedGameState(
+    poolLedger,
+  ) as GameState | null;
+  assert.ok(poolLedgerNormalized);
+  assert.equal(poolLedgerNormalized.pool[first.id], 3);
+  assert.equal(poolLedgerNormalized.pool[second.id], 0);
+
+  const ownershipLedger = jsonClone(current);
+  ownershipLedger.contentVersion = LEGACY_SCHEMA_11_CONTENT_VERSION_V51;
+  for (const definition of TIER_SEVEN_MINION_DEFINITIONS) {
+    ownershipLedger.pool[definition.id] = 0;
+  }
+  const sharedShopMinion = ownershipLedger.players[0]?.shop[0];
+  assert.ok(sharedShopMinion);
+  sharedShopMinion.definitionId = first.id;
+  sharedShopMinion.poolCopies = 1;
+  const ownershipLedgerNormalized = normalizePersistedGameState(
+    ownershipLedger,
+  ) as GameState | null;
+  assert.ok(ownershipLedgerNormalized);
+  assert.equal(ownershipLedgerNormalized.pool[first.id], 0);
+  assert.equal(ownershipLedgerNormalized.pool[second.id], 0);
+});
+
+test("current JSON saves repair a missing system-event counter map", () => {
+  const current = createGame(0x40b5);
+  const human = current.players[0];
+  assert.ok(human);
+  delete (human as Partial<GameState["players"][number]>)
+    .systemEventCounters;
+
+  const normalized = normalizePersistedGameState(
+    jsonClone(current),
+  ) as GameState | null;
+
+  assert.ok(normalized);
+  assert.deepEqual(normalized.players[0]?.systemEventCounters, {});
+});
+
+test("current JSON saves preserve partial system-event counters", () => {
+  const current = createGame(0x40b6);
+  const human = current.players[0];
+  assert.ok(human);
+  human.systemEventCounters = { savedGold: 7 };
+
+  const normalized = normalizePersistedGameState(
+    jsonClone(current),
+  ) as GameState | null;
+
+  assert.ok(normalized);
+  assert.deepEqual(normalized.players[0]?.systemEventCounters, {
+    savedGold: 7,
+  });
+  const refreshed = gameReducer(normalized, { type: "REFRESH_SHOP" });
+  assert.equal(refreshed.players[0]?.systemEventCounters.savedGold, 7);
+});
+
+test("current saves reject malformed system-event counter maps", () => {
+  const current = createGame(0x40b7);
+  const invalidCounters: Array<{ name: string; value: unknown }> = [
+    { name: "null", value: null },
+    { name: "array", value: [] },
+    { name: "string value", value: { savedGold: "7" } },
+    { name: "fractional value", value: { savedGold: 1.5 } },
+    { name: "negative value", value: { savedGold: -1 } },
+  ];
+
+  for (const { name, value } of invalidCounters) {
+    const invalid = jsonClone(current) as unknown as Record<string, unknown>;
+    const players = invalid.players as Array<Record<string, unknown>>;
+    players[0]!.systemEventCounters = value;
+    assert.equal(normalizePersistedGameState(invalid), null, name);
+  }
 });
 
 test("current hero-choice saves retain exactly four valid candidates", () => {
@@ -443,6 +649,7 @@ test("schema 10 and earlier migration chains gain legacy lobby defaults", () => 
         Object.keys(player.heroPowerCounters).length === 0 &&
         player.trinketIds.length === 0 &&
         Object.keys(player.trinketCounters).length === 0 &&
+        Object.keys(player.systemEventCounters).length === 0 &&
         player.pendingSystemSpellIds.length === 0 &&
         player.freeTavernSpellPurchases === 0,
     ),

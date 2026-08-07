@@ -35,6 +35,10 @@ import {
   RIME_OR_REASON_STAT_GRANTING_CARD_IDS,
 } from "../lib/game/tavern-spells.ts";
 import {
+  createInitialHeroPowerCounters,
+  identityEligibleHeroPowers,
+} from "../lib/game/hero-powers.ts";
+import {
   LEGACY_SCHEMA_5_CONTENT_VERSION,
   LEGACY_SCHEMA_6_CONTENT_VERSION,
   LEGACY_SCHEMA_7_CONTENT_VERSION,
@@ -4832,21 +4836,19 @@ test("Hamuul's Lost Staff replaces the full Tavern with the chosen minion type",
 });
 
 test("Unmasked Identity offers three unique eligible powers and resets replacement counters", () => {
+  const originalHeroPowerId = HERO_POWER_DEFINITIONS[0].id;
+  let state = createGame(0x7511);
   const identityEligiblePowerIds = new Set<string>(
-    HERO_POWER_DEFINITIONS.filter(
-      (definition) =>
-        !("identityEligible" in definition) ||
-        definition.identityEligible !== false,
-    ).map((definition) => definition.id),
+    identityEligibleHeroPowers(originalHeroPowerId, state.activeTribes).map(
+      (definition) => definition.id,
+    ),
   );
   assert.ok(identityEligiblePowerIds.size > 4);
   assert.equal(
     identityEligiblePowerIds.has("hero-power-all-patched-up"),
     false,
   );
-  let state = createGame(0x7511);
   let player = humanPlayer(state);
-  const originalHeroPowerId = HERO_POWER_DEFINITIONS[0].id;
   player.heroPowerId = originalHeroPowerId;
   player.heroPowerCounters = {
     smartSavingsGold: 7,
@@ -4886,23 +4888,8 @@ test("Unmasked Identity offers three unique eligible powers and resets replaceme
   });
   assert.equal(invalid, state);
 
-  const counterBearingEffects = new Set<string>([
-    "goldAfterSellNextTurn",
-    "upgradeDiscountAfterElementals",
-    "tavernCoinAfterThreeMinions",
-    "freeFourthTavernSpell",
-    "growingTavernSpellBuff",
-  ]);
-  const chosenId = pending.optionIds.find((optionId) => {
-    const definition = HERO_POWER_DEFINITIONS.find(
-      (candidate) => candidate.id === optionId,
-    );
-    return (
-      definition !== undefined &&
-      counterBearingEffects.has(definition.effect)
-    );
-  });
-  assert.ok(chosenId, "the fixed seed must offer a counter-bearing power");
+  const chosenId = pending.optionIds[0];
+  assert.ok(chosenId);
   const chosenDefinition = HERO_POWER_DEFINITIONS.find(
     (definition) => definition.id === chosenId,
   );
@@ -4917,27 +4904,10 @@ test("Unmasked Identity offers three unique eligible powers and resets replaceme
   assert.equal(player.heroPowerId, chosenId);
   assert.equal(state.pendingInteraction, null);
   assert.equal(player.tavernSpellsCastThisTurn, 1);
-  let expectedCounters: Record<string, number> = {};
-  switch (chosenDefinition.effect) {
-    case "goldAfterSellNextTurn":
-      expectedCounters = { smartSavingsGold: 0 };
-      break;
-    case "upgradeDiscountAfterElementals":
-      expectedCounters = { chenvaalaElementals: 0 };
-      break;
-    case "tavernCoinAfterThreeMinions":
-      expectedCounters = { kaelthasMinions: 0 };
-      break;
-    case "freeFourthTavernSpell":
-      expectedCounters = { taethelanSpells: 0 };
-      break;
-    case "growingTavernSpellBuff":
-      expectedCounters = {
-        rakanishuTurns:
-          (Math.floor(Math.max(1, replacementRound) / 4) + 1) * 4,
-        rakanishuBonus: 1,
-      };
-      break;
+  const expectedCounters = createInitialHeroPowerCounters(chosenId);
+  if (chosenDefinition.effect === "growingTavernSpellBuff") {
+    expectedCounters.rakanishuTurns =
+      (Math.floor(Math.max(1, replacementRound) / 4) + 1) * 4;
   }
   assert.deepEqual(player.heroPowerCounters, expectedCounters);
 });

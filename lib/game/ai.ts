@@ -1,6 +1,6 @@
 import type {
+  MinionTier,
   PlayerId,
-  TavernTier,
   Tribe,
 } from "./types.ts";
 
@@ -316,6 +316,7 @@ export const AI_BASE_TIER_UP_ROUND = Object.freeze([
   6,
   9,
   11,
+  12,
 ] as const);
 
 export function aiTargetBoardSize(round: number): number {
@@ -342,7 +343,7 @@ export function aiTargetBoardSize(round: number): number {
 
 export function aiRefreshLimit(
   profile: AiStrategyProfile,
-  tavernTier: TavernTier,
+  tavernTier: MinionTier,
   boardSize: number,
   effectiveHealth: number,
 ): number {
@@ -358,11 +359,12 @@ export function aiRefreshLimit(
 export interface AiUpgradeContext {
   profile: AiStrategyProfile;
   round: number;
-  tavernTier: TavernTier;
+  tavernTier: MinionTier;
   health: number;
   armor: number;
   gold: number;
   upgradeCost: number;
+  maximumTavernTier?: MinionTier;
   boardSize: number;
   bestShopScore: number;
   weakestBoardScore: number;
@@ -381,12 +383,13 @@ export function shouldAiUpgrade({
   armor,
   gold,
   upgradeCost,
+  maximumTavernTier = 6,
   boardSize,
   bestShopScore,
   weakestBoardScore,
   bestAffordableSpellScore = Number.NEGATIVE_INFINITY,
 }: AiUpgradeContext): boolean {
-  if (tavernTier >= 6 || gold < upgradeCost) {
+  if (tavernTier >= maximumTavernTier || gold < upgradeCost) {
     return false;
   }
   const nextTier = tavernTier + 1;

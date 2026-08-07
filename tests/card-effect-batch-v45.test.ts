@@ -263,7 +263,7 @@ function ensureNagaLobby(state: GameState): void {
 test("v45 exposes exact complete rules for Felboar, Tide Oracle, Groundbreaker, and Darkcrest", () => {
   assert.equal(
     CURRENT_ROSTER_VERSION,
-    "battlegrounds-36.0.3-247416-v50",
+    "battlegrounds-36.0.3-247416-v52",
   );
 
   const felboar = getMinionDefinition("BG28_633");

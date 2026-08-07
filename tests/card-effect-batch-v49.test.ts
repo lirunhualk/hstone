@@ -140,7 +140,7 @@ function prepareDuel(
 test("v49 exposes complete ordinary and Golden Falling Flying Golem and Ingenious Inventor rules", () => {
   assert.equal(
     CURRENT_ROSTER_VERSION,
-    "battlegrounds-36.0.3-247416-v50",
+    "battlegrounds-36.0.3-247416-v52",
   );
 
   const golem = getMinionDefinition("BG35_342");

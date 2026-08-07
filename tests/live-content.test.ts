@@ -66,7 +66,7 @@ function expectedPlainText(html: string): string {
 test("exports the pinned current roster version through the legacy alias", () => {
   assert.equal(
     CURRENT_ROSTER_VERSION,
-    "battlegrounds-36.0.3-247416-v50",
+    "battlegrounds-36.0.3-247416-v52",
   );
   assert.equal(CLASSIC_ROSTER_VERSION, CURRENT_ROSTER_VERSION);
 });
@@ -128,8 +128,8 @@ test("keeps all current Tier 7 rewards addressable but outside the Tavern pool",
 
 test("keeps legacy rules and tokens addressable but out of the shared pool", () => {
   assert.equal(LEGACY_RULE_DEFINITIONS.length, 36);
-  assert.equal(TOKEN_DEFINITIONS.length, 9);
-  assert.equal(LIVE_TOKEN_DEFINITIONS.length, 44);
+  assert.equal(TOKEN_DEFINITIONS.length, 11);
+  assert.equal(LIVE_TOKEN_DEFINITIONS.length, 47);
   assert.ok(
     [
       ...LEGACY_RULE_DEFINITIONS,

@@ -205,7 +205,7 @@ function clearGeneratedPools(state: GameState): void {
 test("v44 exposes exact complete rules and Satellite identities for the four-card batch", () => {
   assert.equal(
     CURRENT_ROSTER_VERSION,
-    "battlegrounds-36.0.3-247416-v50",
+    "battlegrounds-36.0.3-247416-v52",
   );
 
   const peggy = getMinionDefinition("BG25_032");

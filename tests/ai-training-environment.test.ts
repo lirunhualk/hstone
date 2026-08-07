@@ -50,6 +50,49 @@ test("training environment exposes deterministic opaque legal actions", () => {
   }, TypeError);
 });
 
+test("training environments can exercise and observe active Hero Powers", () => {
+  const environment = new AiTrainingEnvironment(0x8a11, 0, 40, {
+    heroPowerId: "hero-power-tb_baconshop_hp_047",
+  });
+  const action = actionByType(environment, "ACTIVATE_HERO_POWER");
+  assert.deepEqual(action.cost, { currency: "gold", amount: 1 });
+
+  const result = environment.step(action.token);
+
+  assert.equal(result.accepted, true);
+  assert.equal(result.environmentVersion, 4);
+  assert.equal(result.observation.own.gold, 2);
+  assert.equal(result.observation.own.heroPowerActiveThisTurn, true);
+  assert.equal(result.observation.own.heroPowerCounters.eliseUses, 1);
+  assert.equal(
+    result.observation.own.pendingInteraction?.kind,
+    "discover",
+  );
+  assert.equal(
+    result.legalActions.some(
+      (candidate) => candidate.type === "ACTIVATE_HERO_POWER",
+    ),
+    false,
+  );
+
+  const reset = environment.reset(0x8a11);
+  assert.equal(
+    reset.own.heroPowerId,
+    "hero-power-tb_baconshop_hp_047",
+  );
+  assert.equal(reset.own.heroPowerActiveThisTurn, false);
+});
+
+test("training configuration rejects explicitly unsupported Hero Powers", () => {
+  assert.throws(
+    () =>
+      new AiTrainingEnvironment(0x8a12, 0, 40, {
+        heroPowerId: "hero-power-tb_baconshop_hp_043",
+      }),
+    /Unsupported training Hero Power/u,
+  );
+});
+
 test("every advertised initial action is accepted by the real reducer", () => {
   const seed = 0x8a02;
   const baseline = new AiTrainingEnvironment(seed, 5);

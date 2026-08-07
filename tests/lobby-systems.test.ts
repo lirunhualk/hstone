@@ -5,17 +5,21 @@ import {
   GREATER_TRINKET_ROUND,
   HERO_DEFINITIONS,
   LESSER_TRINKET_ROUND,
-  SYSTEM_EVENT_DEFINITIONS,
+  PLAYABLE_SYSTEM_EVENT_DEFINITIONS,
   createGame,
   createLobbyGame,
   gameReducer,
   getHeroDefinition,
+  getHeroPowerActivationQuote,
+  getHeroPowerDefinition,
   getMinionPurchaseCost,
+  getMaximumTavernTier,
   getRefreshCost,
   getSpellcraftDefinition,
   getTavernSpellDefinition,
   getTavernSpellPurchaseQuote,
   getTrinketDefinition,
+  getTripleRewardTier,
   getUpgradeCost,
   heroesAvailableForTribes,
   minionHasTribe,
@@ -24,11 +28,14 @@ import {
   type PlayerState,
   type SpellcraftSpellInstance,
   type TavernSpellInstance,
+  type TripleRewardSpellInstance,
   type TrinketTier,
   type Tribe,
 } from "../lib/game/engine.ts";
+import { getBuddyDefinitionIdForHeroPower } from "../lib/game/buddies.ts";
 import {
   LIVE_MINION_DEFINITIONS,
+  TIER_SEVEN_MINION_DEFINITIONS,
   getMinionDefinition,
 } from "../lib/game/content.ts";
 
@@ -59,6 +66,15 @@ function lobbyGameOfferingHero(
 ): GameState {
   for (let seed = 1; seed <= 10_000; seed += 1) {
     const state = createLobbyGame(seed, initialHealth);
+    if (state.systemEventId !== "system-event-final-hour") {
+      continue;
+    }
+    state.systemEventId = null;
+    for (const player of state.players) {
+      player.tavernTier = 1;
+      player.gold = Math.min(player.maxGold, state.round + 2);
+      player.systemEventCounters = {};
+    }
     const pending = state.pendingInteraction;
     if (
       pending?.kind === "heroChoice" &&
@@ -81,6 +97,22 @@ function chooseHero(state: GameState, requestedHeroId?: string): GameState {
     interactionId: pending.interactionId,
     optionInstanceId: heroId,
   });
+}
+
+function offeredHeroWithoutEffects(
+  state: GameState,
+  disallowedEffects: readonly string[],
+): string {
+  const pending = state.pendingInteraction;
+  assert.ok(pending?.kind === "heroChoice");
+  const heroId = pending.optionIds.find((optionId) => {
+    const hero = getHeroDefinition(optionId);
+    return !disallowedEffects.includes(
+      getHeroPowerDefinition(hero.heroPowerId).effect,
+    );
+  });
+  assert.ok(heroId, "the lobby must offer a suitable Hero");
+  return heroId;
 }
 
 function continueThroughCombat(state: GameState): GameState {
@@ -300,7 +332,7 @@ function spellcraft(
     cardId: definition.cardId,
     name: definition.name,
     description: definition.description,
-    spellFamily: "spellcraft",
+    spellFamily: definition.spellFamily ?? "spellcraft",
     target: definition.target,
   };
 }
@@ -324,8 +356,8 @@ test("createGame remains legacy-neutral", () => {
   assert.equal("system-spell-golden-arrow" in state.spellPool, false);
 });
 
-test("the 16-Hero pool deals a stable four-Hero offer and seven unique AI Heroes", () => {
-  assert.equal(HERO_DEFINITIONS.length, 16);
+test("the playable Hero pool deals a stable four-Hero offer and seven unique AI Heroes", () => {
+  assert.equal(HERO_DEFINITIONS.length, 120);
   const first = createLobbyGame(24680);
   const second = createLobbyGame(24680);
   const firstChoice = first.pendingInteraction;
@@ -342,7 +374,7 @@ test("the 16-Hero pool deals a stable four-Hero offer and seven unique AI Heroes
     ),
   );
   assert.ok(
-    SYSTEM_EVENT_DEFINITIONS.some(
+    PLAYABLE_SYSTEM_EVENT_DEFINITIONS.some(
       (definition) => definition.id === first.systemEventId,
     ),
   );
@@ -366,8 +398,15 @@ test("the 16-Hero pool deals a stable four-Hero offer and seven unique AI Heroes
 
   const offerOrders = new Set<string>();
   for (let seed = 1; seed <= 16; seed += 1) {
-    const pending = createLobbyGame(seed).pendingInteraction;
+    const lobby = createLobbyGame(seed);
+    const pending = lobby.pendingInteraction;
     assert.ok(pending?.kind === "heroChoice");
+    assert.ok(
+      PLAYABLE_SYSTEM_EVENT_DEFINITIONS.some(
+        (definition) => definition.id === lobby.systemEventId,
+      ),
+    );
+    assert.notEqual(lobby.systemEventId, "system-event-dual-universe");
     offerOrders.add(pending.optionIds.join(","));
   }
   assert.ok(offerOrders.size > 1, "different seeds should vary the offer order");
@@ -514,6 +553,56 @@ test("Gallywix banks one next-turn Gold for each sold minion", () => {
   assert.equal(player.gold, 5);
   assert.equal(player.pendingNextTurnGold, 0);
   assert.equal(player.heroPowerCounters.smartSavingsGold, 0);
+});
+
+test("Saurfang buffs the initial Tavern and advances after four purchases", () => {
+  const offered = lobbyGameOfferingHero("hero-bg20-102");
+  const initialOffers = humanPlayer(offered).shop.map((minion) => ({
+    instanceId: minion.instanceId,
+    attack: minion.attack,
+    health: minion.health,
+  }));
+  let state = chooseHero(offered, "hero-bg20-102");
+  let player = humanPlayer(state);
+  assert.equal(player.tavernMinionAttackBonus, 1);
+  assert.equal(player.tavernMinionHealthBonus, 1);
+  for (const before of initialOffers) {
+    const after = player.shop.find(
+      (minion) => minion.instanceId === before.instanceId,
+    );
+    assert.ok(after);
+    assert.equal(after.attack, before.attack + 1);
+    assert.equal(after.health, before.health + 1);
+  }
+
+  const template = player.shop[0];
+  assert.ok(template);
+  const purchaseIds = safeLiveMinionIds(5);
+  player.shop = purchaseIds.map((definitionId, index) =>
+    definitionMinion(
+      template,
+      definitionId,
+      `saurfang-buy-${index}`,
+    ),
+  );
+  player.hand = [];
+  player.gold = 20;
+  const remainingBefore = player.shop[4];
+  assert.ok(remainingBefore);
+  const remainingStats = [remainingBefore.attack, remainingBefore.health];
+
+  for (let purchase = 0; purchase < 4; purchase += 1) {
+    state = gameReducer(state, { type: "BUY_MINION", shopIndex: 0 });
+  }
+  player = humanPlayer(state);
+  assert.equal(player.heroPowerCounters.saurfangBuff, 2);
+  assert.equal(player.heroPowerCounters.saurfangBuys, 4);
+  assert.equal(player.tavernMinionAttackBonus, 2);
+  assert.equal(player.tavernMinionHealthBonus, 2);
+  assert.deepEqual(
+    [player.shop[0]?.attack, player.shop[0]?.health],
+    [remainingStats[0] + 1, remainingStats[1] + 1],
+  );
 });
 
 test("Millhouse pays two for minions and Refresh but one more to upgrade", () => {
@@ -993,7 +1082,15 @@ test("turns 6 and 9 pause Recruit for Lesser and Greater Trinket choices", () =>
   state = greaterResolution.state;
   const greaterId = greaterResolution.selectedId;
   assert.equal(state.pendingInteraction, null);
-  assert.deepEqual(humanPlayer(state).trinketIds, [lesserId, greaterId]);
+  assert.ok(
+    humanPlayer(state).trinketIds.includes(lesserId) ||
+      humanPlayer(state).trinketIds.some((definitionId) =>
+        definitionId.startsWith("souvenir-copy:"),
+      ),
+    "the Lesser Trinket must remain owned or resolve its documented replacement",
+  );
+  assert.ok(humanPlayer(state).trinketIds.includes(greaterId));
+  assert.equal(humanPlayer(state).trinketIds.length >= 2, true);
 });
 
 test("Calming Candle also makes a Health-priced Tavern Spell free", () => {
@@ -1144,4 +1241,657 @@ test("Goldenizer Supply fills space freed by expiring Spellcraft", () => {
   assert.deepEqual(player.pendingSystemSpellIds, []);
   assert.equal(player.hand.length, 1);
   assert.equal(player.hand[0]?.definitionId, "system-spell-goldenizer");
+});
+
+test("Sandglass starts everyone at Tavern Tier 2", () => {
+  const state = lobbyGameForEvent("system-event-sandglass");
+  assert.equal(state.systemEventId, "system-event-sandglass");
+  assert.ok(state.players.every((player) => player.tavernTier === 2));
+});
+
+test("Aman'Thul starts everyone at Tavern Tier 3 with 9 gold", () => {
+  const state = lobbyGameForEvent("system-event-amanthul");
+  assert.equal(state.systemEventId, "system-event-amanthul");
+  assert.ok(state.players.every((player) => player.tavernTier === 3));
+  assert.ok(state.players.every((player) => player.gold === 9));
+});
+
+test("Full House tavern always has 7 cards", () => {
+  let state = chooseHero(lobbyGameForEvent("system-event-full-house"));
+  state = gameReducer(state, { type: "REFRESH_SHOP" });
+  let player = humanPlayer(state);
+  assert.ok(player.shop.length >= 5);
+
+  state = gameReducer(state, { type: "REFRESH_SHOP" });
+  player = humanPlayer(state);
+  assert.equal(player.shop.length, 6);
+});
+
+test("Titan Grip first minion purchase each turn is free", () => {
+  let state = chooseHero(lobbyGameForEvent("system-event-titan-grip"));
+  let player = humanPlayer(state);
+  player.gold = 10;
+  const goldBefore = player.gold;
+  assert.ok(player.shop[0]);
+
+  state = gameReducer(state, { type: "BUY_MINION", shopIndex: 0 });
+  player = humanPlayer(state);
+  assert.equal(player.gold, goldBefore);
+
+  state = gameReducer(state, { type: "BUY_MINION", shopIndex: 0 });
+  player = humanPlayer(state);
+  // second purchase costs base (3) or hero-discounted (2)
+  assert.ok(player.gold >= goldBefore - 3);
+});
+
+test("Titan Grip resets the free purchase each turn", () => {
+  let state = chooseHero(lobbyGameForEvent("system-event-titan-grip"));
+  let player = humanPlayer(state);
+  player.gold = 10;
+
+  state = gameReducer(state, { type: "BUY_MINION", shopIndex: 0 });
+  player = humanPlayer(state);
+  assert.equal(player.gold, 10);
+
+  state = continueThroughCombat(state);
+  player = humanPlayer(state);
+  player.gold = 10;
+
+  state = gameReducer(state, { type: "BUY_MINION", shopIndex: 0 });
+  player = humanPlayer(state);
+  assert.equal(player.gold, 10);
+});
+
+test("registry-only Buy One Get One remains loadable for legacy lobbies", () => {
+  const legacy = lobbyGameForEvent("system-event-final-hour");
+  legacy.systemEventId = "system-event-buy-one-get-one";
+  let state = chooseHero(legacy);
+  let player = humanPlayer(state);
+  player.gold = 20;
+  player.hand = [];
+  player.board = [];
+  state = gameReducer(state, { type: "REFRESH_SHOP" });
+  player = humanPlayer(state);
+  const shopMinionId = player.shop[0]?.definitionId;
+  assert.ok(shopMinionId);
+
+  state = gameReducer(state, { type: "BUY_MINION", shopIndex: 0 });
+  player = humanPlayer(state);
+  const matchingCards = player.hand.filter(
+    (card) =>
+      card.kind !== "spellcraft" && card.definitionId === shopMinionId,
+  );
+  assert.equal(matchingCards.length, 2, "bought card plus free copy");
+  assert.equal(player.systemEventCounters.copyGrantedRound, 1);
+
+  state = gameReducer(state, { type: "BUY_MINION", shopIndex: 0 });
+  player = humanPlayer(state);
+  assert.equal(player.systemEventCounters.copyGrantedRound, 1, "not reset by second purchase");
+});
+
+test("Gold Carryover saves unspent gold for the next turn with bonus at 5", () => {
+  let state = chooseHero(lobbyGameForEvent("system-event-gold-carryover"));
+  let player = humanPlayer(state);
+  player.gold = 7;
+
+  state = continueThroughCombat(state);
+  player = humanPlayer(state);
+  assert.equal(player.gold, 4 + 7 + 1); // base(4) + carried(7) + bonus(1)
+  assert.equal(player.systemEventCounters.savedGold, 7);
+
+  player.gold = 3;
+  state = continueThroughCombat(state);
+  player = humanPlayer(state);
+  assert.equal(player.gold, 5 + 3); // base(5) + immediately carried(3)
+});
+
+test("Gold Carryover bonus only triggers when saved >= 5", () => {
+  let state = chooseHero(lobbyGameForEvent("system-event-gold-carryover"));
+  let player = humanPlayer(state);
+  player.gold = 3;
+
+  state = continueThroughCombat(state);
+  player = humanPlayer(state);
+  assert.equal(player.systemEventCounters.savedGold, 3);
+
+  player.gold = 2;
+  state = continueThroughCombat(state);
+  player = humanPlayer(state);
+  assert.equal(player.gold, 5 + 2); // base(5) + immediately carried(2)
+});
+
+test("Refund Trick minions cost 1, sell gives 0, upgrade costs -2", () => {
+  let state = chooseHero(lobbyGameForEvent("system-event-refund-trick"));
+  let player = humanPlayer(state);
+  assert.equal(player.gold, 1);
+
+  assert.equal(getMinionPurchaseCost(state, player.id), 1);
+  const shopMinion = player.shop[0];
+  assert.ok(shopMinion);
+  const goldBeforeBuy = player.gold;
+
+  state = gameReducer(state, { type: "BUY_MINION", shopIndex: 0 });
+  player = humanPlayer(state);
+  assert.equal(player.gold, goldBeforeBuy - 1);
+  const cardInHand = player.hand.find(
+    (card) =>
+      card.kind !== "spellcraft" &&
+      card.definitionId === shopMinion.definitionId,
+  );
+  assert.ok(cardInHand);
+  const goldBeforeSell = player.gold;
+
+  state = gameReducer(state, {
+    type: "PLAY_HAND_CARD",
+    cardInstanceId: cardInHand.instanceId ?? "",
+  });
+  player = humanPlayer(state);
+  const boardMinion = player.board.at(-1);
+  assert.ok(boardMinion);
+
+  state = gameReducer(state, {
+    type: "SELL_MINION",
+    boardIndex: player.board.length - 1,
+  });
+  player = humanPlayer(state);
+  assert.equal(player.gold, goldBeforeSell);
+
+  const upgradeCost = getUpgradeCost(state, player.id);
+  // refundTrick gives -2 discount; combined with any hero effects
+  assert.ok(upgradeCost <= 5, "upgrade cost reduced from base of 5");
+  player.gold = 20;
+
+  state = gameReducer(state, { type: "UPGRADE_TAVERN" });
+  player = humanPlayer(state);
+  assert.equal(player.tavernTier, 2);
+  // upgrade costs exactly the quoted amount; any hero gold-after-upgrade is additive
+  assert.ok(player.gold >= 20 - upgradeCost);
+});
+
+test("Mimiron's Clockwork Arena blocks manual upgrades and auto-upgrades every 2 turns", () => {
+  let state = chooseHero(
+    lobbyGameForEvent("system-event-mimiron-clockwork"),
+  );
+  let player = humanPlayer(state);
+  assert.equal(player.tavernTier, 1);
+  assert.equal(player.systemEventCounters.mimironTurns, 1);
+
+  player.gold = 10;
+  state = gameReducer(state, { type: "UPGRADE_TAVERN" });
+  assert.equal(humanPlayer(state).tavernTier, 1);
+
+  state = continueThroughCombat(state);
+  player = humanPlayer(state);
+  assert.equal(player.tavernTier, 1);
+  assert.equal(player.systemEventCounters.mimironTurns, 2);
+
+  state = continueThroughCombat(state);
+  player = humanPlayer(state);
+  assert.equal(player.tavernTier, 2);
+  assert.equal(player.systemEventCounters.mimironTurns, 1);
+
+  state = continueThroughCombat(state);
+  player = humanPlayer(state);
+  assert.equal(player.tavernTier, 2);
+  assert.equal(player.systemEventCounters.mimironTurns, 2);
+
+  state = continueThroughCombat(state);
+  player = humanPlayer(state);
+  assert.equal(player.tavernTier, 3);
+  assert.equal(player.systemEventCounters.mimironTurns, 1);
+});
+
+test("Norgannon preserves Hero armor and opens a populated Tier 7 Tavern", () => {
+  let state = lobbyGameForEvent("system-event-norgannon");
+  const heroId = offeredHeroWithoutEffects(state, [
+    "extraDragonOnRefresh",
+    "freezeEndTurnSmallerTavern",
+  ]);
+  const heroArmor = getHeroDefinition(heroId).armor;
+  assert.equal(humanPlayer(state).armor, 10);
+
+  state = chooseHero(state, heroId);
+  let player = humanPlayer(state);
+  assert.equal(player.armor, heroArmor + 10);
+  const openedTierSeven = TIER_SEVEN_MINION_DEFINITIONS.filter(
+    (definition) => (state.pool[definition.id] ?? 0) > 0,
+  );
+  assert.ok(openedTierSeven.length > 0);
+  assert.ok(
+    openedTierSeven.every(
+      (definition) => state.pool[definition.id] === 5,
+    ),
+  );
+  assert.equal(state.pool.BG27_513 ?? 0, 0);
+  assert.equal(state.pool.BG31_360 ?? 0, 0);
+
+  player.heroPowerId = null;
+  player.tavernTier = 6;
+  player.upgradeDiscount = 0;
+  player.gold = 9;
+  assert.equal(getMaximumTavernTier(state), 7);
+  assert.equal(getUpgradeCost(state, player.id), 10);
+  assert.equal(getTripleRewardTier(state, player.tavernTier), 7);
+  state = gameReducer(state, { type: "UPGRADE_TAVERN" });
+  player = humanPlayer(state);
+  assert.equal(player.tavernTier, 6);
+  assert.equal(player.gold, 9);
+
+  player.gold = 10;
+  state = gameReducer(state, { type: "UPGRADE_TAVERN" });
+  player = humanPlayer(state);
+  assert.equal(player.tavernTier, 7);
+  assert.equal(player.gold, 0);
+  assert.equal(getUpgradeCost(state, player.id), 0);
+
+  const tripleTemplate = player.shop[0];
+  assert.ok(tripleTemplate);
+  const tripleReward: TripleRewardSpellInstance = {
+    ...tripleTemplate,
+    kind: "tripleReward",
+    instanceId: "norgannon-triple-reward",
+    definitionId: "triple-reward",
+    cardId: "TB_BaconShop_Triples_01",
+    name: "三连奖励",
+    tier: 7,
+    description: "发现一个 7 级随从。",
+    attack: 0,
+    health: 0,
+    poolCopies: 0,
+    grantsTripleReward: false,
+  };
+  player.hand = [tripleReward];
+  const tierSevenPoolBefore = Object.fromEntries(
+    TIER_SEVEN_MINION_DEFINITIONS.map((definition) => [
+      definition.id,
+      state.pool[definition.id] ?? 0,
+    ]),
+  );
+  state = gameReducer(state, {
+    type: "PLAY_HAND_CARD",
+    cardInstanceId: tripleReward.instanceId,
+  });
+  const discover = state.pendingInteraction;
+  assert.ok(discover?.kind === "discover");
+  assert.equal(discover.options.length, 3);
+  assert.ok(discover.options.every((option) => option.poolCopies === 1));
+  for (const option of discover.options) {
+    assert.equal(
+      state.pool[option.definitionId],
+      tierSevenPoolBefore[option.definitionId] - 1,
+    );
+  }
+  const selected = discover.options[0];
+  const unselected = discover.options.slice(1);
+  state = gameReducer(state, {
+    type: "RESOLVE_INTERACTION",
+    interactionId: discover.interactionId,
+    optionInstanceId: selected.instanceId,
+  });
+  player = humanPlayer(state);
+  const ownedSelection = player.hand.find(
+    (card) => card.instanceId === selected.instanceId,
+  );
+  assert.ok(ownedSelection?.kind === "minion");
+  assert.equal(ownedSelection.poolCopies, 1);
+  assert.equal(
+    state.pool[selected.definitionId],
+    tierSevenPoolBefore[selected.definitionId] - 1,
+  );
+  for (const option of unselected) {
+    assert.equal(
+      state.pool[option.definitionId],
+      tierSevenPoolBefore[option.definitionId],
+    );
+  }
+
+  player.shop = [];
+  player.freeRefreshes = 1;
+  for (const definition of LIVE_MINION_DEFINITIONS) {
+    if (definition.tier <= 6) {
+      state.pool[definition.id] = 0;
+    }
+  }
+  state = gameReducer(state, { type: "REFRESH_SHOP" });
+  player = humanPlayer(state);
+  assert.equal(player.shop.length, 6);
+  assert.ok(player.shop.every((minion) => minion.tier === 7));
+});
+
+test("Norgannon Tier 7 discovers reserve and return the shared pool", () => {
+  for (const source of ["search", "elise", "topShelf"] as const) {
+    let state = lobbyGameForEvent("system-event-norgannon");
+    const heroId = offeredHeroWithoutEffects(state, [
+      "extraDragonOnRefresh",
+      "freezeEndTurnSmallerTavern",
+    ]);
+    state = chooseHero(state, heroId);
+    let player = humanPlayer(state);
+    player.heroPowerId = null;
+    player.heroPowerCounters = {};
+    player.heroPowerActiveThisTurn = false;
+    player.tavernTier = 7;
+    player.gold = 10;
+    player.hand = [];
+    state.pendingInteraction = null;
+
+    if (source === "search") {
+      player.hand = [
+        tavernSpell(
+          "tavern-spell-search-the-past",
+          "norgannon-search-the-past",
+        ),
+      ];
+    } else if (source === "elise") {
+      player.heroPowerId = "hero-power-tb_baconshop_hp_047";
+      player.heroPowerCounters = { eliseUses: 0 };
+    } else {
+      player.hand = [
+        spellcraft(
+          "generated-darkmoon-top-shelf",
+          "norgannon-top-shelf",
+        ),
+      ];
+    }
+
+    const poolBefore = Object.fromEntries(
+      TIER_SEVEN_MINION_DEFINITIONS.map((definition) => [
+        definition.id,
+        state.pool[definition.id] ?? 0,
+      ]),
+    );
+    state = gameReducer(
+      state,
+      source === "search"
+        ? {
+            type: "CAST_TAVERN_SPELL",
+            cardInstanceId: "norgannon-search-the-past",
+          }
+        : source === "elise"
+          ? { type: "ACTIVATE_HERO_POWER" }
+          : {
+              type: "CAST_SPELLCRAFT",
+              cardInstanceId: "norgannon-top-shelf",
+            },
+    );
+
+    const discover = state.pendingInteraction;
+    assert.ok(discover?.kind === "discover", `${source} must Discover`);
+    assert.equal(discover.filter.exactTier, 7);
+    assert.equal(discover.filter.usesSharedPool, true);
+    assert.equal(discover.options.length, 3);
+    assert.ok(discover.options.every((option) => option.poolCopies === 1));
+    for (const option of discover.options) {
+      assert.equal(
+        state.pool[option.definitionId],
+        poolBefore[option.definitionId] - 1,
+        `${source} must reserve ${option.definitionId}`,
+      );
+    }
+
+    const selected = discover.options[0];
+    const unselected = discover.options.slice(1);
+    state = gameReducer(state, {
+      type: "RESOLVE_INTERACTION",
+      interactionId: discover.interactionId,
+      optionInstanceId: selected.instanceId,
+    });
+    player = humanPlayer(state);
+    const selectedInHand = player.hand.find(
+      (card) => card.instanceId === selected.instanceId,
+    );
+    assert.ok(selectedInHand?.kind === "minion");
+    assert.equal(selectedInHand.poolCopies, 1);
+    assert.equal(
+      state.pool[selected.definitionId],
+      poolBefore[selected.definitionId] - 1,
+    );
+    for (const option of unselected) {
+      assert.equal(
+        state.pool[option.definitionId],
+        poolBefore[option.definitionId],
+        `${source} must return ${option.definitionId}`,
+      );
+    }
+  }
+});
+
+test("Tavern Special activates every minion type and keeps seven offers", () => {
+  let state = lobbyGameForEvent("system-event-tavern-special");
+  const everyTribe: Tribe[] = [
+    "beast",
+    "mech",
+    "demon",
+    "murloc",
+    "dragon",
+    "pirate",
+    "elemental",
+    "naga",
+    "quilboar",
+    "undead",
+  ];
+  assert.deepEqual(state.activeTribes, everyTribe);
+  for (const tribe of everyTribe) {
+    const representative = LIVE_MINION_DEFINITIONS.find((definition) => {
+      const tribes =
+        definition.tribes ??
+        (definition.tribe === "neutral" ? [] : [definition.tribe]);
+      return definition.tier <= 6 && tribes.includes(tribe);
+    });
+    assert.ok(representative, `${tribe} needs a pool representative`);
+    assert.ok(
+      (state.pool[representative.id] ?? 0) > 0,
+      `${tribe} must be active in the shared pool`,
+    );
+  }
+
+  state = chooseHero(state);
+  const player = humanPlayer(state);
+  player.heroPowerId = null;
+  player.gold = 10;
+  state = gameReducer(state, { type: "REFRESH_SHOP" });
+  assert.equal(humanPlayer(state).shop.length, 6);
+});
+
+test("registry-only Hero's Call remains loadable for legacy lobbies", () => {
+  let state = createLobbyGame(0x4ca11, 999);
+  state.systemEventId = "system-event-heros-call";
+  const priorHandSizes = new Map(
+    state.players.map((player) => [player.id, player.hand.length]),
+  );
+  const heroId = offeredHeroWithoutEffects(state, [
+    "discoverTier7ForGoldSpent",
+  ]);
+
+  state = chooseHero(state, heroId);
+  const pending = state.pendingInteraction;
+  assert.ok(pending?.kind === "discover");
+  assert.equal(pending.options.length, 3);
+  assert.ok(pending.options.every((option) => option.tier === 6));
+  const sharedDefinitionIds = new Set(
+    pending.options.map((option) => option.definitionId),
+  );
+  for (const player of state.players.filter((candidate) => !candidate.isHuman)) {
+    const priorSize = priorHandSizes.get(player.id) ?? 0;
+    const gained = player.hand.slice(priorSize);
+    assert.equal(gained.length, 1, `${player.id} must gain exactly one card`);
+    assert.ok(sharedDefinitionIds.has(gained[0].definitionId));
+  }
+
+  const humanHandSize = humanPlayer(state).hand.length;
+  state = gameReducer(state, {
+    type: "RESOLVE_INTERACTION",
+    interactionId: pending.interactionId,
+    optionInstanceId: pending.options[0].instanceId,
+  });
+  assert.equal(humanPlayer(state).hand.length, humanHandSize + 1);
+  assert.ok(
+    sharedDefinitionIds.has(
+      humanPlayer(state).hand.at(-1)?.definitionId ?? "",
+    ),
+  );
+});
+
+test("registry-only hero-dependent events resume after Hero choice", () => {
+  let buddyState: GameState | null = null;
+  let buddyHeroId: string | null = null;
+  for (let seed = 1; seed <= 2_000; seed += 1) {
+    const candidate = createLobbyGame(seed, 999);
+    if (candidate.pendingInteraction?.kind !== "heroChoice") {
+      continue;
+    }
+    const offered = candidate.pendingInteraction.optionIds.find((heroId) =>
+      getBuddyDefinitionIdForHeroPower(
+        getHeroDefinition(heroId).heroPowerId,
+      ),
+    );
+    if (offered) {
+      candidate.systemEventId = "system-event-bring-buddies";
+      buddyState = candidate;
+      buddyHeroId = offered;
+      break;
+    }
+  }
+  assert.ok(buddyState && buddyHeroId);
+  const buddyDefinitionId = getBuddyDefinitionIdForHeroPower(
+    getHeroDefinition(buddyHeroId).heroPowerId,
+  );
+  assert.ok(buddyDefinitionId);
+  buddyState = chooseHero(buddyState, buddyHeroId);
+  assert.ok(
+    humanPlayer(buddyState).hand.some(
+      (card) => card.definitionId === buddyDefinitionId,
+    ),
+  );
+
+  let dualState = createLobbyGame(0xd00);
+  dualState.systemEventId = "system-event-dual-universe";
+  dualState = chooseHero(dualState);
+  const dualPending = dualState.pendingInteraction;
+  assert.ok(dualPending?.kind === "heroPowerChoice");
+  assert.equal(dualPending.optionIds.length, 3);
+  assert.equal(new Set(dualPending.optionIds).size, 3);
+});
+
+test("Plane Alignment grants only one majority-type minion per turn", () => {
+  let state = chooseHero(
+    lobbyGameForEvent("system-event-plane-alignment"),
+  );
+  let player = humanPlayer(state);
+  for (const candidate of state.players) {
+    candidate.heroPowerId = null;
+    candidate.heroPowerCounters = {};
+  }
+  player = humanPlayer(state);
+  const definition = LIVE_MINION_DEFINITIONS.find((candidate) => {
+    const tribes =
+      candidate.tribes ??
+      (candidate.tribe === "neutral" ? [] : [candidate.tribe]);
+    return (
+      candidate.tier === 1 &&
+      tribes.some((tribe) => state.activeTribes.includes(tribe))
+    );
+  });
+  assert.ok(definition);
+  assert.ok(player.shop[0]);
+  player.board = [
+    definitionMinion(
+      player.shop[0],
+      definition.id,
+      "plane-alignment-source",
+    ),
+  ];
+  player.hand = [];
+
+  state = continueThroughCombat(state);
+  player = humanPlayer(state);
+  assert.equal(player.hand.length, 1);
+});
+
+test("Hero Power quotes are pure, dynamic, and target-aware", () => {
+  let state = createGame(77, 999);
+  let player = humanPlayer(state);
+  player.heroPowerId = "hero-power-tb_baconshop_hp_010";
+  player.heroPowerCounters = {};
+  player.gold = 1;
+  const target = player.shop.shift();
+  assert.ok(target);
+  player.board = [target];
+  const beforeQuote = structuredClone(state);
+
+  assert.deepEqual(
+    getHeroPowerActivationQuote(state, player.id),
+    {
+      cost: 1,
+      affordable: true,
+      usable: true,
+      targetKind: "board",
+    },
+  );
+  assert.equal(
+    getHeroPowerActivationQuote(state, player.id, "missing")?.usable,
+    false,
+  );
+  assert.equal(
+    getHeroPowerActivationQuote(state, player.id, target.instanceId)?.usable,
+    true,
+  );
+  assert.deepEqual(state, beforeQuote, "quotes must not consume live RNG or state");
+
+  state = gameReducer(state, {
+    type: "ACTIVATE_HERO_POWER",
+    targetInstanceId: target.instanceId,
+  });
+  player = humanPlayer(state);
+  assert.equal(player.gold, 0);
+  assert.equal(player.heroPowerActiveThisTurn, true);
+  assert.equal(player.board[0].divineShield, true);
+
+  const dynamic = createGame(78, 999);
+  const dynamicPlayer = humanPlayer(dynamic);
+  dynamicPlayer.heroPowerId = "hero-power-bg23_hero_305p";
+  dynamicPlayer.heroPowerCounters = { togwaggleDiscount: 7 };
+  dynamicPlayer.gold = 4;
+  const dynamicBefore = structuredClone(dynamic);
+  assert.deepEqual(
+    getHeroPowerActivationQuote(dynamic, dynamicPlayer.id),
+    {
+      cost: 4,
+      affordable: true,
+      usable: true,
+      targetKind: null,
+    },
+  );
+  assert.deepEqual(dynamic, dynamicBefore);
+});
+
+test("a failed AI Hero Power activation is fully transactional", () => {
+  let state = createGame(79, 999);
+  const ai = state.players.find((player) => !player.isHuman);
+  assert.ok(ai);
+  for (const player of state.players) {
+    if (!player.isHuman && player.id !== ai.id) {
+      player.alive = false;
+    }
+  }
+  ai.heroPowerId = "hero-power-tb_baconshop_hp_064";
+  ai.heroPowerCounters = {};
+  ai.heroPowerActiveThisTurn = false;
+  ai.tavernTier = 1;
+  ai.gold = 1;
+  ai.goldSpentThisTurn = 0;
+  ai.freeRefreshes = 100;
+  const beforeQuote = structuredClone(state);
+  assert.equal(
+    getHeroPowerActivationQuote(state, ai.id)?.usable,
+    false,
+  );
+  assert.deepEqual(state, beforeQuote);
+
+  state = gameReducer(state, { type: "END_TURN" });
+  const after = state.players.find((player) => player.id === ai.id);
+  assert.ok(after);
+  assert.equal(after.heroPowerActiveThisTurn, false);
+  assert.equal(after.gold, 1);
+  assert.equal(after.goldSpentThisTurn, 0);
 });

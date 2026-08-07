@@ -15,6 +15,7 @@ function keywordState(
     venomous: false,
     windfury: false,
     reborn: false,
+    cleave: false,
     ...overrides,
   };
 }

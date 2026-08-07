@@ -1267,7 +1267,7 @@ test("v37 saves preserve Deepsea growth while refreshing v38 Golden metadata and
   assert.ok(migrated);
   const migratedState = migrated as GameState;
   const deepsea = permanentMinion(migratedState, stale.instanceId);
-  assert.equal(CURRENT_ROSTER_VERSION, "battlegrounds-36.0.3-247416-v50");
+  assert.equal(CURRENT_ROSTER_VERSION, "battlegrounds-36.0.3-247416-v52");
   assert.equal(migratedState.contentVersion, CURRENT_ROSTER_VERSION);
   assert.equal(deepsea.cardId, "BG35_602_G");
   assert.equal(deepsea.effectSupport, "complete");

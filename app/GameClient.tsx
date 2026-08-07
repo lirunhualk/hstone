@@ -30,15 +30,19 @@ import {
   getLegalSpellcraftTargetIds,
   getLegalTavernSpellTargetIds,
   getAiStrategyProfile,
+  getHeroPowerActivationQuote,
   getScheduledOpponent,
   getMinionPurchaseCost,
   getMinionPurchaseQuote,
   getMinionSellValue,
+  getMaximumTavernTier,
   getTavernRefreshQuote,
   getHeroDefinition,
   getHeroPowerDefinition,
+  getHeroSecretDefinition,
   getHeroPowerProgressText,
   getSystemEventDefinition,
+  heroPowerCanBeManuallyActivated,
   getTrinketAliasKind,
   getTrinketDefinition,
   getTrinketProgressText,
@@ -73,6 +77,10 @@ import {
   type TripleRewardSpellInstance,
   type Tribe,
 } from "../lib/game/engine";
+import {
+  isPersistedSecretChoiceInteraction,
+  persistedSecretChoiceMatchesPlayer,
+} from "../lib/game/client-save";
 import {
   CURRENT_ROSTER_VERSION,
   TRIBE_NAMES,
@@ -875,6 +883,9 @@ function isPendingInteraction(
           value.remainingChoices > 0))
     );
   }
+  if (value.kind === "secretChoice") {
+    return isPersistedSecretChoiceInteraction(value);
+  }
   if (value.kind === "minionChoice") {
     const foodieNormalOptions =
       Array.isArray(value.optionIds) &&
@@ -1195,6 +1206,9 @@ function pendingInteractionMatchesPlayer(
       interaction.optionIds.every(isHeroPowerDefinitionId)
     );
   }
+  if (interaction.kind === "secretChoice") {
+    return persistedSecretChoiceMatchesPlayer(interaction, player);
+  }
   if (interaction.kind === "minionChoice") {
     const source = player.board.find(
       (minion) =>
@@ -1245,6 +1259,12 @@ function pendingInteractionMatchesPlayer(
         );
       })
     );
+  }
+  if (
+    interaction.kind !== "target" &&
+    interaction.kind !== "magnetizeTarget"
+  ) {
+    return false;
   }
   return (
     boardIds.has(interaction.sourceInstanceId) &&
@@ -2097,9 +2117,17 @@ function UnitCard({
   tavernSpellCast = false,
   tavernSpellCastLabel,
   tavernSpellCastToken,
+  heroPowerTarget = false,
   newlyGenerated = false,
   locked = false,
   disabled = false,
+  combatShieldBurst = false,
+  combatDeadDissolve = false,
+  combatCharging = false,
+  combatColliding = false,
+  combatRebounding = false,
+  combatChargeX = 0,
+  combatChargeY = 0,
   dragHandlers,
   inspectionHandlers,
   testId,
@@ -2121,7 +2149,14 @@ function UnitCard({
   combatHit?: boolean;
   combatDamageLabel?: string;
   combatShieldBreaking?: boolean;
+  combatShieldBurst?: boolean;
   combatDead?: boolean;
+  combatDeadDissolve?: boolean;
+  combatCharging?: boolean;
+  combatColliding?: boolean;
+  combatRebounding?: boolean;
+  combatChargeX?: number;
+  combatChargeY?: number;
   combatStartOfCombat?: boolean;
   combatAvenge?: boolean;
   combatTrigger?: boolean;
@@ -2146,6 +2181,7 @@ function UnitCard({
   tavernSpellCast?: boolean;
   tavernSpellCastLabel?: string;
   tavernSpellCastToken?: string;
+  heroPowerTarget?: boolean;
   newlyGenerated?: boolean;
   locked?: boolean;
   disabled?: boolean;
@@ -2199,7 +2235,17 @@ function UnitCard({
       }${combatHit ? " is-hit" : ""}${
         combatShieldBreaking ? " is-shield-breaking" : ""
       }${
+        combatShieldBurst ? " is-shield-burst" : ""
+      }${
         combatDead ? " is-dead" : ""
+      }${
+        combatDeadDissolve ? " is-dead-dissolve" : ""
+      }${
+        combatCharging ? " is-charging" : ""
+      }${
+        combatColliding ? " is-colliding" : ""
+      }${
+        combatRebounding ? " is-rebounding" : ""
       }${
         combatStartOfCombat ? " is-start-of-combat-trigger" : ""
       }${
@@ -2222,7 +2268,7 @@ function UnitCard({
         tavernSpellTarget ? " is-tavern-spell-target" : ""
       }${tavernSpellDropTarget ? " is-tavern-spell-drop-target" : ""}${
         tavernSpellCast ? " is-tavern-spell-cast" : ""
-      }${
+      }${heroPowerTarget ? " is-hero-power-target" : ""}${
         newlyGenerated ? " is-newly-generated" : ""
       }${
         locked ? " is-turn-locked" : ""
@@ -2298,7 +2344,29 @@ function UnitCard({
       onClick={onClick}
       onKeyDown={onKeyDown}
       disabled={disabled}
-      style={{ "--card-hue": TRIBE_HUE[unit.tribe] } as CSSProperties}
+      style={
+        {
+          "--card-hue": TRIBE_HUE[unit.tribe],
+          ...(combatCharging || combatColliding
+            ? {
+                "--charge-x": `${combatChargeX ?? 0}px`,
+                "--charge-y": `${combatChargeY ?? 0}px`,
+              }
+            : {}),
+          ...(combatRebounding
+            ? {
+                "--bounce-x": `${combatChargeX ?? 0}px`,
+                "--bounce-y": `${combatChargeY ?? 0}px`,
+              }
+            : {}),
+          ...(combatColliding
+            ? {
+                "--hit-x": `${-(combatChargeX ?? 0)}px`,
+                "--hit-y": `${-(combatChargeY ?? 0)}px`,
+              }
+            : {}),
+        } as CSSProperties
+      }
       {...mergeCardPointerHandlers(inspectionHandlers, dragHandlers)}
     >
       <UnitCardFace unit={unit} keywordVisuals={keywordVisuals} />
@@ -2986,10 +3054,12 @@ function CombatAttackLink({
   actorInstanceId,
   targetInstanceId,
   eventIndex,
+  onChargeVector,
 }: {
   actorInstanceId: string;
   targetInstanceId: string;
   eventIndex: number;
+  onChargeVector?: (vector: { x: number; y: number }) => void;
 }) {
   const svgRef = useRef<SVGSVGElement | null>(null);
   const [geometry, setGeometry] = useState<CombatLinkGeometry | null>(
@@ -3039,8 +3109,10 @@ function CombatAttackLink({
       const distance = Math.hypot(dx, dy);
       if (distance < 1) {
         setGeometry(null);
+        onChargeVector?.({ x: 0, y: 0 });
         return;
       }
+      onChargeVector?.({ x: dx, y: dy });
       const startPadding = Math.min(44, distance * 0.2);
       const endPadding = Math.min(50, distance * 0.23);
       const unitX = dx / distance;
@@ -3065,7 +3137,7 @@ function CombatAttackLink({
       resizeObserver.disconnect();
       window.removeEventListener("resize", updateGeometry);
     };
-  }, [actorInstanceId, eventIndex, targetInstanceId]);
+  }, [actorInstanceId, eventIndex, onChargeVector, targetInstanceId]);
 
   return (
     <svg
@@ -3136,6 +3208,11 @@ function BoardRow({
   debuffLabel,
   summonedInstanceId,
   summonLabel,
+  combatCharging,
+  combatColliding,
+  combatRebounding,
+  combatChargeX = 0,
+  combatChargeY = 0,
   choiceTargetIds,
   magneticTargetIds,
   magneticDropTargetId,
@@ -3146,6 +3223,7 @@ function BoardRow({
   spellTargetKind,
   tavernSpellDropTargetId,
   tavernSpellCastFeedback,
+  heroPowerTargetIds,
   getDragHandlers,
   getCardInspectionHandlers,
   onUnitClick,
@@ -3153,6 +3231,7 @@ function BoardRow({
   onMagneticTarget,
   onBloodGemTarget,
   onTavernSpellTarget,
+  onHeroPowerTarget,
   onEmptyClick,
   interactionLocked = false,
 }: {
@@ -3179,6 +3258,11 @@ function BoardRow({
   debuffLabel?: string;
   summonedInstanceId?: string;
   summonLabel?: string;
+  combatCharging?: boolean;
+  combatColliding?: boolean;
+  combatRebounding?: boolean;
+  combatChargeX?: number;
+  combatChargeY?: number;
   choiceTargetIds?: readonly string[];
   magneticTargetIds?: readonly string[];
   magneticDropTargetId?: string;
@@ -3189,6 +3273,7 @@ function BoardRow({
   spellTargetKind?: "tavernSpell" | "spellcraft" | "generated";
   tavernSpellDropTargetId?: string;
   tavernSpellCastFeedback?: TavernSpellCastFeedback | null;
+  heroPowerTargetIds?: readonly string[];
   getDragHandlers?: (
     source: DragSource,
     card: DraggableCard,
@@ -3201,6 +3286,7 @@ function BoardRow({
   onMagneticTarget?: (instanceId: string) => void;
   onBloodGemTarget?: (instanceId: string) => void;
   onTavernSpellTarget?: (instanceId: string) => void;
+  onHeroPowerTarget?: (instanceId: string) => void;
   onEmptyClick?: (index: number) => void;
   interactionLocked?: boolean;
 }) {
@@ -3284,6 +3370,9 @@ function BoardRow({
           tavernSpellDropTargetId === unit?.instanceId;
         const isTavernSpellCast =
           tavernSpellCastFeedback?.targetInstanceId === unit?.instanceId;
+        const isHeroPowerTarget =
+          unit !== undefined &&
+          heroPowerTargetIds?.includes(unit.instanceId) === true;
         const isValidDragTarget =
           side === "friendly" &&
           dragSession?.active === true &&
@@ -3402,6 +3491,28 @@ function BoardRow({
                       ? summonLabel
                       : undefined
                   }
+                  combatCharging={
+                    combatCharging &&
+                    unit.instanceId === actorInstanceId
+                  }
+                  combatColliding={
+                    combatColliding &&
+                    unit.instanceId === targetInstanceId
+                  }
+                  combatRebounding={
+                    combatRebounding &&
+                    unit.instanceId === actorInstanceId
+                  }
+                  combatChargeX={
+                    unit.instanceId === actorInstanceId
+                      ? combatChargeX
+                      : 0
+                  }
+                  combatChargeY={
+                    unit.instanceId === actorInstanceId
+                      ? combatChargeY
+                      : 0
+                  }
                   choiceTarget={isChoiceTarget}
                   magneticTarget={isMagneticTarget}
                   magneticDropTarget={isMagneticDropTarget}
@@ -3438,6 +3549,9 @@ function BoardRow({
                       ? tavernSpellCastFeedback?.token
                       : undefined
                   }
+                  heroPowerTarget={
+                    heroPowerTargetIds?.includes(unit.instanceId)
+                  }
                   disabled={interactionLocked && !isChoiceTarget}
                   dragHandlers={
                     side === "friendly" && getDragHandlers
@@ -3457,6 +3571,8 @@ function BoardRow({
                         ? () => onBloodGemTarget(unit.instanceId)
                       : isMagneticTarget && onMagneticTarget
                         ? () => onMagneticTarget(unit.instanceId)
+                      : isHeroPowerTarget && onHeroPowerTarget
+                        ? () => onHeroPowerTarget(unit.instanceId)
                       : onUnitClick
                         ? () => onUnitClick(index)
                         : undefined
@@ -3464,7 +3580,8 @@ function BoardRow({
                   onKeyDown={
                     (isTavernSpellTarget && onTavernSpellTarget) ||
                     (isBloodGemTarget && onBloodGemTarget) ||
-                    (isMagneticTarget && onMagneticTarget)
+                    (isMagneticTarget && onMagneticTarget) ||
+                    (isHeroPowerTarget && onHeroPowerTarget)
                       ? (event) => {
                           if (
                             event.key !== "Enter" &&
@@ -3480,8 +3597,10 @@ function BoardRow({
                             onTavernSpellTarget(unit.instanceId);
                           } else if (isBloodGemTarget && onBloodGemTarget) {
                             onBloodGemTarget(unit.instanceId);
-                          } else {
+                          } else if (isMagneticTarget && onMagneticTarget) {
                             onMagneticTarget?.(unit.instanceId);
+                          } else {
+                            onHeroPowerTarget?.(unit.instanceId);
                           }
                         }
                       : undefined
@@ -4055,6 +4174,9 @@ export default function GameClient() {
   const humanHeroPower = human.heroPowerId
     ? getHeroPowerDefinition(human.heroPowerId)
     : null;
+  const humanSecrets = human.secretIds.map((secretId) =>
+    getHeroSecretDefinition(secretId),
+  );
   const humanHeroPowerProgress = human.heroPowerId
     ? getHeroPowerProgressText(
         human.heroPowerId,
@@ -4065,8 +4187,17 @@ export default function GameClient() {
   const humanHeroPowerStatus = humanHeroPower
     ? `${humanHeroPower.description}${
         humanHeroPowerProgress ? ` · ${humanHeroPowerProgress}` : ""
+      }${
+        humanSecrets.length > 0
+          ? ` · 当前奥秘：${humanSecrets.map((secret) => secret.name).join("、")}`
+          : ""
       }`
     : null;
+  const humanHeroPowerActive =
+    humanHeroPower !== null &&
+    heroPowerCanBeManuallyActivated(humanHeroPower.id);
+  const humanHeroPowerUsedThisTurn =
+    human.heroPowerActiveThisTurn === true;
   const systemEvent = game.systemEventId
     ? getSystemEventDefinition(game.systemEventId)
     : null;
@@ -4197,6 +4328,8 @@ export default function GameClient() {
     humanInteraction?.kind === "heroPowerChoice"
       ? humanInteraction
       : null;
+  const secretChoiceInteraction =
+    humanInteraction?.kind === "secretChoice" ? humanInteraction : null;
   const minionChoiceInteraction =
     humanInteraction?.kind === "minionChoice"
       ? humanInteraction
@@ -4208,6 +4341,74 @@ export default function GameClient() {
   const interactionLocked =
     game.pendingInteraction !== null ||
     queuedRecruitBloodGemPulse?.kind === "bloodGemPulse";
+  const humanHeroPowerQuote =
+    humanHeroPowerActive &&
+    !humanHeroPowerUsedThisTurn &&
+    !interactionLocked &&
+    game.phase === "recruit"
+      ? getHeroPowerActivationQuote(game, human.id)
+      : null;
+  const humanHeroPowerCanActivate = humanHeroPowerQuote !== null;
+  const humanHeroPowerCost = humanHeroPowerQuote?.cost ?? 99;
+  const humanHeroPowerAffordable =
+    humanHeroPowerQuote?.affordable ?? false;
+  const humanHeroPowerUsable = humanHeroPowerQuote?.usable ?? false;
+  const humanHeroPowerTargetMode =
+    humanHeroPowerQuote?.targetKind ?? null;
+  const [heroPowerTargeting, setHeroPowerTargeting] = useState(false);
+  const heroPowerTargetValidIds = (() => {
+    if (
+      !heroPowerTargeting ||
+      !humanHeroPowerTargetMode
+    ) {
+      return new Set<string>();
+    }
+    const candidates =
+      humanHeroPowerTargetMode === "shop" ? human.shop : human.board;
+    return new Set(
+      candidates
+        .filter(
+          (candidate) =>
+            getHeroPowerActivationQuote(
+              game,
+              human.id,
+              candidate.instanceId,
+            )?.usable === true,
+        )
+        .map((candidate) => candidate.instanceId),
+    );
+  })();
+
+  const doActivateHeroPower = (targetInstanceId?: string) => {
+    if (!humanHeroPowerCanActivate) return;
+    const quote = targetInstanceId
+      ? getHeroPowerActivationQuote(game, human.id, targetInstanceId)
+      : humanHeroPowerQuote;
+    if (!quote?.usable) return;
+    if (quote.targetKind && !targetInstanceId) {
+      setSelection(null);
+      setHeroPowerTargeting(true);
+      return;
+    }
+    setHeroPowerTargeting(false);
+    send({ type: "ACTIVATE_HERO_POWER", targetInstanceId });
+  };
+
+  useEffect(() => {
+    if (!heroPowerTargeting) return;
+    const onKeyDown = (e: globalThis.KeyboardEvent) => {
+      if (e.key === "Escape") {
+        setHeroPowerTargeting(false);
+      }
+    };
+    window.addEventListener("keydown", onKeyDown);
+    return () => window.removeEventListener("keydown", onKeyDown);
+  }, [heroPowerTargeting]);
+
+  const onHeroPowerTargetClick = (instanceId: string) => {
+    if (!heroPowerTargeting) return;
+    doActivateHeroPower(instanceId);
+  };
   const modalInteractionLocked = interactionRequiresModalBackdrop(
     game.pendingInteraction,
   );
@@ -4258,6 +4459,10 @@ export default function GameClient() {
               ? document.querySelector<HTMLElement>(
                   '[data-testid="hero-power-choice-0"]',
                 )
+            : humanInteraction.kind === "secretChoice"
+              ? document.querySelector<HTMLElement>(
+                  '[data-testid="secret-choice-0"]',
+                )
             : humanInteraction.kind === "minionChoice"
               ? document.querySelector<HTMLElement>(
                   humanInteraction.definitionId === "BG32_237"
@@ -4266,15 +4471,18 @@ export default function GameClient() {
                       ? '[data-testid="adaptable-beetle-reborn"]'
                       : '[data-testid="fearless-foodie-improve"]',
                 )
-            : Array.from(
-                document.querySelectorAll<HTMLElement>(
-                  "[data-unit-instance-id]",
-                ),
-              ).find(
-                (element) =>
-                  element.dataset.unitInstanceId ===
-                  humanInteraction.optionInstanceIds[0],
-              );
+            : humanInteraction.kind === "target" ||
+                humanInteraction.kind === "magnetizeTarget"
+              ? Array.from(
+                  document.querySelectorAll<HTMLElement>(
+                    "[data-unit-instance-id]",
+                  ),
+                ).find(
+                  (element) =>
+                    element.dataset.unitInstanceId ===
+                    humanInteraction.optionInstanceIds[0],
+                )
+              : null;
         focusTarget?.focus();
       });
       return () => window.cancelAnimationFrame(focusFrame);
@@ -4581,6 +4789,46 @@ export default function GameClient() {
           targetInstanceId: currentBattleEvent.targetInstanceId,
         }
       : undefined;
+  const currentAttackEventIndex =
+    currentBattleEvent?.type === "attack" ? currentBattleEvent.index : null;
+  const [combatChargeState, setCombatChargeState] = useState<{
+    eventIndex: number;
+    phase: "charge" | "collide" | "rebound";
+  } | null>(null);
+  const combatChargePhase =
+    currentAttackEventIndex !== null &&
+    combatChargeState?.eventIndex === currentAttackEventIndex
+      ? combatChargeState.phase
+      : "idle";
+  const [combatChargeVector, setCombatChargeVector] = useState<{
+    x: number;
+    y: number;
+  }>({ x: 0, y: 0 });
+
+  useEffect(() => {
+    if (currentAttackEventIndex === null) {
+      return;
+    }
+    const schedulePhase = (
+      phase: "charge" | "collide" | "rebound",
+      delayAtNormalSpeed: number,
+    ) =>
+      window.setTimeout(() => {
+        setCombatChargeState({ eventIndex: currentAttackEventIndex, phase });
+      }, delayAtNormalSpeed / battleSpeed);
+    const timers = [
+      schedulePhase("charge", 40),
+      schedulePhase("collide", 400),
+      schedulePhase("rebound", 560),
+      window.setTimeout(() => {
+        setCombatChargeState(null);
+      }, 740 / battleSpeed),
+    ];
+    return () => {
+      timers.forEach((timer) => window.clearTimeout(timer));
+    };
+  }, [battleSpeed, currentAttackEventIndex]);
+
   const currentDebuffLabel =
     currentBattleEvent?.type === "keywordRemoved" &&
     currentBattleEvent.removedKeywords?.length
@@ -4785,6 +5033,7 @@ export default function GameClient() {
     (infoTab === "scouting" && selectedStandingPlayer !== null) ||
     (infoTab === "battle" && battle !== null);
   const upgradeCost = getUpgradeCost(game, human.id);
+  const maximumTavernTier = getMaximumTavernTier(game);
   const selectedMinionPurchaseQuote =
     selection?.zone === "shop"
       ? getMinionPurchaseQuote(game, human.id, selection.index)
@@ -6685,6 +6934,14 @@ export default function GameClient() {
       }${
         activeRecruitPresentation ? " has-recruit-presentation" : ""
       }`}
+      style={
+        {
+          "--combat-attack-duration": `${320 / battleSpeed}ms`,
+          "--combat-charge-duration": `${360 / battleSpeed}ms`,
+          "--combat-collision-duration": `${160 / battleSpeed}ms`,
+          "--combat-rebound-duration": `${180 / battleSpeed}ms`,
+        } as CSSProperties
+      }
       data-phase={game.phase}
       data-loaded={loaded}
       data-dragging={dragSession?.active === true}
@@ -6812,7 +7069,7 @@ export default function GameClient() {
           data-testid="human-tavern-tier"
         >
           <small>酒馆</small>
-          <strong>{human.tavernTier} / 6</strong>
+          <strong>{human.tavernTier} / {maximumTavernTier}</strong>
           {activeRecruitUpgrade?.kind === "tavernUpgrade" && (
             <span
               className="tavern-tier-burst"
@@ -6826,27 +7083,76 @@ export default function GameClient() {
             </span>
           )}
         </div>
-        <div
-          className="hud-hero-power"
-          aria-label={
-            humanHeroPower
-              ? `${humanHero?.name ?? "英雄"}，英雄技能 ${humanHeroPower.name}：${
-                  humanHeroPowerStatus ?? humanHeroPower.description
-                }`
-              : "英雄与英雄技能：无"
-          }
-          data-testid="human-hero-power"
-          title={humanHeroPowerStatus ?? "尚未获得英雄技能"}
-        >
-          <small>{humanHero?.name ?? "英雄技能"}</small>
-          <strong>{humanHeroPower?.name ?? "无"}</strong>
-          <span>
-            {humanHeroPowerStatus ??
-              (game.lobbySystemsEnabled
-                ? "等待选择英雄"
-                : "旧存档沿用中立英雄")}
-          </span>
-        </div>
+        {humanHeroPowerCanActivate ? (
+          <button
+            type="button"
+            className={`hud-hero-power${
+              humanHeroPowerAffordable ? " is-affordable" : " is-unaffordable"
+            }`}
+            aria-label={
+              humanHeroPower
+                ? `${humanHero?.name ?? "英雄"}，英雄技能 ${humanHeroPower.name} · 费用 ${humanHeroPowerCost} 金币：${humanHeroPowerStatus ?? humanHeroPower.description}`
+                : "英雄与英雄技能：无"
+            }
+            data-testid="human-hero-power"
+            title={`${humanHeroPower?.name ?? "英雄技能"} · ${humanHeroPowerCost} 金币${!humanHeroPowerAffordable ? " · 金币不足" : !humanHeroPowerUsable ? " · 当前条件不满足" : ""}`}
+            onClick={() => doActivateHeroPower()}
+            disabled={!humanHeroPowerUsable || heroPowerTargeting}
+          >
+            {humanHero && (
+              <span className="hero-hud-portrait" aria-hidden="true">
+                <CardArtwork unit={humanHero} kind="portrait" />
+              </span>
+            )}
+            <small>{humanHero?.name ?? "英雄技能"}</small>
+            <strong>{humanHeroPower?.name ?? "无"}</strong>
+            <span>
+              {humanHeroPowerStatus ??
+                (game.lobbySystemsEnabled
+                  ? "等待选择英雄"
+                  : "旧存档沿用中立英雄")}
+            </span>
+            <span className="hero-power-cost-badge">
+              {humanHeroPowerCost} 币
+            </span>
+          </button>
+        ) : (
+          <div
+            className={`hud-hero-power${
+              humanHeroPowerActive ? " is-used" : ""
+            }`}
+            aria-label={
+              humanHeroPower
+                ? `${humanHero?.name ?? "英雄"}，英雄技能 ${humanHeroPower.name}：${humanHeroPowerStatus ?? humanHeroPower.description}`
+                : "英雄与英雄技能：无"
+            }
+            data-testid="human-hero-power"
+            title={
+              humanHeroPowerUsedThisTurn
+                ? "本轮已使用英雄技能"
+                : humanHeroPowerActive
+                  ? "英雄技能无法使用（战斗阶段或锁定中）"
+                  : humanHeroPowerStatus ?? "尚未获得英雄技能"
+            }
+          >
+            {humanHero && (
+              <span className="hero-hud-portrait" aria-hidden="true">
+                <CardArtwork unit={humanHero} kind="portrait" />
+              </span>
+            )}
+            <small>{humanHero?.name ?? "英雄技能"}</small>
+            <strong>{humanHeroPower?.name ?? "无"}</strong>
+            <span>
+              {humanHeroPowerStatus ??
+                (game.lobbySystemsEnabled
+                  ? "等待选择英雄"
+                  : "旧存档沿用中立英雄")}
+            </span>
+            {humanHeroPowerUsedThisTurn && (
+              <span className="hero-power-used-label">已使用</span>
+            )}
+          </div>
+        )}
         {systemEvent && (
           <button
             type="button"
@@ -7029,23 +7335,33 @@ export default function GameClient() {
               <div className="shop-actions">
                 <button
                   type="button"
-                  className="action-button secondary"
+                  className="tavern-control"
                   data-testid="upgrade-tavern"
                   disabled={
                     game.phase !== "recruit" ||
                     interactionLocked ||
-                    human.tavernTier >= 6 ||
+                    human.tavernTier >= maximumTavernTier ||
                     human.gold < upgradeCost
                   }
                   onClick={() => send({ type: "UPGRADE_TAVERN" })}
                 >
-                  {human.tavernTier >= 6
-                    ? "酒馆已满级"
-                    : `升至 ${human.tavernTier + 1}星 · ${upgradeCost}`}
+                  <span className="tavern-control-icon" aria-hidden="true">★</span>
+                  <span className="tavern-control-label">
+                    <strong>
+                      {human.tavernTier >= maximumTavernTier
+                        ? "酒馆已满级"
+                        : `升至 ${human.tavernTier + 1}星`}
+                    </strong>
+                  </span>
+                  {human.tavernTier < maximumTavernTier && (
+                    <span className="tavern-control-cost">
+                      {upgradeCost}
+                    </span>
+                  )}
                 </button>
                 <button
                   type="button"
-                  className="action-button secondary"
+                  className="tavern-control"
                   data-testid="refresh-shop"
                   disabled={
                     game.phase !== "recruit" ||
@@ -7054,27 +7370,37 @@ export default function GameClient() {
                   }
                   onClick={() => send({ type: "REFRESH_SHOP" })}
                 >
-                  {refreshCost === 0
-                    ? "刷新 · 免费"
-                    : refreshQuote?.currency === "health"
-                      ? `刷新 · ${refreshCost}生命`
-                      : `刷新 · ${refreshCost}`}
-                  {human.heroRefreshAvailable
-                    ? "（英雄首次免费）"
-                    : ""}
-                  {human.freeRefreshes > 0
-                    ? `（免费剩余 ${human.freeRefreshes}）`
-                    : ""}
-                  {(refreshQuote?.remainingHealthRefreshes ?? 0) > 0
-                    ? `（生命刷新剩余 ${refreshQuote?.remainingHealthRefreshes}）`
-                    : ""}
-                  {human.helpfulRefreshes > 0
-                    ? `（有用剩余 ${human.helpfulRefreshes}）`
-                    : ""}
+                  <span className="tavern-control-icon" aria-hidden="true">↻</span>
+                  <span className="tavern-control-label">
+                    <strong>刷新</strong>
+                    {human.freeRefreshes > 0 ? (
+                      <span>免费剩余 {human.freeRefreshes}</span>
+                    ) : human.heroRefreshAvailable ? (
+                      <span>英雄首次免费</span>
+                    ) : (refreshQuote?.remainingHealthRefreshes ?? 0) > 0 ? (
+                      <span>生命刷新剩余 {refreshQuote?.remainingHealthRefreshes}</span>
+                    ) : human.helpfulRefreshes > 0 ? (
+                      <span>有用 {human.helpfulRefreshes}</span>
+                    ) : null}
+                  </span>
+                  {refreshCost > 0 && (
+                    <span
+                      className={`tavern-control-cost${
+                        refreshCost === 0 ? " is-free" : ""
+                      }${
+                        refreshQuote?.currency === "health" ? " is-health" : ""
+                      }`}
+                    >
+                      {refreshCost}
+                    </span>
+                  )}
+                  {refreshCost === 0 && (
+                    <span className="tavern-control-cost is-free">免费</span>
+                  )}
                 </button>
                 <button
                   type="button"
-                  className={`action-button secondary${
+                  className={`tavern-control${
                     human.frozen ? " is-active" : ""
                   }`}
                   data-testid="freeze-shop"
@@ -7084,7 +7410,13 @@ export default function GameClient() {
                   }
                   onClick={() => send({ type: "TOGGLE_FREEZE" })}
                 >
-                  {human.frozen ? "解冻酒馆" : "冻结酒馆"}
+                  <span className="tavern-control-icon" aria-hidden="true">❄</span>
+                  <span className="tavern-control-label">
+                    <strong>{human.frozen ? "已冻结" : "冻结"}</strong>
+                    {human.frozen ? <span>点击解冻</span> : <span>保留当前报价</span>}
+                  </span>
+                  <span className="tavern-control-frost" aria-hidden="true" />
+                  <span className="tavern-control-ice-edge" aria-hidden="true" />
                 </button>
               </div>
               <div className="card-row" data-testid="shop-row">
@@ -7152,6 +7484,11 @@ export default function GameClient() {
                           ? tavernSpellCastFeedback.token
                           : undefined
                       }
+                      heroPowerTarget={
+                        heroPowerTargeting &&
+                        humanHeroPowerTargetMode === "shop" &&
+                        heroPowerTargetValidIds.has(offer.unit.instanceId)
+                      }
                       dragEnabled={
                         canBuyMinionOffer(offer.shopIndex) &&
                         !activeSpellTargetIds.includes(
@@ -7216,6 +7553,14 @@ export default function GameClient() {
                             selectedHandTavernSpell.instanceId,
                             offer.unit.instanceId,
                           );
+                          return;
+                        }
+                        if (
+                          heroPowerTargeting &&
+                          humanHeroPowerTargetMode === "shop" &&
+                          heroPowerTargetValidIds.has(offer.unit.instanceId)
+                        ) {
+                          onHeroPowerTargetClick(offer.unit.instanceId);
                           return;
                         }
                         selectCard({
@@ -7396,6 +7741,25 @@ export default function GameClient() {
                       : undefined
                   }
                   summonLabel={currentSummonLabel}
+                  combatCharging={
+                    combatChargePhase === "charge" &&
+                    currentStrikeEvent?.actorInstanceId !== undefined
+                  }
+                  combatColliding={
+                    combatChargePhase === "collide" &&
+                    currentStrikeEvent?.targetInstanceId !== undefined
+                  }
+                  combatRebounding={
+                    combatChargePhase === "rebound" &&
+                    currentStrikeEvent?.actorInstanceId !== undefined
+                  }
+                  combatChargeX={combatChargeVector.x}
+                  combatChargeY={combatChargeVector.y}
+                  heroPowerTargetIds={
+                    humanHeroPowerTargetMode === "board"
+                      ? [...heroPowerTargetValidIds]
+                      : undefined
+                  }
                 />
               )}
               {game.phase === "combat" &&
@@ -7420,6 +7784,17 @@ export default function GameClient() {
                         战斗事件 {revealedBattleEventCount} /{" "}
                         {playbackEventCount}
                       </span>
+                      <div className="combat-playback-bar" aria-hidden="true">
+                        <div
+                          className="combat-playback-bar-fill"
+                          style={{
+                            width:
+                              playbackEventCount > 0
+                                ? `${(revealedBattleEventCount / playbackEventCount) * 100}%`
+                                : "0%",
+                          }}
+                        />
+                      </div>
                       <strong>
                         {currentBattleEvent?.type === "attack" && (
                           <span
@@ -7684,6 +8059,22 @@ export default function GameClient() {
                     : undefined
                 }
                 summonLabel={currentSummonLabel}
+                combatCharging={
+                  combatChargePhase === "charge"
+                }
+                combatColliding={
+                  combatChargePhase === "collide"
+                }
+                combatRebounding={
+                  combatChargePhase === "rebound"
+                }
+                combatChargeX={combatChargeVector.x}
+                combatChargeY={combatChargeVector.y}
+                heroPowerTargetIds={
+                  humanHeroPowerTargetMode === "board"
+                    ? [...heroPowerTargetValidIds]
+                    : undefined
+                }
                 choiceTargetIds={
                   boardChoiceInteraction?.optionInstanceIds
                 }
@@ -7776,6 +8167,7 @@ export default function GameClient() {
                     );
                   }
                 }}
+                onHeroPowerTarget={onHeroPowerTargetClick}
                 onEmptyClick={deploySelected}
               />
               {game.phase === "combat" && currentStrikeEvent && (
@@ -7787,6 +8179,7 @@ export default function GameClient() {
                     currentStrikeEvent.targetInstanceId
                   }
                   eventIndex={currentStrikeEvent.index}
+                  onChargeVector={setCombatChargeVector}
                 />
               )}
               {game.phase === "recruit" &&
@@ -7821,7 +8214,7 @@ export default function GameClient() {
                 : ""
             }`}
             aria-label="手牌"
-            aria-hidden={game.phase !== "recruit"}
+            aria-hidden={false}
             inert={interactionLocked || game.phase !== "recruit"}
             aria-describedby="buy-drop-description"
             data-drop-cost={selectedOfferCost}
@@ -9582,7 +9975,9 @@ export default function GameClient() {
                     >
                       <CardArtwork unit={option} kind="portrait" />
                       <span className="hero-power-choice-type">
-                        被动英雄技能
+                        {heroPowerCanBeManuallyActivated(option.id)
+                          ? "主动英雄技能"
+                          : "被动英雄技能"}
                       </span>
                       <strong>{option.name}</strong>
                       <span className="hero-power-choice-copy">
@@ -9592,6 +9987,61 @@ export default function GameClient() {
                   );
                 },
               )}
+            </div>
+          </div>
+        </div>
+      )}
+
+      {secretChoiceInteraction && (
+        <div
+          className="overlay interaction-overlay"
+          role="dialog"
+          aria-modal="true"
+          aria-labelledby="secret-choice-title"
+          aria-describedby="secret-choice-description"
+          data-testid="secret-choice-dialog"
+          onKeyDown={trapModalFocus}
+        >
+          <div className="modal hero-power-choice-modal">
+            <span className="discover-kicker">发现 · 奥秘</span>
+            <h2
+              className="discover-title"
+              id="secret-choice-title"
+            >
+              神奇魔术 · 选择一个奥秘
+            </h2>
+            <p
+              className="discover-copy"
+              id="secret-choice-description"
+            >
+              选择后会立刻进入你的英雄奥秘区，并在之后的招募或战斗中按卡面触发一次。
+            </p>
+            <div className="hero-power-choice-options">
+              {secretChoiceInteraction.optionIds.map((optionId, index) => {
+                const option = getHeroSecretDefinition(optionId);
+                return (
+                  <button
+                    type="button"
+                    className="hero-power-choice"
+                    data-testid={`secret-choice-${index}`}
+                    key={option.id}
+                    onClick={() =>
+                      send({
+                        type: "RESOLVE_INTERACTION",
+                        interactionId: secretChoiceInteraction.interactionId,
+                        optionInstanceId: option.id,
+                      })
+                    }
+                  >
+                    <CardArtwork unit={option} kind="portrait" />
+                    <span className="hero-power-choice-type">奥秘</span>
+                    <strong>{option.name}</strong>
+                    <span className="hero-power-choice-copy">
+                      {option.description}
+                    </span>
+                  </button>
+                );
+              })}
             </div>
           </div>
         </div>
@@ -10006,7 +10456,7 @@ export default function GameClient() {
           aria-modal="true"
           onKeyDown={trapModalFocus}
         >
-          <div className="modal">
+          <div className={`modal game-over-modal${game.winnerId === game.humanPlayerId ? " is-victory" : ""}`}>
             <span className="modal-kicker">
               {game.winnerId === game.humanPlayerId ? "酒馆战棋胜利" : "战局结束"}
             </span>
@@ -10016,8 +10466,29 @@ export default function GameClient() {
                 : `最终第 ${human.placement ?? 8} 名`}
             </h1>
             <p>
-              坚持 {game.round} 回合，最终战场保留 {human.board.length} 个随从。
+              坚持 {game.round} 回合 ·{" "}
+              {humanHero?.name ?? "中立英雄"}
+              {humanHeroPower ? ` · ${humanHeroPower.name}` : ""}
             </p>
+            <div className="game-over-standings">
+              {[...game.players]
+                .sort((a, b) => (a.placement ?? 99) - (b.placement ?? 99))
+                .filter((p) => p.placement !== undefined)
+                .slice(0, 4)
+                .map((p) => (
+                  <div
+                    className={`game-over-player${p.id === game.humanPlayerId ? " is-self" : ""}`}
+                    key={p.id}
+                  >
+                    <span className="game-over-rank">
+                      {p.placement === 1 ? "🥇" : p.placement === 2 ? "🥈" : p.placement === 3 ? "🥉" : `#${p.placement}`}
+                    </span>
+                    <span className="game-over-name">
+                      {p.id === game.humanPlayerId ? "你" : p.name}
+                    </span>
+                  </div>
+                ))}
+            </div>
             <button
               type="button"
               className="action-button primary"

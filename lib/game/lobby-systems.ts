@@ -185,7 +185,47 @@ export const TRINKET_DEFINITIONS: readonly TrinketDefinition[] = Object.freeze([
 export type SystemEventEffect =
   | "goldenArrowEveryThreeTurns"
   | "startWithGoldenizer"
-  | "startWithTenGold";
+  | "startWithTenGold"
+  | "startAtTier2"
+  | "startAtTier3With9Gold"
+  | "fullHouse"
+  | "titanGrip"
+  | "buyOneGetOne"
+  | "goldCarryover"
+  | "refundTrick"
+  | "mimironsClockworkArena"
+  | "norgannonsSecret"
+  | "lightTheWay"
+  | "finalHour"
+  | "immediateFormation"
+  | "scoutsHonor"
+  | "tierMatchOnly"
+  | "assemblyLine"
+  | "planeAlignment"
+  | "goldenArena"
+  | "falseIdols"
+  | "extraSpellPerRefresh"
+  | "gladiatorSpoils"
+  | "gargonnisStorm"
+  | "overseersOrb"
+  | "tavernSpecial"
+  | "wisdomballAnomaly"
+  | "yoggArena"
+  | "upgradePrize"
+  | "vault"
+  | "sinDoreiMirror"
+  | "mysteryFlower"
+  | "circusPrize"
+  | "continuingEducation"
+  | "herosCall"
+  | "risingTide"
+  | "matchFixing"
+  | "incubating"
+  | "treasureSeeker"
+  | "facelessEvery4"
+  | "bringBuddies"
+  | "dualUniverse"
+  | "emergencyLanding";
 
 export interface SystemEventDefinition {
   id: string;
@@ -194,6 +234,38 @@ export interface SystemEventDefinition {
   description: string;
   effect: SystemEventEffect;
 }
+
+/**
+ * Registry-only events whose current local rule path is incomplete or violates
+ * shared-pool/timing invariants. Keep them loadable for old saves, but never
+ * deal them into a newly created lobby.
+ */
+export const UNSUPPORTED_SYSTEM_EVENT_EFFECTS = new Set<SystemEventEffect>([
+  "buyOneGetOne",
+  "immediateFormation",
+  "scoutsHonor",
+  "tierMatchOnly",
+  "assemblyLine",
+  "goldenArena",
+  "extraSpellPerRefresh",
+  "gladiatorSpoils",
+  "gargonnisStorm",
+  "overseersOrb",
+  "wisdomballAnomaly",
+  "yoggArena",
+  "upgradePrize",
+  "vault",
+  "mysteryFlower",
+  "circusPrize",
+  "continuingEducation",
+  "herosCall",
+  "risingTide",
+  "incubating",
+  "facelessEvery4",
+  "bringBuddies",
+  "dualUniverse",
+  "emergencyLanding",
+]);
 
 /** Official Anomalies that can coexist with this local Trinket ruleset. */
 export const SYSTEM_EVENT_DEFINITIONS = [
@@ -218,7 +290,294 @@ export const SYSTEM_EVENT_DEFINITIONS = [
     description: "对战开始时即有10枚铸币。",
     effect: "startWithTenGold",
   },
+  {
+    id: "system-event-sandglass",
+    cardId: "BG27_Anomaly_116",
+    name: "讲究的沙漏",
+    description: "以酒馆等级2开始赛局。",
+    effect: "startAtTier2",
+  },
+  {
+    id: "system-event-amanthul",
+    cardId: "BG27_Anomaly_119",
+    name: "阿曼苏尔的节制",
+    description: "以酒馆等级3和9枚铸币开始赛局。",
+    effect: "startAtTier3With9Gold",
+  },
+  {
+    id: "system-event-full-house",
+    cardId: "BG27_Anomaly_102",
+    name: "座无虚席",
+    description: "旅店中永远有7个卡牌。",
+    effect: "fullHouse",
+  },
+  {
+    id: "system-event-titan-grip",
+    cardId: "BG27_Anomaly_113",
+    name: "泰坦爪钩",
+    description: "每回合你购买的第一个手下免费。",
+    effect: "titanGrip",
+  },
+  {
+    id: "system-event-buy-one-get-one",
+    cardId: "BG27_Anomaly_111",
+    name: "买一送一",
+    description: "你每回合第一次购买手下时，会获得一张它的复製品。",
+    effect: "buyOneGetOne",
+  },
+  {
+    id: "system-event-gold-carryover",
+    cardId: "BG27_Anomaly_100",
+    name: "艾蜜特斯的谨慎",
+    description: "未花费的金币会带到你的下一回合。若你存了至少5枚金币，获得1枚额外金币。",
+    effect: "goldCarryover",
+  },
+  {
+    id: "system-event-refund-trick",
+    cardId: "BG27_Anomaly_104",
+    name: "不退款就捣蛋",
+    description:
+      "以1枚金币开始赛局。手下花费(1)枚金币，但卖出时获得(0)枚金币。升级旅店的消耗降低(2)。",
+    effect: "refundTrick",
+  },
+  {
+    id: "system-event-mimiron-clockwork",
+    cardId: "BG27_Anomaly_117",
+    name: "弥米伦发条竞技场",
+    description: "无法以金币升级旅店。旅店每两回合会自动升级。",
+    effect: "mimironsClockworkArena",
+  },
+  {
+    id: "system-event-norgannon",
+    cardId: "BG27_Anomaly_106",
+    name: "诺甘农的秘密",
+    description: "可提升至旅店等级7。对战开始时拥有10点额外护甲值。",
+    effect: "norgannonsSecret",
+  },
+  {
+    id: "system-event-light-the-way",
+    cardId: "BG31_Anomaly_109",
+    name: "点亮道路",
+    description: "每当你重置两次后，下回合获得1枚金币。",
+    effect: "lightTheWay",
+  },
+  {
+    id: "system-event-final-hour",
+    cardId: "BG31_Anomaly_126",
+    name: "最后时刻",
+    description: "抵销你的英雄在战斗中第一次受到的致命伤，并在下回合获得11枚金币。",
+    effect: "finalHour",
+  },
+  {
+    id: "system-event-immediate-formation",
+    cardId: "BG31_Anomaly_122",
+    name: "立即布阵",
+    description: "开 局时获得3个不同的旅店等级1手下。",
+    effect: "immediateFormation",
+  },
+  {
+    id: "system-event-scouts-honor",
+    cardId: "BG31_Anomaly_118",
+    name: "斥候荣耀",
+    description: "开局时场上有一张有耐心的斥候。",
+    effect: "scoutsHonor",
+  },
+  {
+    id: "system-event-tier-match",
+    cardId: "BG31_Anomaly_108",
+    name: "精灵精英",
+    description: "旅店只会提供与你的旅店等级相同的卡牌。",
+    effect: "tierMatchOnly",
+  },
+  {
+    id: "system-event-assembly-line",
+    cardId: "BG31_Anomaly_112",
+    name: "流水线",
+    description: "每第2个回合结束时，获得你最左边的手下的一 张未加成分身。",
+    effect: "assemblyLine",
+  },
+  {
+    id: "system-event-plane-alignment",
+    cardId: "BG31_Anomaly_121",
+    name: "界域校准",
+    description: "每个回合开始时获得一个你数量最多手下类型的随机手下。（于第2回合解 锁）",
+    effect: "planeAlignment",
+  },
+  {
+    id: "system-event-golden-arena",
+    cardId: "BG27_Anomaly_115",
+    name: "黄金竞技场",
+    description: "全部手下皆為金卡，但你无法取得三合一奖励。",
+    effect: "goldenArena",
+  },
+  {
+    id: "system-event-false-idols",
+    cardId: "BG27_Anomaly_110",
+    name: "虚假塑像",
+    description: "你只需要2个手下，就能合成金卡。不再获得三合一奖励，改為获得金币。",
+    effect: "falseIdols",
+  },
+  {
+    id: "system-event-extra-spell",
+    cardId: "BG31_Anomaly_101",
+    name: "情势判断",
+    description: "每次重置后，旅店都会提供1个额 外的旅店法术。",
+    effect: "extraSpellPerRefresh",
+  },
+  {
+    id: "system-event-gladiator-spoils",
+    cardId: "BG31_Anomaly_105",
+    name: "斗士的战利品",
+    description: "在你赢得一场战斗后，发现一个你旅 店等级的手下。反之则获得一个低于你旅店等级一级的随机手下。",
+    effect: "gladiatorSpoils",
+  },
+  {
+    id: "system-event-gargonnis-storm",
+    cardId: "BG27_Anomaly_114",
+    name: "葛刚尼斯的风暴",
+    description: "手下花费2枚金币。你无法重置旅店。旅店会 在你购买一张卡牌后自行重置。",
+    effect: "gargonnisStorm",
+  },
+  {
+    id: "system-event-overseers-orb",
+    cardId: "BG27_Anomaly_120",
+    name: "监督者的宝珠",
+    description: "在你升级旅店后，以你数量最 多的手下类型重置旅店。",
+    effect: "overseersOrb",
+  },
+  {
+    id: "system-event-tavern-special",
+    cardId: "BG27_Anomaly_107",
+    name: "旅店 特典",
+    description: "旅店内所有类型的手下，永远有7张卡牌。",
+    effect: "tavernSpecial",
+  },
+  {
+    id: "system-event-wisdomball",
+    cardId: "BG27_Anomaly_118",
+    name: "异象智慧球",
+    description: "偶尔会获得有用的重置！（于第6回合解锁）",
+    effect: "wisdomballAnomaly",
+  },
+  {
+    id: "system-event-yogg-arena",
+    cardId: "BG27_Anomaly_122",
+    name: "尤格竞技场",
+    description: "在每个回合开始时转动相同的尤格萨轮。",
+    effect: "yoggArena",
+  },
+  {
+    id: "system-event-upgrade-prize",
+    cardId: "BG27_Anomaly_121",
+    name: "升级奖品",
+    description: "在你升级旅店后，发现一个等级1的暗月奖品。（3回合后强化！）",
+    effect: "upgradePrize",
+  },
+  {
+    id: "system-event-vault",
+    cardId: "BG27_Anomaly_123",
+    name: "宝库",
+    description: "在第X回合，发现一个金卡等级X手下（等级3-7版本）。",
+    effect: "vault",
+  },
+  {
+    id: "system-event-sindorei-mirror",
+    cardId: "BG31_Anomaly_103",
+    name: "辛多雷之镜",
+    description: "你每回合第一次购买旅店法术後，获得一张它的复製品（於第5回合解锁）。",
+    effect: "sinDoreiMirror",
+  },
+  {
+    id: "system-event-mystery-flower",
+    cardId: "BG31_Anomaly_106",
+    name: "奥秘之花",
+    description: "在每个回合开始时，发现一个旅店法术。（於第3回合解锁）",
+    effect: "mysteryFlower",
+  },
+  {
+    id: "system-event-circus-prize",
+    cardId: "BG27_Anomaly_103",
+    name: "马戏团奖赏",
+    description: "三合一奖励不提供手下，改為发现一个等级1暗月奖品。",
+    effect: "circusPrize",
+  },
+  {
+    id: "system-event-continuing-education",
+    cardId: "BG31_Anomaly_102",
+    name: "继续教育",
+    description: "在每个回合开始时获得一个进化卷轴。每个回合都会变成高一 级的旅店法术。",
+    effect: "continuingEducation",
+  },
+  {
+    id: "system-event-heros-call",
+    cardId: "BG27_Anomaly_125",
+    name: "勇士召唤",
+    description: "在赛局开始时，全部玩家从同样的选择中发现一个等级6的手下。",
+    effect: "herosCall",
+  },
+  {
+    id: "system-event-rising-tide",
+    cardId: "BG31_Anomaly_104",
+    name: "水涨船高",
+    description: "在你升级旅店後，发现一个等级1的法术。（每2个回合获得强化！）",
+    effect: "risingTide",
+  },
+  {
+    id: "system-event-match-fixing",
+    cardId: "BG27_Anomaly_105",
+    name: "打假赛",
+    description: "每个回合获得3枚金币。",
+    effect: "matchFixing",
+  },
+  {
+    id: "system-event-incubating",
+    cardId: "BG31_Anomaly_107",
+    name: "孵育异变",
+    description: "不具有类型的手下拥有全部手下类型。",
+    effect: "incubating",
+  },
+  {
+    id: "system-event-treasure-seeker",
+    cardId: "BG27_Anomaly_112",
+    name: "宝库追寻者之路",
+    description: "重置5次以後，获得一个当前酒馆等级的金卡手下。",
+    effect: "treasureSeeker",
+  },
+  {
+    id: "system-event-faceless",
+    cardId: "BG27_Anomaly_577",
+    name: "无面无间",
+    description: "每4回合获得一个「无面操纵者」。",
+    effect: "facelessEvery4",
+  },
+  {
+    id: "system-event-bring-buddies",
+    cardId: "BG27_Anomaly_108",
+    name: "叫伙伴来",
+    description: "每个玩家获得其英雄的伙伴。",
+    effect: "bringBuddies",
+  },
+  {
+    id: "system-event-dual-universe",
+    cardId: "BG31_Anomaly_125",
+    name: "双重宇宙",
+    description: "在赛局开始时发现第二个英雄能力。",
+    effect: "dualUniverse",
+  },
+  {
+    id: "system-event-emergency-landing",
+    cardId: "BG31_Anomaly_111",
+    name: "紧急着陆",
+    description: "每回合从备选手下库中移除旅店一个手下的所有卡牌。",
+    effect: "emergencyLanding",
+  },
 ] as const satisfies readonly SystemEventDefinition[];
+
+/** Events eligible for newly created lobbies; the full registry remains for saves. */
+export const PLAYABLE_SYSTEM_EVENT_DEFINITIONS =
+  SYSTEM_EVENT_DEFINITIONS.filter(
+    (definition) => !UNSUPPORTED_SYSTEM_EVENT_EFFECTS.has(definition.effect),
+  );
 
 export const SYSTEM_TAVERN_SPELL_DEFINITIONS = [
   {
