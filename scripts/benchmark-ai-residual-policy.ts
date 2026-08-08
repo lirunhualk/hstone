@@ -16,7 +16,6 @@ import {
 } from "../lib/game/ai.ts";
 import {
   advanceHeadlessGame,
-  createHeadlessGame,
   type GameState,
 } from "../lib/game/engine.ts";
 import {
@@ -37,6 +36,12 @@ import {
   type PlacementBounds,
 } from "./benchmark-ai-recruit-planner.ts";
 import { assertAiBenchmarkSeedAccess } from "./ai-seed-ledger.ts";
+import {
+  createAiBenchmarkPairKey,
+  createAiBenchmarkScenarioGame,
+  normalizeAiBenchmarkScenarioIds,
+  type AiBenchmarkScenarioId,
+} from "./ai-benchmark-scenarios.ts";
 
 export const AI_RESIDUAL_POLICY_BENCHMARK_VERSION = 1 as const;
 export const AI_RESIDUAL_POLICY_ARTIFACT_SCHEMA_VERSION = 1 as const;
@@ -51,7 +56,7 @@ const DEFAULTS = {
   startSeed: 1,
   maxRounds: 40,
 };
-const RUNS_PER_SEED = 8;
+const RUNS_PER_SCENARIO_SEED = 8;
 
 export type AiResidualPolicyArtifactJson =
   | null
@@ -82,6 +87,8 @@ export interface AiResidualPolicyBenchmarkOptions {
   startSeed?: number;
   maxRounds?: number;
   initialHealth?: number;
+  /** Defaults to the legacy neutral-v1 evaluator when omitted. */
+  scenarioIds?: readonly AiBenchmarkScenarioId[];
   onProgress?: (progress: AiResidualPolicyBenchmarkProgress) => void;
 }
 
@@ -89,6 +96,7 @@ export interface AiResidualPolicyBenchmarkProgress {
   processedRuns: number;
   scheduledRuns: number;
   seed: number;
+  scenarioId: AiBenchmarkScenarioId;
   kind: "baseline" | "candidate";
   controlledSeat: AiRecruitPlannerControlledSeat | null;
   completed: boolean;
@@ -101,6 +109,7 @@ export interface AiResidualPolicyProfileSnapshot {
 }
 
 export interface AiResidualPolicyBenchmarkBaseline {
+  scenarioId: AiBenchmarkScenarioId;
   completed: boolean;
   drawn: boolean;
   truncated: boolean;
@@ -111,11 +120,14 @@ export interface AiResidualPolicyBenchmarkBaseline {
     seat: AiRecruitPlannerControlledSeat;
     playerId: string;
     placementBounds: PlacementBounds | null;
+    /** Actual winner result. Drawn games are false, incomplete runs are null. */
+    won: boolean | null;
   }>;
   failure: string | null;
 }
 
 export interface AiResidualPolicyBenchmarkCandidate {
+  scenarioId: AiBenchmarkScenarioId;
   controlledSeat: AiRecruitPlannerControlledSeat;
   playerId: string;
   strategyId: AiStrategyId;
@@ -126,11 +138,16 @@ export interface AiResidualPolicyBenchmarkCandidate {
   alivePlayers: number | null;
   contentVersion: string | null;
   placementBounds: PlacementBounds | null;
+  /** Actual winner result. Drawn games are false, incomplete runs are null. */
+  won: boolean | null;
   providerDiagnostics: AiResidualPolicyDiagnostics | null;
   failure: string | null;
 }
 
 export interface AiResidualPolicyBenchmarkPair {
+  pairKey: string;
+  seed: number;
+  scenarioId: AiBenchmarkScenarioId;
   seat: AiRecruitPlannerControlledSeat;
   playerId: string;
   strategyId: AiStrategyId;
@@ -141,11 +158,36 @@ export interface AiResidualPolicyBenchmarkPair {
   conservativeWinDelta: number | null;
 }
 
-export interface AiResidualPolicyBenchmarkCluster {
-  seed: number;
+export interface AiResidualPolicyBenchmarkScenarioCluster {
+  scenarioId: AiBenchmarkScenarioId;
   baseline: AiResidualPolicyBenchmarkBaseline;
   pairs: AiResidualPolicyBenchmarkPair[];
   metric: AiRecruitPlannerSeedMetric | null;
+}
+
+export interface AiResidualPolicyBenchmarkCluster {
+  seed: number;
+  /** Compatibility alias for the first configured scenario's baseline. */
+  baseline: AiResidualPolicyBenchmarkBaseline;
+  /** All scenario-seat pairs for this seed. */
+  pairs: AiResidualPolicyBenchmarkPair[];
+  /** Equal-weight mean across every configured scenario and profile. */
+  metric: AiRecruitPlannerSeedMetric | null;
+  scenarios: AiResidualPolicyBenchmarkScenarioCluster[];
+}
+
+export interface AiResidualPolicyComparisonMatrix {
+  overall: AiRecruitPlannerComparisons;
+  byScenario: Partial<
+    Record<AiBenchmarkScenarioId, AiRecruitPlannerComparisons>
+  >;
+  byProfile: Partial<Record<AiStrategyId, AiRecruitPlannerComparisons>>;
+  byScenarioProfile: Partial<
+    Record<
+      AiBenchmarkScenarioId,
+      Partial<Record<AiStrategyId, AiRecruitPlannerComparisons>>
+    >
+  >;
 }
 
 export interface AiResidualPolicyCoverage {
@@ -197,6 +239,7 @@ export interface AiResidualPolicyBenchmarkResult {
     startSeed: number;
     maxRounds: number;
     initialHealth: number;
+    scenarioIds: readonly AiBenchmarkScenarioId[];
     controlledSeats: typeof AI_RESIDUAL_POLICY_CONTROLLED_SEATS;
   };
   progress: {
@@ -215,7 +258,9 @@ export interface AiResidualPolicyBenchmarkResult {
   abstention: AiResidualPolicyAbstentionSummary;
   providerErrors: AiResidualPolicyErrorSummary;
   clusters: AiResidualPolicyBenchmarkCluster[];
+  /** Legacy alias for comparisonMatrix.overall. */
   comparisons: AiRecruitPlannerComparisons;
+  comparisonMatrix: AiResidualPolicyComparisonMatrix;
   accepted: boolean;
   acceptanceReasons: string[];
 }
@@ -506,7 +551,11 @@ function sourceHash(): string {
       .update("\0");
   }
   return hash
-    .update("scripts/benchmark-ai-recruit-planner.ts\0")
+    .update("scripts/ai-benchmark-scenarios.ts\0")
+    .update(
+      readFileSync(new URL("./ai-benchmark-scenarios.ts", import.meta.url)),
+    )
+    .update("\0scripts/benchmark-ai-recruit-planner.ts\0")
     .update(
       readFileSync(new URL("./benchmark-ai-recruit-planner.ts", import.meta.url)),
     )
@@ -623,10 +672,15 @@ function profileHash(
 
 function runHeadlessGame(
   seed: number,
+  scenarioId: AiBenchmarkScenarioId,
   maxRounds: number,
   initialHealth: number,
 ): GameState {
-  let state = createHeadlessGame(seed, initialHealth);
+  let state = createAiBenchmarkScenarioGame(
+    scenarioId,
+    seed,
+    initialHealth,
+  );
   while (state.phase !== "gameOver") {
     if (state.phase === "recruit" && state.round > maxRounds) break;
     state = advanceHeadlessGame(state);
@@ -657,21 +711,30 @@ function placementBoundsForSeat(
 function baselineSeats(
   state: GameState,
 ): AiResidualPolicyBenchmarkBaseline["seats"] {
+  const completed = state.phase === "gameOver";
   return AI_RESIDUAL_POLICY_CONTROLLED_SEATS.map((seat) => ({
     seat,
     playerId: state.players[seat]?.id ?? `player-${seat}`,
     placementBounds: placementBoundsForSeat(state, seat),
+    won: completed ? state.winnerId === `player-${seat}` : null,
   }));
 }
 
 function runBaseline(
   seed: number,
+  scenarioId: AiBenchmarkScenarioId,
   maxRounds: number,
   initialHealth: number,
 ): AiResidualPolicyBenchmarkBaseline {
-  const state = runHeadlessGame(seed, maxRounds, initialHealth);
+  const state = runHeadlessGame(
+    seed,
+    scenarioId,
+    maxRounds,
+    initialHealth,
+  );
   const completed = state.phase === "gameOver";
   return {
+    scenarioId,
     completed,
     drawn: completed && state.winnerId === null,
     truncated: !completed,
@@ -685,6 +748,7 @@ function runBaseline(
 
 function runCandidate(
   seed: number,
+  scenarioId: AiBenchmarkScenarioId,
   controlledSeat: AiRecruitPlannerControlledSeat,
   policy: AiResidualPolicy,
   expectedIdentity: ResidualPolicyIdentity,
@@ -694,12 +758,19 @@ function runCandidate(
   const profile = getAiStrategyProfile(playerId);
   const scopedRun = withAiResidualPolicyOverrides(
     new Map([[playerId, policy]]),
-    () => runHeadlessGame(seed, config.maxRounds, config.initialHealth),
+    () =>
+      runHeadlessGame(
+        seed,
+        scenarioId,
+        config.maxRounds,
+        config.initialHealth,
+      ),
   );
   assertPolicyIdentity(policy, expectedIdentity);
   const state = scopedRun.result;
   const completed = state.phase === "gameOver";
   return {
+    scenarioId,
     controlledSeat,
     playerId,
     strategyId: profile.id,
@@ -710,13 +781,18 @@ function runCandidate(
     alivePlayers: alivePlayerCount(state),
     contentVersion: state.contentVersion,
     placementBounds: placementBoundsForSeat(state, controlledSeat),
+    won: completed ? state.winnerId === playerId : null,
     providerDiagnostics: scopedRun.diagnostics,
     failure: null,
   };
 }
 
-function failedBaseline(message: string): AiResidualPolicyBenchmarkBaseline {
+function failedBaseline(
+  scenarioId: AiBenchmarkScenarioId,
+  message: string,
+): AiResidualPolicyBenchmarkBaseline {
   return {
+    scenarioId,
     completed: false,
     drawn: false,
     truncated: false,
@@ -727,17 +803,20 @@ function failedBaseline(message: string): AiResidualPolicyBenchmarkBaseline {
       seat,
       playerId: `player-${seat}`,
       placementBounds: null,
+      won: null,
     })),
     failure: message,
   };
 }
 
 function failedCandidate(
+  scenarioId: AiBenchmarkScenarioId,
   seat: AiRecruitPlannerControlledSeat,
   message: string,
 ): AiResidualPolicyBenchmarkCandidate {
   const playerId = `player-${seat}`;
   return {
+    scenarioId,
     controlledSeat: seat,
     playerId,
     strategyId: getAiStrategyProfile(playerId).id,
@@ -748,13 +827,168 @@ function failedCandidate(
     alivePlayers: null,
     contentVersion: null,
     placementBounds: null,
+    won: null,
     providerDiagnostics: null,
     failure: message,
   };
 }
 
+export function actualWinnerDelta(
+  candidateWon: boolean | null,
+  baselineWon: boolean | null,
+): number | null {
+  if (candidateWon === null || baselineWon === null) return null;
+  return Number(candidateWon) - Number(baselineWon);
+}
+
 function mean(values: readonly number[]): number {
   return values.reduce((sum, value) => sum + value, 0) / values.length;
+}
+
+function isCompletePair(
+  pair: AiResidualPolicyBenchmarkPair,
+): boolean {
+  return (
+    pair.conservativePlacementDelta !== null &&
+    pair.conservativeTopFourDelta !== null &&
+    pair.conservativeWinDelta !== null
+  );
+}
+
+function seedMetricFromPairs(
+  seed: number,
+  pairs: readonly AiResidualPolicyBenchmarkPair[],
+  expectedPairCount: number,
+): AiRecruitPlannerSeedMetric | null {
+  if (
+    pairs.length !== expectedPairCount ||
+    new Set(pairs.map((pair) => pair.pairKey)).size !== expectedPairCount ||
+    !pairs.every(isCompletePair)
+  ) {
+    return null;
+  }
+  return {
+    seed,
+    placementDelta: mean(
+      pairs.map((pair) => pair.conservativePlacementDelta as number),
+    ),
+    topFourDelta: mean(
+      pairs.map((pair) => pair.conservativeTopFourDelta as number),
+    ),
+    winDelta: mean(
+      pairs.map((pair) => pair.conservativeWinDelta as number),
+    ),
+  };
+}
+
+function summarizePairStratum(
+  clusters: readonly AiResidualPolicyBenchmarkCluster[],
+  selectPairs: (
+    cluster: AiResidualPolicyBenchmarkCluster,
+  ) => readonly AiResidualPolicyBenchmarkPair[],
+  expectedPairsPerSeed: number,
+): AiRecruitPlannerComparisons {
+  const metrics: AiRecruitPlannerSeedMetric[] = [];
+  let pairedSeats = 0;
+  for (const cluster of clusters) {
+    const pairs = selectPairs(cluster);
+    pairedSeats += pairs.filter(isCompletePair).length;
+    const metric = seedMetricFromPairs(
+      cluster.seed,
+      pairs,
+      expectedPairsPerSeed,
+    );
+    if (metric) metrics.push(metric);
+  }
+  return summarizeAiRecruitPlannerSeedMetrics(metrics, pairedSeats);
+}
+
+function buildComparisonMatrix(
+  clusters: readonly AiResidualPolicyBenchmarkCluster[],
+  scenarioIds: readonly AiBenchmarkScenarioId[],
+  profileIds: readonly AiStrategyId[],
+): AiResidualPolicyComparisonMatrix {
+  const overall = summarizePairStratum(
+    clusters,
+    (cluster) => cluster.pairs,
+    scenarioIds.length * profileIds.length,
+  );
+  const byScenario: AiResidualPolicyComparisonMatrix["byScenario"] = {};
+  const byProfile: AiResidualPolicyComparisonMatrix["byProfile"] = {};
+  const byScenarioProfile: AiResidualPolicyComparisonMatrix["byScenarioProfile"] =
+    {};
+
+  for (const scenarioId of scenarioIds) {
+    byScenario[scenarioId] = summarizePairStratum(
+      clusters,
+      (cluster) =>
+        cluster.pairs.filter((pair) => pair.scenarioId === scenarioId),
+      profileIds.length,
+    );
+    const scenarioProfiles: Partial<
+      Record<AiStrategyId, AiRecruitPlannerComparisons>
+    > = {};
+    for (const profileId of profileIds) {
+      scenarioProfiles[profileId] = summarizePairStratum(
+        clusters,
+        (cluster) =>
+          cluster.pairs.filter(
+            (pair) =>
+              pair.scenarioId === scenarioId &&
+              pair.strategyId === profileId,
+          ),
+        1,
+      );
+    }
+    byScenarioProfile[scenarioId] = scenarioProfiles;
+  }
+
+  for (const profileId of profileIds) {
+    byProfile[profileId] = summarizePairStratum(
+      clusters,
+      (cluster) =>
+        cluster.pairs.filter((pair) => pair.strategyId === profileId),
+      scenarioIds.length,
+    );
+  }
+
+  return { overall, byScenario, byProfile, byScenarioProfile };
+}
+
+function completeSeedProfilePairs(
+  clusters: readonly AiResidualPolicyBenchmarkCluster[],
+  scenarioIds: readonly AiBenchmarkScenarioId[],
+  profileIds: readonly AiStrategyId[],
+): number {
+  let completePairs = 0;
+  for (const cluster of clusters) {
+    for (const profileId of profileIds) {
+      const profilePairs = cluster.pairs.filter(
+        (pair) => pair.strategyId === profileId,
+      );
+      if (
+        seedMetricFromPairs(
+          cluster.seed,
+          profilePairs,
+          scenarioIds.length,
+        ) !== null
+      ) {
+        completePairs += 1;
+      }
+    }
+  }
+  return completePairs;
+}
+
+function withPairedSeats(
+  comparisons: AiRecruitPlannerComparisons,
+  pairedSeats: number,
+): AiRecruitPlannerComparisons {
+  return {
+    placement: { ...comparisons.placement, pairedSeats },
+    topFour: { ...comparisons.topFour, pairedSeats },
+    win: { ...comparisons.win, pairedSeats },
+  };
 }
 
 interface MutableResidualPolicyDiagnostics {
@@ -866,6 +1100,7 @@ export function runAiResidualPolicyBenchmark(
     throw new RangeError("scheduled seeds must be safe integers");
   }
   assertAiBenchmarkSeedAccess({ startSeed, seeds });
+  const scenarioIds = normalizeAiBenchmarkScenarioIds(options.scenarioIds);
   const config = {
     seeds,
     startSeed,
@@ -875,6 +1110,7 @@ export function runAiResidualPolicyBenchmark(
       "maxRounds",
     ),
     initialHealth: options.initialHealth ?? DEFAULT_INITIAL_HEALTH,
+    scenarioIds,
     controlledSeats: AI_RESIDUAL_POLICY_CONTROLLED_SEATS,
   };
   if (!isValidInitialHealth(config.initialHealth)) {
@@ -914,15 +1150,22 @@ export function runAiResidualPolicyBenchmark(
           parametersSha256,
         );
   const strategyProfiles = strategyProfileSnapshots();
+  const profileIds = strategyProfiles.map((snapshot) => snapshot.profile.id);
+  if (new Set(profileIds).size !== AI_RESIDUAL_POLICY_CONTROLLED_SEATS.length) {
+    throw new Error("residual benchmark requires one unique profile per seat");
+  }
   const strategyProfileHash = profileHash(strategyProfiles);
-  const scheduledRuns = seeds * RUNS_PER_SEED;
+  const scheduledRuns =
+    seeds * scenarioIds.length * RUNS_PER_SCENARIO_SEED;
   let processedRuns = 0;
   let completedRuns = 0;
   let contentVersion: string | null = null;
   const clusters: AiResidualPolicyBenchmarkCluster[] = [];
+  const pairKeys = new Set<string>();
 
   const progress = (
     seed: number,
+    scenarioId: AiBenchmarkScenarioId,
     kind: "baseline" | "candidate",
     controlledSeat: AiRecruitPlannerControlledSeat | null,
     completed: boolean,
@@ -934,6 +1177,7 @@ export function runAiResidualPolicyBenchmark(
       processedRuns,
       scheduledRuns,
       seed,
+      scenarioId,
       kind,
       controlledSeat,
       completed,
@@ -959,136 +1203,190 @@ export function runAiResidualPolicyBenchmark(
 
   for (let offset = 0; offset < seeds; offset += 1) {
     const seed = startSeed + offset;
-    let baseline: AiResidualPolicyBenchmarkBaseline;
-    try {
-      baseline = runBaseline(seed, config.maxRounds, config.initialHealth);
-    } catch (error) {
-      const message = error instanceof Error ? error.message : String(error);
-      runnerFailures.push({ seed, run: "baseline", message });
-      baseline = failedBaseline(message);
-    }
-    checkContentVersion(baseline.contentVersion, seed, "baseline");
-    progress(seed, "baseline", null, baseline.completed, baseline.failure);
-
-    const pairs: AiResidualPolicyBenchmarkPair[] = [];
-    for (const seat of AI_RESIDUAL_POLICY_CONTROLLED_SEATS) {
-      let candidate: AiResidualPolicyBenchmarkCandidate;
+    const scenarioClusters: AiResidualPolicyBenchmarkScenarioCluster[] = [];
+    for (const scenarioId of scenarioIds) {
+      const baselineRun = `baseline-${scenarioId}`;
+      let baseline: AiResidualPolicyBenchmarkBaseline;
       try {
-        if (policyIdentity === null) {
-          throw new Error("residual policy metadata instance is unavailable");
-        }
-        const policy = createFreshPolicy(
-          options.createPolicy,
-          parametersSnapshot,
-          seenPolicies,
-          policyIdentity,
-        );
-        candidate = runCandidate(
+        baseline = runBaseline(
           seed,
-          seat,
-          policy,
-          policyIdentity,
-          config,
+          scenarioId,
+          config.maxRounds,
+          config.initialHealth,
         );
       } catch (error) {
         const message = error instanceof Error ? error.message : String(error);
-        runnerFailures.push({
-          seed,
-          run: `candidate-seat-${seat}`,
-          message,
-        });
-        candidate = failedCandidate(seat, message);
+        runnerFailures.push({ seed, run: baselineRun, message });
+        baseline = failedBaseline(scenarioId, message);
       }
-      checkContentVersion(
-        candidate.contentVersion,
-        seed,
-        `candidate-seat-${seat}`,
-      );
-      const baselineBounds =
-        baseline.seats.find((item) => item.seat === seat)?.placementBounds ??
-        null;
-      const candidateBounds = candidate.placementBounds;
-      const usable =
-        baseline.failure === null &&
-        candidate.failure === null &&
-        baselineBounds !== null &&
-        candidateBounds !== null;
-      pairs.push({
-        seat,
-        playerId: candidate.playerId,
-        strategyId: candidate.strategyId,
-        baselinePlacementBounds: baselineBounds,
-        candidate,
-        conservativePlacementDelta: usable
-          ? conservativePlacementDelta(candidateBounds, baselineBounds)
-          : null,
-        conservativeTopFourDelta: usable
-          ? conservativeRateDelta(candidateBounds, baselineBounds, "topFour")
-          : null,
-        conservativeWinDelta: usable
-          ? conservativeRateDelta(candidateBounds, baselineBounds, "win")
-          : null,
-      });
+      checkContentVersion(baseline.contentVersion, seed, baselineRun);
       progress(
         seed,
-        "candidate",
-        seat,
-        candidate.completed,
-        candidate.failure,
+        scenarioId,
+        "baseline",
+        null,
+        baseline.completed,
+        baseline.failure,
       );
+
+      const pairs: AiResidualPolicyBenchmarkPair[] = [];
+      for (const seat of AI_RESIDUAL_POLICY_CONTROLLED_SEATS) {
+        const candidateRun = `candidate-${scenarioId}-seat-${seat}`;
+        let candidate: AiResidualPolicyBenchmarkCandidate;
+        try {
+          if (policyIdentity === null) {
+            throw new Error(
+              "residual policy metadata instance is unavailable",
+            );
+          }
+          const policy = createFreshPolicy(
+            options.createPolicy,
+            parametersSnapshot,
+            seenPolicies,
+            policyIdentity,
+          );
+          candidate = runCandidate(
+            seed,
+            scenarioId,
+            seat,
+            policy,
+            policyIdentity,
+            config,
+          );
+        } catch (error) {
+          const message = error instanceof Error ? error.message : String(error);
+          runnerFailures.push({ seed, run: candidateRun, message });
+          candidate = failedCandidate(scenarioId, seat, message);
+        }
+        checkContentVersion(candidate.contentVersion, seed, candidateRun);
+        const baselineBounds =
+          baseline.seats.find((item) => item.seat === seat)?.placementBounds ??
+          null;
+        const baselineWon =
+          baseline.seats.find((item) => item.seat === seat)?.won ?? null;
+        const candidateBounds = candidate.placementBounds;
+        const pairKey = createAiBenchmarkPairKey(
+          seed,
+          scenarioId,
+          "seat",
+          seat,
+        );
+        const uniquePairKey = !pairKeys.has(pairKey);
+        if (uniquePairKey) {
+          pairKeys.add(pairKey);
+        } else {
+          runnerFailures.push({
+            seed,
+            run: candidateRun,
+            message: `duplicate benchmark pair key ${pairKey}`,
+          });
+        }
+        const usable =
+          uniquePairKey &&
+          baseline.failure === null &&
+          candidate.failure === null &&
+          baselineBounds !== null &&
+          candidateBounds !== null;
+        pairs.push({
+          pairKey,
+          seed,
+          scenarioId,
+          seat,
+          playerId: candidate.playerId,
+          strategyId: candidate.strategyId,
+          baselinePlacementBounds: baselineBounds,
+          candidate,
+          conservativePlacementDelta: usable
+            ? conservativePlacementDelta(candidateBounds, baselineBounds)
+            : null,
+          conservativeTopFourDelta: usable
+            ? conservativeRateDelta(candidateBounds, baselineBounds, "topFour")
+            : null,
+          conservativeWinDelta: usable
+            ? candidate.completed && baseline.completed
+              ? actualWinnerDelta(candidate.won, baselineWon)
+              : conservativeRateDelta(candidateBounds, baselineBounds, "win")
+            : null,
+        });
+        progress(
+          seed,
+          scenarioId,
+          "candidate",
+          seat,
+          candidate.completed,
+          candidate.failure,
+        );
+      }
+
+      scenarioClusters.push({
+        scenarioId,
+        baseline,
+        pairs,
+        metric: seedMetricFromPairs(
+          seed,
+          pairs,
+          AI_RESIDUAL_POLICY_CONTROLLED_SEATS.length,
+        ),
+      });
     }
 
-    const completePairs = pairs.filter(
-      (pair) => pair.conservativePlacementDelta !== null,
+    const pairs = scenarioClusters.flatMap(
+      (scenarioCluster) => scenarioCluster.pairs,
     );
-    const metric =
-      completePairs.length === AI_RESIDUAL_POLICY_CONTROLLED_SEATS.length
-        ? {
-            seed,
-            placementDelta: mean(
-              completePairs.map(
-                (pair) => pair.conservativePlacementDelta as number,
-              ),
-            ),
-            topFourDelta: mean(
-              completePairs.map(
-                (pair) => pair.conservativeTopFourDelta as number,
-              ),
-            ),
-            winDelta: mean(
-              completePairs.map(
-                (pair) => pair.conservativeWinDelta as number,
-              ),
-            ),
-          }
-        : null;
-    clusters.push({ seed, baseline, pairs, metric });
+    const baseline = scenarioClusters[0]?.baseline;
+    if (!baseline) {
+      throw new Error("residual benchmark requires at least one scenario");
+    }
+    clusters.push({
+      seed,
+      baseline,
+      pairs,
+      metric: seedMetricFromPairs(
+        seed,
+        pairs,
+        scenarioIds.length * AI_RESIDUAL_POLICY_CONTROLLED_SEATS.length,
+      ),
+      scenarios: scenarioClusters,
+    });
   }
 
   const pairs = clusters.flatMap((cluster) => cluster.pairs);
   const candidates = pairs.map((pair) => pair.candidate);
-  const pairedSeats = pairs.filter(
-    (pair) => pair.conservativePlacementDelta !== null,
-  ).length;
-  const missingPairs = seeds * AI_RESIDUAL_POLICY_CONTROLLED_SEATS.length - pairedSeats;
+  const pairedSeats = pairs.filter(isCompletePair).length;
+  const missingPairs =
+    seeds * scenarioIds.length * AI_RESIDUAL_POLICY_CONTROLLED_SEATS.length -
+    pairedSeats;
   const drawnRuns = clusters.reduce(
     (sum, cluster) =>
       sum +
-      (cluster.baseline.drawn ? 1 : 0) +
-      cluster.pairs.filter((pair) => pair.candidate.drawn).length,
+      cluster.scenarios.reduce(
+        (scenarioSum, scenarioCluster) =>
+          scenarioSum +
+          (scenarioCluster.baseline.drawn ? 1 : 0) +
+          scenarioCluster.pairs.filter((pair) => pair.candidate.drawn).length,
+        0,
+      ),
     0,
   );
   const truncatedRuns = clusters.reduce(
     (sum, cluster) =>
       sum +
-      (cluster.baseline.truncated ? 1 : 0) +
-      cluster.pairs.filter((pair) => pair.candidate.truncated).length,
+      cluster.scenarios.reduce(
+        (scenarioSum, scenarioCluster) =>
+          scenarioSum +
+          (scenarioCluster.baseline.truncated ? 1 : 0) +
+          scenarioCluster.pairs.filter((pair) => pair.candidate.truncated)
+            .length,
+        0,
+      ),
     0,
   );
-  const comparisons = summarizeAiRecruitPlannerSeedMetrics(
-    clusters.flatMap((cluster) => (cluster.metric ? [cluster.metric] : [])),
-    pairedSeats,
+  const comparisonMatrix = buildComparisonMatrix(
+    clusters,
+    scenarioIds,
+    profileIds,
   );
+  const comparisons = comparisonMatrix.overall;
   const providerDiagnostics = aggregateDiagnostics(candidates);
   const providerErrors = {
     providerErrors: providerDiagnostics.providerErrors,
@@ -1194,17 +1492,23 @@ export function runAiResidualPolicyBenchmark(
     parametersStable &&
     initialPolicyArtifactSha256 !== null &&
     policyArtifactSha256After === initialPolicyArtifactSha256;
+  const gatePairedSeats = completeSeedProfilePairs(
+    clusters,
+    scenarioIds,
+    profileIds,
+  );
+  const gateMissingPairs = seeds * profileIds.length - gatePairedSeats;
   const gate = evaluateAiRecruitPlannerGate({
     configuredSeeds: seeds,
-    pairedSeats,
-    missingPairs,
+    pairedSeats: gatePairedSeats,
+    missingPairs: gateMissingPairs,
     incompletePlans: 0,
     rejectedActions: 0,
     boundaryViolations: 0,
     replanLimitHits: 0,
     drawnRuns,
     runnerFailures: runnerFailures.length,
-    comparisons,
+    comparisons: withPairedSeats(comparisons, gatePairedSeats),
   });
   const acceptanceReasons = [...gate.reasons];
   appendReason(
@@ -1311,6 +1615,7 @@ export function runAiResidualPolicyBenchmark(
     providerErrors,
     clusters,
     comparisons,
+    comparisonMatrix,
     accepted: acceptanceReasons.length === 0,
     acceptanceReasons,
   };

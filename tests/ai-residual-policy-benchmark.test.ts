@@ -9,12 +9,22 @@ import {
   type AiResidualPolicy,
   type AiResidualPolicyProposal,
 } from "../lib/game/ai-residual-policy.ts";
+import { AI_BENCHMARK_SCENARIOS } from "../scripts/ai-benchmark-scenarios.ts";
 import {
+  actualWinnerDelta,
   AI_RESIDUAL_POLICY_CONTROLLED_SEATS,
   runAiResidualPolicyBenchmark,
   type AiResidualPolicyArtifactJson,
   type AiResidualPolicyArtifactManifest,
 } from "../scripts/benchmark-ai-residual-policy.ts";
+
+test("winner delta uses winnerId semantics so a drawn first place is not a win", () => {
+  assert.equal(actualWinnerDelta(false, false), 0);
+  assert.equal(actualWinnerDelta(true, false), 1);
+  assert.equal(actualWinnerDelta(false, true), -1);
+  assert.equal(actualWinnerDelta(null, false), null);
+  assert.equal(actualWinnerDelta(false, null), null);
+});
 
 function testPolicyArtifact(
   parameters: AiResidualPolicyArtifactJson = { mode: "test" },
@@ -46,6 +56,8 @@ test("residual benchmark rejects protected seeds before policy creation or progr
     30_100_001,
     30_200_001,
     30_300_001,
+    30_400_001,
+    30_500_001,
   ]) {
     assert.throws(
       () =>
@@ -65,6 +77,34 @@ test("residual benchmark rejects protected seeds before policy creation or progr
       /AI benchmark seed ledger rejected access/,
     );
   }
+  assert.equal(policyCreations, 0);
+  assert.equal(progressCalls, 0);
+});
+
+test("residual benchmark rejects empty or duplicate scenario schedules before execution", () => {
+  let policyCreations = 0;
+  let progressCalls = 0;
+  const invoke = (scenarioIds: readonly ("neutral-v1" | "live-lobby-v1")[]) =>
+    runAiResidualPolicyBenchmark({
+      createPolicy: () => {
+        policyCreations += 1;
+        return createAlwaysAbstainPolicy();
+      },
+      policyArtifact: testPolicyArtifact({ mode: "invalid-scenarios" }),
+      seeds: 1,
+      startSeed: 0xa001,
+      maxRounds: 1,
+      scenarioIds,
+      onProgress: () => {
+        progressCalls += 1;
+      },
+    });
+
+  assert.throws(() => invoke([]), /non-empty array/);
+  assert.throws(
+    () => invoke(["neutral-v1", "neutral-v1"]),
+    /duplicate AI benchmark scenario/,
+  );
   assert.equal(policyCreations, 0);
   assert.equal(progressCalls, 0);
 });
@@ -136,6 +176,7 @@ test("always-abstain provider completes seven fixed-seat pairs but cannot pass t
 
   assert.equal(result.progress.scheduledRuns, 8);
   assert.equal(result.progress.processedRuns, 8);
+  assert.deepEqual(result.config.scenarioIds, ["neutral-v1"]);
   assert.equal(result.clusters.length, 1);
   assert.equal(result.pairedSeats, 7);
   assert.equal(result.missingPairs, 0);
@@ -150,6 +191,11 @@ test("always-abstain provider completes seven fixed-seat pairs but cannot pass t
       (pair) => pair.candidate.playerId !== "player-0",
     ),
   );
+  assert.deepEqual(
+    result.clusters[0]?.scenarios.map((scenario) => scenario.scenarioId),
+    ["neutral-v1"],
+  );
+  assert.deepEqual(result.comparisons, result.comparisonMatrix.overall);
   assert.ok(result.providerDiagnostics.providerCalls > 0);
   assert.equal(
     result.providerDiagnostics.abstentions,
@@ -165,6 +211,93 @@ test("always-abstain provider completes seven fixed-seat pairs but cannot pass t
   assert.ok(
     result.acceptanceReasons.some((reason) => reason.includes("override")),
   );
+});
+
+test("dual scenarios retain one significance cluster per seed and expose every stratum", () => {
+  let policyCreations = 0;
+  const progressScenarios: string[] = [];
+  const result = runAiResidualPolicyBenchmark({
+    createPolicy: () => {
+      policyCreations += 1;
+      return createAlwaysAbstainPolicy();
+    },
+    policyArtifact: testPolicyArtifact({ mode: "dual-scenario" }),
+    seeds: 1,
+    startSeed: 0xaa01,
+    maxRounds: 1,
+    initialHealth: 40,
+    scenarioIds: AI_BENCHMARK_SCENARIOS,
+    onProgress: (progress) => {
+      progressScenarios.push(progress.scenarioId);
+    },
+  });
+
+  assert.equal(policyCreations, 15, "one metadata plus fourteen episodes");
+  assert.deepEqual(result.config.scenarioIds, AI_BENCHMARK_SCENARIOS);
+  assert.equal(result.progress.scheduledRuns, 16);
+  assert.equal(result.progress.processedRuns, 16);
+  assert.deepEqual(
+    new Set(progressScenarios),
+    new Set(AI_BENCHMARK_SCENARIOS),
+  );
+  assert.equal(result.clusters.length, 1);
+  assert.deepEqual(
+    result.clusters[0]?.scenarios.map((scenario) => scenario.scenarioId),
+    AI_BENCHMARK_SCENARIOS,
+  );
+  assert.ok(
+    result.clusters[0]?.scenarios.every(
+      (scenario) => scenario.pairs.length === 7,
+    ),
+  );
+  assert.equal(result.clusters[0]?.pairs.length, 14);
+  assert.equal(
+    new Set(result.clusters[0]?.pairs.map((pair) => pair.pairKey)).size,
+    14,
+  );
+  assert.ok(
+    result.clusters[0]?.pairs.every(
+      (pair) =>
+        pair.pairKey ===
+        `seed:${pair.seed}|scenario:${pair.scenarioId}|seat:${pair.seat}`,
+    ),
+  );
+  assert.equal(result.pairedSeats, 14);
+  assert.equal(result.missingPairs, 0);
+  assert.equal(result.truncatedRuns, 16);
+  assert.equal(result.runnerFailures.length, 0);
+
+  assert.deepEqual(result.comparisons, result.comparisonMatrix.overall);
+  assert.equal(
+    result.comparisonMatrix.overall.placement.seedClusters,
+    1,
+    "two scenarios from one seed remain one significance cluster",
+  );
+  assert.equal(result.comparisonMatrix.overall.placement.pairedSeats, 14);
+
+  const profileIds = result.strategyProfiles.map(
+    (snapshot) => snapshot.profile.id,
+  );
+  for (const scenarioId of AI_BENCHMARK_SCENARIOS) {
+    const scenarioComparison =
+      result.comparisonMatrix.byScenario[scenarioId];
+    assert.ok(scenarioComparison);
+    assert.equal(scenarioComparison.placement.seedClusters, 1);
+    assert.equal(scenarioComparison.placement.pairedSeats, 7);
+    for (const profileId of profileIds) {
+      const cell =
+        result.comparisonMatrix.byScenarioProfile[scenarioId]?.[profileId];
+      assert.ok(cell);
+      assert.equal(cell.placement.seedClusters, 1);
+      assert.equal(cell.placement.pairedSeats, 1);
+    }
+  }
+  for (const profileId of profileIds) {
+    const profileComparison = result.comparisonMatrix.byProfile[profileId];
+    assert.ok(profileComparison);
+    assert.equal(profileComparison.placement.seedClusters, 1);
+    assert.equal(profileComparison.placement.pairedSeats, 2);
+  }
 });
 
 test("high-confidence legal inversion produces deterministic overrides but remains diagnostic with one seed", () => {

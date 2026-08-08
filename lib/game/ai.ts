@@ -14,7 +14,7 @@ export type AiStrategyId =
   | "deathrattle";
 
 /** Bump whenever shared policy logic changes so benchmark runs stay comparable. */
-export const AI_POLICY_VERSION = "video-strategy-v3-certified-replacements";
+export const AI_POLICY_VERSION = "video-strategy-v4-safe-recruit-health";
 
 /**
  * Stable, deterministic strategy weights extracted from recurring decisions in
