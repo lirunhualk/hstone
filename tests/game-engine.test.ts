@@ -1917,6 +1917,40 @@ test("a played triple grants the real reward spell and reserves a deterministic 
   }
 });
 
+test("a golden tavern minion bought from the shop grants a triple reward when played", () => {
+  let state = createGame(0xa102);
+  const player = humanPlayer(state);
+  const offer = player.shop[0];
+  const definition = getMinionDefinition(offer.definitionId);
+  player.gold = 3;
+  player.shop[0] = {
+    ...offer,
+    golden: true,
+    cardId: definition.goldenCardId ?? definition.cardId,
+    name: `金色·${definition.name}`,
+    attack: definition.attack * 2,
+    health: definition.health * 2,
+    description: `金色随从：基础属性已翻倍；可倍增的效果会按金色规则结算。普通版本牌面：${definition.description}`,
+    grantsTripleReward: false,
+  };
+
+  state = gameReducer(state, { type: "BUY_MINION", shopIndex: 0 });
+  const bought = humanPlayer(state).hand[0];
+  assert.equal(bought?.kind, "minion");
+  assert.equal(bought?.golden, true);
+  assert.equal(bought?.grantsTripleReward, true);
+
+  state = gameReducer(state, {
+    type: "PLAY_HAND_CARD",
+    cardInstanceId: bought.instanceId,
+  });
+  const reward = humanPlayer(state).hand.find(
+    (card) => card.kind === "tripleReward",
+  );
+  assert.ok(reward);
+  assert.equal(humanPlayer(state).board[0]?.grantsTripleReward, false);
+});
+
 test("Triple Reward discovers exactly Tier 6 when the Tavern is already Tier 6", () => {
   let state = createGame(0xa102);
   const human = humanPlayer(state);

@@ -11702,6 +11702,12 @@ function applyGoldenWarbandPurchaseTrinket(
   }
 }
 
+function boughtShopGoldenShouldGrantTripleReward(
+  minion: BoardMinionInstance,
+): boolean {
+  return minion.golden && !minion.grantsTripleReward;
+}
+
 function buyMinion(
   state: GameState,
   player: PlayerState,
@@ -11718,6 +11724,9 @@ function buyMinion(
   }
   claimGeneratedShopMinion(minion);
   applyGoldenWarbandPurchaseTrinket(state, player, minion);
+  if (boughtShopGoldenShouldGrantTripleReward(minion)) {
+    minion.grantsTripleReward = true;
+  }
   applyOwnedUndeadArmyBonus(player, minion);
   applyOwnedBeetleBonus(player, minion);
   reconcileWhereverMinion(
