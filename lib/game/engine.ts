@@ -69,6 +69,10 @@ import {
   normalizeInitialHealth,
 } from "./setup.ts";
 import {
+  getSoloCombatDamageCap,
+  type SoloCombatDamageCap,
+} from "./damage-cap.ts";
+import {
   AI_POLICY_VERSION,
   aiRefreshLimit,
   aiTargetBoardSize,
@@ -246,6 +250,8 @@ export {
 } from "./lobby-systems.ts";
 
 export { areTrinketOfferCandidatesValid } from "./trinket-offers.ts";
+
+export { getSoloCombatDamageCap } from "./damage-cap.ts";
 
 export {
   AI_STRATEGY_PROFILES,
@@ -6542,6 +6548,42 @@ function applyTavernBonuses(
   applyCurrentTurnTavernBonuses(player, minion);
 }
 
+function prepareTavernMinionForShop(
+  state: GameState,
+  player: PlayerState,
+  minion: BoardMinionInstance,
+): void {
+  applyTavernBonuses(player, minion);
+  reconcileWhereverMinion(
+    minion,
+    player.astralAutomatonsSummoned ?? 0,
+    player.eternalKnightsDied ?? 0,
+    player.tavernSpellsCast ?? 0,
+    player.deathrattlesTriggered ?? 0,
+    player.magnetizationsThisGame ?? 0,
+  );
+  refreshDynamicMinionDescription(minion, player);
+  if (player.systemEventCounters.incubatingActive) {
+    const definition = getMinionDefinition(minion.definitionId);
+    const tribes =
+      definition.tribes ??
+      (definition.tribe === "neutral" ? [] : [definition.tribe]);
+    if (tribes.length === 0) {
+      minion.tribes = ["all"];
+      minion.tribe = "all";
+    }
+  }
+  if (player.systemEventCounters.goldenArenaActive) {
+    const definition = getMinionDefinition(minion.definitionId);
+    minion.golden = true;
+    minion.cardId = definition.goldenCardId ?? definition.cardId;
+    minion.name = `金色·${definition.name}`;
+    minion.attack = definition.attack * 2;
+    minion.health = definition.health * 2;
+    minion.sellValue = 1;
+  }
+}
+
 function applyOwnedUndeadArmyBonus(
   player: PlayerState,
   minion: BoardMinionInstance,
@@ -7968,33 +8010,7 @@ function fillShop(
     if (!minion) {
       break;
     }
-    applyTavernBonuses(player, minion);
-    reconcileWhereverMinion(
-      minion,
-      player.astralAutomatonsSummoned ?? 0,
-      player.eternalKnightsDied ?? 0,
-      player.tavernSpellsCast ?? 0,
-      player.deathrattlesTriggered ?? 0,
-      player.magnetizationsThisGame ?? 0,
-    );
-    refreshDynamicMinionDescription(minion, player);
-    if (player.systemEventCounters.incubatingActive) {
-      const def = getMinionDefinition(minion.definitionId);
-      const defTribes = def.tribes ?? (def.tribe === "neutral" ? [] : [def.tribe]);
-      if (defTribes.length === 0) {
-        minion.tribes = ["all"];
-        minion.tribe = "all";
-      }
-    }
-    if (player.systemEventCounters.goldenArenaActive) {
-      const def = getMinionDefinition(minion.definitionId);
-      minion.golden = true;
-      minion.cardId = def.goldenCardId ?? def.cardId;
-      minion.name = `金色·${def.name}`;
-      minion.attack = def.attack * 2;
-      minion.health = def.health * 2;
-      minion.sellValue = 1;
-    }
+    prepareTavernMinionForShop(state, player, minion);
     player.shop.push(minion);
     tavernRefreshed = true;
   }
@@ -18356,6 +18372,26 @@ function returnDiscoverOptions(
   }
 }
 
+function replaceShopMinionFromDiscover(
+  state: GameState,
+  player: PlayerState,
+  selected: BoardMinionInstance,
+  targetInstanceId: string,
+): boolean {
+  const targetIndex = player.shop.findIndex(
+    (minion) => minion.instanceId === targetInstanceId,
+  );
+  if (targetIndex < 0) {
+    return false;
+  }
+
+  const [replaced] = player.shop.splice(targetIndex, 1);
+  returnMinionToPool(state, replaced);
+  prepareTavernMinionForShop(state, player, selected);
+  player.shop.splice(targetIndex, 0, selected);
+  return true;
+}
+
 function prepareDiscoverSelection(
   player: PlayerState,
   selected: BoardMinionInstance,
@@ -18705,6 +18741,27 @@ function beginDiscoverInteraction(
     } else if (destination.kind === "transform") {
       if (
         !transformFriendlyMinionFromDiscover(
+          state,
+          player,
+          selected,
+          destination.targetInstanceId,
+        )
+      ) {
+        returnMinionToPool(state, selected);
+        if (battlecry) {
+          const unresolvedTriggers = Math.ceil(
+            discoveries /
+              Math.max(1, battlecryEffectRepetitionsPerTrigger),
+          );
+          for (let trigger = 0; trigger < unresolvedTriggers; trigger += 1) {
+            observeRecruitBattlecryTriggered(player);
+          }
+        }
+        return false;
+      }
+    } else if (destination.kind === "replaceShop") {
+      if (
+        !replaceShopMinionFromDiscover(
           state,
           player,
           selected,
@@ -20174,6 +20231,32 @@ function resolvePendingInteraction(
       return next;
     }
     triggerRecruitAfterSpellCast(next, nextPlayer);
+  } else if (destination.kind === "replaceShop") {
+    if (
+      !replaceShopMinionFromDiscover(
+        next,
+        nextPlayer,
+        nextSelected,
+        destination.targetInstanceId,
+      )
+    ) {
+      returnMinionToPool(next, nextSelected);
+      if (nextPending.battlecry) {
+        const unresolvedTriggers = Math.ceil(
+          nextPending.remainingDiscoveries /
+            Math.max(
+              1,
+              nextPending.battlecryEffectRepetitionsPerTrigger ?? 1,
+            ),
+        );
+        for (let trigger = 0; trigger < unresolvedTriggers; trigger += 1) {
+          observeRecruitBattlecryTriggered(nextPlayer);
+        }
+      }
+      next.pendingInteraction = null;
+      finishCardPlayed(next, nextPlayer);
+      return next;
+    }
   } else {
     return state;
   }
@@ -21047,10 +21130,14 @@ function bestShopIndex(player: PlayerState): number {
 function bestPurchasableShopIndex(
   state: GameState,
   player: PlayerState,
+  excludedInstanceId?: string | null,
 ): number {
   let bestIndex = -1;
   let bestScore = Number.NEGATIVE_INFINITY;
   for (let index = 0; index < player.shop.length; index += 1) {
+    if (player.shop[index].instanceId === excludedInstanceId) {
+      continue;
+    }
     if (!canAiPurchaseMinion(state, player, index)) {
       continue;
     }
@@ -21066,12 +21153,14 @@ function bestPurchasableShopIndex(
 function bestMagneticShopIndex(
   state: GameState,
   player: PlayerState,
+  excludedInstanceId?: string | null,
 ): number {
   let bestIndex = -1;
   let bestScore = Number.NEGATIVE_INFINITY;
   for (let index = 0; index < player.shop.length; index += 1) {
     const offer = player.shop[index];
     if (
+      offer.instanceId === excludedInstanceId ||
       !canAiPurchaseMinion(state, player, index) ||
       !player.board.some((target) => canMagnetize(offer, target))
     ) {
@@ -21757,15 +21846,15 @@ function sellAiMaturePatientScouts(
 function tryActivateAiHeroPower(
   state: GameState,
   player: PlayerState,
-): void {
+): string | null {
   if (
     !player.heroPowerId ||
     !heroPowerCanBeManuallyActivated(player.heroPowerId)
   ) {
-    return;
+    return null;
   }
   if (player.heroPowerActiveThisTurn) {
-    return;
+    return null;
   }
   const definition = getHeroPowerDefinition(player.heroPowerId);
   const targetMode = heroPowerNeedsTarget(definition.effect);
@@ -21774,7 +21863,22 @@ function tryActivateAiHeroPower(
     if (getHeroPowerActivationQuote(state, player.id)?.usable) {
       activateHeroPower(state, player);
     }
-    return;
+    return null;
+  }
+
+  if (targetMode === "shopOrBoard") {
+    const targetInstanceId = selectAiGeorgeDivineShieldTarget(state, player);
+    if (
+      targetInstanceId &&
+      getHeroPowerActivationQuote(
+        state,
+        player.id,
+        targetInstanceId,
+      )?.usable
+    ) {
+      activateHeroPower(state, player, targetInstanceId);
+    }
+    return null;
   }
 
   if (targetMode === "board" && player.board.length > 0) {
@@ -21793,11 +21897,12 @@ function tryActivateAiHeroPower(
     ) {
       activateHeroPower(state, player, targetInstanceId);
     }
-    return;
+    return null;
   }
 
   if (targetMode === "shop" && player.shop.length > 0) {
     const targetShopIndex = selectAiHeroPowerShopTarget(
+      state,
       player,
       definition.effect,
     );
@@ -21809,13 +21914,87 @@ function tryActivateAiHeroPower(
         player.shop[targetShopIndex].instanceId,
       )?.usable
     ) {
-      activateHeroPower(
-        state,
-        player,
-        player.shop[targetShopIndex].instanceId,
-      );
+      const targetInstanceId = player.shop[targetShopIndex].instanceId;
+      if (activateHeroPower(state, player, targetInstanceId)) {
+        const replacement = player.shop[targetShopIndex];
+        return definition.effect === "activeReplaceHigherTier" &&
+          replacement &&
+          replacement.tier < getMaximumTavernTier(state)
+          ? replacement.instanceId
+          : null;
+      }
     }
   }
+  return null;
+}
+
+function georgeDivineShieldTargetScore(
+  player: PlayerState,
+  minion: BoardMinionInstance,
+  owned: boolean,
+): number {
+  let score = minionScore(player, minion) * 0.35 + Math.max(0, minion.attack);
+  if (minion.poisonous || minion.venomous) score += 80;
+  if (minion.cleave) score += 18 + Math.max(0, minion.attack) * 0.55;
+  if (minion.windfury) score += 12 + Math.max(0, minion.attack) * 0.35;
+  if (minion.taunt) score += 5;
+  if (minion.golden) score += 4;
+  if (owned) score += 12;
+  return score;
+}
+
+function selectAiGeorgeDivineShieldTarget(
+  state: GameState,
+  player: PlayerState,
+): string | null {
+  const heroPowerCost = heroPowerActivationCost(
+    player,
+    "activeGiveDivineShield",
+  );
+  const candidates: Array<{
+    instanceId: string;
+    owned: boolean;
+    score: number;
+  }> = player.board
+    .filter(
+      (minion) =>
+        !minion.divineShield || minion.temporaryDivineShield === true,
+    )
+    .map((minion) => ({
+      instanceId: minion.instanceId,
+      owned: true,
+      score: georgeDivineShieldTargetScore(player, minion, true),
+    }));
+
+  for (let index = 0; index < player.shop.length; index += 1) {
+    const minion = player.shop[index];
+    const purchaseQuote = getMinionPurchaseQuote(state, player.id, index);
+    const affordableAfterPower =
+      purchaseQuote !== null &&
+      (purchaseQuote.currency === "health"
+        ? purchaseQuote.affordable
+        : player.gold - heroPowerCost >= purchaseQuote.cost);
+    if (
+      (minion.divineShield && minion.temporaryDivineShield !== true) ||
+      !affordableAfterPower ||
+      !canAiPurchaseMinion(state, player, index)
+    ) {
+      continue;
+    }
+    candidates.push({
+      instanceId: minion.instanceId,
+      owned: false,
+      score: georgeDivineShieldTargetScore(player, minion, false),
+    });
+  }
+
+  candidates.sort(
+    (left, right) =>
+      right.score - left.score ||
+      Number(right.owned) - Number(left.owned) ||
+      left.instanceId.localeCompare(right.instanceId),
+  );
+  return candidates[0]?.instanceId ?? null;
 }
 
 function selectAiHeroPowerBoardTarget(
@@ -21828,10 +22007,15 @@ function selectAiHeroPowerBoardTarget(
   switch (effect) {
     case "activeGiveDivineShield": {
       const candidates = player.board.filter(
-        (m) => !m.divineShield && !m.venomous && !m.poisonous,
+        (m) => !m.divineShield || m.temporaryDivineShield === true,
       );
       if (candidates.length === 0) return null;
-      candidates.sort((a, b) => b.attack - a.attack);
+      candidates.sort(
+        (a, b) =>
+          georgeDivineShieldTargetScore(player, b, true) -
+            georgeDivineShieldTargetScore(player, a, true) ||
+          a.instanceId.localeCompare(b.instanceId),
+      );
       return candidates[0].instanceId;
     }
     case "activeScalingTargetBuff": {
@@ -21860,6 +22044,7 @@ function selectAiHeroPowerBoardTarget(
 }
 
 function selectAiHeroPowerShopTarget(
+  state: GameState,
   player: PlayerState,
   effect: HeroPowerDefinition["effect"],
 ): number {
@@ -21882,13 +22067,26 @@ function selectAiHeroPowerShopTarget(
       return bestIndex;
     }
     case "activeReplaceHigherTier": {
-      for (let i = 0; i < player.shop.length; i++) {
-        const minion = player.shop[i];
-        if (minion.tier < Math.min(6, player.tavernTier)) {
-          return i;
-        }
-      }
-      return -1;
+      return player.shop
+        .map((minion, index) => ({ minion, index }))
+        .filter(
+          ({ minion }) => minion.tier < getMaximumTavernTier(state),
+        )
+        .sort(
+          (left, right) =>
+            right.minion.tier - left.minion.tier ||
+            minionScore(player, left.minion) -
+              minionScore(player, right.minion) ||
+            left.index - right.index,
+        )
+        .find(
+          ({ minion }) =>
+            getHeroPowerActivationQuote(
+              state,
+              player.id,
+              minion.instanceId,
+            )?.usable === true,
+        )?.index ?? -1;
     }
     default:
       return -1;
@@ -21903,7 +22101,20 @@ function runAiRecruit(state: GameState, player: PlayerState): void {
   actions += sellAiMaturePatientScouts(state, player);
   actions += sellAiLossBonusMinions(state, player);
 
-  tryActivateAiHeroPower(state, player);
+  const deferGeorgePowerForOpeningUpgrade =
+    player.heroPowerId !== null &&
+    getHeroPowerDefinition(player.heroPowerId).effect ===
+      "activeGiveDivineShield" &&
+    shouldUpgradeAiTavernWithResidual(
+      state,
+      player,
+      "opening",
+      actions,
+      0,
+    );
+  let galakrondChainTargetInstanceId = deferGeorgePowerForOpeningUpgrade
+    ? null
+    : tryActivateAiHeroPower(state, player);
 
   if (
     shouldUpgradeAiTavernWithResidual(
@@ -21917,6 +22128,10 @@ function runAiRecruit(state: GameState, player: PlayerState): void {
   ) {
     upgradedThisTurn = true;
     actions += 1;
+  }
+
+  if (deferGeorgePowerForOpeningUpgrade) {
+    galakrondChainTargetInstanceId = tryActivateAiHeroPower(state, player);
   }
 
   let refreshes = 0;
@@ -21942,7 +22157,11 @@ function runAiRecruit(state: GameState, player: PlayerState): void {
       actions += 1;
       continue;
     }
-    const shopIndex = bestPurchasableShopIndex(state, player);
+    const shopIndex = bestPurchasableShopIndex(
+      state,
+      player,
+      galakrondChainTargetInstanceId,
+    );
     const bestMinionOffer =
       shopIndex >= 0 ? player.shop[shopIndex] : undefined;
     const minionPurchaseQuote =
@@ -22058,7 +22277,11 @@ function runAiRecruit(state: GameState, player: PlayerState): void {
           continue;
         }
       } else {
-        const magneticShopIndex = bestMagneticShopIndex(state, player);
+        const magneticShopIndex = bestMagneticShopIndex(
+          state,
+          player,
+          galakrondChainTargetInstanceId,
+        );
         if (
           magneticShopIndex >= 0 &&
           buyMinion(state, player, magneticShopIndex)
@@ -22190,6 +22413,15 @@ function runAiRecruit(state: GameState, player: PlayerState): void {
           targetBoardSize: aiTargetBoardSize(state.round),
         }) === "refreshOnce";
     }
+    if (
+      galakrondChainTargetInstanceId !== null &&
+      player.shop.some(
+        (minion) =>
+          minion.instanceId === galakrondChainTargetInstanceId,
+      )
+    ) {
+      shouldRefresh = false;
+    }
     if (shouldRefresh) {
       refreshShop(state, player);
       refreshes += 1;
@@ -22232,7 +22464,15 @@ function runAiRecruit(state: GameState, player: PlayerState): void {
     bestRemainingSpell !== undefined &&
     tavernSpellAiScore(player, bestRemainingSpell) >=
       8 - profile.freezeScoreBonus;
-  const legacyShouldFreeze = freezeMinion || freezeSpell;
+  const preservesGalakrondChain =
+    galakrondChainTargetInstanceId !== null &&
+    player.shop.some(
+      (minion) =>
+        minion.instanceId === galakrondChainTargetInstanceId &&
+        minion.tier < getMaximumTavernTier(state),
+    );
+  const legacyShouldFreeze =
+    preservesGalakrondChain || freezeMinion || freezeSpell;
   let shouldFreeze = legacyShouldFreeze;
   if (hasAiResidualPolicyOverride(player.id)) {
     const bestRemainingTripleProgress = Math.min(
@@ -22285,6 +22525,9 @@ function runAiRecruit(state: GameState, player: PlayerState): void {
         freezeSpellReason: freezeSpell,
         unspentGold: player.gold,
       }) === "freeze";
+  }
+  if (preservesGalakrondChain) {
+    shouldFreeze = true;
   }
   player.frozen = shouldFreeze;
   reconcileConditionalMinions(player);
@@ -34118,8 +34361,15 @@ function applyCombatHeroDamage(
   actor: PlayerState,
   target: PlayerState,
   amount: number,
+  damageCap: SoloCombatDamageCap | null,
 ): number {
-  let resolvedAmount = Math.max(0, amount);
+  const uncappedAmount = Math.max(0, amount);
+  const cappedAmount =
+    damageCap === null
+      ? uncappedAmount
+      : Math.min(uncappedAmount, damageCap);
+  let resolvedAmount = cappedAmount;
+  const damagePreventedByCap = uncappedAmount - cappedAmount;
   const iceBlock = consumeIceBlockSecretForLethalCombatDamage(
     target,
     resolvedAmount,
@@ -34171,12 +34421,24 @@ function applyCombatHeroDamage(
     actorPlayerId: actor.id,
     targetPlayerId: target.id,
     amount: resolvedAmount,
+    ...(damageCap === null
+      ? {}
+      : {
+          uncappedAmount,
+          damageCap,
+          damagePreventedByCap,
+        }),
     armorAbsorbed: damage.armorAbsorbed,
     healthDamage: damage.healthDamage,
-    message:
+    message: `${
+      damagePreventedByCap > 0
+        ? `伤害上限 ${damageCap} 将 ${uncappedAmount} 点伤害压至 ${cappedAmount} 点。`
+        : ""
+    }${
       damage.armorAbsorbed > 0
         ? `${target.name}受到 ${resolvedAmount} 点伤害，护甲抵挡 ${damage.armorAbsorbed} 点。`
-        : `${target.name}受到 ${resolvedAmount} 点伤害。`,
+        : `${target.name}受到 ${resolvedAmount} 点伤害。`
+    }`,
   });
   return resolvedAmount;
 }
@@ -34186,6 +34448,13 @@ function simulateBattle(
   pairing: Pairing,
 ): BattleSummary {
   const { playerA, playerB, isGhost } = pairing;
+  const alivePlayersAtCombatStart = state.players.filter(
+    (player) => player.alive,
+  ).length;
+  const damageCap = getSoloCombatDamageCap(
+    state.round,
+    alivePlayersAtCombatStart,
+  );
   resetThornedPauldrons(playerA);
   if (!isGhost) {
     resetThornedPauldrons(playerB);
@@ -34565,6 +34834,7 @@ function simulateBattle(
         playerA,
         playerB,
         damageToPlayerB,
+        damageCap,
       );
     } else {
       damageToPlayerB = 0;
@@ -34582,6 +34852,7 @@ function simulateBattle(
       playerB,
       playerA,
       damageToPlayerA,
+      damageCap,
     );
   } else if (state.round > 60) {
     const fatigueDamage = state.round - 60;
@@ -34591,6 +34862,7 @@ function simulateBattle(
       playerB,
       playerA,
       fatigueDamage,
+      damageCap,
     );
     if (!isGhost) {
       damageToPlayerB = applyCombatHeroDamage(
@@ -34599,6 +34871,7 @@ function simulateBattle(
         playerA,
         playerB,
         fatigueDamage,
+        damageCap,
       );
     }
   }
@@ -34677,6 +34950,8 @@ function simulateBattle(
     playerA.id === state.humanPlayerId || playerB.id === state.humanPlayerId;
   return {
     round: state.round,
+    alivePlayersAtCombatStart,
+    damageCap,
     playerAId: playerA.id,
     playerBId: playerB.id,
     playerAName: playerA.name,
@@ -35968,14 +36243,16 @@ const HERO_POWER_SHOP_TARGET_EFFECTS = new Set<HeroPowerDefinition["effect"]>([
 ]);
 
 const HERO_POWER_BOARD_TARGET_EFFECTS = new Set<HeroPowerDefinition["effect"]>([
-  "activeGiveDivineShield",
   "activeScalingTargetBuff",
   "activeKillUndeadForUndead",
 ]);
 
+export type HeroPowerTargetKind = "shop" | "board" | "shopOrBoard";
+
 export function heroPowerNeedsTarget(
   effect: HeroPowerDefinition["effect"],
-): "shop" | "board" | null {
+): HeroPowerTargetKind | null {
+  if (effect === "activeGiveDivineShield") return "shopOrBoard";
   if (HERO_POWER_SHOP_TARGET_EFFECTS.has(effect)) return "shop";
   if (HERO_POWER_BOARD_TARGET_EFFECTS.has(effect)) return "board";
   return null;
@@ -35985,7 +36262,7 @@ export interface HeroPowerActivationQuote {
   cost: number;
   affordable: boolean;
   usable: boolean;
-  targetKind: "shop" | "board" | null;
+  targetKind: HeroPowerTargetKind | null;
 }
 
 function heroPowerActivationCost(
@@ -36126,25 +36403,26 @@ function activateHeroPowerMutating(
         return false;
       }
       const currentTier = player.shop[shopIndex].tier;
-      const maxTier = Math.min(6, player.tavernTier);
-      if (currentTier >= maxTier) {
+      const maximumTier = getMaximumTavernTier(state);
+      if (currentTier >= maximumTier) {
         return false;
       }
-      const replacement = drawMatchingFromPool(
-        state,
-        player.tavernTier,
-        (d) =>
-          d.tier > currentTier &&
-          d.tier <= maxTier &&
-          d.id !== player.shop[shopIndex].definitionId,
-      );
-      if (!replacement) {
+      const nextTier = (currentTier + 1) as MinionTier;
+      if (
+        !beginDiscoverInteraction(
+          state,
+          player,
+          definition.id,
+          sharedPoolDiscoverFilterForExactTier(state, nextTier),
+          1,
+          { kind: "replaceShop", targetInstanceId },
+          undefined,
+          undefined,
+          definition.id,
+        )
+      ) {
         return false;
       }
-      player.shop.splice(shopIndex, 1);
-      player.shop.splice(shopIndex, 0, replacement);
-      reconcileConditionalMinion(replacement);
-      refreshDynamicMinionDescription(replacement, player);
       break;
     }
     case "activeDoubleHealthTavernMinion": {
@@ -36190,13 +36468,14 @@ function activateHeroPowerMutating(
       if (!targetInstanceId) {
         return false;
       }
-      const target = player.board.find(
+      const target = [...player.board, ...player.shop].find(
         (m) => m.instanceId === targetInstanceId,
       );
-      if (!target || target.divineShield) {
+      if (!target) {
         return false;
       }
       target.divineShield = true;
+      target.temporaryDivineShield = false;
       reconcileConditionalMinion(target);
       refreshDynamicMinionDescription(target, player);
       break;
@@ -36236,7 +36515,9 @@ function activateHeroPowerMutating(
         ),
         1,
         { kind: "hand" },
-        "tavernSpellCast",
+        undefined,
+        undefined,
+        definition.id,
       )) {
         return false;
       }
@@ -36257,7 +36538,9 @@ function activateHeroPowerMutating(
         } as DiscoverFilter,
         1,
         { kind: "hand" },
-        "tavernSpellCast",
+        undefined,
+        undefined,
+        definition.id,
       )) {
         return false;
       }
@@ -36277,7 +36560,9 @@ function activateHeroPowerMutating(
         } as DiscoverFilter,
         1,
         { kind: "hand" },
-        "tavernSpellCast",
+        undefined,
+        undefined,
+        definition.id,
       )) {
         return false;
       }
@@ -36747,7 +37032,12 @@ export function getHeroPowerActivationQuote(
       targetInstanceId,
     );
   } else {
-    const candidates = targetKind === "shop" ? player.shop : player.board;
+    const candidates =
+      targetKind === "shop"
+        ? player.shop
+        : targetKind === "board"
+          ? player.board
+          : [...player.shop, ...player.board];
     usable = candidates.some((candidate) =>
       canActivateHeroPowerOnClone(
         state,

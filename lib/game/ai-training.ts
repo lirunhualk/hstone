@@ -187,6 +187,10 @@ export type AiTrainingDiscoverDestinationObservation =
       target: AiTrainingCardReference | null;
     }
   | {
+      kind: "replaceShop";
+      target: AiTrainingCardReference | null;
+    }
+  | {
       kind: "customUndeadFirst";
       sourceTrinketDefinitionId: string;
     }
@@ -650,6 +654,7 @@ function observeDiscoverDestination(
       };
     case "magnetize":
     case "transform":
+    case "replaceShop":
       return {
         kind: destination.kind,
         target: cardReference(player, destination.targetInstanceId),

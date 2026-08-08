@@ -16,11 +16,40 @@ export function combatPlaybackKey(
   ]);
 }
 
-export interface CombatPlaybackSnapshot {
+export type CombatPlaybackStatus = "playing" | "paused" | "complete";
+
+export interface CombatPlaybackTimeline {
+  battleKey: string;
+  events: readonly BattleEvent[];
+}
+
+export interface CombatPlaybackState {
   battleKey: string;
   revealedCount: number;
-  complete: boolean;
+  furthestRevealedCount: number;
+  resultUnlocked: boolean;
+  status: CombatPlaybackStatus;
+  revision: number;
 }
+
+export type CombatPlaybackSessionSnapshot = Omit<
+  CombatPlaybackState,
+  "revision"
+>;
+
+export type CombatPlaybackAction =
+  | { type: "play" }
+  | { type: "pause" }
+  | {
+      type: "tick";
+      expectedRevision: number;
+      expectedRevealedCount: number;
+    }
+  | { type: "step"; direction: "backward" | "forward" }
+  | { type: "seek"; revealedCount: number }
+  | { type: "replay" }
+  | { type: "skip" }
+  | { type: "reschedule" };
 
 export interface CombatIntroOpponent {
   opponentName: string;
@@ -85,58 +114,372 @@ export function combatTriggerLabel(
   )}/${formatSignedCombatStat(event.healthDelta)}`;
 }
 
+export function combatDamageCapLabel(
+  event: BattleEvent | undefined,
+): string | undefined {
+  if (
+    event?.type !== "heroDamage" ||
+    event.damageCap === undefined ||
+    (event.damagePreventedByCap ?? 0) <= 0
+  ) {
+    return undefined;
+  }
+  return `伤害上限 ${event.damageCap} · 减免 ${event.damagePreventedByCap}`;
+}
+
 export function isCombatPlaybackEvent(event: BattleEvent): boolean {
   return event.type !== "battleStart" && event.type !== "battleEnd";
 }
 
-export function initialCombatPlayback(eventCount: number): {
-  revealedCount: number;
-  complete: boolean;
-} {
-  const safeEventCount = Number.isFinite(eventCount)
+function safeCombatPlaybackEventCount(eventCount: number): number {
+  return Number.isFinite(eventCount)
     ? Math.max(0, Math.trunc(eventCount))
     : 0;
+}
+
+function clampCombatPlaybackCount(
+  revealedCount: number,
+  eventCount: number,
+): number {
+  return Math.min(
+    eventCount,
+    Math.max(0, Math.trunc(revealedCount)),
+  );
+}
+
+export function createCombatPlaybackTimeline(
+  battle: Pick<
+    BattleSummary,
+    "round" | "playerAId" | "playerBId" | "isGhost" | "events"
+  >,
+): CombatPlaybackTimeline {
   return {
-    revealedCount: safeEventCount > 0 ? 1 : 0,
-    complete: safeEventCount === 0,
+    battleKey: combatPlaybackKey(battle),
+    events: battle.events.filter(isCombatPlaybackEvent),
+  };
+}
+
+export function createCombatPlaybackState(
+  timeline: CombatPlaybackTimeline,
+): CombatPlaybackState {
+  const eventCount = safeCombatPlaybackEventCount(timeline.events.length);
+  const revealedCount = eventCount > 0 ? 1 : 0;
+  return {
+    battleKey: timeline.battleKey,
+    revealedCount,
+    furthestRevealedCount: revealedCount,
+    resultUnlocked: eventCount === 0,
+    status: eventCount > 0 ? "playing" : "complete",
+    revision: 0,
+  };
+}
+
+export function transitionCombatPlayback(
+  state: CombatPlaybackState,
+  action: CombatPlaybackAction,
+  timeline: CombatPlaybackTimeline,
+): CombatPlaybackState {
+  if (state.battleKey !== timeline.battleKey) {
+    return state;
+  }
+
+  const eventCount = safeCombatPlaybackEventCount(timeline.events.length);
+  if (eventCount === 0) {
+    return state.revealedCount === 0 &&
+      state.furthestRevealedCount === 0 &&
+      state.resultUnlocked &&
+      state.status === "complete"
+      ? state
+      : {
+          battleKey: timeline.battleKey,
+          revealedCount: 0,
+          furthestRevealedCount: 0,
+          resultUnlocked: true,
+          status: "complete",
+          revision: state.revision + 1,
+        };
+  }
+
+  const revealedCount = clampCombatPlaybackCount(
+    state.revealedCount,
+    eventCount,
+  );
+  const furthestRevealedCount = clampCombatPlaybackCount(
+    Math.max(state.furthestRevealedCount, revealedCount),
+    eventCount,
+  );
+  const nextRevision = state.revision + 1;
+  if (action.type === "replay") {
+    const initial = createCombatPlaybackState(timeline);
+    return {
+      ...initial,
+      furthestRevealedCount: Math.max(
+        furthestRevealedCount,
+        initial.furthestRevealedCount,
+      ),
+      resultUnlocked: state.resultUnlocked,
+      revision: nextRevision,
+    };
+  }
+  if (action.type === "skip") {
+    if (
+      state.status === "complete" &&
+      revealedCount === eventCount &&
+      furthestRevealedCount === eventCount &&
+      state.resultUnlocked
+    ) {
+      return state;
+    }
+    return {
+      battleKey: timeline.battleKey,
+      revealedCount: eventCount,
+      furthestRevealedCount: eventCount,
+      resultUnlocked: true,
+      status: "complete",
+      revision: nextRevision,
+    };
+  }
+  if (action.type === "reschedule") {
+    if (state.status === "complete") return state;
+    return {
+      ...state,
+      revealedCount,
+      furthestRevealedCount,
+      revision: nextRevision,
+    };
+  }
+  if (action.type === "pause") {
+    if (state.status === "complete" || state.status === "paused") {
+      return state;
+    }
+    return {
+      battleKey: timeline.battleKey,
+      revealedCount,
+      furthestRevealedCount,
+      resultUnlocked: state.resultUnlocked,
+      status: "paused",
+      revision: nextRevision,
+    };
+  }
+  if (action.type === "play") {
+    if (state.status === "complete" || state.status === "playing") {
+      return state;
+    }
+    return {
+      battleKey: timeline.battleKey,
+      revealedCount,
+      furthestRevealedCount,
+      resultUnlocked: state.resultUnlocked,
+      status: "playing",
+      revision: nextRevision,
+    };
+  }
+  if (action.type === "tick") {
+    if (
+      state.status !== "playing" ||
+      state.revision !== action.expectedRevision ||
+      revealedCount !== action.expectedRevealedCount
+    ) {
+      return state;
+    }
+    if (revealedCount >= eventCount) {
+      return {
+        battleKey: timeline.battleKey,
+        revealedCount: eventCount,
+        furthestRevealedCount: eventCount,
+        resultUnlocked: true,
+        status: "complete",
+        revision: state.revision,
+      };
+    }
+    const nextRevealedCount = revealedCount + 1;
+    return {
+      battleKey: timeline.battleKey,
+      revealedCount: nextRevealedCount,
+      furthestRevealedCount: Math.max(
+        furthestRevealedCount,
+        nextRevealedCount,
+      ),
+      resultUnlocked: state.resultUnlocked,
+      status: "playing",
+      revision: state.revision,
+    };
+  }
+  if (action.type === "step") {
+    if (action.direction === "backward") {
+      return {
+        battleKey: timeline.battleKey,
+        revealedCount:
+          state.status === "complete"
+            ? eventCount
+            : Math.max(0, revealedCount - 1),
+        furthestRevealedCount,
+        resultUnlocked: state.resultUnlocked,
+        status: "paused",
+        revision: nextRevision,
+      };
+    }
+    if (revealedCount >= eventCount) {
+      return {
+        battleKey: timeline.battleKey,
+        revealedCount: eventCount,
+        furthestRevealedCount: eventCount,
+        resultUnlocked: true,
+        status: "complete",
+        revision: nextRevision,
+      };
+    }
+    const nextRevealedCount = revealedCount + 1;
+    return {
+      battleKey: timeline.battleKey,
+      revealedCount: nextRevealedCount,
+      furthestRevealedCount: Math.max(
+        furthestRevealedCount,
+        nextRevealedCount,
+      ),
+      resultUnlocked: state.resultUnlocked,
+      status: "paused",
+      revision: nextRevision,
+    };
+  }
+
+  if (!Number.isFinite(action.revealedCount)) {
+    return state;
+  }
+  const seekLimit = state.resultUnlocked
+    ? eventCount
+    : furthestRevealedCount;
+  return {
+    battleKey: timeline.battleKey,
+    revealedCount: clampCombatPlaybackCount(
+      action.revealedCount,
+      seekLimit,
+    ),
+    furthestRevealedCount,
+    resultUnlocked: state.resultUnlocked,
+    status: "paused",
+    revision: nextRevision,
+  };
+}
+
+export function combatPlaybackRevealCountForEvent(
+  events: readonly BattleEvent[],
+  eventIndex: number,
+): number | null {
+  let revealedCount = 0;
+  for (const event of events) {
+    if (!isCombatPlaybackEvent(event)) continue;
+    revealedCount += 1;
+    if (event.index === eventIndex) return revealedCount;
+  }
+  return null;
+}
+
+export function combatPlaybackSessionSnapshot(
+  state: CombatPlaybackState,
+): CombatPlaybackSessionSnapshot {
+  return {
+    battleKey: state.battleKey,
+    revealedCount: state.revealedCount,
+    furthestRevealedCount: state.furthestRevealedCount,
+    resultUnlocked: state.resultUnlocked,
+    status: state.status,
   };
 }
 
 export function resumeCombatPlayback(
-  battle: Pick<
-    BattleSummary,
-    "round" | "playerAId" | "playerBId" | "isGhost"
-  >,
-  eventCount: number,
+  timeline: CombatPlaybackTimeline,
   snapshot: unknown,
-): CombatPlaybackSnapshot | null {
+): CombatPlaybackState | null {
   if (!snapshot || typeof snapshot !== "object") {
     return null;
   }
-  const candidate = snapshot as Partial<CombatPlaybackSnapshot>;
-  const battleKey = combatPlaybackKey(battle);
+  const candidate = snapshot as Partial<CombatPlaybackState> & {
+    complete?: unknown;
+  };
+  const battleKey = timeline.battleKey;
   if (
     candidate.battleKey !== battleKey ||
     typeof candidate.revealedCount !== "number" ||
     !Number.isFinite(candidate.revealedCount) ||
-    candidate.revealedCount < 0 ||
-    typeof candidate.complete !== "boolean"
+    candidate.revealedCount < 0
   ) {
     return null;
   }
 
-  const safeEventCount = Number.isFinite(eventCount)
-    ? Math.max(0, Math.trunc(eventCount))
-    : 0;
-  const initial = initialCombatPlayback(safeEventCount);
-  const revealedCount = Math.min(
-    safeEventCount,
-    Math.max(initial.revealedCount, Math.trunc(candidate.revealedCount)),
+  const safeEventCount = safeCombatPlaybackEventCount(
+    timeline.events.length,
   );
+  let status: CombatPlaybackStatus;
+  let revealedCount: number;
+  let furthestRevealedCount: number;
+  let resultUnlocked: boolean;
+  if (candidate.status !== undefined) {
+    if (
+      candidate.status !== "playing" &&
+      candidate.status !== "paused" &&
+      candidate.status !== "complete"
+    ) {
+      return null;
+    }
+    status = candidate.status;
+    if (
+      typeof candidate.furthestRevealedCount !== "number" ||
+      !Number.isFinite(candidate.furthestRevealedCount) ||
+      candidate.furthestRevealedCount < 0 ||
+      typeof candidate.resultUnlocked !== "boolean"
+    ) {
+      return null;
+    }
+    revealedCount = clampCombatPlaybackCount(
+      candidate.revealedCount,
+      safeEventCount,
+    );
+    furthestRevealedCount = clampCombatPlaybackCount(
+      Math.max(candidate.furthestRevealedCount, revealedCount),
+      safeEventCount,
+    );
+    resultUnlocked = candidate.resultUnlocked;
+  } else if (typeof candidate.complete === "boolean") {
+    status = candidate.complete ? "complete" : "playing";
+    const initial = createCombatPlaybackState(timeline);
+    revealedCount = Math.min(
+      safeEventCount,
+      Math.max(
+        initial.revealedCount,
+        Math.trunc(candidate.revealedCount),
+      ),
+    );
+    resultUnlocked =
+      candidate.complete && revealedCount >= safeEventCount;
+    furthestRevealedCount = resultUnlocked
+      ? safeEventCount
+      : revealedCount;
+  } else {
+    return null;
+  }
+
+  if (safeEventCount === 0) {
+    status = "complete";
+    revealedCount = 0;
+    furthestRevealedCount = 0;
+    resultUnlocked = true;
+  } else if (status === "complete" && revealedCount < safeEventCount) {
+    status = resultUnlocked ? "paused" : "playing";
+  }
+  if (status === "complete") {
+    resultUnlocked = true;
+    furthestRevealedCount = safeEventCount;
+  } else if (resultUnlocked) {
+    furthestRevealedCount = safeEventCount;
+  }
   return {
     battleKey,
     revealedCount,
-    complete: candidate.complete && revealedCount >= safeEventCount,
+    furthestRevealedCount,
+    resultUnlocked,
+    status,
+    revision: 0,
   };
 }
 

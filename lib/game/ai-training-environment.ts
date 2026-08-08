@@ -517,10 +517,18 @@ function recruitCandidates(state: GameState): CandidateAction[] {
         ),
       );
     } else {
+      const shopTargets = player.shop.map((_minion, index) =>
+        reference("shop", index),
+      );
+      const boardTargets = player.board.map((_minion, index) =>
+        reference("board", index),
+      );
       const targets =
         heroPowerQuote.targetKind === "shop"
-          ? player.shop.map((_minion, index) => reference("shop", index))
-          : player.board.map((_minion, index) => reference("board", index));
+          ? shopTargets
+          : heroPowerQuote.targetKind === "board"
+            ? boardTargets
+            : [...shopTargets, ...boardTargets];
       for (const target of targets) {
         const targetInstanceId =
           target.zone === "shop"

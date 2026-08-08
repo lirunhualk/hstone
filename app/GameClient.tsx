@@ -36,6 +36,7 @@ import {
   getMinionPurchaseQuote,
   getMinionSellValue,
   getMaximumTavernTier,
+  getSoloCombatDamageCap,
   getTavernRefreshQuote,
   getHeroDefinition,
   getHeroPowerDefinition,
@@ -79,6 +80,7 @@ import {
 } from "../lib/game/engine";
 import {
   isPersistedSecretChoiceInteraction,
+  persistedGalakrondDiscoverMatchesPlayer,
   persistedSecretChoiceMatchesPlayer,
 } from "../lib/game/client-save";
 import {
@@ -88,17 +90,27 @@ import {
 } from "../lib/game/content";
 import { isTierThreeDarkmoonPrizeDefinitionId } from "../lib/game/darkmoon-prizes";
 import {
-  COMBAT_START_INTRO_DURATION_MS,
   combatBuffLabel,
+  combatDamageCapLabel,
   combatIntroOpponent,
-  combatPlaybackKey,
+  combatPlaybackRevealCountForEvent,
+  combatPlaybackSessionSnapshot,
   combatTriggerLabel,
-  initialCombatPlayback,
-  isCombatPlaybackEvent,
+  createCombatPlaybackState,
+  createCombatPlaybackTimeline,
   projectCombatArmor,
   projectCombatHealth,
   resumeCombatPlayback,
+  transitionCombatPlayback,
+  type CombatPlaybackAction,
+  type CombatPlaybackState,
 } from "../lib/game/combat-presentation";
+import {
+  combatEntryStageDuration,
+  createCombatEntryPresentation,
+  transitionCombatEntryPresentation,
+  type CombatEntryPresentationState,
+} from "../lib/game/combat-entry-presentation";
 import {
   cardInspectionDelay,
   movedBeyondCardInspectionTolerance,
@@ -113,6 +125,39 @@ import {
 } from "../lib/game/drag-preview";
 import { interactionRequiresModalBackdrop } from "../lib/game/interaction-presentation";
 import {
+  createDiscoverChoicePresentation,
+  discoverChoicePresentationDuration,
+  findDiscoverTripleReward,
+  transitionDiscoverChoicePresentation,
+  type DiscoverChoicePresentationState,
+} from "../lib/game/discover-choice-presentation";
+import {
+  createHeroChoicePresentation,
+  heroChoicePresentationDuration,
+  transitionHeroChoicePresentation,
+  type HeroChoicePresentationState,
+} from "../lib/game/hero-choice-presentation";
+import {
+  createHeroPowerPresentation,
+  heroPowerPresentationAnnouncement,
+  heroPowerPresentationDuration,
+  transitionHeroPowerPresentation,
+  type HeroPowerPresentationState,
+} from "../lib/game/hero-power-presentation";
+import {
+  createTrinketChoicePresentation,
+  transitionTrinketChoicePresentation,
+  trinketChoicePresentationDuration,
+  type TrinketChoicePresentationState,
+} from "../lib/game/trinket-choice-presentation";
+import {
+  createTripleForgePresentation,
+  transitionTripleForgePresentation,
+  tripleForgePresentationDuration,
+  tripleForgeStageAnnouncement,
+  type TripleForgePresentationState,
+} from "../lib/game/triple-forge-presentation";
+import {
   activeMinionKeywordVisuals,
   type MinionKeywordVisual,
 } from "../lib/game/minion-presentation";
@@ -125,10 +170,25 @@ import {
 import {
   completeRecruitPresentation,
   deriveRecruitPresentation,
+  groupRecruitPresentationEvents,
   recruitPresentationAnnouncement,
   recruitPresentationDuration,
   type RecruitPresentationEvent,
 } from "../lib/game/recruit-presentation";
+import {
+  createRecruitEntryPresentation,
+  recruitEntryAnnouncement,
+  recruitEntryStageDuration,
+  transitionRecruitEntryPresentation,
+  type RecruitEntryPresentationState,
+} from "../lib/game/recruit-entry-presentation";
+import {
+  createSpellCastPresentation,
+  spellCastPresentationAnnouncement,
+  spellCastPresentationDuration,
+  transitionSpellCastPresentation,
+  type SpellCastPresentationState,
+} from "../lib/game/spell-cast-presentation";
 import { normalizePersistedGameState } from "../lib/game/save";
 import {
   DEFAULT_INITIAL_HEALTH,
@@ -141,6 +201,8 @@ import {
 
 const SAVE_KEY = "hearthstone-battlegrounds-local.save.v11";
 const COMBAT_PLAYBACK_SESSION_KEY =
+  "hearthstone-battlegrounds-local.combat-playback.v2";
+const LEGACY_COMBAT_PLAYBACK_SESSION_KEY =
   "hearthstone-battlegrounds-local.combat-playback.v1";
 const LEGACY_SAVE_KEYS = [
   "hearthstone-battlegrounds-local.save.v10",
@@ -211,15 +273,32 @@ function safeRemoveSessionStorage(key: string): void {
   }
 }
 
-function readCombatPlaybackSession(): unknown {
-  const raw = safeReadSessionStorage(COMBAT_PLAYBACK_SESSION_KEY);
-  if (!raw) return null;
-  try {
-    return JSON.parse(raw) as unknown;
-  } catch {
-    safeRemoveSessionStorage(COMBAT_PLAYBACK_SESSION_KEY);
-    return null;
+function readCombatPlaybackSession(
+  timeline: Parameters<typeof resumeCombatPlayback>[0],
+): CombatPlaybackState | null {
+  for (const key of [
+    COMBAT_PLAYBACK_SESSION_KEY,
+    LEGACY_COMBAT_PLAYBACK_SESSION_KEY,
+  ]) {
+    const raw = safeReadSessionStorage(key);
+    if (!raw) continue;
+    try {
+      const resumed = resumeCombatPlayback(
+        timeline,
+        JSON.parse(raw) as unknown,
+      );
+      if (resumed) return resumed;
+      safeRemoveSessionStorage(key);
+    } catch {
+      safeRemoveSessionStorage(key);
+    }
   }
+  return null;
+}
+
+function clearCombatPlaybackSession(): void {
+  safeRemoveSessionStorage(COMBAT_PLAYBACK_SESSION_KEY);
+  safeRemoveSessionStorage(LEGACY_COMBAT_PLAYBACK_SESSION_KEY);
 }
 
 type Selection =
@@ -320,15 +399,9 @@ type CardInspectionHandlers = {
   onBlur: FocusEventHandler<HTMLButtonElement>;
 };
 
-type BattleSpeed = 1 | 2;
+type BattleSpeed = 1 | 2 | 4;
 
 type CombatPresentationStage = "intro" | "playback" | "result";
-
-type BattlePlaybackState = {
-  battleKey: string | null;
-  revealedCount: number;
-  complete: boolean;
-};
 
 type CombatRewardSummary = {
   addedCount: number;
@@ -352,6 +425,51 @@ type TavernSpellCastFeedback = {
   token: string;
 };
 
+type SpellCastMotionGeometry = {
+  fromLeft: number;
+  fromTop: number;
+  fromWidth: number;
+  fromHeight: number;
+  liftX: number;
+  liftY: number;
+  releaseX: number;
+  releaseY: number;
+  travelX: number;
+  travelY: number;
+  impactLeft: number;
+  impactTop: number;
+  impactWidth: number;
+  impactHeight: number;
+  impactScope: "target" | "board";
+};
+
+type SpellCastPresentationView = {
+  state: SpellCastPresentationState;
+  card: TavernSpellInstance | SpellcraftSpellInstance;
+  targetCard: BoardMinionInstance | null;
+  motion: SpellCastMotionGeometry;
+};
+
+type HeroPowerPresentationGeometry = {
+  left: number;
+  top: number;
+  width: number;
+  height: number;
+};
+
+type HeroPowerPresentationTargetView = {
+  instanceId: string;
+  name: string;
+  zone: "shop" | "board";
+  geometry: HeroPowerPresentationGeometry;
+};
+
+type HeroPowerPresentationView = {
+  state: HeroPowerPresentationState;
+  geometry: HeroPowerPresentationGeometry;
+  target: HeroPowerPresentationTargetView | null;
+};
+
 type RecruitMotionGeometry = {
   fromLeft: number;
   fromTop: number;
@@ -361,11 +479,132 @@ type RecruitMotionGeometry = {
   travelY: number;
 };
 
+type RecruitTripleHandoffGeometry = {
+  travelX: number;
+  travelY: number;
+};
+
 type RecruitPresentationBatch = {
   token: number;
   events: RecruitPresentationEvent[];
   announcement: string;
   motion: RecruitMotionGeometry | null;
+  tripleForge: TripleForgePresentationState | null;
+  tripleHandoff: RecruitTripleHandoffGeometry | null;
+};
+
+type DiscoverPresentationOption =
+  | {
+      kind: "minion";
+      card: BoardMinionInstance;
+    }
+  | {
+      kind: "tavernSpell";
+      card: TavernSpellInstance;
+    }
+  | {
+      kind: "darkmoonPrize";
+      card: SpellcraftSpellInstance;
+    };
+
+type DiscoverRewardStrategy =
+  | "selected"
+  | "generatedMinion"
+  | "shopReplace"
+  | "immediate";
+
+type DiscoverChoicePresentationView = {
+  state: DiscoverChoicePresentationState;
+  title: string;
+  copy: string;
+  options: readonly DiscoverPresentationOption[];
+  rewardCard: DiscoverPresentationOption | null;
+  outcomeLabel: string;
+  rewardStrategy: DiscoverRewardStrategy;
+  shopTarget: HeroPowerPresentationTargetView | null;
+  handTravelX: number;
+  handTravelY: number;
+  shopTravelX: number;
+  shopTravelY: number;
+};
+
+type PendingDiscoverRecruitPresentation = {
+  events: RecruitPresentationEvent[];
+  motion: RecruitMotionGeometry | null;
+};
+
+type SendGameActionOptions = {
+  deferRecruitPresentation?: boolean;
+};
+
+type ResolveDiscoverChoicePresentationInput = {
+  interactionId: string;
+  options: readonly DiscoverPresentationOption[];
+  selectedOptionId: string;
+  title: string;
+  copy: string;
+  rewardStrategy: DiscoverRewardStrategy;
+  shopTargetInstanceId?: string;
+};
+
+function snapshotDiscoverPresentationOption(
+  option: DiscoverPresentationOption,
+): DiscoverPresentationOption {
+  if (option.kind === "minion") {
+    return { kind: "minion", card: { ...option.card } };
+  }
+  if (option.kind === "tavernSpell") {
+    return { kind: "tavernSpell", card: { ...option.card } };
+  }
+  return { kind: "darkmoonPrize", card: { ...option.card } };
+}
+
+function discoverHandTravel(): { x: number; y: number } {
+  const handRow = document.querySelector<HTMLElement>(
+    '[data-testid="hand-row"]',
+  );
+  if (!handRow) {
+    return { x: 0, y: Math.max(180, window.innerHeight * 0.32) };
+  }
+  const handRect = handRow.getBoundingClientRect();
+  return {
+    x: handRect.left + handRect.width / 2 - window.innerWidth / 2,
+    y:
+      handRect.top +
+      Math.min(handRect.height / 2, 72) -
+      window.innerHeight / 2,
+  };
+}
+
+function trinketHudTravel(
+  tier: "lesser" | "greater",
+): { x: number; y: number } {
+  const target = document.querySelector<HTMLElement>(
+    `[data-testid="trinket-hud-slot-${tier}"]`,
+  );
+  if (!target) {
+    return {
+      x: Math.max(180, window.innerWidth * 0.32),
+      y: -Math.max(180, window.innerHeight * 0.32),
+    };
+  }
+  const targetRect = target.getBoundingClientRect();
+  return {
+    x:
+      targetRect.left +
+      targetRect.width / 2 -
+      window.innerWidth / 2,
+    y:
+      targetRect.top +
+      targetRect.height / 2 -
+      window.innerHeight / 2,
+  };
+}
+
+type PendingRecruitEntryFeedback = {
+  rewardNotice: CombatRewardSummary | null;
+  rewardIds: string[];
+  presentationEvents: RecruitPresentationEvent[];
 };
 
 function humanPlayerForPresentation(
@@ -394,6 +633,172 @@ function cardElementForPresentation(
   return null;
 }
 
+function handCardElementForPresentation(
+  instanceId: string,
+): HTMLElement | null {
+  const candidates = document.querySelectorAll<HTMLElement>(
+    '[data-testid^="hand-card-"][data-unit-instance-id]',
+  );
+  for (const candidate of candidates) {
+    if (candidate.dataset.unitInstanceId === instanceId) {
+      return candidate;
+    }
+  }
+  return null;
+}
+
+function captureSpellCastMotion(
+  cardInstanceId: string,
+  targetInstanceId?: string,
+): SpellCastMotionGeometry {
+  const viewportWidth = Math.max(1, window.innerWidth);
+  const viewportHeight = Math.max(1, window.innerHeight);
+  const source = cardElementForPresentation(cardInstanceId);
+  const measuredSource = source?.getBoundingClientRect();
+  const hasMeasuredSource =
+    measuredSource !== undefined &&
+    measuredSource.width > 0 &&
+    measuredSource.height > 0;
+  const fromWidth = hasMeasuredSource
+    ? measuredSource.width
+    : Math.min(132, Math.max(88, viewportWidth * 0.13));
+  const fromHeight = hasMeasuredSource
+    ? measuredSource.height
+    : fromWidth * 1.42;
+  const fromLeft = hasMeasuredSource
+    ? measuredSource.left
+    : viewportWidth / 2 - fromWidth / 2;
+  const fromTop = hasMeasuredSource
+    ? measuredSource.top
+    : viewportHeight - fromHeight - 24;
+
+  const board = document.querySelector<HTMLElement>(
+    '[data-board-drop-zone="true"]',
+  );
+  const impactElement = targetInstanceId
+    ? cardElementForPresentation(targetInstanceId)
+    : board;
+  const measuredImpact = impactElement?.getBoundingClientRect();
+  const hasMeasuredImpact =
+    measuredImpact !== undefined &&
+    measuredImpact.width > 0 &&
+    measuredImpact.height > 0;
+  const impactScope = targetInstanceId ? "target" : "board";
+  const impactWidth = hasMeasuredImpact
+    ? measuredImpact.width
+    : impactScope === "target"
+      ? Math.min(126, viewportWidth * 0.16)
+      : Math.min(860, viewportWidth * 0.72);
+  const impactHeight = hasMeasuredImpact
+    ? measuredImpact.height
+    : impactScope === "target"
+      ? impactWidth * 1.28
+      : Math.min(270, viewportHeight * 0.3);
+  const impactLeft = hasMeasuredImpact
+    ? measuredImpact.left
+    : viewportWidth / 2 - impactWidth / 2;
+  const impactTop = hasMeasuredImpact
+    ? measuredImpact.top
+    : viewportHeight * 0.42 - impactHeight / 2;
+
+  const sourceCenterX = fromLeft + fromWidth / 2;
+  const sourceCenterY = fromTop + fromHeight / 2;
+  const impactCenterX = impactLeft + impactWidth / 2;
+  const impactCenterY = impactTop + impactHeight / 2;
+  const travelX = impactCenterX - sourceCenterX;
+  const travelY = impactCenterY - sourceCenterY;
+
+  return {
+    fromLeft,
+    fromTop,
+    fromWidth,
+    fromHeight,
+    liftX: travelX * 0.3,
+    liftY: travelY * 0.3 - 34,
+    releaseX: travelX * 0.76,
+    releaseY: travelY * 0.76 - 14,
+    travelX,
+    travelY,
+    impactLeft,
+    impactTop,
+    impactWidth,
+    impactHeight,
+    impactScope,
+  };
+}
+
+function captureHeroPowerPresentationGeometry(): HeroPowerPresentationGeometry {
+  const viewportWidth = Math.max(1, window.innerWidth);
+  const source = document.querySelector<HTMLElement>(
+    '[data-testid="human-hero-power"]',
+  );
+  const measured = source?.getBoundingClientRect();
+  if (measured && measured.width > 0 && measured.height > 0) {
+    return {
+      left: measured.left,
+      top: measured.top,
+      width: measured.width,
+      height: measured.height,
+    };
+  }
+  const width = Math.min(230, Math.max(150, viewportWidth * 0.18));
+  return {
+    left: Math.max(12, viewportWidth / 2 - width / 2),
+    top: 12,
+    width,
+    height: 64,
+  };
+}
+
+function captureHeroPowerPresentationTarget(
+  player: PlayerState,
+  targetInstanceId: string | undefined,
+): HeroPowerPresentationTargetView | null {
+  if (!targetInstanceId) return null;
+  const shopTarget = player.shop.find(
+    (minion) => minion.instanceId === targetInstanceId,
+  );
+  const boardTarget = player.board.find(
+    (minion) => minion.instanceId === targetInstanceId,
+  );
+  const target = shopTarget ?? boardTarget;
+  if (!target) return null;
+  const element = Array.from(
+    document.querySelectorAll<HTMLElement>("[data-unit-instance-id]"),
+  ).find(
+    (candidate) =>
+      candidate.dataset.unitInstanceId === targetInstanceId,
+  );
+  const measured = element?.getBoundingClientRect();
+  if (!measured || measured.width <= 0 || measured.height <= 0) {
+    return null;
+  }
+  return {
+    instanceId: target.instanceId,
+    name: target.name,
+    zone: shopTarget ? "shop" : "board",
+    geometry: {
+      left: measured.left,
+      top: measured.top,
+      width: measured.width,
+      height: measured.height,
+    },
+  };
+}
+
+function heroPowerPresentationTargetPath(
+  source: HeroPowerPresentationGeometry,
+  target: HeroPowerPresentationGeometry,
+): string {
+  const sourceX = source.left + source.width * 0.2;
+  const sourceY = source.top + source.height * 0.56;
+  const targetX = target.left + target.width / 2;
+  const targetY = target.top + target.height / 2;
+  const controlX = (sourceX + targetX) / 2;
+  const controlY = Math.min(sourceY, targetY) - 72;
+  return `M ${sourceX} ${sourceY} Q ${controlX} ${controlY} ${targetX} ${targetY}`;
+}
+
 function captureRecruitMotion(
   state: GameState,
   action: GameAction,
@@ -403,6 +808,7 @@ function captureRecruitMotion(
 
   let instanceId: string | null = null;
   let targetTestId: "hand-row" | "tavern-keeper" | null = null;
+  let target: HTMLElement | null = null;
   if (action.type === "BUY_MINION") {
     instanceId = player.shop[action.shopIndex]?.instanceId ?? null;
     targetTestId = "hand-row";
@@ -422,11 +828,33 @@ function captureRecruitMotion(
   } else if (action.type === "SELL_MINION") {
     instanceId = player.board[action.boardIndex]?.instanceId ?? null;
     targetTestId = "tavern-keeper";
+  } else if (
+    action.type === "PLAY_HAND_CARD" ||
+    action.type === "PLAY_MINION"
+  ) {
+    const card =
+      action.type === "PLAY_HAND_CARD"
+        ? player.hand.find(
+            (candidate) => candidate.instanceId === action.cardInstanceId,
+          )
+        : player.hand[action.handIndex];
+    if (card?.kind !== "minion") return null;
+    instanceId = card.instanceId;
+    const requestedIndex = Math.max(
+      0,
+      Math.min(action.boardIndex ?? player.board.length, player.board.length),
+    );
+    target = document.querySelector<HTMLElement>(
+      `[data-board-insert-index="${requestedIndex}"], [data-board-slot-index="${requestedIndex}"]`,
+    );
+    target ??= document.querySelector<HTMLElement>(
+      '[data-board-drop-zone="true"]',
+    );
   }
-  if (!instanceId || !targetTestId) return null;
+  if (!instanceId || (!targetTestId && !target)) return null;
 
   const source = cardElementForPresentation(instanceId);
-  const target = document.querySelector<HTMLElement>(
+  target ??= document.querySelector<HTMLElement>(
     `[data-testid="${targetTestId}"]`,
   );
   if (!source || !target) return null;
@@ -991,6 +1419,8 @@ function isPendingInteraction(
         typeof value.destination.targetInstanceId === "string") ||
       (value.destination.kind === "transform" &&
         typeof value.destination.targetInstanceId === "string") ||
+      (value.destination.kind === "replaceShop" &&
+        typeof value.destination.targetInstanceId === "string") ||
       (value.destination.kind === "customUndeadFirst" &&
         typeof value.destination.sourceTrinketDefinitionId === "string" &&
         isTrinketDefinitionId(
@@ -1013,7 +1443,9 @@ function isPendingInteraction(
       value.filter.ability === "battlecry" ||
       value.filter.ability === "deathrattle") &&
     (value.filter.requiresMinionType === undefined ||
-      typeof value.filter.requiresMinionType === "boolean");
+      typeof value.filter.requiresMinionType === "boolean") &&
+    (value.filter.usesSharedPool === undefined ||
+      typeof value.filter.usesSharedPool === "boolean");
   const validSelectionEffect =
     value.selectionEffect === undefined ||
     (isRecord(value.selectionEffect) &&
@@ -1066,6 +1498,7 @@ function isPendingInteraction(
 function pendingInteractionMatchesPlayer(
   interaction: PendingInteraction,
   players: readonly PlayerState[],
+  maximumTavernTier: ReturnType<typeof getMaximumTavernTier>,
 ): boolean {
   const player = players.find(
     (candidate) => candidate.id === interaction.playerId,
@@ -1094,6 +1527,16 @@ function pendingInteractionMatchesPlayer(
       destination.kind === "transform"
     ) {
       return boardIds.has(destination.targetInstanceId);
+    }
+    if (destination.kind === "replaceShop") {
+      return (
+        shopIds.has(destination.targetInstanceId) &&
+        persistedGalakrondDiscoverMatchesPlayer(
+          interaction,
+          player,
+          maximumTavernTier,
+        )
+      );
     }
     if (
       !player.trinketIds.includes(destination.sourceTrinketDefinitionId) ||
@@ -1798,6 +2241,7 @@ function isGameState(value: unknown): value is GameState {
         pendingInteractionMatchesPlayer(
           candidate.pendingInteraction,
           candidate.players,
+          getMaximumTavernTier(candidate as unknown as GameState),
         ) &&
         pendingTrinketChoiceMatchesState(
           candidate.pendingInteraction,
@@ -2119,6 +2563,8 @@ function UnitCard({
   tavernSpellCastToken,
   heroPowerTarget = false,
   newlyGenerated = false,
+  tripleForgePending = false,
+  discoverRewardPending = false,
   locked = false,
   disabled = false,
   combatShieldBurst = false,
@@ -2183,6 +2629,8 @@ function UnitCard({
   tavernSpellCastToken?: string;
   heroPowerTarget?: boolean;
   newlyGenerated?: boolean;
+  tripleForgePending?: boolean;
+  discoverRewardPending?: boolean;
   locked?: boolean;
   disabled?: boolean;
   dragHandlers?: DragPointerHandlers;
@@ -2271,10 +2719,15 @@ function UnitCard({
       }${heroPowerTarget ? " is-hero-power-target" : ""}${
         newlyGenerated ? " is-newly-generated" : ""
       }${
+        tripleForgePending ? " is-triple-forge-pending" : ""
+      }${
+        discoverRewardPending ? " is-discover-reward-pending" : ""
+      }${
         locked ? " is-turn-locked" : ""
       }${
         disabled ? " is-disabled" : ""
       }`}
+      aria-hidden={tripleForgePending || undefined}
       aria-label={`${unit.name}，${unit.tier} 级，${printedTribeLabel(
         unit,
       )}，${unit.attack} 攻击，${unit.health} 生命，${
@@ -2286,6 +2739,8 @@ function UnitCard({
               .join("、")}`
           : ""
       }${choiceTarget ? "，可选择为效果目标" : ""}${
+        heroPowerTarget ? "，可作为英雄技能目标" : ""
+      }${
         magneticTarget ? "，可作为磁力吸附目标" : ""
       }${bloodGemTarget ? "，可作为鲜血宝石目标" : ""}${
         tavernSpellTarget
@@ -2311,6 +2766,7 @@ function UnitCard({
       aria-describedby={
         [
           dragEnabled ? "drag-instructions" : "",
+          heroPowerTarget ? "hero-power-target-instructions" : "",
           magneticTarget ? "magnetic-target-instructions" : "",
           bloodGemTarget ? "blood-gem-target-instructions" : "",
           tavernSpellTarget
@@ -2331,6 +2787,8 @@ function UnitCard({
       data-tavern-spell-target={tavernSpellTarget || undefined}
       data-tavern-spell-drop-target={tavernSpellDropTarget || undefined}
       data-newly-generated={newlyGenerated || undefined}
+      data-triple-forge-pending={tripleForgePending || undefined}
+      data-discover-reward-pending={discoverRewardPending || undefined}
       data-turn-locked={locked || undefined}
       data-keyword-visuals={
         keywordVisuals.map(({ kind }) => kind).join(" ") || undefined
@@ -2711,6 +3169,7 @@ function SpellcraftCard({
   card,
   selected = false,
   playable = false,
+  discoverRewardPending = false,
   disabled = false,
   dragging = false,
   dragHandlers,
@@ -2721,6 +3180,7 @@ function SpellcraftCard({
   card: SpellcraftSpellInstance;
   selected?: boolean;
   playable?: boolean;
+  discoverRewardPending?: boolean;
   disabled?: boolean;
   dragging?: boolean;
   dragHandlers?: DragPointerHandlers;
@@ -2736,6 +3196,8 @@ function SpellcraftCard({
       }${
         selected ? " is-selected" : ""
       }${playable ? " is-playable" : ""}${
+        discoverRewardPending ? " is-discover-reward-pending" : ""
+      }${
         dragHandlers ? " is-draggable" : ""
       }${
         dragging ? " is-drag-source" : ""
@@ -2748,6 +3210,7 @@ function SpellcraftCard({
       aria-pressed={selected}
       data-card-instance-id={card.instanceId}
       data-drag-enabled={Boolean(dragHandlers)}
+      data-discover-reward-pending={discoverRewardPending || undefined}
       data-testid={testId}
       disabled={disabled}
       onClick={onClick}
@@ -2812,6 +3275,7 @@ function TavernSpellCard({
   purchaseCurrency,
   selected = false,
   playable = false,
+  discoverRewardPending = false,
   unaffordable = false,
   disabled = false,
   dragging = false,
@@ -2826,6 +3290,7 @@ function TavernSpellCard({
   purchaseCurrency?: "gold" | "health";
   selected?: boolean;
   playable?: boolean;
+  discoverRewardPending?: boolean;
   unaffordable?: boolean;
   disabled?: boolean;
   dragging?: boolean;
@@ -2844,6 +3309,8 @@ function TavernSpellCard({
       className={`tavern-spell-card${inShop ? " is-shop-offer" : ""}${
         selected ? " is-selected" : ""
       }${playable ? " is-playable" : ""}${
+        discoverRewardPending ? " is-discover-reward-pending" : ""
+      }${
         unaffordable ? " is-unaffordable" : ""
       }${
         dragHandlers ? " is-draggable" : ""
@@ -2854,6 +3321,7 @@ function TavernSpellCard({
       aria-pressed={selected}
       data-card-instance-id={card.instanceId}
       data-drag-enabled={Boolean(dragHandlers)}
+      data-discover-reward-pending={discoverRewardPending || undefined}
       data-testid={testId}
       disabled={disabled}
       onClick={onClick}
@@ -2867,6 +3335,56 @@ function TavernSpellCard({
         purchaseCurrency={displayedPurchaseCurrency}
       />
     </button>
+  );
+}
+
+function DiscoverPresentationCard({
+  option,
+  testId,
+}: {
+  option: DiscoverPresentationOption;
+  testId?: string;
+}) {
+  if (option.kind === "minion") {
+    return (
+      <div
+        className="unit-card discover-presentation-card"
+        aria-hidden="true"
+        data-testid={testId}
+        data-unit-instance-id={option.card.instanceId}
+        style={{ "--card-hue": TRIBE_HUE[option.card.tribe] } as CSSProperties}
+      >
+        <UnitCardFace unit={option.card} />
+      </div>
+    );
+  }
+
+  if (option.kind === "tavernSpell") {
+    return (
+      <div
+        className="tavern-spell-card discover-presentation-card"
+        aria-hidden="true"
+        data-card-instance-id={option.card.instanceId}
+        data-testid={testId}
+        style={{ "--card-hue": 266 } as CSSProperties}
+      >
+        <TavernSpellCardFace card={option.card} />
+      </div>
+    );
+  }
+
+  return (
+    <div
+      className={`tavern-spell-card spellcraft-card discover-presentation-card${
+        (option.card.effectMultiplier ?? 1) > 1 ? " is-golden" : ""
+      }`}
+      aria-hidden="true"
+      data-card-instance-id={option.card.instanceId}
+      data-testid={testId}
+      style={{ "--card-hue": 222 } as CSSProperties}
+    >
+      <SpellcraftCardFace card={option.card} />
+    </div>
   );
 }
 
@@ -3213,6 +3731,7 @@ function BoardRow({
   combatRebounding,
   combatChargeX = 0,
   combatChargeY = 0,
+  recruitArrivalInstanceId,
   choiceTargetIds,
   magneticTargetIds,
   magneticDropTargetId,
@@ -3263,6 +3782,7 @@ function BoardRow({
   combatRebounding?: boolean;
   combatChargeX?: number;
   combatChargeY?: number;
+  recruitArrivalInstanceId?: string;
   choiceTargetIds?: readonly string[];
   magneticTargetIds?: readonly string[];
   magneticDropTargetId?: string;
@@ -3402,7 +3922,14 @@ function BoardRow({
                 />
               )}
               <div
-                className="board-card-motion"
+                className={`board-card-motion${
+                  unit.instanceId === recruitArrivalInstanceId
+                    ? " is-recruit-arriving"
+                    : ""
+                }`}
+                data-recruit-arrival={
+                  unit.instanceId === recruitArrivalInstanceId || undefined
+                }
                 data-preview-shift={previewSlot?.shift ?? undefined}
                 data-preview-source={previewSlot?.isSource || undefined}
               >
@@ -3859,10 +4386,26 @@ export default function GameClient() {
   const [cardInspection, setCardInspection] =
     useState<CardInspectionState | null>(null);
   const [magneticAnnouncement, setMagneticAnnouncement] = useState("");
-  const [tavernSpellCastFeedback, setTavernSpellCastFeedback] =
-    useState<TavernSpellCastFeedback | null>(null);
+  const [heroPowerPresentation, setHeroPowerPresentation] =
+    useState<HeroPowerPresentationView | null>(null);
+  const [spellCastPresentation, setSpellCastPresentation] =
+    useState<SpellCastPresentationView | null>(null);
   const [recruitPresentationQueue, setRecruitPresentationQueue] =
     useState<RecruitPresentationBatch[]>([]);
+  const [recruitEntryPresentation, setRecruitEntryPresentation] =
+    useState<RecruitEntryPresentationState | null>(null);
+  const [heroChoicePresentation, setHeroChoicePresentation] =
+    useState<HeroChoicePresentationState | null>(null);
+  const [trinketChoicePresentation, setTrinketChoicePresentation] =
+    useState<TrinketChoicePresentationState | null>(null);
+  const [trinketChoiceHudTravel, setTrinketChoiceHudTravel] = useState({
+    x: 0,
+    y: 0,
+  });
+  const [discoverChoicePresentation, setDiscoverChoicePresentation] =
+    useState<DiscoverChoicePresentationView | null>(null);
+  const [hiddenDiscoverInteractionId, setHiddenDiscoverInteractionId] =
+    useState<string | null>(null);
   const [battleSpeed, setBattleSpeed] = useState<BattleSpeed>(1);
   const [combatRewardNotice, setCombatRewardNotice] =
     useState<CombatRewardSummary | null>(null);
@@ -3870,15 +4413,29 @@ export default function GameClient() {
     [],
   );
   const [battlePlayback, setBattlePlayback] =
-    useState<BattlePlaybackState>({
-      battleKey: null,
-      revealedCount: 0,
-      complete: false,
-    });
-  const [combatIntroCompletedBattleKey, setCombatIntroCompletedBattleKey] =
-    useState<string | null>(null);
+    useState<CombatPlaybackState | null>(null);
+  const [combatEntryPresentation, setCombatEntryPresentation] =
+    useState<CombatEntryPresentationState | null>(null);
   const gameRef = useRef(game);
+  const heroPowerPresentationTokenRef = useRef(0);
+  const spellCastPresentationTokenRef = useRef(0);
   const recruitPresentationTokenRef = useRef(0);
+  const recruitEntryTokenRef = useRef(0);
+  const resolvingHeroChoiceInteractionRef = useRef<string | null>(null);
+  const resolvingTrinketChoiceInteractionRef = useRef<string | null>(null);
+  const pendingTrinketRecruitPresentationRef =
+    useRef<PendingDiscoverRecruitPresentation | null>(null);
+  const resolvingDiscoverInteractionRef = useRef<string | null>(null);
+  const pendingDiscoverRecruitPresentationRef =
+    useRef<PendingDiscoverRecruitPresentation | null>(null);
+  const pendingHeroPowerRecruitPresentationRef =
+    useRef<PendingDiscoverRecruitPresentation | null>(null);
+  const pendingSpellCastRecruitPresentationRef =
+    useRef<PendingDiscoverRecruitPresentation | null>(null);
+  const deferredDiscoverTripleFocusPhaseRef =
+    useRef<"pending" | "active" | null>(null);
+  const pendingRecruitEntryFeedbackRef =
+    useRef<PendingRecruitEntryFeedback | null>(null);
   const dragSessionRef = useRef<DragSession | null>(null);
   const cardInspectionRef = useRef<CardInspectionState | null>(null);
   const cardInspectionTimerRef = useRef<number | null>(null);
@@ -3891,7 +4448,6 @@ export default function GameClient() {
   const suppressCardClickRef = useRef(false);
   const battlePlaybackTimerRef = useRef<number | null>(null);
   const combatIntroTimerRef = useRef<number | null>(null);
-  const tavernSpellCastTimerRef = useRef<number | null>(null);
   const interactionReturnFocusRef = useRef<HTMLElement | null>(null);
   const restartReturnFocusRef = useRef<HTMLElement | null>(null);
   const lobbyOverviewReturnFocusRef = useRef<HTMLElement | null>(null);
@@ -3908,6 +4464,16 @@ export default function GameClient() {
   const queuedRecruitBloodGemPulse = recruitPresentationQueue
     .flatMap((presentation) => presentation.events)
     .find((event) => event.kind === "bloodGemPulse");
+  const tavernSpellCastFeedback: TavernSpellCastFeedback | null =
+    spellCastPresentation?.state.stage === "effectResolve" &&
+    spellCastPresentation.state.targetInstanceId !== null
+      ? {
+          targetInstanceId:
+            spellCastPresentation.state.targetInstanceId,
+          label: spellCastPresentation.state.cardName,
+          token: `${spellCastPresentation.state.cardInstanceId}-${spellCastPresentation.state.revision}`,
+        }
+      : null;
 
   useLayoutEffect(() => {
     gameRef.current = game;
@@ -3989,18 +4555,45 @@ export default function GameClient() {
     writeCardInspection(null);
   }, [clearCardInspectionTimer, writeCardInspection]);
 
-  const clearTavernSpellCastFeedback = useCallback(() => {
-    if (tavernSpellCastTimerRef.current !== null) {
-      window.clearTimeout(tavernSpellCastTimerRef.current);
-      tavernSpellCastTimerRef.current = null;
-    }
-    setTavernSpellCastFeedback(null);
-  }, []);
-
   const clearCombatRewardFeedback = useCallback(() => {
     setCombatRewardNotice(null);
     setNewCombatRewardIds([]);
   }, []);
+
+  const enqueueRecruitPresentationEvents = useCallback(
+    (
+      events: readonly RecruitPresentationEvent[],
+      motion: RecruitMotionGeometry | null = null,
+    ) => {
+      if (events.length === 0) return;
+      const eventGroups = groupRecruitPresentationEvents(events);
+      const presentations = eventGroups.map((group, index) => {
+        recruitPresentationTokenRef.current += 1;
+        const token = recruitPresentationTokenRef.current;
+        const triple = group.find((event) => event.kind === "triple");
+        const presentation: RecruitPresentationBatch = {
+          token,
+          events: group,
+          announcement: recruitPresentationAnnouncement(group),
+          motion: index === 0 ? motion : null,
+          tripleForge:
+            triple?.kind === "triple"
+              ? createTripleForgePresentation({
+                  token,
+                  goldenInstanceId: triple.golden.instanceId,
+                })
+              : null,
+          tripleHandoff: null,
+        };
+        return presentation;
+      });
+      setRecruitPresentationQueue((current) => [
+        ...current,
+        ...presentations,
+      ]);
+    },
+    [],
+  );
 
   useEffect(() => {
     const hydrationTimer = window.setTimeout(() => {
@@ -4011,23 +4604,26 @@ export default function GameClient() {
           setInitialHealthInput(String(saved.initialHealth));
           safeWriteLocalStorage(SAVE_KEY, JSON.stringify(saved));
 
-          const resumedPlayback =
+          const playbackTimeline =
             saved.phase === "combat" && saved.lastBattle
-              ? resumeCombatPlayback(
-                  saved.lastBattle,
-                  saved.lastBattle.events.filter(isCombatPlaybackEvent)
-                    .length,
-                  readCombatPlaybackSession(),
-                )
+              ? createCombatPlaybackTimeline(saved.lastBattle)
               : null;
+          const resumedPlayback = playbackTimeline
+            ? readCombatPlaybackSession(playbackTimeline)
+            : null;
           if (resumedPlayback) {
             setBattlePlayback(resumedPlayback);
-            setCombatIntroCompletedBattleKey(
-              resumedPlayback.battleKey,
-            );
           } else {
-            safeRemoveSessionStorage(COMBAT_PLAYBACK_SESSION_KEY);
+            setBattlePlayback(
+              playbackTimeline
+                ? createCombatPlaybackState(playbackTimeline)
+                : null,
+            );
+            clearCombatPlaybackSession();
           }
+          // Combat entry is a client-only transition. Restoring a saved
+          // combat resumes its real replay without repeating the ceremony.
+          setCombatEntryPresentation(null);
         };
 
         const raw = safeReadLocalStorage(SAVE_KEY);
@@ -4085,16 +4681,17 @@ export default function GameClient() {
   }, [game, loaded, started]);
 
   useEffect(() => {
-    if (battlePlayback.battleKey === null) return;
+    if (!battlePlayback) return;
     safeWriteSessionStorage(
       COMBAT_PLAYBACK_SESSION_KEY,
-      JSON.stringify(battlePlayback),
+      JSON.stringify(combatPlaybackSessionSnapshot(battlePlayback)),
     );
+    safeRemoveSessionStorage(LEGACY_COMBAT_PLAYBACK_SESSION_KEY);
   }, [battlePlayback]);
 
   useEffect(() => {
     if (!loaded || game.phase === "combat") return;
-    safeRemoveSessionStorage(COMBAT_PLAYBACK_SESSION_KEY);
+    clearCombatPlaybackSession();
   }, [game.phase, loaded]);
 
   useEffect(() => {
@@ -4107,7 +4704,12 @@ export default function GameClient() {
   }, [clearCombatRewardFeedback, combatRewardNotice]);
 
   useEffect(() => {
-    if (!activeRecruitPresentation) return;
+    if (
+      !activeRecruitPresentation ||
+      activeRecruitPresentation.tripleForge !== null
+    ) {
+      return;
+    }
     const activeToken = activeRecruitPresentation.token;
     const presentationTimer = window.setTimeout(() => {
       setRecruitPresentationQueue((current) =>
@@ -4117,8 +4719,329 @@ export default function GameClient() {
     return () => window.clearTimeout(presentationTimer);
   }, [activeRecruitPresentation]);
 
+  useEffect(() => {
+    const forge = activeRecruitPresentation?.tripleForge;
+    if (!forge) return;
+    const expectedToken = forge.token;
+    const expectedGoldenInstanceId = forge.goldenInstanceId;
+    const expectedStage = forge.stage;
+    const expectedRevision = forge.revision;
+    const reducedMotion = window.matchMedia?.(
+      "(prefers-reduced-motion: reduce)",
+    ).matches ?? false;
+    const stageTimer = window.setTimeout(() => {
+      setRecruitPresentationQueue((current) => {
+        const active = current[0];
+        if (
+          !active ||
+          active.token !== expectedToken ||
+          active.tripleForge === null
+        ) {
+          return current;
+        }
+        const next = transitionTripleForgePresentation(
+          active.tripleForge,
+          {
+            type: "advance",
+            expectedToken,
+            expectedGoldenInstanceId,
+            expectedStage,
+            expectedRevision,
+          },
+        );
+        if (next === active.tripleForge) return current;
+        if (next === null) return current.slice(1);
+        return [{ ...active, tripleForge: next }, ...current.slice(1)];
+      });
+    }, tripleForgePresentationDuration(expectedStage, reducedMotion));
+    return () => window.clearTimeout(stageTimer);
+  }, [activeRecruitPresentation]);
+
+  useEffect(() => {
+    const forge = activeRecruitPresentation?.tripleForge;
+    if (!forge || activeRecruitPresentation.tripleHandoff !== null) {
+      return;
+    }
+    const expectedToken = forge.token;
+    const expectedGoldenInstanceId = forge.goldenInstanceId;
+    const measurementFrame = window.requestAnimationFrame(() => {
+      const target =
+        handCardElementForPresentation(expectedGoldenInstanceId) ??
+        document.querySelector<HTMLElement>('[data-testid="hand-row"]');
+      if (!target) return;
+      const targetRect = target.getBoundingClientRect();
+      if (targetRect.width <= 0 || targetRect.height <= 0) return;
+      const nextHandoff: RecruitTripleHandoffGeometry = {
+        travelX:
+          targetRect.left + targetRect.width / 2 - window.innerWidth / 2,
+        travelY:
+          targetRect.top +
+          targetRect.height / 2 -
+          window.innerHeight * 0.46,
+      };
+      setRecruitPresentationQueue((current) => {
+        const active = current[0];
+        if (
+          !active ||
+          active.token !== expectedToken ||
+          active.tripleForge?.goldenInstanceId !==
+            expectedGoldenInstanceId ||
+          active.tripleHandoff !== null
+        ) {
+          return current;
+        }
+        return [
+          { ...active, tripleHandoff: nextHandoff },
+          ...current.slice(1),
+        ];
+      });
+    });
+    return () => window.cancelAnimationFrame(measurementFrame);
+  }, [activeRecruitPresentation]);
+
+  useEffect(() => {
+    if (
+      !recruitEntryPresentation ||
+      recruitEntryPresentation.stage === "complete"
+    ) {
+      return;
+    }
+    const expectedKey = recruitEntryPresentation.transitionKey;
+    const expectedStage = recruitEntryPresentation.stage;
+    const expectedRevision = recruitEntryPresentation.revision;
+    const reducedMotion = window.matchMedia?.(
+      "(prefers-reduced-motion: reduce)",
+    ).matches ?? false;
+    const stageTimer = window.setTimeout(() => {
+      setRecruitEntryPresentation((current) =>
+        transitionRecruitEntryPresentation(current, {
+          type: "advance",
+          expectedKey,
+          expectedStage,
+          expectedRevision,
+        }),
+      );
+    }, recruitEntryStageDuration(expectedStage, reducedMotion));
+    return () => window.clearTimeout(stageTimer);
+  }, [recruitEntryPresentation]);
+
+  useEffect(() => {
+    if (!heroChoicePresentation) return;
+    const expectedInteractionId = heroChoicePresentation.interactionId;
+    const expectedStage = heroChoicePresentation.stage;
+    const expectedRevision = heroChoicePresentation.revision;
+    const reducedMotion = window.matchMedia?.(
+      "(prefers-reduced-motion: reduce)",
+    ).matches ?? false;
+    const stageTimer = window.setTimeout(() => {
+      setHeroChoicePresentation((current) =>
+        transitionHeroChoicePresentation(current, {
+          type: "advance",
+          expectedInteractionId,
+          expectedStage,
+          expectedRevision,
+        }),
+      );
+    }, heroChoicePresentationDuration(expectedStage, reducedMotion));
+    return () => window.clearTimeout(stageTimer);
+  }, [heroChoicePresentation]);
+
+  useEffect(() => {
+    if (heroChoicePresentation === null) {
+      resolvingHeroChoiceInteractionRef.current = null;
+    }
+  }, [heroChoicePresentation]);
+
+  useEffect(() => {
+    if (!trinketChoicePresentation) return;
+    const expectedInteractionId =
+      trinketChoicePresentation.interactionId;
+    const expectedStage = trinketChoicePresentation.stage;
+    const expectedRevision = trinketChoicePresentation.revision;
+    const reducedMotion = window.matchMedia?.(
+      "(prefers-reduced-motion: reduce)",
+    ).matches ?? false;
+    const duration = trinketChoicePresentationDuration(
+      expectedStage,
+      reducedMotion,
+    );
+    if (duration === null) return;
+    const stageTimer = window.setTimeout(() => {
+      setTrinketChoicePresentation((current) =>
+        transitionTrinketChoicePresentation(current, {
+          type: "advance",
+          expectedInteractionId,
+          expectedStage,
+          expectedRevision,
+        }),
+      );
+    }, duration);
+    return () => window.clearTimeout(stageTimer);
+  }, [trinketChoicePresentation]);
+
+  useLayoutEffect(() => {
+    if (trinketChoicePresentation !== null) return;
+    resolvingTrinketChoiceInteractionRef.current = null;
+    const deferred = pendingTrinketRecruitPresentationRef.current;
+    pendingTrinketRecruitPresentationRef.current = null;
+    if (deferred && deferred.events.length > 0) {
+      enqueueRecruitPresentationEvents(deferred.events, deferred.motion);
+    }
+  }, [
+    enqueueRecruitPresentationEvents,
+    trinketChoicePresentation,
+  ]);
+
+  useEffect(() => {
+    if (!heroPowerPresentation) return;
+    const expectedToken = heroPowerPresentation.state.token;
+    const expectedHeroPowerId =
+      heroPowerPresentation.state.heroPowerId;
+    const expectedStage = heroPowerPresentation.state.stage;
+    const expectedRevision = heroPowerPresentation.state.revision;
+    const reducedMotion = window.matchMedia?.(
+      "(prefers-reduced-motion: reduce)",
+    ).matches ?? false;
+    const stageTimer = window.setTimeout(() => {
+      setHeroPowerPresentation((current) => {
+        if (!current) return null;
+        const next = transitionHeroPowerPresentation(current.state, {
+          type: "advance",
+          expectedToken,
+          expectedHeroPowerId,
+          expectedStage,
+          expectedRevision,
+        });
+        if (next === current.state) return current;
+        return next ? { ...current, state: next } : null;
+      });
+    }, heroPowerPresentationDuration(expectedStage, reducedMotion));
+    return () => window.clearTimeout(stageTimer);
+  }, [heroPowerPresentation]);
+
+  useLayoutEffect(() => {
+    if (heroPowerPresentation !== null) return;
+    const deferred = pendingHeroPowerRecruitPresentationRef.current;
+    pendingHeroPowerRecruitPresentationRef.current = null;
+    if (deferred && deferred.events.length > 0) {
+      enqueueRecruitPresentationEvents(deferred.events, deferred.motion);
+    }
+  }, [enqueueRecruitPresentationEvents, heroPowerPresentation]);
+
+  useEffect(() => {
+    if (!spellCastPresentation) return;
+    const expectedToken = spellCastPresentation.state.token;
+    const expectedCardInstanceId =
+      spellCastPresentation.state.cardInstanceId;
+    const expectedStage = spellCastPresentation.state.stage;
+    const expectedRevision = spellCastPresentation.state.revision;
+    const reducedMotion = window.matchMedia?.(
+      "(prefers-reduced-motion: reduce)",
+    ).matches ?? false;
+    const stageTimer = window.setTimeout(() => {
+      setSpellCastPresentation((current) => {
+        if (!current) return null;
+        const next = transitionSpellCastPresentation(current.state, {
+          type: "advance",
+          expectedToken,
+          expectedCardInstanceId,
+          expectedStage,
+          expectedRevision,
+        });
+        if (next === current.state) return current;
+        return next ? { ...current, state: next } : null;
+      });
+    }, spellCastPresentationDuration(expectedStage, reducedMotion));
+    return () => window.clearTimeout(stageTimer);
+  }, [spellCastPresentation]);
+
+  useLayoutEffect(() => {
+    if (spellCastPresentation !== null) return;
+    const deferred = pendingSpellCastRecruitPresentationRef.current;
+    pendingSpellCastRecruitPresentationRef.current = null;
+    if (deferred && deferred.events.length > 0) {
+      enqueueRecruitPresentationEvents(deferred.events, deferred.motion);
+    }
+  }, [enqueueRecruitPresentationEvents, spellCastPresentation]);
+
+  useEffect(() => {
+    if (!discoverChoicePresentation) return;
+    const expectedInteractionId =
+      discoverChoicePresentation.state.interactionId;
+    const expectedStage = discoverChoicePresentation.state.stage;
+    const expectedRevision = discoverChoicePresentation.state.revision;
+    const reducedMotion = window.matchMedia?.(
+      "(prefers-reduced-motion: reduce)",
+    ).matches ?? false;
+    const stageTimer = window.setTimeout(() => {
+      setDiscoverChoicePresentation((current) => {
+        if (!current) return null;
+        const next = transitionDiscoverChoicePresentation(current.state, {
+          type: "advance",
+          expectedInteractionId,
+          expectedStage,
+          expectedRevision,
+        });
+        return next ? { ...current, state: next } : null;
+      });
+    }, discoverChoicePresentationDuration(expectedStage, reducedMotion));
+    return () => window.clearTimeout(stageTimer);
+  }, [discoverChoicePresentation]);
+
+  useLayoutEffect(() => {
+    if (discoverChoicePresentation !== null) return;
+    resolvingDiscoverInteractionRef.current = null;
+    const deferred = pendingDiscoverRecruitPresentationRef.current;
+    pendingDiscoverRecruitPresentationRef.current = null;
+    if (deferred && deferred.events.length > 0) {
+      enqueueRecruitPresentationEvents(deferred.events, deferred.motion);
+    }
+  }, [discoverChoicePresentation, enqueueRecruitPresentationEvents]);
+
+  useEffect(() => {
+    if (recruitEntryPresentation?.stage !== "complete") return;
+    const completionTimer = window.setTimeout(() => {
+      const pending = pendingRecruitEntryFeedbackRef.current;
+      if (pending && pending.presentationEvents.length > 0) {
+        pendingRecruitEntryFeedbackRef.current = {
+          ...pending,
+          presentationEvents: [],
+        };
+        enqueueRecruitPresentationEvents(pending.presentationEvents);
+      }
+      setRecruitEntryPresentation(null);
+    }, 0);
+    return () => window.clearTimeout(completionTimer);
+  }, [enqueueRecruitPresentationEvents, recruitEntryPresentation]);
+
+  useEffect(() => {
+    if (
+      recruitEntryPresentation !== null ||
+      recruitPresentationQueue.length > 0
+    ) {
+      return;
+    }
+    const pending = pendingRecruitEntryFeedbackRef.current;
+    if (!pending) return;
+    const feedbackTimer = window.setTimeout(() => {
+      if (pendingRecruitEntryFeedbackRef.current !== pending) return;
+      pendingRecruitEntryFeedbackRef.current = null;
+      if (pending.rewardNotice) {
+        setCombatRewardNotice(pending.rewardNotice);
+        setNewCombatRewardIds(pending.rewardIds);
+      } else {
+        clearCombatRewardFeedback();
+      }
+    }, 0);
+    return () => window.clearTimeout(feedbackTimer);
+  }, [
+    clearCombatRewardFeedback,
+    recruitEntryPresentation,
+    recruitPresentationQueue.length,
+  ]);
+
   const send = useCallback(
-    (action: GameAction) => {
+    (action: GameAction, options: SendGameActionOptions = {}) => {
       const current = gameRef.current;
       const motion = captureRecruitMotion(current, action);
       dismissCardInspection();
@@ -4133,33 +5056,48 @@ export default function GameClient() {
       gameRef.current = next;
       if (action.type === "END_TURN" || action.type === "CONTINUE") {
         setRecruitPresentationQueue([]);
-      } else if (events.length > 0) {
-        const eventGroups = events.every(
-          (event) => event.kind === "bloodGemPulse",
-        )
-          ? events.map((event) => [event])
-          : [events];
-        const presentations = eventGroups.map((group, index) => {
-          recruitPresentationTokenRef.current += 1;
-          return {
-            token: recruitPresentationTokenRef.current,
-            events: group,
-            announcement: recruitPresentationAnnouncement(group),
-            motion: index === 0 ? motion : null,
-          };
-        });
-        setRecruitPresentationQueue((current) => [
-          ...current,
-          ...presentations,
-        ]);
+      } else if (
+        events.length > 0 &&
+        options.deferRecruitPresentation !== true
+      ) {
+        enqueueRecruitPresentationEvents(events, motion);
       }
       if (started) {
         safeWriteLocalStorage(SAVE_KEY, JSON.stringify(next));
       }
       setGame(next);
       setSelection(null);
+      return { transition, events, motion };
     },
-    [dismissCardInspection, started],
+    [dismissCardInspection, enqueueRecruitPresentationEvents, started],
+  );
+
+  const resolveHeroChoiceWithPresentation = useCallback(
+    (
+      interaction: Extract<PendingInteraction, { kind: "heroChoice" }>,
+      selectedHeroId: string,
+    ) => {
+      if (resolvingHeroChoiceInteractionRef.current !== null) return;
+      const presentation = createHeroChoicePresentation({
+        interactionId: interaction.interactionId,
+        optionIds: interaction.optionIds,
+        selectedHeroId,
+      });
+      if (!presentation) return;
+
+      resolvingHeroChoiceInteractionRef.current = interaction.interactionId;
+      setHeroChoicePresentation(presentation);
+      const { transition } = send({
+        type: "RESOLVE_INTERACTION",
+        interactionId: interaction.interactionId,
+        optionInstanceId: selectedHeroId,
+      });
+      if (!transition.accepted) {
+        resolvingHeroChoiceInteractionRef.current = null;
+        setHeroChoicePresentation(null);
+      }
+    },
+    [send],
   );
 
   const human = useMemo(
@@ -4234,6 +5172,12 @@ export default function GameClient() {
   const hasGreaterTrinket = humanTrinkets.some(
     (definition) => definition.tier === "greater",
   );
+  const lesserTrinket = humanTrinkets.find(
+    (definition) => definition.tier === "lesser",
+  );
+  const greaterTrinket = humanTrinkets.find(
+    (definition) => definition.tier === "greater",
+  );
   const nextTrinketRound = !hasLesserTrinket
     ? LESSER_TRINKET_ROUND
     : !hasGreaterTrinket
@@ -4269,12 +5213,51 @@ export default function GameClient() {
     });
     return offers;
   }, [human.shop, tavernSpellShopOffers]);
-  const humanInteraction =
+  const pendingHumanInteraction =
     game.pendingInteraction?.playerId === human.id
       ? game.pendingInteraction
       : null;
+  const pendingTrinketChoiceInteraction =
+    heroPowerPresentation === null &&
+    spellCastPresentation === null &&
+    pendingHumanInteraction?.kind === "trinketChoice"
+      ? pendingHumanInteraction
+      : null;
+  const recruitTripleBlocksInteraction =
+    recruitPresentationQueue.some((presentation) =>
+      presentation.events.some((event) => event.kind === "triple"),
+    );
+  const recruitPlayBlocksInteraction =
+    activeRecruitPresentation?.events.some(
+      (event) =>
+        event.kind === "cardMove" && event.motion === "hand-to-board",
+    ) ?? false;
+  const recruitPresentationBlocksInteraction =
+    recruitTripleBlocksInteraction || recruitPlayBlocksInteraction;
+  const trinketChoicePresentationBlocksInteraction =
+    trinketChoicePresentation?.stage === "confirmFocus" ||
+    trinketChoicePresentation?.stage === "effectHandoff";
+  const humanInteraction =
+    recruitEntryPresentation !== null ||
+    heroChoicePresentation !== null ||
+    heroPowerPresentation !== null ||
+    trinketChoicePresentationBlocksInteraction ||
+    spellCastPresentation !== null ||
+    discoverChoicePresentation !== null ||
+    recruitPresentationBlocksInteraction
+      ? null
+      : pendingHumanInteraction;
   const heroChoiceInteraction =
     humanInteraction?.kind === "heroChoice" ? humanInteraction : null;
+  const heroChoiceStage = heroChoicePresentation?.stage ?? "choosing";
+  const heroChoiceOptionIds =
+    heroChoiceInteraction?.optionIds ?? heroChoicePresentation?.optionIds ?? [];
+  const selectedHeroChoice = heroChoicePresentation
+    ? getHeroDefinition(heroChoicePresentation.selectedHeroId)
+    : null;
+  const selectedHeroChoicePower = selectedHeroChoice
+    ? getHeroPowerDefinition(selectedHeroChoice.heroPowerId)
+    : null;
   const trinketChoiceInteraction =
     humanInteraction?.kind === "trinketChoice"
       ? humanInteraction
@@ -4285,6 +5268,156 @@ export default function GameClient() {
     isMysteryCubeTrinketSlotId(
       trinketChoiceInteraction.replaceTrinketId,
     );
+  useEffect(() => {
+    const synchronizeTimer = window.setTimeout(() => {
+      setTrinketChoicePresentation((current) => {
+        if (
+          current?.stage === "confirmFocus" ||
+          current?.stage === "effectHandoff"
+        ) {
+          return current;
+        }
+        if (!pendingTrinketChoiceInteraction) return null;
+        if (
+          current?.interactionId ===
+            pendingTrinketChoiceInteraction.interactionId &&
+          current.optionIds.length ===
+            pendingTrinketChoiceInteraction.optionIds.length &&
+          current.optionIds.every(
+            (optionId, index) =>
+              optionId ===
+              pendingTrinketChoiceInteraction.optionIds[index],
+          )
+        ) {
+          return current;
+        }
+        return createTrinketChoicePresentation({
+          interactionId:
+            pendingTrinketChoiceInteraction.interactionId,
+          optionIds: pendingTrinketChoiceInteraction.optionIds,
+        });
+      });
+    }, 0);
+    return () => window.clearTimeout(synchronizeTimer);
+  }, [
+    pendingTrinketChoiceInteraction,
+    trinketChoicePresentation,
+  ]);
+  const activeTrinketChoicePresentation =
+    trinketChoiceInteraction &&
+    trinketChoicePresentation?.interactionId ===
+      trinketChoiceInteraction.interactionId
+      ? trinketChoicePresentation
+      : null;
+  const trinketChoiceStage =
+    activeTrinketChoicePresentation?.stage ?? "reveal";
+  const selectedTrinketChoiceId =
+    activeTrinketChoicePresentation?.selectedOptionId ?? null;
+  const selectedTrinketChoice = selectedTrinketChoiceId
+    ? getTrinketDefinition(selectedTrinketChoiceId)
+    : null;
+  const trinketChoicesHidden =
+    activeTrinketChoicePresentation?.hidden ?? false;
+  const selectedTrinketChoiceAffordable =
+    selectedTrinketChoice !== null &&
+    (isMysteryCubeTrinketChoice ||
+      human.gold >= selectedTrinketChoice.cost);
+  const trinketChoiceCanConfirm =
+    trinketChoiceStage === "choosing" &&
+    selectedTrinketChoiceAffordable;
+  const presentedTrinketChoice =
+    trinketChoicePresentation?.selectedOptionId !== null &&
+    trinketChoicePresentation?.selectedOptionId !== undefined
+      ? getTrinketDefinition(
+          trinketChoicePresentation.selectedOptionId,
+        )
+      : null;
+  const selectTrinketChoice = (optionId: string) => {
+    if (!trinketChoiceInteraction) return;
+    setTrinketChoicePresentation((current) =>
+      transitionTrinketChoicePresentation(current, {
+        type: "select",
+        expectedInteractionId:
+          trinketChoiceInteraction.interactionId,
+        optionId,
+      }),
+    );
+  };
+  const toggleTrinketChoices = () => {
+    if (!trinketChoiceInteraction) return;
+    setTrinketChoicePresentation((current) =>
+      transitionTrinketChoicePresentation(current, {
+        type: "toggleVisibility",
+        expectedInteractionId:
+          trinketChoiceInteraction.interactionId,
+      }),
+    );
+  };
+  const confirmTrinketChoice = (): boolean => {
+    if (
+      !trinketChoiceInteraction ||
+      !activeTrinketChoicePresentation ||
+      !selectedTrinketChoice ||
+      !trinketChoiceCanConfirm ||
+      resolvingTrinketChoiceInteractionRef.current !== null
+    ) {
+      return false;
+    }
+
+    const interactionId = trinketChoiceInteraction.interactionId;
+    const selectedOptionId = selectedTrinketChoice.id;
+    const paidCost = isMysteryCubeTrinketChoice
+      ? 0
+      : selectedTrinketChoice.cost;
+    const beforeHuman = humanPlayerForPresentation(gameRef.current);
+    if (!beforeHuman || paidCost > beforeHuman.gold) return false;
+    const hudTravel = trinketHudTravel(selectedTrinketChoice.tier);
+
+    resolvingTrinketChoiceInteractionRef.current = interactionId;
+    const { transition, events, motion } = send(
+      {
+        type: "RESOLVE_INTERACTION",
+        interactionId,
+        optionInstanceId: selectedOptionId,
+      },
+      { deferRecruitPresentation: true },
+    );
+    const afterHuman = humanPlayerForPresentation(transition.state);
+    if (!transition.accepted || !afterHuman) {
+      resolvingTrinketChoiceInteractionRef.current = null;
+      return false;
+    }
+
+    const nextPresentation = transitionTrinketChoicePresentation(
+      activeTrinketChoicePresentation,
+      {
+        type: "confirm",
+        expectedInteractionId: interactionId,
+        selectedOptionId,
+        accepted: transition.accepted,
+        paidCost,
+        goldBefore: beforeHuman.gold,
+        goldAfter: afterHuman.gold,
+      },
+    );
+    if (
+      nextPresentation === activeTrinketChoicePresentation ||
+      nextPresentation === null
+    ) {
+      resolvingTrinketChoiceInteractionRef.current = null;
+      if (events.length > 0) {
+        enqueueRecruitPresentationEvents(events, motion);
+      }
+      setTrinketChoicePresentation(null);
+      return true;
+    }
+
+    pendingTrinketRecruitPresentationRef.current =
+      events.length > 0 ? { events, motion } : null;
+    setTrinketChoiceHudTravel(hudTravel);
+    setTrinketChoicePresentation(nextPresentation);
+    return true;
+  };
   const targetInteraction =
     humanInteraction?.kind === "target" ? humanInteraction : null;
   const taughtTavernSpellTargetResolution =
@@ -4314,6 +5447,21 @@ export default function GameClient() {
     humanInteraction?.kind === "darkmoonPrizeDiscover"
       ? humanInteraction
       : null;
+  const activeDiscoverInteraction =
+    discoverInteraction ??
+    tavernSpellDiscoverInteraction ??
+    darkmoonPrizeDiscoverInteraction;
+  const discoverChoicesHidden =
+    activeDiscoverInteraction?.interactionId ===
+    hiddenDiscoverInteractionId;
+  const toggleDiscoverChoices = () => {
+    if (!activeDiscoverInteraction) return;
+    setHiddenDiscoverInteractionId((current) =>
+      current === activeDiscoverInteraction.interactionId
+        ? null
+        : activeDiscoverInteraction.interactionId,
+    );
+  };
   const tavernSpellChoiceInteraction =
     humanInteraction?.kind === "tavernSpellChoice"
       ? humanInteraction
@@ -4340,7 +5488,14 @@ export default function GameClient() {
     minionChoiceInteraction?.definitionId === "BG27_084";
   const interactionLocked =
     game.pendingInteraction !== null ||
-    queuedRecruitBloodGemPulse?.kind === "bloodGemPulse";
+    queuedRecruitBloodGemPulse?.kind === "bloodGemPulse" ||
+    recruitEntryPresentation !== null ||
+    heroChoicePresentation !== null ||
+    heroPowerPresentation !== null ||
+    trinketChoicePresentationBlocksInteraction ||
+    spellCastPresentation !== null ||
+    discoverChoicePresentation !== null ||
+    recruitPresentationBlocksInteraction;
   const humanHeroPowerQuote =
     humanHeroPowerActive &&
     !humanHeroPowerUsedThisTurn &&
@@ -4364,7 +5519,11 @@ export default function GameClient() {
       return new Set<string>();
     }
     const candidates =
-      humanHeroPowerTargetMode === "shop" ? human.shop : human.board;
+      humanHeroPowerTargetMode === "shop"
+        ? human.shop
+        : humanHeroPowerTargetMode === "board"
+          ? human.board
+          : [...human.shop, ...human.board];
     return new Set(
       candidates
         .filter(
@@ -4380,18 +5539,50 @@ export default function GameClient() {
   })();
 
   const doActivateHeroPower = (targetInstanceId?: string) => {
-    if (!humanHeroPowerCanActivate) return;
-    const quote = targetInstanceId
-      ? getHeroPowerActivationQuote(game, human.id, targetInstanceId)
-      : humanHeroPowerQuote;
+    if (!humanHeroPowerCanActivate || !humanHero || !humanHeroPower) return;
+    const quote = getHeroPowerActivationQuote(
+      gameRef.current,
+      human.id,
+      targetInstanceId,
+    );
     if (!quote?.usable) return;
     if (quote.targetKind && !targetInstanceId) {
       setSelection(null);
       setHeroPowerTargeting(true);
       return;
     }
+    const geometry = captureHeroPowerPresentationGeometry();
+    const presentationTarget = captureHeroPowerPresentationTarget(
+      humanPlayerForPresentation(gameRef.current) ?? human,
+      targetInstanceId,
+    );
+    const { transition, events, motion } = send(
+      { type: "ACTIVATE_HERO_POWER", targetInstanceId },
+      { deferRecruitPresentation: true },
+    );
+    if (!transition.accepted) return;
     setHeroPowerTargeting(false);
-    send({ type: "ACTIVATE_HERO_POWER", targetInstanceId });
+
+    heroPowerPresentationTokenRef.current += 1;
+    const presentationState = createHeroPowerPresentation({
+      accepted: transition.accepted,
+      token: heroPowerPresentationTokenRef.current,
+      heroPowerId: humanHeroPower.id,
+      heroName: humanHero.name,
+      powerName: humanHeroPower.name,
+      cost: quote.cost,
+    });
+    if (!presentationState) {
+      enqueueRecruitPresentationEvents(events, motion);
+      return;
+    }
+    pendingHeroPowerRecruitPresentationRef.current =
+      events.length > 0 ? { events, motion } : null;
+    setHeroPowerPresentation({
+      state: presentationState,
+      geometry,
+      target: presentationTarget,
+    });
   };
 
   useEffect(() => {
@@ -4410,10 +5601,43 @@ export default function GameClient() {
     doActivateHeroPower(instanceId);
   };
   const modalInteractionLocked = interactionRequiresModalBackdrop(
-    game.pendingInteraction,
+    humanInteraction,
   );
 
   useEffect(() => {
+    if (heroPowerPresentation) {
+      const focusFrame = window.requestAnimationFrame(() => {
+        document
+          .querySelector<HTMLElement>(
+            '[data-testid="skip-hero-power-presentation"]',
+          )
+          ?.focus();
+      });
+      return () => window.cancelAnimationFrame(focusFrame);
+    }
+
+    if (trinketChoicePresentationBlocksInteraction) {
+      const focusFrame = window.requestAnimationFrame(() => {
+        document
+          .querySelector<HTMLElement>(
+            '[data-testid="skip-trinket-choice-presentation"]',
+          )
+          ?.focus();
+      });
+      return () => window.cancelAnimationFrame(focusFrame);
+    }
+
+    if (discoverChoicePresentation) {
+      const focusFrame = window.requestAnimationFrame(() => {
+        document
+          .querySelector<HTMLElement>(
+            '[data-testid="skip-discover-choice-presentation"]',
+          )
+          ?.focus();
+      });
+      return () => window.cancelAnimationFrame(focusFrame);
+    }
+
     if (humanInteraction) {
       if (previousInteractionIdRef.current === null) {
         const activeElement = document.activeElement;
@@ -4433,19 +5657,31 @@ export default function GameClient() {
               )
             : humanInteraction.kind === "trinketChoice"
               ? document.querySelector<HTMLElement>(
-                  '[data-testid="trinket-choice-dialog"] button:not(:disabled)',
+                  trinketChoicesHidden
+                    ? '[data-testid="toggle-trinket-visibility"]'
+                    : trinketChoiceStage === "reveal"
+                      ? '[data-testid="skip-trinket-choice-reveal"]'
+                      : selectedTrinketChoiceId
+                        ? `[data-trinket-option-id="${selectedTrinketChoiceId}"]`
+                        : '[data-testid="trinket-choice-0"]',
                 )
           : humanInteraction.kind === "discover"
             ? document.querySelector<HTMLElement>(
-                '[data-testid="discover-option-0"]',
+                discoverChoicesHidden
+                  ? '[data-testid="toggle-discover-visibility"]'
+                  : '[data-testid="discover-option-0"]',
               )
             : humanInteraction.kind === "tavernSpellDiscover"
               ? document.querySelector<HTMLElement>(
-                  '[data-testid="tavern-spell-discover-option-0"]',
+                  discoverChoicesHidden
+                    ? '[data-testid="toggle-discover-visibility"]'
+                    : '[data-testid="tavern-spell-discover-option-0"]',
                 )
             : humanInteraction.kind === "darkmoonPrizeDiscover"
               ? document.querySelector<HTMLElement>(
-                  '[data-testid="darkmoon-prize-discover-option-0"]',
+                  discoverChoicesHidden
+                    ? '[data-testid="toggle-discover-visibility"]'
+                    : '[data-testid="darkmoon-prize-discover-option-0"]',
                 )
             : humanInteraction.kind === "tavernSpellChoice"
               ? document.querySelector<HTMLElement>(
@@ -4488,7 +5724,30 @@ export default function GameClient() {
       return () => window.cancelAnimationFrame(focusFrame);
     }
 
+    if (heroChoicePresentation) {
+      const focusFrame = window.requestAnimationFrame(() => {
+        document
+          .querySelector<HTMLElement>(
+            '[data-testid="skip-hero-choice-presentation"]',
+          )
+          ?.focus();
+      });
+      return () => window.cancelAnimationFrame(focusFrame);
+    }
+
     if (previousInteractionIdRef.current !== null) {
+      const deferredTripleFocusPhase =
+        deferredDiscoverTripleFocusPhaseRef.current;
+      if (recruitTripleBlocksInteraction) {
+        if (deferredTripleFocusPhase === "pending") {
+          deferredDiscoverTripleFocusPhaseRef.current = "active";
+        }
+        return;
+      }
+      if (deferredTripleFocusPhase === "pending") return;
+      if (deferredTripleFocusPhase === "active") {
+        deferredDiscoverTripleFocusPhaseRef.current = null;
+      }
       previousInteractionIdRef.current = null;
       const returnTarget = interactionReturnFocusRef.current;
       interactionReturnFocusRef.current = null;
@@ -4498,7 +5757,7 @@ export default function GameClient() {
           returnTarget !== document.body
         ) {
           returnTarget.focus();
-          return;
+          if (document.activeElement === returnTarget) return;
         }
         document
           .querySelector<HTMLElement>('[data-testid="end-turn"]')
@@ -4506,9 +5765,21 @@ export default function GameClient() {
       });
       return () => window.cancelAnimationFrame(focusFrame);
     }
-  }, [humanInteraction]);
+  }, [
+    discoverChoicePresentation,
+    discoverChoicesHidden,
+    heroChoicePresentation,
+    heroPowerPresentation,
+    humanInteraction,
+    recruitTripleBlocksInteraction,
+    selectedTrinketChoiceId,
+    trinketChoicePresentationBlocksInteraction,
+    trinketChoiceStage,
+    trinketChoicesHidden,
+  ]);
 
   useEffect(() => {
+    if (discoverChoicePresentation !== null) return;
     const targetInstanceId = magneticFocusTargetRef.current;
     if (!targetInstanceId) return;
     const focusFrame = window.requestAnimationFrame(() => {
@@ -4526,7 +5797,7 @@ export default function GameClient() {
       }
     });
     return () => window.cancelAnimationFrame(focusFrame);
-  }, [game.players]);
+  }, [discoverChoicePresentation, game.players]);
 
   const trapModalFocus = useCallback(
     (event: ReactKeyboardEvent<HTMLDivElement>) => {
@@ -4535,6 +5806,10 @@ export default function GameClient() {
         event.currentTarget.querySelectorAll<HTMLElement>(
           'button:not([disabled]), input:not([disabled]), select:not([disabled]), textarea:not([disabled]), [href], [tabindex]:not([tabindex="-1"])',
         ),
+      ).filter(
+        (element) =>
+          !element.closest('[inert], [aria-hidden="true"]') &&
+          element.getClientRects().length > 0,
       );
       if (focusable.length === 0) return;
       const first = focusable[0];
@@ -4554,12 +5829,20 @@ export default function GameClient() {
   );
 
   const battle = game.lastBattle;
-  const battleKey = battle ? combatPlaybackKey(battle) : null;
+  const combatTimeline = useMemo(
+    () => (battle ? createCombatPlaybackTimeline(battle) : null),
+    [battle],
+  );
+  const battleKey = combatTimeline?.battleKey ?? null;
+  const combatEntryStage =
+    combatEntryPresentation?.battleKey === battleKey
+      ? combatEntryPresentation.stage
+      : null;
   const combatIntroActive =
     started &&
     game.phase === "combat" &&
     battleKey !== null &&
-    combatIntroCompletedBattleKey !== battleKey;
+    combatEntryStage !== null;
   const pageModalOpen =
     (loaded && !started) ||
     showRestart ||
@@ -4582,6 +5865,9 @@ export default function GameClient() {
       : battle.playerAId
     : human.lastOpponentId;
   const opponent = game.players.find((player) => player.id === opponentId);
+  const opponentHero = opponent?.heroId
+    ? getHeroDefinition(opponent.heroId)
+    : null;
   const scheduledHumanOpponent =
     game.phase === "recruit"
       ? getScheduledOpponent(game, game.humanPlayerId)
@@ -4598,33 +5884,49 @@ export default function GameClient() {
           isBoardMinionInstance,
         )
       : [];
-  const playbackEvents = useMemo(
-    () => battle?.events.filter(isCombatPlaybackEvent) ?? [],
-    [battle],
-  );
+  const playbackEvents = combatTimeline?.events ?? [];
   const playbackEventCount = playbackEvents.length;
   const playbackIsCurrent =
     game.phase === "combat" &&
     battleKey !== null &&
-    battlePlayback.battleKey === battleKey;
+    battlePlayback?.battleKey === battleKey;
+  const effectiveBattlePlayback =
+    game.phase === "combat" && combatTimeline
+      ? playbackIsCurrent && battlePlayback
+        ? battlePlayback
+        : createCombatPlaybackState(combatTimeline)
+      : null;
   const revealedBattleEventCount =
     game.phase === "combat" && battle
       ? combatIntroActive
         ? 0
-        : playbackIsCurrent
-        ? Math.min(battlePlayback.revealedCount, playbackEventCount)
-        : playbackEventCount > 0
-          ? 1
-          : 0
+        : Math.min(
+            effectiveBattlePlayback?.revealedCount ?? 0,
+            playbackEventCount,
+          )
       : 0;
   const battlePlaybackComplete =
-    game.phase === "combat" && battle
-      ? combatIntroActive
-        ? false
-        : playbackIsCurrent
-        ? battlePlayback.complete
-        : playbackEventCount === 0
-      : false;
+    game.phase === "combat" &&
+    battle !== null &&
+    !combatIntroActive &&
+    effectiveBattlePlayback?.status === "complete";
+  const battlePlaybackPaused =
+    game.phase === "combat" &&
+    battle !== null &&
+    !combatIntroActive &&
+    effectiveBattlePlayback?.status === "paused";
+  const battlePlaybackResultUnlocked =
+    game.phase !== "combat" ||
+    (!combatIntroActive &&
+      (effectiveBattlePlayback?.resultUnlocked ?? false));
+  const furthestRevealedBattleEventCount =
+    game.phase === "combat" && battle && !combatIntroActive
+      ? Math.min(
+          effectiveBattlePlayback?.furthestRevealedCount ?? 0,
+          playbackEventCount,
+        )
+      : 0;
+  const battlePlaybackRevision = effectiveBattlePlayback?.revision ?? 0;
   const combatPresentationStage: CombatPresentationStage | null =
     game.phase === "combat" && battle
       ? combatIntroActive
@@ -4764,6 +6066,7 @@ export default function GameClient() {
           ? queuedRecruitBloodGemPulse.boardBeforePulse
           : human.board;
   const currentBuffLabel = combatBuffLabel(currentBattleEvent);
+  const currentDamageCapLabel = combatDamageCapLabel(currentBattleEvent);
   const currentTriggerLabel = combatTriggerLabel(currentBattleEvent);
   const currentHitLabel =
     currentBattleEvent?.type === "damage"
@@ -4793,11 +6096,14 @@ export default function GameClient() {
     currentBattleEvent?.type === "attack" ? currentBattleEvent.index : null;
   const [combatChargeState, setCombatChargeState] = useState<{
     eventIndex: number;
+    revision: number;
     phase: "charge" | "collide" | "rebound";
   } | null>(null);
   const combatChargePhase =
+    effectiveBattlePlayback?.status === "playing" &&
     currentAttackEventIndex !== null &&
-    combatChargeState?.eventIndex === currentAttackEventIndex
+    combatChargeState?.eventIndex === currentAttackEventIndex &&
+    combatChargeState.revision === battlePlaybackRevision
       ? combatChargeState.phase
       : "idle";
   const [combatChargeVector, setCombatChargeVector] = useState<{
@@ -4806,7 +6112,10 @@ export default function GameClient() {
   }>({ x: 0, y: 0 });
 
   useEffect(() => {
-    if (currentAttackEventIndex === null) {
+    if (
+      currentAttackEventIndex === null ||
+      effectiveBattlePlayback?.status !== "playing"
+    ) {
       return;
     }
     const schedulePhase = (
@@ -4814,7 +6123,11 @@ export default function GameClient() {
       delayAtNormalSpeed: number,
     ) =>
       window.setTimeout(() => {
-        setCombatChargeState({ eventIndex: currentAttackEventIndex, phase });
+        setCombatChargeState({
+          eventIndex: currentAttackEventIndex,
+          revision: battlePlaybackRevision,
+          phase,
+        });
       }, delayAtNormalSpeed / battleSpeed);
     const timers = [
       schedulePhase("charge", 40),
@@ -4827,7 +6140,12 @@ export default function GameClient() {
     return () => {
       timers.forEach((timer) => window.clearTimeout(timer));
     };
-  }, [battleSpeed, currentAttackEventIndex]);
+  }, [
+    battlePlaybackRevision,
+    battleSpeed,
+    currentAttackEventIndex,
+    effectiveBattlePlayback?.status,
+  ]);
 
   const currentDebuffLabel =
     currentBattleEvent?.type === "keywordRemoved" &&
@@ -4853,9 +6171,9 @@ export default function GameClient() {
           : "召唤"
       : undefined;
   const revealedBattleLogEvents = battle
-    ? game.phase !== "combat" || battlePlaybackComplete
+    ? game.phase !== "combat" || battlePlaybackResultUnlocked
       ? battle.events
-      : playbackEvents.slice(0, revealedBattleEventCount)
+      : playbackEvents.slice(0, furthestRevealedBattleEventCount)
     : [];
   const selectedUnit = selectionUnit(selection, human);
   const selectedHandCard =
@@ -5019,8 +6337,7 @@ export default function GameClient() {
   const selectedVisibleWarband = selectedStandingPlayer
     ? getVisibleWarband(game, selectedStandingPlayer.id)
     : null;
-  const scoutingResultRevealed =
-    game.phase !== "combat" || battlePlaybackComplete;
+  const scoutingResultRevealed = battlePlaybackResultUnlocked;
   const selectedLastRoundResult =
     selectedStandingPlayer && scoutingResultRevealed
       ? getPublicLastRoundResult(game, selectedStandingPlayer.id)
@@ -5131,6 +6448,21 @@ export default function GameClient() {
     isTrinketDefinitionId(discoverInteraction.sourceDefinitionId)
       ? getTrinketDefinition(discoverInteraction.sourceDefinitionId)
       : undefined;
+  const discoverSourceHeroPower =
+    discoverInteraction?.sourceDefinitionId !== undefined &&
+    isHeroPowerDefinitionId(discoverInteraction.sourceDefinitionId)
+      ? getHeroPowerDefinition(discoverInteraction.sourceDefinitionId)
+      : undefined;
+  const discoverSourceHeroPowerPrompt = discoverSourceHeroPower
+    ? discoverSourceHeroPower.effect ===
+      "activeDiscoverMagneticMech"
+      ? "发现一个磁力机械"
+      : discoverSourceHeroPower.effect === "activeDiscoverDragonTier4"
+        ? "发现一张龙牌"
+        : discoverInteraction?.filter.exactTier
+          ? `发现一个 ${discoverInteraction.filter.exactTier} 级随从`
+          : "发现一个随从"
+    : null;
   const isKaleidoscopeDiscover =
     discoverSourceTrinket?.cardId === "BG35_MagicItem_821" ||
     discoverSourceTrinket?.cardId === "BG35_MagicItem_821t";
@@ -5150,8 +6482,17 @@ export default function GameClient() {
             minion.instanceId === discoverDestination.targetInstanceId,
         )
       : undefined;
+  const discoverShopReplaceTarget =
+    discoverDestination?.kind === "replaceShop"
+      ? human.shop.find(
+          (minion) =>
+            minion.instanceId === discoverDestination.targetInstanceId,
+        )
+      : undefined;
   const discoverTitle = discoverInteraction
-    ? discoverInteraction.destination.kind === "transform"
+    ? discoverInteraction.destination.kind === "replaceShop"
+      ? `迦拉克隆的贪婪 · 为${discoverShopReplaceTarget?.name ?? "目标随从"}选择高一级随从`
+      : discoverInteraction.destination.kind === "transform"
       ? `古神信物 · 为${discoverTransformTarget?.name ?? "目标随从"}选择高一级形态`
       : discoverInteraction.destination.kind === "customUndeadFirst"
         ? "普崔塞德标签 · 选择战斗组件"
@@ -5173,6 +6514,8 @@ export default function GameClient() {
       : discoverInteraction.destination.kind === "hand" &&
           discoverInteraction.destination.playableFromRound !== undefined
         ? `搜寻时光 · 发现一个 ${discoverInteraction.filter.exactTier} 级随从`
+      : discoverSourceHeroPower && discoverSourceHeroPowerPrompt
+        ? `${discoverSourceHeroPower.name} · ${discoverSourceHeroPowerPrompt}`
       : discoverInteraction.sourceDefinitionId === "BG24_715"
         ? `耐心的侦查员 · 发现一个 ${discoverInteraction.filter.exactTier} 级随从`
       : discoverInteraction.sourceDefinitionId === "BG26_525"
@@ -5200,6 +6543,205 @@ export default function GameClient() {
           }牌`
         : "发现一个随从"
     : "";
+  const discoverCopy = discoverInteraction
+    ? discoverInteraction.destination.kind === "replaceShop"
+      ? "选择后，所选随从会替换酒馆中的目标；原目标和另外两张候选会回到共享随从池。"
+      : discoverInteraction.destination.kind === "transform"
+      ? "选择后，目标会变形为所选随从；原随从和另外两张候选会回到共享随从池。"
+      : discoverInteraction.destination.kind === "customUndeadFirst"
+        ? "先从三个战斗组件中选择一个。候选是制造用组件，不会占用共享随从池。"
+        : discoverInteraction.destination.kind === "customUndeadSecond"
+          ? "再从三个功能组件中选择一个；两个组件的属性、关键词与可组合效果会制造成一张无法三连的亡灵牌。"
+          : discoverInteraction.destination.kind === "magnetize"
+            ? "选择后会立即吸附到目标，不会进入手牌；其余候选会回到共享随从池。"
+            : discoverInteraction.destination.kind === "hand" &&
+                discoverInteraction.destination
+                  .destroyAfterPlayThroughRound !== undefined
+              ? "选择一张加入手牌；本回合打出时会先完成入场效果，随后死亡并触发亡语。组成三连会清除死亡预言。"
+              : discoverInteraction.selectionEffect?.kind === "setStats"
+                ? "选择一张加入手牌并将其属性值变为30/30；另外两张会回到共享随从池。"
+                : isKaleidoscopeDiscover
+                  ? discoverInteraction.selectionEffect?.kind ===
+                    "makeGolden"
+                    ? "选择一个金色等级7随从加入手牌。它将在手牌中锁定两回合，达到可用回合后才能打出；这些候选不占用共享随从池。"
+                    : "选择一个等级7随从加入手牌。它将在手牌中锁定两回合，达到可用回合后才能打出；这些候选不占用共享随从池。"
+                  : discoverInteraction.selectionEffect?.kind ===
+                      "rememberTrinketMinion"
+                    ? "选择一张加入手牌；口袋工厂会在以后每个回合开始时获取一张它的复制。"
+                    : "选择一张加入手牌；另外两张会回到共享随从池。"
+    : "";
+
+  const resolveDiscoverChoiceWithPresentation = (
+    input: ResolveDiscoverChoicePresentationInput,
+  ): boolean => {
+    if (resolvingDiscoverInteractionRef.current !== null) return false;
+    const selectedOption = input.options.find(
+      (option) => option.card.instanceId === input.selectedOptionId,
+    );
+    if (!selectedOption) return false;
+
+    const current = gameRef.current;
+    const beforeHuman = humanPlayerForPresentation(current);
+    if (!beforeHuman) return false;
+    const capturedOptions = Object.freeze(
+      input.options.map(snapshotDiscoverPresentationOption),
+    );
+    const capturedSelected = capturedOptions.find(
+      (option) => option.card.instanceId === input.selectedOptionId,
+    );
+    if (!capturedSelected) return false;
+    const handTravel = discoverHandTravel();
+    const shopTarget =
+      input.rewardStrategy === "shopReplace"
+        ? captureHeroPowerPresentationTarget(
+            beforeHuman,
+            input.shopTargetInstanceId,
+          )
+        : null;
+    const shopTravel = shopTarget
+      ? {
+          x:
+            shopTarget.geometry.left +
+            shopTarget.geometry.width / 2 -
+            window.innerWidth / 2,
+          y:
+            shopTarget.geometry.top +
+            shopTarget.geometry.height / 2 -
+            window.innerHeight / 2,
+        }
+      : { x: 0, y: 0 };
+
+    resolvingDiscoverInteractionRef.current = input.interactionId;
+    const { transition, events, motion } = send(
+      {
+        type: "RESOLVE_INTERACTION",
+        interactionId: input.interactionId,
+        optionInstanceId: input.selectedOptionId,
+      },
+      { deferRecruitPresentation: true },
+    );
+    if (!transition.accepted) {
+      resolvingDiscoverInteractionRef.current = null;
+      return false;
+    }
+    setHiddenDiscoverInteractionId(null);
+
+    const afterHuman = humanPlayerForPresentation(transition.state);
+    const beforeHandIds = new Set(
+      beforeHuman.hand.map((card) => card.instanceId),
+    );
+    let rewardCard: DiscoverPresentationOption | null = null;
+    let rewardInstanceId: string | null = null;
+    const discoverTripleReward =
+      capturedSelected.kind === "minion"
+        ? findDiscoverTripleReward(
+            events,
+            input.selectedOptionId,
+            capturedSelected.card.definitionId,
+          )
+        : null;
+
+    if (input.rewardStrategy === "selected" && afterHuman) {
+      const arrived = afterHuman.hand.find(
+        (card) => card.instanceId === input.selectedOptionId,
+      );
+      if (capturedSelected.kind === "minion" && arrived?.kind === "minion") {
+        rewardCard = { kind: "minion", card: { ...arrived } };
+        rewardInstanceId = arrived.instanceId;
+      } else if (
+        capturedSelected.kind === "tavernSpell" &&
+        arrived?.kind === "tavernSpell"
+      ) {
+        rewardCard = { kind: "tavernSpell", card: { ...arrived } };
+        rewardInstanceId = arrived.instanceId;
+      } else if (
+        capturedSelected.kind === "darkmoonPrize" &&
+        arrived?.kind === "spellcraft"
+      ) {
+        rewardCard = { kind: "darkmoonPrize", card: { ...arrived } };
+        rewardInstanceId = arrived.instanceId;
+      } else if (discoverTripleReward) {
+        rewardCard = capturedSelected;
+        rewardInstanceId = discoverTripleReward.instanceId;
+      }
+    } else if (
+      input.rewardStrategy === "generatedMinion" &&
+      afterHuman
+    ) {
+      const generated = afterHuman.hand.find(
+        (card) =>
+          card.kind === "minion" &&
+          !beforeHandIds.has(card.instanceId),
+      );
+      if (generated?.kind === "minion") {
+        rewardCard = { kind: "minion", card: { ...generated } };
+        rewardInstanceId = generated.instanceId;
+      }
+    }
+
+    const presentationState = createDiscoverChoicePresentation({
+      accepted: transition.accepted,
+      interactionId: input.interactionId,
+      optionIds: capturedOptions.map((option) => option.card.instanceId),
+      selectedOptionId: input.selectedOptionId,
+      rewardKind: rewardCard ? "hand" : "immediate",
+      rewardInstanceId: rewardInstanceId ?? input.selectedOptionId,
+    });
+    if (!presentationState) {
+      resolvingDiscoverInteractionRef.current = null;
+      if (events.length > 0) {
+        enqueueRecruitPresentationEvents(events, motion);
+      }
+      return true;
+    }
+
+    pendingDiscoverRecruitPresentationRef.current =
+      events.length > 0 ? { events, motion } : null;
+    deferredDiscoverTripleFocusPhaseRef.current = events.some(
+      (event) => event.kind === "triple",
+    )
+      ? "pending"
+      : null;
+    const selectedName = capturedSelected.card.name;
+    const outcomeLabel = rewardCard
+      ? discoverTripleReward
+        ? `${selectedName}已选定，等待三连锻造`
+        : `${rewardCard.card.name}正在进入手牌`
+      : input.rewardStrategy === "shopReplace"
+        ? `已选择${selectedName}，正在替换酒馆中的${shopTarget?.name ?? "目标随从"}`
+      : input.rewardStrategy === "immediate"
+        ? `已选择${selectedName}，效果已经结算`
+        : `手牌已满，${selectedName}未能进入手牌`;
+    setDiscoverChoicePresentation({
+      state: presentationState,
+      title: input.title,
+      copy: input.copy,
+      options: capturedOptions,
+      rewardCard,
+      outcomeLabel,
+      rewardStrategy: input.rewardStrategy,
+      shopTarget,
+      handTravelX: handTravel.x,
+      handTravelY: handTravel.y,
+      shopTravelX: shopTravel.x,
+      shopTravelY: shopTravel.y,
+    });
+    return true;
+  };
+  const discoverPresentationSelectedOption =
+    discoverChoicePresentation?.options.find(
+      (option) =>
+        option.card.instanceId ===
+        discoverChoicePresentation.state.selectedOptionId,
+    ) ?? null;
+  const discoverPresentationActiveCard =
+    discoverChoicePresentation?.state.stage === "rewardArrival"
+      ? discoverChoicePresentation.rewardCard
+      : discoverPresentationSelectedOption;
+  const pendingDiscoverRewardInstanceId =
+    discoverChoicePresentation?.state.rewardKind === "hand"
+      ? discoverChoicePresentation.state.rewardInstanceId
+      : null;
 
   useEffect(() => {
     const sourceInstanceId =
@@ -5268,121 +6810,241 @@ export default function GameClient() {
   useEffect(() => {
     clearCombatIntroTimer();
     if (
+      !combatEntryPresentation ||
       !battleKey ||
-      game.phase !== "combat" ||
-      combatIntroCompletedBattleKey === battleKey
+      !combatTimeline ||
+      game.phase !== "combat"
     ) {
       return clearCombatIntroTimer;
     }
+    if (combatEntryPresentation.battleKey !== battleKey) {
+      return clearCombatIntroTimer;
+    }
+    if (combatEntryPresentation.stage === "complete") {
+      const completedBattleKey = combatEntryPresentation.battleKey;
+      const completedRevision = combatEntryPresentation.revision;
+      combatIntroTimerRef.current = window.setTimeout(() => {
+        combatIntroTimerRef.current = null;
+        setBattlePlayback(createCombatPlaybackState(combatTimeline));
+        setCombatEntryPresentation((current) =>
+          current?.battleKey === completedBattleKey &&
+          current.stage === "complete" &&
+          current.revision === completedRevision
+            ? null
+            : current,
+        );
+      }, 0);
+      return clearCombatIntroTimer;
+    }
 
+    const expectedBattleKey = combatEntryPresentation.battleKey;
+    const expectedStage = combatEntryPresentation.stage;
+    const expectedRevision = combatEntryPresentation.revision;
+    const reducedMotion = window.matchMedia?.(
+      "(prefers-reduced-motion: reduce)",
+    ).matches ?? false;
     combatIntroTimerRef.current = window.setTimeout(() => {
       combatIntroTimerRef.current = null;
-      setBattlePlayback({
-        battleKey,
-        ...initialCombatPlayback(playbackEventCount),
-      });
-      setCombatIntroCompletedBattleKey(battleKey);
-    }, COMBAT_START_INTRO_DURATION_MS);
+      setCombatEntryPresentation((current) =>
+        transitionCombatEntryPresentation(current, {
+          type: "advance",
+          expectedBattleKey,
+          expectedStage,
+          expectedRevision,
+        }),
+      );
+    }, combatEntryStageDuration(expectedStage, reducedMotion));
 
     return clearCombatIntroTimer;
   }, [
     battleKey,
     clearCombatIntroTimer,
-    combatIntroCompletedBattleKey,
+    combatEntryPresentation,
+    combatTimeline,
     game.phase,
-    playbackEventCount,
   ]);
 
   useEffect(() => {
     clearBattlePlaybackTimer();
     if (
-      !battleKey ||
+      !combatTimeline ||
       game.phase !== "combat" ||
       combatIntroActive ||
-      battlePlaybackComplete
+      effectiveBattlePlayback?.status !== "playing"
     ) {
       return clearBattlePlaybackTimer;
     }
 
+    const expectedRevision = effectiveBattlePlayback.revision;
+    const expectedRevealedCount =
+      effectiveBattlePlayback.revealedCount;
     battlePlaybackTimerRef.current = window.setTimeout(() => {
       battlePlaybackTimerRef.current = null;
       setBattlePlayback((current) => {
-        const currentIsThisBattle = current.battleKey === battleKey;
-        const currentRevealedCount = currentIsThisBattle
-          ? Math.min(current.revealedCount, playbackEventCount)
-          : playbackEventCount > 0
-            ? 1
-            : 0;
-        if (currentIsThisBattle && current.complete) return current;
-        if (currentRevealedCount >= playbackEventCount) {
-          return {
-            battleKey,
-            revealedCount: playbackEventCount,
-            complete: true,
-          };
-        }
-        return {
-          battleKey,
-          revealedCount: currentRevealedCount + 1,
-          complete: false,
-        };
+        const currentState =
+          current?.battleKey === combatTimeline.battleKey
+            ? current
+            : createCombatPlaybackState(combatTimeline);
+        return transitionCombatPlayback(
+          currentState,
+          {
+            type: "tick",
+            expectedRevision,
+            expectedRevealedCount,
+          },
+          combatTimeline,
+        );
       });
     }, currentBattleEventDelay);
 
     return clearBattlePlaybackTimer;
   }, [
-    battleKey,
-    battlePlaybackComplete,
     clearBattlePlaybackTimer,
-    currentBattleEventDelay,
-    game.phase,
-    playbackEventCount,
-    revealedBattleEventCount,
     combatIntroActive,
+    combatTimeline,
+    currentBattleEventDelay,
+    effectiveBattlePlayback?.revealedCount,
+    effectiveBattlePlayback?.revision,
+    effectiveBattlePlayback?.status,
+    game.phase,
   ]);
 
-  const skipBattlePlayback = useCallback(() => {
-    clearBattlePlaybackTimer();
-    if (!battleKey || game.phase !== "combat" || combatIntroActive) {
-      return;
-    }
-    setBattlePlayback({
-      battleKey,
-      revealedCount: playbackEventCount,
-      complete: true,
+  const controlBattlePlayback = useCallback(
+    (action: CombatPlaybackAction) => {
+      clearBattlePlaybackTimer();
+      if (
+        !combatTimeline ||
+        game.phase !== "combat" ||
+        combatIntroActive
+      ) {
+        return;
+      }
+      setBattlePlayback((current) => {
+        const currentState =
+          current?.battleKey === combatTimeline.battleKey
+            ? current
+            : createCombatPlaybackState(combatTimeline);
+        return transitionCombatPlayback(
+          currentState,
+          action,
+          combatTimeline,
+        );
+      });
+    },
+    [
+      clearBattlePlaybackTimer,
+      combatIntroActive,
+      combatTimeline,
+      game.phase,
+    ],
+  );
+
+  const toggleBattlePlayback = useCallback(() => {
+    controlBattlePlayback({
+      type: battlePlaybackPaused ? "play" : "pause",
     });
-  }, [
-    battleKey,
-    clearBattlePlaybackTimer,
-    combatIntroActive,
-    game.phase,
-    playbackEventCount,
-  ]);
+  }, [battlePlaybackPaused, controlBattlePlayback]);
+
+  const stepBattlePlaybackBackward = useCallback(() => {
+    controlBattlePlayback({ type: "step", direction: "backward" });
+  }, [controlBattlePlayback]);
+
+  const stepBattlePlaybackForward = useCallback(() => {
+    controlBattlePlayback({ type: "step", direction: "forward" });
+  }, [controlBattlePlayback]);
+
+  const replayBattlePlayback = useCallback(() => {
+    controlBattlePlayback({ type: "replay" });
+  }, [controlBattlePlayback]);
+
+  const skipBattlePlayback = useCallback(() => {
+    controlBattlePlayback({ type: "skip" });
+  }, [controlBattlePlayback]);
+
+  const seekBattlePlayback = useCallback(
+    (revealedCount: number) => {
+      controlBattlePlayback({ type: "seek", revealedCount });
+    },
+    [controlBattlePlayback],
+  );
+
+  const changeBattleSpeed = useCallback(
+    (speed: BattleSpeed) => {
+      if (speed === battleSpeed) return;
+      controlBattlePlayback({ type: "reschedule" });
+      setBattleSpeed(speed);
+    },
+    [battleSpeed, controlBattlePlayback],
+  );
 
   const continueAfterCombat = useCallback(() => {
     if (!battle || game.phase !== "combat") return;
-    if (human.alive && humanCombatRewardOutcomeCount > 0) {
-      setCombatRewardNotice(humanCombatRewards);
-      const preCombatHandIds = preCombatHandIdsRef.current;
-      setNewCombatRewardIds(
-        preCombatHandIds
-          ? human.hand
-              .filter(
-                (card) =>
-                  card.kind === "minion" &&
-                  !preCombatHandIds.has(card.instanceId),
-              )
-              .map((card) => card.instanceId)
-          : humanCombatRewards.addedInstanceIds,
-      );
-    } else {
-      clearCombatRewardFeedback();
-    }
+    const before = gameRef.current;
+    const rewardNotice =
+      human.alive && humanCombatRewardOutcomeCount > 0
+        ? humanCombatRewards
+        : null;
+    const preCombatHandIds = preCombatHandIdsRef.current;
+    const rewardIds = rewardNotice
+      ? preCombatHandIds
+        ? human.hand
+            .filter(
+              (card) =>
+                card.kind === "minion" &&
+                !preCombatHandIds.has(card.instanceId),
+            )
+            .map((card) => card.instanceId)
+        : humanCombatRewards.addedInstanceIds
+      : [];
+    clearCombatRewardFeedback();
     preCombatHandIdsRef.current = null;
-    send({ type: "CONTINUE" });
+    clearBattlePlaybackTimer();
+    clearCombatIntroTimer();
+    setCombatEntryPresentation(null);
+    setBattlePlayback(null);
+    clearCombatPlaybackSession();
+    const { transition, events } = send({ type: "CONTINUE" });
+    recruitEntryTokenRef.current += 1;
+    const entry = createRecruitEntryPresentation({
+      before,
+      after: transition.state,
+      accepted: transition.accepted,
+      token: recruitEntryTokenRef.current,
+      rewardHandInstanceIds: rewardIds,
+    });
+    if (entry) {
+      pendingRecruitEntryFeedbackRef.current = {
+        rewardNotice,
+        rewardIds: [...entry.rewardHandInstanceIds],
+        presentationEvents: events,
+      };
+      setRecruitEntryPresentation(entry);
+      return;
+    }
+
+    pendingRecruitEntryFeedbackRef.current = null;
+    setRecruitEntryPresentation(null);
+    if (transition.accepted && transition.state.phase === "recruit") {
+      enqueueRecruitPresentationEvents(events);
+      if (rewardNotice) {
+        const afterHuman = transition.state.players.find(
+          (player) => player.id === transition.state.humanPlayerId,
+        );
+        const afterHandIds = new Set(
+          afterHuman?.hand.map((card) => card.instanceId) ?? [],
+        );
+        setCombatRewardNotice(rewardNotice);
+        setNewCombatRewardIds(
+          rewardIds.filter((instanceId) => afterHandIds.has(instanceId)),
+        );
+      }
+    }
   }, [
     battle,
+    clearBattlePlaybackTimer,
+    clearCombatIntroTimer,
     clearCombatRewardFeedback,
+    enqueueRecruitPresentationEvents,
     game.phase,
     human.alive,
     human.hand,
@@ -5402,7 +7064,6 @@ export default function GameClient() {
     }
     clearBattlePlaybackTimer();
     clearCombatIntroTimer();
-    clearTavernSpellCastFeedback();
     const next = createLobbyGame(seed, configuredInitialHealth);
     safeWriteLocalStorage(SAVE_KEY, JSON.stringify(next));
     gameRef.current = next;
@@ -5410,18 +7071,33 @@ export default function GameClient() {
     setStarted(true);
     setLoaded(true);
     setSelection(null);
+    setHeroPowerTargeting(false);
     setSelectedStandingPlayerId(null);
     setShowRestart(false);
     setShowLobbyOverview(false);
     setInfoTab("details");
     setMagneticAnnouncement("");
-    setBattlePlayback({
-      battleKey: null,
-      revealedCount: 0,
-      complete: false,
-    });
+    setHeroPowerPresentation(null);
+    setSpellCastPresentation(null);
+    setBattlePlayback(null);
+    clearCombatPlaybackSession();
     setRecruitPresentationQueue([]);
-    setCombatIntroCompletedBattleKey(null);
+    setRecruitEntryPresentation(null);
+    setHeroChoicePresentation(null);
+    setTrinketChoicePresentation(null);
+    setTrinketChoiceHudTravel({ x: 0, y: 0 });
+    setDiscoverChoicePresentation(null);
+    setHiddenDiscoverInteractionId(null);
+    resolvingHeroChoiceInteractionRef.current = null;
+    resolvingTrinketChoiceInteractionRef.current = null;
+    pendingTrinketRecruitPresentationRef.current = null;
+    resolvingDiscoverInteractionRef.current = null;
+    pendingDiscoverRecruitPresentationRef.current = null;
+    pendingHeroPowerRecruitPresentationRef.current = null;
+    pendingSpellCastRecruitPresentationRef.current = null;
+    deferredDiscoverTripleFocusPhaseRef.current = null;
+    pendingRecruitEntryFeedbackRef.current = null;
+    setCombatEntryPresentation(null);
     clearCombatRewardFeedback();
     restartReturnFocusRef.current = null;
     lobbyOverviewReturnFocusRef.current = null;
@@ -5429,7 +7105,6 @@ export default function GameClient() {
     preCombatHandIdsRef.current = null;
   }, [
     clearBattlePlaybackTimer,
-    clearTavernSpellCastFeedback,
     clearCombatIntroTimer,
     clearCombatRewardFeedback,
     configuredInitialHealth,
@@ -5622,32 +7297,61 @@ export default function GameClient() {
       ) {
         return;
       }
-      if (tavernSpellCastTimerRef.current !== null) {
-        window.clearTimeout(tavernSpellCastTimerRef.current);
+      const castMotion = captureSpellCastMotion(
+        card.instanceId,
+        target?.instanceId,
+      );
+      const { transition, events, motion: recruitMotion } = send(
+        {
+          type: "CAST_TAVERN_SPELL",
+          cardInstanceId,
+          targetInstanceId,
+        },
+        { deferRecruitPresentation: true },
+      );
+      if (!transition.accepted) return;
+
+      spellCastPresentationTokenRef.current += 1;
+      const presentationState = createSpellCastPresentation({
+        accepted: transition.accepted,
+        token: spellCastPresentationTokenRef.current,
+        cardInstanceId: card.instanceId,
+        cardKind: "tavernSpell",
+        cardName: card.name,
+        ...(target
+          ? {
+              targetInstanceId: target.instanceId,
+              targetName: target.name,
+            }
+          : {}),
+      });
+      if (!presentationState) {
+        enqueueRecruitPresentationEvents(events, recruitMotion);
+        return;
       }
-      if (target) {
-        setTavernSpellCastFeedback({
-          targetInstanceId: target.instanceId,
-          label: card.name,
-          token: card.instanceId,
-        });
-        tavernSpellCastTimerRef.current = window.setTimeout(() => {
-          tavernSpellCastTimerRef.current = null;
-          setTavernSpellCastFeedback(null);
-        }, 720);
-      }
+      pendingSpellCastRecruitPresentationRef.current =
+        events.length > 0 ? { events, motion: recruitMotion } : null;
+      setSpellCastPresentation({
+        state: presentationState,
+        card: { ...card },
+        targetCard: target ? { ...target } : null,
+        motion: castMotion,
+      });
       setMagneticAnnouncement(
         target
           ? `已对${target.name}施放${card.name}`
           : `已施放${card.name}：${card.description}`,
       );
-      send({
-        type: "CAST_TAVERN_SPELL",
-        cardInstanceId,
-        targetInstanceId,
-      });
     },
-    [game, human.board, human.hand, human.id, human.shop, send],
+    [
+      enqueueRecruitPresentationEvents,
+      game,
+      human.board,
+      human.hand,
+      human.id,
+      human.shop,
+      send,
+    ],
   );
 
   const castSpellcraft = useCallback(
@@ -5682,33 +7386,62 @@ export default function GameClient() {
       ) {
         return;
       }
-      if (target) {
-        if (tavernSpellCastTimerRef.current !== null) {
-          window.clearTimeout(tavernSpellCastTimerRef.current);
-        }
-        setTavernSpellCastFeedback({
-          targetInstanceId: target.instanceId,
-          label: card.name,
-          token: card.instanceId,
-        });
-        tavernSpellCastTimerRef.current = window.setTimeout(() => {
-          tavernSpellCastTimerRef.current = null;
-          setTavernSpellCastFeedback(null);
-        }, 720);
-      }
       const spellLabel = spellcraftDisplayLabel(card);
+      const castMotion = captureSpellCastMotion(
+        card.instanceId,
+        target?.instanceId,
+      );
+      const { transition, events, motion: recruitMotion } = send(
+        {
+          type: "CAST_SPELLCRAFT",
+          cardInstanceId,
+          targetInstanceId,
+        },
+        { deferRecruitPresentation: true },
+      );
+      if (!transition.accepted) return;
+
+      spellCastPresentationTokenRef.current += 1;
+      const presentationState = createSpellCastPresentation({
+        accepted: transition.accepted,
+        token: spellCastPresentationTokenRef.current,
+        cardInstanceId: card.instanceId,
+        cardKind: "spellcraft",
+        cardName: card.name,
+        ...(target
+          ? {
+              targetInstanceId: target.instanceId,
+              targetName: target.name,
+            }
+          : {}),
+      });
+      if (!presentationState) {
+        enqueueRecruitPresentationEvents(events, recruitMotion);
+        return;
+      }
+      pendingSpellCastRecruitPresentationRef.current =
+        events.length > 0 ? { events, motion: recruitMotion } : null;
+      setSpellCastPresentation({
+        state: presentationState,
+        card: { ...card },
+        targetCard: target ? { ...target } : null,
+        motion: castMotion,
+      });
       setMagneticAnnouncement(
         target
           ? `已对${target.name}施放${spellLabel}${card.name}`
           : `已施放${spellLabel}${card.name}：${card.description}`,
       );
-      send({
-        type: "CAST_SPELLCRAFT",
-        cardInstanceId,
-        targetInstanceId,
-      });
     },
-    [game, human.board, human.hand, human.id, human.shop, send],
+    [
+      enqueueRecruitPresentationEvents,
+      game,
+      human.board,
+      human.hand,
+      human.id,
+      human.shop,
+      send,
+    ],
   );
 
   const showCardInspection = useCallback(
@@ -5940,14 +7673,14 @@ export default function GameClient() {
 
   const selectStandingPlayer = useCallback(
     (playerId: string) => {
-      if (game.phase === "combat" && !battlePlaybackComplete) {
+      if (game.phase === "combat" && !battlePlaybackResultUnlocked) {
         return;
       }
       setSelection(null);
       setSelectedStandingPlayerId(playerId);
       setInfoTab("scouting");
     },
-    [battlePlaybackComplete, game.phase],
+    [battlePlaybackResultUnlocked, game.phase],
   );
 
   const resolveDragTarget = useCallback(
@@ -6852,6 +8585,30 @@ export default function GameClient() {
           : battle.damageToPlayerB
         : 0
     : 0;
+  const alivePlayersAtDamageCapSnapshot =
+    game.phase === "combat" && battle
+      ? (battle.alivePlayersAtCombatStart ??
+        game.players.filter((player) => player.alive).length)
+      : game.players.filter((player) => player.alive).length;
+  const currentDamageCap =
+    game.phase === "combat" && battle && battle.damageCap !== undefined
+      ? battle.damageCap
+      : getSoloCombatDamageCap(game.round, alivePlayersAtDamageCapSnapshot);
+  const damageCapStatusText =
+    currentDamageCap === null
+      ? "已进入前四，战斗伤害上限已解除"
+      : `当前战斗伤害上限 ${currentDamageCap} 点${
+          currentDamageCap === 5
+            ? "，第 4 回合提高至 10 点"
+            : currentDamageCap === 10
+              ? "，第 8 回合提高至 15 点"
+              : "，进入前四后解除"
+        }`;
+  const cappedHeroDamageEvent = battle?.events.find(
+    (event) =>
+      event.type === "heroDamage" &&
+      (event.damagePreventedByCap ?? 0) > 0,
+  );
   const activeRecruitCurrencies =
     activeRecruitPresentation?.events.filter(
       (event) => event.kind === "currency",
@@ -6860,6 +8617,12 @@ export default function GameClient() {
   const activeRecruitMove = activeRecruitPresentation?.events.find(
     (event) => event.kind === "cardMove",
   );
+  const activeRecruitArrival =
+    activeRecruitMove?.kind === "cardMove" &&
+    activeRecruitMove.motion === "hand-to-board" &&
+    activeRecruitMove.card.kind === "minion"
+      ? activeRecruitMove
+      : null;
   const activeRecruitRefresh =
     activeRecruitPresentation?.events.find(
       (event) => event.kind === "shopRefresh",
@@ -6872,6 +8635,16 @@ export default function GameClient() {
     activeRecruitPresentation?.events.filter(
       (event) => event.kind === "triple",
     ) ?? [];
+  const activeRecruitTriple = activeRecruitTriples[0] ?? null;
+  const activeTripleForge =
+    activeRecruitPresentation?.tripleForge ?? null;
+  const pendingTripleGoldenIds = new Set(
+    recruitPresentationQueue.flatMap((presentation) =>
+      presentation.events.flatMap((event) =>
+        event.kind === "triple" ? [event.golden.instanceId] : [],
+      ),
+    ),
+  );
   const bloodGemCastFeedback: BloodGemCastFeedback | null =
     activeRecruitBloodGemPulse?.kind === "bloodGemPulse"
       ? {
@@ -6896,8 +8669,13 @@ export default function GameClient() {
         }
       : null;
   const activeRecruitMotion = activeRecruitPresentation?.motion ?? null;
+  const tripleForgeHasTakenOver =
+    activeTripleForge !== null &&
+    activeTripleForge.stage !== "acquireHandoff";
   const activeRecruitAction =
-    activeRecruitMove?.kind === "cardMove"
+    tripleForgeHasTakenOver
+      ? "triple-merge"
+      : activeRecruitMove?.kind === "cardMove"
       ? activeRecruitMove.motion
       : activeRecruitRefresh
         ? "shop-refresh"
@@ -6909,10 +8687,14 @@ export default function GameClient() {
               ? "blood-gem-pulse"
             : "none";
   const recruitFeedbackTitle =
-    activeRecruitMove?.kind === "cardMove"
+    tripleForgeHasTakenOver && activeRecruitTriple?.kind === "triple"
+      ? `三连 · ${activeRecruitTriple.golden.name}`
+      : activeRecruitMove?.kind === "cardMove"
       ? activeRecruitMove.motion === "shop-to-hand"
         ? `购买 · ${activeRecruitMove.card.name}`
-        : `出售 · ${activeRecruitMove.card.name}`
+        : activeRecruitMove.motion === "hand-to-board"
+          ? `打出 · ${activeRecruitMove.card.name}`
+          : `出售 · ${activeRecruitMove.card.name}`
       : activeRecruitRefresh?.kind === "shopRefresh"
         ? activeRecruitRefresh.free
           ? "免费刷新"
@@ -6926,6 +8708,23 @@ export default function GameClient() {
                 ? "鲁古格 · 鲜血宝石转投"
                 : "鲜血宝石 · 逐颗结算"
             : "";
+  const recruitEntryStage = recruitEntryPresentation?.stage ?? null;
+  const recruitEntryShowsPreviousGold =
+    recruitEntryStage === "curtain" ||
+    recruitEntryStage === "roundBanner" ||
+    recruitEntryStage === "shopReveal";
+  const displayedGold = recruitEntryShowsPreviousGold
+    ? recruitEntryPresentation?.previousGold ?? human.gold
+    : recruitEntryPresentation?.gold ?? human.gold;
+  const defaultGoldCapacity = Math.max(
+    human.gold,
+    Math.min(human.maxGold, game.round + 2),
+  );
+  const displayedGoldCapacity = recruitEntryShowsPreviousGold
+    ? recruitEntryPresentation?.previousMaxGold ?? defaultGoldCapacity
+    : recruitEntryPresentation?.maxGold ?? defaultGoldCapacity;
+  const goldPipCount = Math.min(12, Math.max(0, displayedGoldCapacity));
+  const goldRefillActive = recruitEntryStage === "goldRefill";
 
   return (
     <main
@@ -6933,6 +8732,8 @@ export default function GameClient() {
         interactionLocked ? " has-pending-interaction" : ""
       }${
         activeRecruitPresentation ? " has-recruit-presentation" : ""
+      }${
+        recruitEntryPresentation ? " has-recruit-entry" : ""
       }`}
       style={
         {
@@ -6946,6 +8747,13 @@ export default function GameClient() {
       data-loaded={loaded}
       data-dragging={dragSession?.active === true}
       data-combat-stage={combatPresentationStage ?? "none"}
+      data-recruit-entry-stage={recruitEntryStage ?? "none"}
+      data-recruit-entry-fresh-offers={
+        recruitEntryPresentation?.freshOfferInstanceIds.length ?? 0
+      }
+      data-recruit-entry-retained-offers={
+        recruitEntryPresentation?.retainedOfferInstanceIds.length ?? 0
+      }
       data-pending-interaction={humanInteraction?.kind ?? "none"}
       data-testid="game-shell"
     >
@@ -7025,19 +8833,64 @@ export default function GameClient() {
           <strong>{displayedHumanArmor}</strong>
         </div>
         <div
+          className="hud-stat damage-cap"
+          aria-label={damageCapStatusText}
+          data-damage-cap={currentDamageCap ?? "none"}
+          data-stat="damage-cap"
+          data-testid="combat-damage-cap"
+          role="status"
+          title={damageCapStatusText}
+        >
+          <small>伤害上限</small>
+          <strong>{currentDamageCap ?? "无"}</strong>
+        </div>
+        <div
           className={`hud-stat gold${
             activeRecruitCurrency?.currency === "gold"
               ? activeRecruitCurrency.delta < 0
                 ? " is-spending"
                 : " is-earning"
               : ""
-          }`}
-          aria-label={`金币 ${human.gold}`}
+          }${goldRefillActive ? " is-refilling" : ""}`}
+          aria-label={`金币 ${displayedGold} / ${displayedGoldCapacity}`}
+          data-displayed-gold={displayedGold}
+          data-displayed-max-gold={displayedGoldCapacity}
           data-stat="gold"
           data-testid="human-gold"
         >
           <small>金币</small>
-          <strong>{human.gold}</strong>
+          <strong>
+            {displayedGold} / {displayedGoldCapacity}
+          </strong>
+          <span
+            className="gold-refill-track"
+            aria-hidden="true"
+            data-testid="gold-refill-track"
+          >
+            {Array.from({ length: goldPipCount }, (_, index) => {
+              const wasFilled =
+                index <
+                (recruitEntryPresentation?.previousGold ?? displayedGold);
+              const isFilled = index < displayedGold;
+              const isNew = goldRefillActive && isFilled && !wasFilled;
+              return (
+                <span
+                  className={`gold-refill-pip${
+                    isFilled ? " is-filled" : ""
+                  }${wasFilled ? " was-filled" : ""}${
+                    isNew ? " is-new" : ""
+                  }`}
+                  key={`gold-pip-${index}`}
+                  style={{ "--gold-pip-index": index } as CSSProperties}
+                />
+              );
+            })}
+            {displayedGoldCapacity > goldPipCount && (
+              <span className="gold-refill-overflow">
+                +{displayedGoldCapacity - goldPipCount}
+              </span>
+            )}
+          </span>
           {activeRecruitCurrencies
             .filter((currency) => currency.currency === "gold")
             .map((currency, index) => (
@@ -7119,7 +8972,11 @@ export default function GameClient() {
         ) : (
           <div
             className={`hud-hero-power${
-              humanHeroPowerActive ? " is-used" : ""
+              humanHeroPowerUsedThisTurn
+                ? " is-used"
+                : humanHeroPowerActive
+                  ? " is-locked"
+                  : ""
             }`}
             aria-label={
               humanHeroPower
@@ -7176,23 +9033,51 @@ export default function GameClient() {
             title={lobbyOverviewSummary}
             onClick={openLobbyOverview}
           >
-            <small>大厅规则</small>
-            <strong>
-              {humanTrinkets.length > 0
-                ? humanTrinkets
-                    .map((definition) => definition.name)
-                    .join(" · ")
-                : "尚未开启"}
-            </strong>
-            <span>
-              {nextTrinketRound === null
-                ? "小符文与大符文均已生效"
-                : game.round < nextTrinketRound
-                  ? `第 ${nextTrinketRound} 回合开启下一次选择`
-                  : "本回合等待选择"}
-              {human.pendingSystemSpellIds.length > 0
-                ? ` · ${human.pendingSystemSpellIds.length} 张系统牌等待手牌空位`
-                : ""}
+            <span className="trinket-hud-slots" aria-hidden="true">
+              <span
+                className={`trinket-hud-slot${
+                  lesserTrinket ? " is-filled" : ""
+                }`}
+                data-testid="trinket-hud-slot-lesser"
+              >
+                {lesserTrinket ? (
+                  <CardArtwork unit={lesserTrinket} kind="portrait" />
+                ) : (
+                  "小"
+                )}
+              </span>
+              <span
+                className={`trinket-hud-slot${
+                  greaterTrinket ? " is-filled" : ""
+                }`}
+                data-testid="trinket-hud-slot-greater"
+              >
+                {greaterTrinket ? (
+                  <CardArtwork unit={greaterTrinket} kind="portrait" />
+                ) : (
+                  "大"
+                )}
+              </span>
+            </span>
+            <span className="trinket-hud-copy">
+              <small>饰品</small>
+              <strong>
+                {humanTrinkets.length > 0
+                  ? humanTrinkets
+                      .map((definition) => definition.name)
+                      .join(" · ")
+                  : "尚未开启"}
+              </strong>
+              <span>
+                {nextTrinketRound === null
+                  ? "小符文与大符文均已生效"
+                  : game.round < nextTrinketRound
+                    ? `第 ${nextTrinketRound} 回合开启下一次选择`
+                    : "本回合等待选择"}
+                {human.pendingSystemSpellIds.length > 0
+                  ? ` · ${human.pendingSystemSpellIds.length} 张系统牌等待手牌空位`
+                  : ""}
+              </span>
             </span>
           </button>
         )}
@@ -7220,7 +9105,22 @@ export default function GameClient() {
                 human.hand.map((card) => card.instanceId),
               );
               setInfoTab("battle");
-              send({ type: "END_TURN" });
+              const { transition } = send({ type: "END_TURN" });
+              const nextTimeline =
+                transition.accepted &&
+                transition.state.phase === "combat" &&
+                transition.state.lastBattle
+                  ? createCombatPlaybackTimeline(
+                      transition.state.lastBattle,
+                    )
+                  : null;
+              setBattlePlayback(null);
+              clearCombatPlaybackSession();
+              setCombatEntryPresentation(
+                nextTimeline
+                  ? createCombatEntryPresentation(nextTimeline.battleKey)
+                  : null,
+              );
             }}
           >
             {game.phase === "recruit" ? "结束回合" : "战斗中"}
@@ -7230,7 +9130,14 @@ export default function GameClient() {
 
       <div
         className="main-grid"
-        inert={modalInteractionLocked || combatIntroActive || pageModalOpen}
+        inert={
+          modalInteractionLocked ||
+          recruitEntryPresentation !== null ||
+          discoverChoicePresentation !== null ||
+          recruitPresentationBlocksInteraction ||
+          combatIntroActive ||
+          pageModalOpen
+        }
       >
         <section className="play-column" aria-label="游戏区域">
           <section
@@ -7486,7 +9393,8 @@ export default function GameClient() {
                       }
                       heroPowerTarget={
                         heroPowerTargeting &&
-                        humanHeroPowerTargetMode === "shop" &&
+                        (humanHeroPowerTargetMode === "shop" ||
+                          humanHeroPowerTargetMode === "shopOrBoard") &&
                         heroPowerTargetValidIds.has(offer.unit.instanceId)
                       }
                       dragEnabled={
@@ -7557,7 +9465,8 @@ export default function GameClient() {
                         }
                         if (
                           heroPowerTargeting &&
-                          humanHeroPowerTargetMode === "shop" &&
+                          (humanHeroPowerTargetMode === "shop" ||
+                            humanHeroPowerTargetMode === "shopOrBoard") &&
                           heroPowerTargetValidIds.has(offer.unit.instanceId)
                         ) {
                           onHeroPowerTargetClick(offer.unit.instanceId);
@@ -7756,7 +9665,8 @@ export default function GameClient() {
                   combatChargeX={combatChargeVector.x}
                   combatChargeY={combatChargeVector.y}
                   heroPowerTargetIds={
-                    humanHeroPowerTargetMode === "board"
+                    humanHeroPowerTargetMode === "board" ||
+                    humanHeroPowerTargetMode === "shopOrBoard"
                       ? [...heroPowerTargetValidIds]
                       : undefined
                   }
@@ -7767,7 +9677,9 @@ export default function GameClient() {
                 !combatIntroActive &&
                 !battlePlaybackComplete && (
                   <div
-                    className="combat-playback"
+                    className={`combat-playback${
+                      battlePlaybackPaused ? " is-paused" : ""
+                    }`}
                     data-event-type={currentBattleEvent?.type}
                     data-testid="combat-playback"
                   >
@@ -7779,22 +9691,30 @@ export default function GameClient() {
                     >
                       <span
                         className="combat-playback-progress"
-                        aria-hidden="true"
                       >
                         战斗事件 {revealedBattleEventCount} /{" "}
                         {playbackEventCount}
+                        {battlePlaybackPaused && (
+                          <span className="combat-playback-state">
+                            已暂停
+                          </span>
+                        )}
                       </span>
-                      <div className="combat-playback-bar" aria-hidden="true">
-                        <div
-                          className="combat-playback-bar-fill"
-                          style={{
-                            width:
-                              playbackEventCount > 0
-                                ? `${(revealedBattleEventCount / playbackEventCount) * 100}%`
-                                : "0%",
-                          }}
-                        />
-                      </div>
+                      <input
+                        type="range"
+                        className="combat-playback-scrubber"
+                        min={0}
+                        max={furthestRevealedBattleEventCount}
+                        value={Math.min(
+                          revealedBattleEventCount,
+                          furthestRevealedBattleEventCount,
+                        )}
+                        aria-label={`战斗回放进度，已显示 ${revealedBattleEventCount} / ${playbackEventCount} 个事件`}
+                        data-testid="battle-playback-scrubber"
+                        onChange={(event) =>
+                          seekBattlePlayback(Number(event.currentTarget.value))
+                        }
+                      />
                       <strong>
                         {currentBattleEvent?.type === "attack" && (
                           <span
@@ -7831,6 +9751,14 @@ export default function GameClient() {
                             触发！
                           </span>
                         )}
+                        {currentDamageCapLabel && (
+                          <span
+                            className="combat-damage-cap-mark"
+                            data-testid="combat-damage-cap-mark"
+                          >
+                            {currentDamageCapLabel}
+                          </span>
+                        )}
                         {currentBattleEvent?.message ?? "准备战斗回放…"}
                       </strong>
                     </div>
@@ -7840,12 +9768,52 @@ export default function GameClient() {
                     >
                       <button
                         type="button"
+                        className="combat-control-button"
+                        aria-label="重新播放本场战斗"
+                        title="重新播放本场战斗"
+                        data-testid="battle-replay-restart"
+                        onClick={replayBattlePlayback}
+                      >
+                        ↺
+                      </button>
+                      <button
+                        type="button"
+                        className="combat-control-button"
+                        aria-label="上一个战斗事件"
+                        title="上一个战斗事件"
+                        data-testid="battle-step-back"
+                        disabled={revealedBattleEventCount <= 0}
+                        onClick={stepBattlePlaybackBackward}
+                      >
+                        ‹
+                      </button>
+                      <button
+                        type="button"
+                        className="combat-control-button combat-play-pause-button"
+                        aria-pressed={battlePlaybackPaused}
+                        data-testid="battle-play-pause"
+                        onClick={toggleBattlePlayback}
+                      >
+                        {battlePlaybackPaused ? "继续" : "暂停"}
+                      </button>
+                      <button
+                        type="button"
+                        className="combat-control-button"
+                        aria-label="下一个战斗事件"
+                        title="下一个战斗事件"
+                        data-testid="battle-step-forward"
+                        onClick={stepBattlePlaybackForward}
+                      >
+                        ›
+                      </button>
+                      <button
+                        type="button"
                         className={`combat-speed-button${
                           battleSpeed === 1 ? " is-active" : ""
                         }`}
                         aria-pressed={battleSpeed === 1}
                         data-testid="battle-speed-1"
-                        onClick={() => setBattleSpeed(1)}
+                        onClick={() => changeBattleSpeed(1)}
                       >
                         1×
                       </button>
@@ -7856,9 +9824,20 @@ export default function GameClient() {
                         }`}
                         aria-pressed={battleSpeed === 2}
                         data-testid="battle-speed-2"
-                        onClick={() => setBattleSpeed(2)}
+                        onClick={() => changeBattleSpeed(2)}
                       >
                         2×
+                      </button>
+                      <button
+                        type="button"
+                        className={`combat-speed-button${
+                          battleSpeed === 4 ? " is-active" : ""
+                        }`}
+                        aria-pressed={battleSpeed === 4}
+                        data-testid="battle-speed-4"
+                        onClick={() => changeBattleSpeed(4)}
+                      >
+                        4×
                       </button>
                       <button
                         type="button"
@@ -7885,6 +9864,16 @@ export default function GameClient() {
                             : "双方英雄未受伤害"}
                         </span>
                       </div>
+                      {cappedHeroDamageEvent && (
+                        <span
+                          className="combat-damage-cap-summary"
+                          data-testid="combat-damage-cap-summary"
+                        >
+                          原始 {cappedHeroDamageEvent.uncappedAmount} 点 · 上限{" "}
+                          {cappedHeroDamageEvent.damageCap} · 减免{" "}
+                          {cappedHeroDamageEvent.damagePreventedByCap}
+                        </span>
+                      )}
                       {human.alive &&
                         humanCombatRewardOutcomeCount > 0 && (
                         <span
@@ -7896,14 +9885,32 @@ export default function GameClient() {
                         </span>
                         )}
                     </div>
-                    <button
-                      type="button"
-                      className="action-button primary"
-                      data-testid="continue-after-combat"
-                      onClick={continueAfterCombat}
-                    >
-                      {human.alive ? "继续招募" : "查看最终名次"}
-                    </button>
+                    <div className="combat-banner-actions">
+                      <button
+                        type="button"
+                        className="action-button secondary"
+                        data-testid="battle-result-step-back"
+                        onClick={stepBattlePlaybackBackward}
+                      >
+                        上一条
+                      </button>
+                      <button
+                        type="button"
+                        className="action-button secondary"
+                        data-testid="battle-result-replay"
+                        onClick={replayBattlePlayback}
+                      >
+                        重新播放
+                      </button>
+                      <button
+                        type="button"
+                        className="action-button primary"
+                        data-testid="continue-after-combat"
+                        onClick={continueAfterCombat}
+                      >
+                        {human.alive ? "继续招募" : "查看最终名次"}
+                      </button>
+                    </div>
                   </div>
                 )}
               {boardChoiceInteraction && (
@@ -7974,6 +9981,9 @@ export default function GameClient() {
               <BoardRow
                 units={friendlyCombatBoard}
                 side="friendly"
+                recruitArrivalInstanceId={
+                  activeRecruitArrival?.card.instanceId
+                }
                 getCardInspectionHandlers={getCardInspectionHandlers}
                 selection={selection}
                 dragSession={dragSession}
@@ -8071,7 +10081,8 @@ export default function GameClient() {
                 combatChargeX={combatChargeVector.x}
                 combatChargeY={combatChargeVector.y}
                 heroPowerTargetIds={
-                  humanHeroPowerTargetMode === "board"
+                  humanHeroPowerTargetMode === "board" ||
+                  humanHeroPowerTargetMode === "shopOrBoard"
                     ? [...heroPowerTargetValidIds]
                     : undefined
                 }
@@ -8350,6 +10361,9 @@ export default function GameClient() {
                   <TavernSpellCard
                     card={card}
                     key={card.instanceId}
+                    discoverRewardPending={
+                      pendingDiscoverRewardInstanceId === card.instanceId
+                    }
                     selected={
                       selection?.zone === "hand" &&
                       selection.index === index
@@ -8378,6 +10392,9 @@ export default function GameClient() {
                   <SpellcraftCard
                     card={card}
                     key={card.instanceId}
+                    discoverRewardPending={
+                      pendingDiscoverRewardInstanceId === card.instanceId
+                    }
                     selected={
                       selection?.zone === "hand" &&
                       selection.index === index
@@ -8407,6 +10424,12 @@ export default function GameClient() {
                     unit={card}
                     compact
                     key={card.instanceId}
+                    discoverRewardPending={
+                      pendingDiscoverRewardInstanceId === card.instanceId
+                    }
+                    tripleForgePending={pendingTripleGoldenIds.has(
+                      card.instanceId,
+                    )}
                     selected={
                       selection?.zone === "hand" &&
                       selection.index === index
@@ -9128,17 +11151,54 @@ export default function GameClient() {
               <div
                 className="battle-log"
                 aria-live={
-                  game.phase === "combat" && !battlePlaybackComplete
+                  game.phase === "combat" &&
+                  effectiveBattlePlayback?.status === "playing"
                     ? "off"
                     : "polite"
                 }
               >
                 {revealedBattleLogEvents.length ? (
-                  revealedBattleLogEvents.slice(-80).map((event) => (
-                    <p key={`${battle?.round ?? "battle"}-${event.index}`}>
-                      <strong>{event.index + 1}</strong> {event.message}
-                    </p>
-                  ))
+                  revealedBattleLogEvents.slice(-80).map((event) => {
+                    const revealCount = battle
+                      ? combatPlaybackRevealCountForEvent(
+                          battle.events,
+                          event.index,
+                        )
+                      : null;
+                    const canSeekToEvent =
+                      game.phase === "combat" &&
+                      revealCount !== null &&
+                      revealCount <= furthestRevealedBattleEventCount;
+                    const content = (
+                      <>
+                        <strong>{event.index + 1}</strong> {event.message}
+                      </>
+                    );
+                    return canSeekToEvent ? (
+                      <button
+                        type="button"
+                        className="battle-log-event"
+                        aria-current={
+                          !battlePlaybackComplete &&
+                          revealedBattleEventCount === revealCount
+                            ? "step"
+                            : undefined
+                        }
+                        data-testid={`battle-log-event-${revealCount}`}
+                        key={`${battle?.round ?? "battle"}-${event.index}`}
+                        onClick={() => seekBattlePlayback(revealCount)}
+                      >
+                        {content}
+                      </button>
+                    ) : (
+                      <p
+                        className="battle-log-event"
+                        key={`${battle?.round ?? "battle"}-${event.index}`}
+                      >
+                        {content}
+                      </p>
+                    );
+                  })
                 ) : battle && game.phase === "combat" ? (
                   <div className="empty-state">战斗回放准备中…</div>
                 ) : (
@@ -9152,34 +11212,136 @@ export default function GameClient() {
         </aside>
       </div>
 
-      {combatIntroActive && battle && introOpponent && (
+      {recruitEntryPresentation &&
+        recruitEntryPresentation.stage !== "complete" && (
+          <section
+            className={`recruit-entry-intro stage-${recruitEntryPresentation.stage}`}
+            role="status"
+            aria-live="polite"
+            aria-atomic="true"
+            aria-label={recruitEntryAnnouncement(recruitEntryPresentation)}
+            data-round={recruitEntryPresentation.round}
+            data-stage={recruitEntryPresentation.stage}
+            data-testid="recruit-entry-intro"
+            data-transition-key={recruitEntryPresentation.transitionKey}
+          >
+            <span className="recruit-entry-rays" aria-hidden="true" />
+            <div className="recruit-entry-ribbon">
+              <span className="recruit-entry-round">
+                第 {recruitEntryPresentation.round} 回合
+              </span>
+              <strong className="recruit-entry-title">招募阶段</strong>
+              <span className="recruit-entry-subtitle">
+                {recruitEntryPresentation.stage === "curtain"
+                  ? "战斗结算完毕"
+                  : recruitEntryPresentation.stage === "roundBanner"
+                    ? "返回鲍勃的酒馆"
+                    : recruitEntryPresentation.stage === "shopReveal"
+                      ? `酒馆 ${recruitEntryPresentation.tavernTier} 星 · 商店报价就绪`
+                      : `金币补充至 ${recruitEntryPresentation.gold} / ${recruitEntryPresentation.maxGold}`}
+              </span>
+            </div>
+            <button
+              type="button"
+              className="recruit-entry-skip"
+              data-testid="skip-recruit-entry"
+              onClick={() =>
+                setRecruitEntryPresentation((current) =>
+                  transitionRecruitEntryPresentation(current, {
+                    type: "skip",
+                    expectedKey: recruitEntryPresentation.transitionKey,
+                  }),
+                )
+              }
+            >
+              跳过动画
+            </button>
+          </section>
+        )}
+
+      {combatIntroActive &&
+        combatEntryStage !== "complete" &&
+        battle &&
+        introOpponent && (
         <section
-          className="combat-start-intro"
+          className={`combat-start-intro stage-${combatEntryStage}`}
           role="status"
           aria-live="polite"
           aria-atomic="true"
           aria-label={`第 ${battle.round} 回合，开始战斗，对阵${
             introOpponent.opponentIsGhost ? "幽灵" : ""
-          }${introOpponent.opponentName}`}
+          }${introOpponent.opponentName}；${
+            combatEntryStage === "versusReveal"
+              ? "正在揭示双方英雄"
+              : combatEntryStage === "warbandReveal"
+                ? "双方初始阵容已揭示，首次攻击尚未开始"
+                : "阵容阅读完毕，准备首次攻击"
+          }`}
+          data-friendly-board-count={friendlyCombatBoard.length}
+          data-opponent-board-count={opponentInitialBoard.length}
+          data-stage={combatEntryStage}
           data-testid="combat-start-intro"
         >
           <div className="combat-start-stage">
             <span className="combat-start-round">
               第 {battle.round} 回合
             </span>
-            {/* eslint-disable-next-line @next/next/no-img-element */}
-            <img
-              className="combat-start-emblem"
-              src="/ui/battle-crossed-weapons.webp"
-              alt=""
-              draggable={false}
-            />
+            <div className="combat-start-versus" aria-hidden="true">
+              <article className="combat-start-hero is-friendly">
+                <span className="combat-start-hero-art">
+                  {humanHero ? (
+                    <CardArtwork unit={humanHero} kind="portrait" />
+                  ) : (
+                    <span className="art-fallback">{human.name}</span>
+                  )}
+                </span>
+                <strong>{human.name}</strong>
+                <span>{humanHero?.name ?? "你的英雄"}</span>
+              </article>
+              <span className="combat-start-versus-mark">
+                {/* eslint-disable-next-line @next/next/no-img-element */}
+                <img
+                  className="combat-start-emblem"
+                  src="/ui/battle-crossed-weapons.webp"
+                  alt=""
+                  draggable={false}
+                />
+                <b>VS</b>
+              </span>
+              <article className="combat-start-hero is-opponent">
+                <span className="combat-start-hero-art">
+                  {opponentHero ? (
+                    <CardArtwork unit={opponentHero} kind="portrait" />
+                  ) : (
+                    <span className="art-fallback">
+                      {introOpponent.opponentName}
+                    </span>
+                  )}
+                </span>
+                <strong>{introOpponent.opponentName}</strong>
+                <span>
+                  {introOpponent.opponentIsGhost
+                    ? "幽灵阵容"
+                    : opponentHero?.name ?? "对手英雄"}
+                </span>
+              </article>
+            </div>
             <div className="combat-start-banner">
-              <strong>开始战斗</strong>
+              <strong>
+                {combatEntryStage === "versusReveal"
+                  ? "开始战斗"
+                  : combatEntryStage === "warbandReveal"
+                    ? "双方阵容"
+                    : "准备攻击"}
+              </strong>
               <span>
-                对阵{" "}
-                {introOpponent.opponentIsGhost ? "幽灵 · " : ""}
-                {introOpponent.opponentName}
+                {combatEntryStage === "versusReveal"
+                  ? `对阵 ${
+                      introOpponent.opponentIsGhost ? "幽灵 · " : ""
+                    }${introOpponent.opponentName}`
+                  : combatEntryStage === "warbandReveal"
+                    ? `你的 ${friendlyCombatBoard.length} 名随从 · 对手 ${opponentInitialBoard.length} 名随从`
+                    : "首次攻击即将开始"}
               </span>
               {introOpponent.opponentIsGhost && (
                 <small>
@@ -9188,9 +11350,28 @@ export default function GameClient() {
               )}
             </div>
             <span className="combat-start-status">
-              正在切换至战斗阵型
+              {combatEntryStage === "versusReveal"
+                ? "正在切换至战斗阵型"
+                : combatEntryStage === "warbandReveal"
+                  ? "查看双方开战阵容"
+                  : "阵容已锁定"}
             </span>
           </div>
+          <button
+            type="button"
+            className="combat-start-skip"
+            data-testid="skip-combat-entry"
+            onClick={() =>
+              setCombatEntryPresentation((current) =>
+                transitionCombatEntryPresentation(current, {
+                  type: "skip",
+                  expectedBattleKey: battleKey ?? "",
+                }),
+              )
+            }
+          >
+            跳过动画
+          </button>
         </section>
       )}
 
@@ -9199,6 +11380,9 @@ export default function GameClient() {
       </span>
       <span className="sr-only" id="magnetic-target-instructions">
         这是当前磁力牌的合法目标。点击或按回车键即可完成吸附；按 Escape 键取消选择。
+      </span>
+      <span className="sr-only" id="hero-power-target-instructions">
+        这是当前英雄技能的合法目标。点击或按回车键即可确认；按 Escape 键取消选择。
       </span>
       <span className="sr-only" id="blood-gem-target-instructions">
         这是当前鲜血宝石的合法目标。点击或按回车键即可使用；按 Escape 键取消选择。
@@ -9266,6 +11450,270 @@ export default function GameClient() {
         </svg>
       )}
 
+      {heroPowerPresentation && (
+        <div
+          className={`hero-power-presentation stage-${heroPowerPresentation.state.stage}`}
+          data-hero-power-stage={heroPowerPresentation.state.stage}
+          data-hero-power-id={heroPowerPresentation.state.heroPowerId}
+          data-testid="hero-power-presentation"
+          role="group"
+          aria-label={`英雄技能激活演出：${heroPowerPresentation.state.powerName}`}
+          key={`hero-power-${heroPowerPresentation.state.token}`}
+        >
+          {heroPowerPresentation.target && (
+            <>
+              <svg
+                className="hero-power-presentation-target-arc"
+                width="100%"
+                height="100%"
+                aria-hidden="true"
+                data-testid="hero-power-presentation-target-arc"
+              >
+                <path
+                  d={heroPowerPresentationTargetPath(
+                    heroPowerPresentation.geometry,
+                    heroPowerPresentation.target.geometry,
+                  )}
+                />
+              </svg>
+              <div
+                className="hero-power-presentation-target-impact"
+                data-testid="hero-power-presentation-target-impact"
+                data-target-instance-id={
+                  heroPowerPresentation.target.instanceId
+                }
+                data-target-zone={heroPowerPresentation.target.zone}
+                aria-hidden="true"
+                style={{
+                  left: heroPowerPresentation.target.geometry.left,
+                  top: heroPowerPresentation.target.geometry.top,
+                  width: heroPowerPresentation.target.geometry.width,
+                  height: heroPowerPresentation.target.geometry.height,
+                }}
+              >
+                <span className="hero-power-presentation-target-ring" />
+                {heroPowerPresentation.state.heroPowerId ===
+                  "hero-power-tb_baconshop_hp_010" && (
+                  <span
+                    className="hero-power-presentation-divine-shield-bloom"
+                    data-testid="hero-power-presentation-divine-shield-bloom"
+                  >
+                    <span />
+                  </span>
+                )}
+                <strong>{heroPowerPresentation.target.name}</strong>
+              </div>
+            </>
+          )}
+          <div
+            className="hud-hero-power hero-power-presentation-source"
+            data-testid="hero-power-presentation-source"
+            aria-hidden="true"
+            style={{
+              left: heroPowerPresentation.geometry.left,
+              top: heroPowerPresentation.geometry.top,
+              width: heroPowerPresentation.geometry.width,
+              height: heroPowerPresentation.geometry.height,
+              maxWidth: "none",
+            }}
+          >
+            {humanHero && (
+              <span className="hero-hud-portrait">
+                <CardArtwork unit={humanHero} kind="portrait" />
+              </span>
+            )}
+            <small>{heroPowerPresentation.state.heroName}</small>
+            <strong>{heroPowerPresentation.state.powerName}</strong>
+            <span className="hero-power-presentation-status">
+              {heroPowerPresentation.state.stage === "sourcePulse"
+                ? "正在发动"
+                : heroPowerPresentation.state.stage === "resourceCommit"
+                  ? "费用与使用状态已更新"
+                  : heroPowerPresentation.target
+                    ? "目标已锁定"
+                    : "技能效果已结算"}
+            </span>
+            <span className="hero-power-cost-badge">
+              {heroPowerPresentation.state.cost} 币
+            </span>
+            {heroPowerPresentation.state.stage === "resourceCommit" &&
+              heroPowerPresentation.state.cost > 0 && (
+                <span className="hero-power-presentation-cost-delta">
+                  -{heroPowerPresentation.state.cost}
+                </span>
+              )}
+            <span className="hero-power-presentation-ring" />
+            <span className="hero-power-presentation-core" />
+            <span className="hero-power-presentation-sparks" />
+          </div>
+          <span
+            className="sr-only"
+            role="status"
+            aria-live="assertive"
+            aria-atomic="true"
+          >
+            {heroPowerPresentationAnnouncement(
+              heroPowerPresentation.state,
+            )}
+          </span>
+          <button
+            type="button"
+            className="hero-power-presentation-skip"
+            data-testid="skip-hero-power-presentation"
+            onClick={() => {
+              const expectedToken = heroPowerPresentation.state.token;
+              const expectedHeroPowerId =
+                heroPowerPresentation.state.heroPowerId;
+              setHeroPowerPresentation((current) => {
+                if (!current) return null;
+                const next = transitionHeroPowerPresentation(
+                  current.state,
+                  {
+                    type: "skip",
+                    expectedToken,
+                    expectedHeroPowerId,
+                  },
+                );
+                if (next === current.state) return current;
+                return next ? { ...current, state: next } : null;
+              });
+            }}
+          >
+            跳过技能动画
+          </button>
+        </div>
+      )}
+
+      {spellCastPresentation && (
+        <div
+          className={`spell-cast-presentation stage-${spellCastPresentation.state.stage}`}
+          data-card-kind={spellCastPresentation.state.cardKind}
+          data-impact-scope={spellCastPresentation.motion.impactScope}
+          data-spell-cast-stage={spellCastPresentation.state.stage}
+          data-target-instance-id={
+            spellCastPresentation.state.targetInstanceId ?? undefined
+          }
+          data-testid="spell-cast-presentation"
+          role="group"
+          aria-label={`${
+            spellCastPresentation.state.cardKind === "tavernSpell"
+              ? "酒馆法术"
+              : "塑造法术"
+          }施放演出：${spellCastPresentation.state.cardName}`}
+          key={`spell-cast-${spellCastPresentation.state.token}`}
+        >
+          <div
+            className={`tavern-spell-card spell-cast-source-card${
+              spellCastPresentation.state.cardKind === "spellcraft"
+                ? " spellcraft-card"
+                : ""
+            }${
+              spellCastPresentation.card.kind === "spellcraft" &&
+              (spellCastPresentation.card.effectMultiplier ?? 1) > 1
+                ? " is-golden"
+                : ""
+            }`}
+            aria-hidden="true"
+            data-testid="spell-cast-source-card"
+            style={
+              {
+                "--card-hue":
+                  spellCastPresentation.state.cardKind === "spellcraft"
+                    ? 222
+                    : 266,
+                "--spell-lift-x": `${spellCastPresentation.motion.liftX}px`,
+                "--spell-lift-y": `${spellCastPresentation.motion.liftY}px`,
+                "--spell-release-x": `${spellCastPresentation.motion.releaseX}px`,
+                "--spell-release-y": `${spellCastPresentation.motion.releaseY}px`,
+                "--spell-travel-x": `${spellCastPresentation.motion.travelX}px`,
+                "--spell-travel-y": `${spellCastPresentation.motion.travelY}px`,
+                left: spellCastPresentation.motion.fromLeft,
+                top: spellCastPresentation.motion.fromTop,
+                width: spellCastPresentation.motion.fromWidth,
+                height: spellCastPresentation.motion.fromHeight,
+                maxWidth: "none",
+              } as CSSProperties
+            }
+          >
+            {spellCastPresentation.card.kind === "tavernSpell" ? (
+              <TavernSpellCardFace card={spellCastPresentation.card} />
+            ) : (
+              <SpellcraftCardFace card={spellCastPresentation.card} />
+            )}
+          </div>
+          {spellCastPresentation.targetCard && (
+            <div
+              className="unit-card is-compact spell-cast-target-snapshot"
+              aria-hidden="true"
+              data-testid="spell-cast-target-snapshot"
+              style={
+                {
+                  "--card-hue":
+                    TRIBE_HUE[spellCastPresentation.targetCard.tribe],
+                  left: spellCastPresentation.motion.impactLeft,
+                  top: spellCastPresentation.motion.impactTop,
+                  width: spellCastPresentation.motion.impactWidth,
+                  height: spellCastPresentation.motion.impactHeight,
+                  maxWidth: "none",
+                } as CSSProperties
+              }
+            >
+              <UnitCardFace unit={spellCastPresentation.targetCard} />
+            </div>
+          )}
+          <div
+            className={`spell-cast-impact is-${spellCastPresentation.motion.impactScope}`}
+            aria-hidden="true"
+            data-testid="spell-cast-impact"
+            style={{
+              left: spellCastPresentation.motion.impactLeft,
+              top: spellCastPresentation.motion.impactTop,
+              width: spellCastPresentation.motion.impactWidth,
+              height: spellCastPresentation.motion.impactHeight,
+            }}
+          >
+            <span className="spell-cast-impact-ring" />
+            <span className="spell-cast-impact-core" />
+            <span className="spell-cast-impact-sparks" />
+          </div>
+          <span
+            className="sr-only"
+            role="status"
+            aria-live="assertive"
+            aria-atomic="true"
+          >
+            {spellCastPresentationAnnouncement(
+              spellCastPresentation.state,
+            )}
+          </span>
+          <button
+            type="button"
+            className="spell-cast-skip"
+            data-testid="skip-spell-cast-presentation"
+            onClick={() => {
+              const expectedToken = spellCastPresentation.state.token;
+              const expectedCardInstanceId =
+                spellCastPresentation.state.cardInstanceId;
+              setSpellCastPresentation((current) => {
+                if (!current) return null;
+                const next = transitionSpellCastPresentation(
+                  current.state,
+                  {
+                    type: "skip",
+                    expectedToken,
+                    expectedCardInstanceId,
+                  },
+                );
+                if (next === current.state) return current;
+                return next ? { ...current, state: next } : null;
+              });
+            }}
+          >
+            跳过动画
+          </button>
+        </div>
+      )}
+
       {game.phase === "recruit" && combatRewardNotice && (
         <div
           className="toast combat-reward-toast"
@@ -9328,7 +11776,9 @@ export default function GameClient() {
             } recruit-card-motion`}
             aria-hidden="true"
             data-card-instance-id={activeRecruitMove.card.instanceId}
+            data-board-index={activeRecruitMove.boardIndex}
             data-recruit-motion={activeRecruitMove.motion}
+            data-triple-forge={activeTripleForge !== null || undefined}
             data-testid="recruit-card-motion"
             key={`motion-${activeRecruitPresentation?.token ?? 0}`}
             style={
@@ -9360,38 +11810,86 @@ export default function GameClient() {
           </div>
         )}
 
-      {activeRecruitTriples.length > 0 && (
+      {activeRecruitTriple?.kind === "triple" && activeTripleForge && (
         <div
-          className="recruit-triple-stage"
+          className={`recruit-triple-stage stage-${activeTripleForge.stage}`}
+          data-triple-stage={activeTripleForge.stage}
           data-testid="triple-forge"
-          aria-hidden="true"
+          role="group"
+          aria-label={`三连锻造：${activeRecruitTriple.golden.name}`}
           key={`triple-${activeRecruitPresentation?.token ?? 0}`}
         >
-          {activeRecruitTriples.map((event, index) => (
+          <div
+            className="recruit-triple-forge"
+            data-known-consumed-count={
+              activeRecruitTriple.knownConsumedInstanceIds.length
+            }
+            data-golden-instance-id={activeRecruitTriple.golden.instanceId}
+          >
+            <span className="recruit-triple-energy" aria-hidden="true" />
+            <span
+              className="recruit-triple-light-column"
+              aria-hidden="true"
+            />
+            <span className="recruit-triple-smoke" aria-hidden="true" />
             <div
-              className="recruit-triple-forge"
-              data-known-consumed-count={
-                event.knownConsumedInstanceIds.length
+              className="unit-card recruit-triple-card"
+              data-testid="triple-forge-card"
+              data-golden-instance-id={activeRecruitTriple.golden.instanceId}
+              style={
+                {
+                  "--card-hue": TRIBE_HUE[activeRecruitTriple.golden.tribe],
+                  ...(activeRecruitPresentation?.tripleHandoff
+                    ? {
+                        "--triple-hand-x": `${activeRecruitPresentation.tripleHandoff.travelX}px`,
+                        "--triple-hand-y": `${activeRecruitPresentation.tripleHandoff.travelY}px`,
+                      }
+                    : {}),
+                } as CSSProperties
               }
-              data-golden-instance-id={event.golden.instanceId}
-              key={event.golden.instanceId}
-              style={{ "--triple-index": index } as CSSProperties}
             >
-              <span className="recruit-triple-rays" />
-              <div
-                className="unit-card recruit-triple-card"
-                style={
-                  {
-                    "--card-hue": TRIBE_HUE[event.golden.tribe],
-                  } as CSSProperties
-                }
-              >
-                <UnitCardFace unit={event.golden} />
-              </div>
-              <strong>三连！</strong>
-              <span>{event.golden.name}</span>
+              <UnitCardFace unit={activeRecruitTriple.golden} />
             </div>
-          ))}
+          </div>
+          <span className="sr-only" role="status" aria-live="assertive">
+            {tripleForgeStageAnnouncement(activeTripleForge.stage)}
+          </span>
+          <button
+            type="button"
+            className="recruit-triple-skip"
+            data-testid="skip-triple-forge"
+            onClick={() => {
+              const expectedToken = activeTripleForge.token;
+              const expectedGoldenInstanceId =
+                activeTripleForge.goldenInstanceId;
+              setRecruitPresentationQueue((current) => {
+                const active = current[0];
+                if (
+                  !active ||
+                  active.token !== expectedToken ||
+                  active.tripleForge === null
+                ) {
+                  return current;
+                }
+                const next = transitionTripleForgePresentation(
+                  active.tripleForge,
+                  {
+                    type: "skip",
+                    expectedToken,
+                    expectedGoldenInstanceId,
+                  },
+                );
+                if (next === active.tripleForge) return current;
+                if (next === null) return current.slice(1);
+                return [
+                  { ...active, tripleForge: next },
+                  ...current.slice(1),
+                ];
+              });
+            }}
+          >
+            跳过动画
+          </button>
         </div>
       )}
 
@@ -9457,142 +11955,294 @@ export default function GameClient() {
         </div>
       )}
 
-      {heroChoiceInteraction && (
+      {(heroChoiceInteraction || heroChoicePresentation) && (
         <div
-          className="overlay interaction-overlay"
+          className="overlay interaction-overlay hero-choice-overlay"
           role="dialog"
           aria-modal="true"
           aria-labelledby="hero-choice-title"
           aria-describedby="hero-choice-description"
+          data-hero-choice-stage={heroChoiceStage}
           data-testid="hero-choice-dialog"
           onKeyDown={trapModalFocus}
         >
-          <div className="modal lobby-choice-modal hero-choice-modal">
-            <span className="discover-kicker">开局 · 四选一</span>
-            <h2 className="discover-title" id="hero-choice-title">
-              选择你的英雄
-            </h2>
-            <p className="discover-copy" id="hero-choice-description">
-              每位英雄拥有不同的被动英雄技能。选择会立即保存，并用于本局余下时间。
-            </p>
-            {systemEvent && (
+          {heroChoiceStage !== "lobbyReveal" ? (
+            <div className="modal lobby-choice-modal hero-choice-modal">
+              <span className="discover-kicker">
+                {heroChoiceStage === "focus"
+                  ? "英雄已锁定"
+                  : "开局 · 四选一"}
+              </span>
+              <h2 className="discover-title" id="hero-choice-title">
+                {selectedHeroChoice
+                  ? `已选择 ${selectedHeroChoice.name}`
+                  : "选择你的英雄"}
+              </h2>
+              <p className="discover-copy" id="hero-choice-description">
+                {selectedHeroChoice
+                  ? "选择已保存。你的英雄正在进入本局八人大厅。"
+                  : "每位英雄拥有不同的英雄技能。选择会立即保存，并用于本局余下时间。"}
+              </p>
+              {systemEvent && (
+                <div
+                  className="lobby-event-banner"
+                  data-testid="hero-choice-system-event"
+                >
+                  <CardArtwork unit={systemEvent} kind="portrait" />
+                  <span>
+                    <small>本局随机系统事件</small>
+                    <strong>{systemEvent.name}</strong>
+                    <span>{systemEvent.description}</span>
+                  </span>
+                </div>
+              )}
+              <div className="lobby-choice-options hero-choice-options">
+                {heroChoiceOptionIds.map((optionId, index) => {
+                  const option = getHeroDefinition(optionId);
+                  const power = getHeroPowerDefinition(option.heroPowerId);
+                  const selectionState = heroChoicePresentation
+                    ? option.id === heroChoicePresentation.selectedHeroId
+                      ? "selected"
+                      : "dismissed"
+                    : "available";
+                  return (
+                    <button
+                      type="button"
+                      className="lobby-choice-card hero-choice-card"
+                      data-hero-id={option.id}
+                      data-selection-state={selectionState}
+                      data-testid={`hero-choice-${index}`}
+                      aria-pressed={selectionState === "selected"}
+                      disabled={heroChoiceInteraction === null}
+                      key={option.id}
+                      onClick={() => {
+                        if (!heroChoiceInteraction) return;
+                        resolveHeroChoiceWithPresentation(
+                          heroChoiceInteraction,
+                          option.id,
+                        );
+                      }}
+                      style={
+                        {
+                          "--hero-choice-index": index,
+                        } as CSSProperties
+                      }
+                    >
+                      <CardArtwork unit={option} kind="portrait" />
+                      <small>英雄</small>
+                      <strong>{option.name}</strong>
+                      <span className="lobby-choice-power-name">
+                        {power.name}
+                      </span>
+                      <span>{power.description}</span>
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
+          ) : selectedHeroChoice && selectedHeroChoicePower ? (
+            <div
+              className="hero-choice-confirmation"
+              data-testid="hero-choice-confirmation"
+            >
+              <span className="discover-kicker">八人大厅</span>
+              <h2 className="discover-title" id="hero-choice-title">
+                {selectedHeroChoice.name}，准备入局
+              </h2>
+              <p className="discover-copy" id="hero-choice-description">
+                七名 AI 对手已经就位，本局没有回合倒计时。
+              </p>
               <div
-                className="lobby-event-banner"
-                data-testid="hero-choice-system-event"
+                className="hero-choice-confirmed-card"
+                data-hero-id={selectedHeroChoice.id}
               >
-                <CardArtwork unit={systemEvent} kind="portrait" />
+                <CardArtwork unit={selectedHeroChoice} kind="portrait" />
                 <span>
-                  <small>本局随机系统事件</small>
-                  <strong>{systemEvent.name}</strong>
-                  <span>{systemEvent.description}</span>
+                  <small>你的英雄</small>
+                  <strong>{selectedHeroChoice.name}</strong>
+                  <span>{selectedHeroChoicePower.name}</span>
                 </span>
               </div>
-            )}
-            <div className="lobby-choice-options hero-choice-options">
-              {heroChoiceInteraction.optionIds.map((optionId, index) => {
-                const option = getHeroDefinition(optionId);
-                const power = getHeroPowerDefinition(option.heroPowerId);
-                return (
-                  <button
-                    type="button"
-                    className="lobby-choice-card hero-choice-card"
-                    data-testid={`hero-choice-${index}`}
-                    key={option.id}
-                    onClick={() =>
-                      send({
-                        type: "RESOLVE_INTERACTION",
-                        interactionId: heroChoiceInteraction.interactionId,
-                        optionInstanceId: option.id,
-                      })
-                    }
-                  >
-                    <CardArtwork unit={option} kind="portrait" />
-                    <small>英雄</small>
-                    <strong>{option.name}</strong>
-                    <span className="lobby-choice-power-name">
-                      {power.name}
-                    </span>
-                    <span>{power.description}</span>
-                  </button>
-                );
-              })}
+              <div
+                className="hero-choice-lobby-table"
+                data-testid="hero-choice-lobby"
+                aria-label="本局八名玩家的英雄"
+              >
+                {game.players.map((player, index) => {
+                  const lobbyHero =
+                    typeof player.heroId === "string" &&
+                    isHeroDefinitionId(player.heroId)
+                      ? getHeroDefinition(player.heroId)
+                      : null;
+                  return (
+                    <div
+                      className={`hero-choice-lobby-seat${
+                        player.isHuman ? " is-human" : ""
+                      }`}
+                      data-hero-id={lobbyHero?.id}
+                      data-player-id={player.id}
+                      data-testid={`hero-choice-lobby-seat-${index}`}
+                      key={player.id}
+                      style={
+                        {
+                          "--hero-choice-seat-index": index,
+                        } as CSSProperties
+                      }
+                    >
+                      {lobbyHero ? (
+                        <CardArtwork unit={lobbyHero} kind="portrait" />
+                      ) : (
+                        <span className="hero-choice-lobby-placeholder">
+                          ?
+                        </span>
+                      )}
+                      <span>
+                        <small>{player.isHuman ? "你" : "AI"}</small>
+                        <strong>{lobbyHero?.name ?? "英雄待定"}</strong>
+                      </span>
+                    </div>
+                  );
+                })}
+              </div>
             </div>
-          </div>
+          ) : null}
+          {heroChoicePresentation && (
+            <button
+              type="button"
+              className="hero-choice-skip"
+              data-testid="skip-hero-choice-presentation"
+              onClick={() =>
+                setHeroChoicePresentation((current) =>
+                  transitionHeroChoicePresentation(current, {
+                    type: "skip",
+                    expectedInteractionId:
+                      heroChoicePresentation.interactionId,
+                  }),
+                )
+              }
+            >
+              跳过动画
+            </button>
+          )}
+          {heroChoicePresentation && (
+            <span
+              className="sr-only"
+              role="status"
+              aria-live="polite"
+              aria-atomic="true"
+            >
+              {heroChoicePresentation.stage === "focus"
+                ? `已选择${selectedHeroChoice?.name ?? "英雄"}`
+                : "八名玩家的英雄已经就位"}
+            </span>
+          )}
         </div>
       )}
 
       {trinketChoiceInteraction && (
         <div
-          className="overlay interaction-overlay"
+          className={`overlay interaction-overlay trinket-selection-overlay stage-${trinketChoiceStage}${
+            trinketChoicesHidden ? " is-peeking" : ""
+          }`}
           role="dialog"
           aria-modal="true"
           aria-labelledby="trinket-choice-title"
           aria-describedby="trinket-choice-description"
+          aria-busy={trinketChoiceStage === "reveal"}
+          data-stage={trinketChoiceStage}
           data-testid="trinket-choice-dialog"
-          onKeyDown={trapModalFocus}
+          onKeyDown={(event) => {
+            if (
+              event.key === "Escape" &&
+              trinketChoiceStage === "choosing"
+            ) {
+              event.preventDefault();
+              toggleTrinketChoices();
+              return;
+            }
+            trapModalFocus(event);
+          }}
         >
-          <div className="modal lobby-choice-modal trinket-choice-modal">
+          <div
+            className="modal lobby-choice-modal trinket-choice-modal"
+            inert={trinketChoicesHidden}
+            aria-hidden={trinketChoicesHidden || undefined}
+          >
             <span className="discover-kicker">
-              第 {game.round} 回合 ·
+              饰品商店 · 第 {game.round} 回合 ·
               {trinketChoiceInteraction.trinketTier === "lesser"
-                ? " 小符文"
-                : " 大符文"}
+                ? " 小型"
+                : " 大型"}
             </span>
             <h2 className="discover-title" id="trinket-choice-title">
               {isMysteryCubeTrinketChoice
-                ? "神秘魔方 · 选择新的次级饰品"
-                : `选择一个${
-                    trinketChoiceInteraction.trinketTier === "lesser"
-                      ? "次级饰品"
-                      : "强效饰品"
-                  }`}
+                ? "神秘魔方 · 更换小型饰品"
+                : "选择一项并购买"}
             </h2>
             <p className="discover-copy" id="trinket-choice-description">
-              {isMysteryCubeTrinketChoice ? (
-                "从两个新的次级饰品中选择一个，免费替换神秘魔方；以后每个回合开始时会再次替换。"
-              ) : (
-                <>
-                  本局从
-                  {ACTIVE_TRINKET_DEFINITIONS.filter(
-                    (definition) =>
-                      definition.tier ===
-                      trinketChoiceInteraction.trinketTier,
-                  ).length}
-                  件
-                  {trinketChoiceInteraction.trinketTier === "lesser"
-                    ? "次级"
-                    : "强效"}
-                  饰品中随机生成四个候选，选择一个并支付标示费用。类型专属饰品只会在你的战队拥有该类型时出现，所占比例越高，进入候选的概率越大；完成选择前其他酒馆操作保持锁定。
-                </>
-              )}
+              {isMysteryCubeTrinketChoice
+                ? "从两个新小型饰品中先点选一个，再确认免费替换。候选在确认前不会改变。"
+                : `从本局 ${
+                    ACTIVE_TRINKET_DEFINITIONS.filter(
+                      (definition) =>
+                        definition.tier ===
+                        trinketChoiceInteraction.trinketTier,
+                    ).length
+                  } 件同级饰品中生成四个候选。点选只会高亮，按下确认后才会支付费用。`}
             </p>
-            <div className="lobby-choice-options trinket-choice-options">
+            <div
+              className="lobby-choice-options trinket-choice-options"
+              data-option-count={trinketChoiceInteraction.optionIds.length}
+              style={
+                {
+                  "--trinket-choice-columns":
+                    trinketChoiceInteraction.optionIds.length,
+                } as CSSProperties
+              }
+            >
               {trinketChoiceInteraction.optionIds.map(
                 (optionId, index) => {
                   const option = getTrinketDefinition(optionId);
                   const affordable =
                     isMysteryCubeTrinketChoice || human.gold >= option.cost;
+                  const selected = selectedTrinketChoiceId === option.id;
                   return (
                     <button
                       type="button"
-                      className="lobby-choice-card trinket-choice-card"
-                      data-testid={`trinket-choice-${index}`}
-                      disabled={!affordable}
-                      key={option.id}
-                      onClick={() =>
-                        send({
-                          type: "RESOLVE_INTERACTION",
-                          interactionId:
-                            trinketChoiceInteraction.interactionId,
-                          optionInstanceId: option.id,
-                        })
+                      className={`lobby-choice-card trinket-choice-card${
+                        selected ? " is-selected" : ""
+                      }${!affordable ? " is-unaffordable" : ""}`}
+                      aria-label={`${option.name}，${
+                        isMysteryCubeTrinketChoice
+                          ? "免费替换"
+                          : `${option.cost} 枚铸币`
+                      }，${option.description}`}
+                      aria-pressed={selected}
+                      data-affordable={affordable}
+                      data-selection-state={
+                        selected ? "selected" : "available"
                       }
+                      data-trinket-option-id={option.id}
+                      data-testid={`trinket-choice-${index}`}
+                      disabled={trinketChoiceStage !== "choosing"}
+                      key={option.id}
+                      style={
+                        {
+                          "--trinket-choice-delay": `${
+                            120 + index * 58
+                          }ms`,
+                        } as CSSProperties
+                      }
+                      onClick={() => selectTrinketChoice(option.id)}
                     >
+                      <span className="trinket-choice-cost-badge">
+                        {isMysteryCubeTrinketChoice ? 0 : option.cost}
+                      </span>
                       <CardArtwork unit={option} kind="portrait" />
                       <small>
                         {option.tier === "lesser"
-                          ? "次级饰品"
-                          : "强效饰品"}
+                          ? "小型饰品"
+                          : "大型饰品"}
                       </small>
                       <strong>{option.name}</strong>
                       <span className="trinket-choice-tribes">
@@ -9610,14 +12260,153 @@ export default function GameClient() {
                               !affordable ? " · 当前不足" : ""
                             }`}
                       </span>
+                      <span className="trinket-choice-selection-mark">
+                        {selected
+                          ? "已选中"
+                          : affordable
+                            ? "点击选中"
+                            : "可查看 · 金币不足"}
+                      </span>
                     </button>
                   );
                 },
               )}
             </div>
+            <div className="trinket-choice-confirmation">
+              <span role="status" aria-live="polite">
+                {selectedTrinketChoice
+                  ? `${selectedTrinketChoice.name}已选中${
+                      selectedTrinketChoiceAffordable
+                        ? "，可以确认"
+                        : "，但金币不足"
+                    }`
+                  : trinketChoiceStage === "reveal"
+                    ? "正在揭示饰品候选"
+                    : "请先选择一个饰品"}
+              </span>
+              <button
+                type="button"
+                className="trinket-choice-confirm"
+                data-testid="confirm-trinket-choice"
+                disabled={!trinketChoiceCanConfirm}
+                onClick={confirmTrinketChoice}
+              >
+                确认
+              </button>
+            </div>
           </div>
+          {trinketChoiceStage === "choosing" && (
+            <button
+              type="button"
+              className="trinket-visibility-toggle"
+              aria-pressed={!trinketChoicesHidden}
+              data-testid="toggle-trinket-visibility"
+              onClick={toggleTrinketChoices}
+            >
+              {trinketChoicesHidden ? "待选择 · 显示" : "隐藏"}
+            </button>
+          )}
+          {trinketChoiceStage === "reveal" && (
+            <button
+              type="button"
+              className="trinket-choice-skip"
+              data-testid="skip-trinket-choice-reveal"
+              onClick={() =>
+                setTrinketChoicePresentation((current) =>
+                  transitionTrinketChoicePresentation(current, {
+                    type: "skip",
+                    expectedInteractionId:
+                      trinketChoiceInteraction.interactionId,
+                  }),
+                )
+              }
+            >
+              跳过揭示
+            </button>
+          )}
         </div>
       )}
+
+      {trinketChoicePresentationBlocksInteraction &&
+        trinketChoicePresentation &&
+        presentedTrinketChoice && (
+          <div
+            className={`overlay trinket-choice-presentation-overlay stage-${trinketChoicePresentation.stage}`}
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="trinket-choice-presentation-title"
+            data-stage={trinketChoicePresentation.stage}
+            data-testid="trinket-choice-presentation"
+            onKeyDown={trapModalFocus}
+          >
+            <div className="trinket-choice-return-scene">
+              <span
+                className="trinket-choice-return-label"
+                id="trinket-choice-presentation-title"
+              >
+                {trinketChoicePresentation.stage === "confirmFocus"
+                  ? "饰品已获得"
+                  : "装备到饰品槽"}
+              </span>
+              <div
+                className="lobby-choice-card trinket-choice-card trinket-choice-acquired-card"
+                data-testid="trinket-choice-acquired-card"
+                style={
+                  {
+                    "--trinket-fly-x": `${trinketChoiceHudTravel.x}px`,
+                    "--trinket-fly-y": `${trinketChoiceHudTravel.y}px`,
+                  } as CSSProperties
+                }
+              >
+                <span className="trinket-choice-cost-badge">
+                  {trinketChoicePresentation.paidCost ?? 0}
+                </span>
+                <CardArtwork
+                  unit={presentedTrinketChoice}
+                  kind="portrait"
+                />
+                <small>
+                  {presentedTrinketChoice.tier === "lesser"
+                    ? "小型饰品"
+                    : "大型饰品"}
+                </small>
+                <strong>{presentedTrinketChoice.name}</strong>
+                <span>{presentedTrinketChoice.description}</span>
+                <span className="trinket-choice-acquired-outcome">
+                  {(trinketChoicePresentation.paidCost ?? 0) > 0
+                    ? `支付 ${trinketChoicePresentation.paidCost} 枚铸币 · 剩余 ${trinketChoicePresentation.goldAfter}`
+                    : `免费获得 · 当前 ${trinketChoicePresentation.goldAfter} 枚铸币`}
+                </span>
+              </div>
+            </div>
+            <button
+              type="button"
+              className="trinket-choice-skip"
+              data-testid="skip-trinket-choice-presentation"
+              onClick={() =>
+                setTrinketChoicePresentation((current) =>
+                  transitionTrinketChoicePresentation(current, {
+                    type: "skip",
+                    expectedInteractionId:
+                      trinketChoicePresentation.interactionId,
+                  }),
+                )
+              }
+            >
+              跳过动画
+            </button>
+            <span
+              className="sr-only"
+              role="status"
+              aria-live="polite"
+              aria-atomic="true"
+            >
+              {trinketChoicePresentation.stage === "confirmFocus"
+                ? `已获得${presentedTrinketChoice.name}`
+                : `${presentedTrinketChoice.name}正在进入饰品槽`}
+            </span>
+          </div>
+        )}
 
       {minionChoiceInteraction && (
         <div
@@ -10047,9 +12836,190 @@ export default function GameClient() {
         </div>
       )}
 
+      {discoverChoicePresentation &&
+        discoverPresentationActiveCard && (
+          <div
+            className="overlay interaction-overlay discover-choice-presentation"
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="discover-choice-presentation-title"
+            data-discover-stage={discoverChoicePresentation.state.stage}
+            data-reward-strategy={
+              discoverChoicePresentation.rewardStrategy
+            }
+            data-testid="discover-choice-presentation"
+            onKeyDown={trapModalFocus}
+          >
+            {discoverChoicePresentation.state.stage ===
+            "selectedFocus" ? (
+              <div className="modal discover-modal discover-choice-presentation-modal">
+                <span className="discover-kicker">发现</span>
+                <h2
+                  className="discover-title"
+                  id="discover-choice-presentation-title"
+                >
+                  {discoverChoicePresentation.title}
+                </h2>
+                <p className="discover-copy">
+                  {discoverChoicePresentation.copy}
+                </p>
+                <div className="discover-options">
+                  {discoverChoicePresentation.options.map(
+                    (option, index) => {
+                      const selected =
+                        option.card.instanceId ===
+                        discoverChoicePresentation.state.selectedOptionId;
+                      return (
+                        <div
+                          className="discover-option discover-presentation-option"
+                          data-selection-state={
+                            selected ? "selected" : "dismissed"
+                          }
+                          data-testid={`discover-presentation-option-${index}`}
+                          key={option.card.instanceId}
+                        >
+                          <DiscoverPresentationCard option={option} />
+                          <div className="discover-option-summary">
+                            <span>
+                              {option.kind === "minion"
+                                ? `${option.card.tier} 级 · ${printedTribeLabel(
+                                    option.card,
+                                  )} · ATK ${option.card.attack} / HP ${
+                                    option.card.health
+                                  }`
+                                : option.kind === "tavernSpell"
+                                  ? `${option.card.tier} 级 · ${option.card.cost} 枚铸币`
+                                  : "等级3暗月奖品"}
+                            </span>
+                            <p>{option.card.description}</p>
+                          </div>
+                        </div>
+                      );
+                    },
+                  )}
+                </div>
+              </div>
+            ) : (
+              <div className="discover-choice-return-scene">
+                <span
+                  className="discover-choice-return-label"
+                  id="discover-choice-presentation-title"
+                >
+                  {discoverChoicePresentation.state.stage ===
+                  "rewardArrival"
+                    ? "奖励进入手牌"
+                    : discoverChoicePresentation.rewardStrategy ===
+                        "shopReplace"
+                      ? "替换酒馆随从"
+                    : "返回酒馆"}
+                </span>
+                {discoverChoicePresentation.rewardStrategy ===
+                  "shopReplace" &&
+                  discoverChoicePresentation.shopTarget && (
+                    <div
+                      className="discover-choice-shop-vortex"
+                      data-testid="discover-choice-shop-vortex"
+                      data-target-instance-id={
+                        discoverChoicePresentation.shopTarget.instanceId
+                      }
+                      style={{
+                        left:
+                          discoverChoicePresentation.shopTarget.geometry
+                            .left,
+                        top:
+                          discoverChoicePresentation.shopTarget.geometry
+                            .top,
+                        width:
+                          discoverChoicePresentation.shopTarget.geometry
+                            .width,
+                        height:
+                          discoverChoicePresentation.shopTarget.geometry
+                            .height,
+                      }}
+                    >
+                      <span />
+                      <strong>
+                        {discoverChoicePresentation.shopTarget.name}
+                      </strong>
+                    </div>
+                  )}
+                <div
+                  className="discover-choice-selected-card"
+                  data-reward-kind={
+                    discoverChoicePresentation.state.rewardKind ?? undefined
+                  }
+                  data-testid={
+                    discoverChoicePresentation.state.stage ===
+                    "rewardArrival"
+                      ? "discover-choice-reward-card"
+                      : "discover-choice-selected-card"
+                  }
+                  style={
+                    {
+                      "--discover-fly-x": `${discoverChoicePresentation.handTravelX}px`,
+                      "--discover-fly-y": `${discoverChoicePresentation.handTravelY}px`,
+                      "--discover-shop-x": `${discoverChoicePresentation.shopTravelX}px`,
+                      "--discover-shop-y": `${discoverChoicePresentation.shopTravelY}px`,
+                    } as CSSProperties
+                  }
+                >
+                  <span className="discover-choice-outcome">
+                    {discoverChoicePresentation.state.stage ===
+                      "returnToTavern" &&
+                    discoverChoicePresentation.state.rewardKind === "hand"
+                      ? `已确认${discoverPresentationSelectedOption?.card.name ?? "所选卡牌"}`
+                      : discoverChoicePresentation.outcomeLabel}
+                  </span>
+                  <DiscoverPresentationCard
+                    option={discoverPresentationActiveCard}
+                  />
+                </div>
+              </div>
+            )}
+            <button
+              type="button"
+              className="discover-choice-skip"
+              data-testid="skip-discover-choice-presentation"
+              onClick={() =>
+                setDiscoverChoicePresentation((current) => {
+                  if (!current) return null;
+                  const next = transitionDiscoverChoicePresentation(
+                    current.state,
+                    {
+                      type: "skip",
+                      expectedInteractionId:
+                        discoverChoicePresentation.state.interactionId,
+                    },
+                  );
+                  return next ? { ...current, state: next } : null;
+                })
+              }
+            >
+              跳过动画
+            </button>
+            <span
+              className="sr-only"
+              role="status"
+              aria-live="polite"
+              aria-atomic="true"
+            >
+              {discoverChoicePresentation.state.stage === "selectedFocus"
+                ? `已选择${discoverPresentationSelectedOption?.card.name ?? "卡牌"}`
+                : discoverChoicePresentation.state.stage ===
+                    "returnToTavern"
+                  ? discoverChoicePresentation.state.rewardKind === "hand"
+                    ? `已确认${discoverPresentationSelectedOption?.card.name ?? "所选卡牌"}，正在返回酒馆`
+                    : discoverChoicePresentation.outcomeLabel
+                  : discoverChoicePresentation.outcomeLabel}
+            </span>
+          </div>
+        )}
+
       {discoverInteraction && (
         <div
-          className="overlay interaction-overlay"
+          className={`overlay interaction-overlay discover-selection-overlay${
+            discoverChoicesHidden ? " is-peeking" : ""
+          }`}
           role="dialog"
           aria-modal="true"
           aria-labelledby="discover-title"
@@ -10059,37 +13029,17 @@ export default function GameClient() {
           data-testid="discover-dialog"
           onKeyDown={trapModalFocus}
         >
-          <div className="modal discover-modal">
+          <div
+            className="modal discover-modal"
+            inert={discoverChoicesHidden}
+            aria-hidden={discoverChoicesHidden || undefined}
+          >
             <span className="discover-kicker">发现</span>
             <h2 className="discover-title" id="discover-title">
               {discoverTitle}
             </h2>
             <p className="discover-copy">
-              {discoverInteraction.destination.kind === "transform"
-                ? "选择后，目标会变形为所选随从；原随从和另外两张候选会回到共享随从池。"
-                : discoverInteraction.destination.kind ===
-                    "customUndeadFirst"
-                  ? "先从三个战斗组件中选择一个。候选是制造用组件，不会占用共享随从池。"
-                  : discoverInteraction.destination.kind ===
-                      "customUndeadSecond"
-                    ? "再从三个功能组件中选择一个；两个组件的属性、关键词与可组合效果会制造成一张无法三连的亡灵牌。"
-              : discoverInteraction.destination.kind === "magnetize"
-                ? "选择后会立即吸附到目标，不会进入手牌；其余候选会回到共享随从池。"
-                : discoverInteraction.destination.kind === "hand" &&
-                    discoverInteraction.destination
-                      .destroyAfterPlayThroughRound !== undefined
-                  ? "选择一张加入手牌；本回合打出时会先完成入场效果，随后死亡并触发亡语。组成三连会清除死亡预言。"
-                  : discoverInteraction.selectionEffect?.kind === "setStats"
-                    ? "选择一张加入手牌并将其属性值变为30/30；另外两张会回到共享随从池。"
-                    : isKaleidoscopeDiscover
-                      ? discoverInteraction.selectionEffect?.kind ===
-                        "makeGolden"
-                        ? "选择一个金色等级7随从加入手牌。它将在手牌中锁定两回合，达到可用回合后才能打出；这些候选不占用共享随从池。"
-                        : "选择一个等级7随从加入手牌。它将在手牌中锁定两回合，达到可用回合后才能打出；这些候选不占用共享随从池。"
-                    : discoverInteraction.selectionEffect?.kind ===
-                        "rememberTrinketMinion"
-                      ? "选择一张加入手牌；口袋工厂会在以后每个回合开始时获取一张它的复制。"
-                      : "选择一张加入手牌；另外两张会回到共享随从池。"}
+              {discoverCopy}
             </p>
             {discoverInteraction.destination.kind === "magnetize" && (
               <div
@@ -10107,6 +13057,20 @@ export default function GameClient() {
                 </small>
               </div>
             )}
+            {discoverInteraction.destination.kind === "replaceShop" && (
+              <div
+                className="discover-destination"
+                data-testid="discover-shop-replace-target"
+              >
+                <span>替换目标</span>
+                <strong>
+                  {discoverShopReplaceTarget?.name ?? "酒馆中的目标随从"}
+                </strong>
+                <small>
+                  当前等级 {discoverShopReplaceTarget?.tier ?? "?"} · 选择后保留此酒馆栏位
+                </small>
+              </div>
+            )}
             <div className="discover-options">
               {discoverInteraction.options.map((option, index) => (
                 <div className="discover-option" key={option.instanceId}>
@@ -10114,7 +13078,39 @@ export default function GameClient() {
                     unit={option}
                     testId={`discover-option-${index}`}
                     onClick={() => {
+                      const accepted =
+                        resolveDiscoverChoiceWithPresentation({
+                          interactionId:
+                            discoverInteraction.interactionId,
+                          options: discoverInteraction.options.map(
+                            (candidate) => ({
+                              kind: "minion" as const,
+                              card: candidate,
+                            }),
+                          ),
+                          selectedOptionId: option.instanceId,
+                          title: discoverTitle,
+                          copy: discoverCopy,
+                          rewardStrategy:
+                            discoverInteraction.destination.kind ===
+                            "customUndeadSecond"
+                              ? "generatedMinion"
+                              : discoverInteraction.destination.kind ===
+                                  "hand"
+                                ? "selected"
+                                : discoverInteraction.destination.kind ===
+                                    "replaceShop"
+                                  ? "shopReplace"
+                                : "immediate",
+                          shopTargetInstanceId:
+                            discoverInteraction.destination.kind ===
+                            "replaceShop"
+                              ? discoverInteraction.destination
+                                  .targetInstanceId
+                              : undefined,
+                        });
                       if (
+                        accepted &&
                         discoverInteraction.destination.kind ===
                           "magnetize" &&
                         discoverInteraction.remainingDiscoveries === 1
@@ -10127,12 +13123,17 @@ export default function GameClient() {
                           }，贡献 +${option.attack}/+${option.health}`,
                         );
                       }
-                      send({
-                        type: "RESOLVE_INTERACTION",
-                        interactionId:
-                          discoverInteraction.interactionId,
-                        optionInstanceId: option.instanceId,
-                      });
+                      if (
+                        accepted &&
+                        discoverInteraction.destination.kind ===
+                          "replaceShop"
+                      ) {
+                        setMagneticAnnouncement(
+                          `已用${option.name}替换酒馆中的${
+                            discoverShopReplaceTarget?.name ?? "目标随从"
+                          }，原目标和未选候选已回到共享随从池`,
+                        );
+                      }
                     }}
                   />
                   <div className="discover-option-summary">
@@ -10155,19 +13156,34 @@ export default function GameClient() {
               </p>
             )}
           </div>
+          <button
+            type="button"
+            className="discover-visibility-toggle"
+            aria-pressed={!discoverChoicesHidden}
+            data-testid="toggle-discover-visibility"
+            onClick={toggleDiscoverChoices}
+          >
+            {discoverChoicesHidden ? "待选择 · 显示" : "隐藏"}
+          </button>
         </div>
       )}
 
       {darkmoonPrizeDiscoverInteraction && (
         <div
-          className="overlay interaction-overlay"
+          className={`overlay interaction-overlay discover-selection-overlay${
+            discoverChoicesHidden ? " is-peeking" : ""
+          }`}
           role="dialog"
           aria-modal="true"
           aria-labelledby="darkmoon-prize-discover-title"
           data-testid="darkmoon-prize-discover-dialog"
           onKeyDown={trapModalFocus}
         >
-          <div className="modal discover-modal">
+          <div
+            className="modal discover-modal"
+            inert={discoverChoicesHidden}
+            aria-hidden={discoverChoicesHidden || undefined}
+          >
             <span className="discover-kicker">发现</span>
             <h2
               className="discover-title"
@@ -10188,14 +13204,23 @@ export default function GameClient() {
                     <SpellcraftCard
                       card={option}
                       testId={`darkmoon-prize-discover-option-${index}`}
-                      onClick={() => {
-                        send({
-                          type: "RESOLVE_INTERACTION",
+                      onClick={() =>
+                        resolveDiscoverChoiceWithPresentation({
                           interactionId:
                             darkmoonPrizeDiscoverInteraction.interactionId,
-                          optionInstanceId: option.instanceId,
-                        });
-                      }}
+                          options:
+                            darkmoonPrizeDiscoverInteraction.options.map(
+                              (candidate) => ({
+                                kind: "darkmoonPrize" as const,
+                                card: candidate,
+                              }),
+                            ),
+                          selectedOptionId: option.instanceId,
+                          title: "发现等级3暗月奖品",
+                          copy: "从随机出现的三张等级3暗月奖品中选择一张加入手牌。",
+                          rewardStrategy: "selected",
+                        })
+                      }
                     />
                     <div className="discover-option-summary">
                       <span>等级3暗月奖品</span>
@@ -10212,19 +13237,34 @@ export default function GameClient() {
               </p>
             )}
           </div>
+          <button
+            type="button"
+            className="discover-visibility-toggle"
+            aria-pressed={!discoverChoicesHidden}
+            data-testid="toggle-discover-visibility"
+            onClick={toggleDiscoverChoices}
+          >
+            {discoverChoicesHidden ? "待选择 · 显示" : "隐藏"}
+          </button>
         </div>
       )}
 
       {tavernSpellDiscoverInteraction && (
         <div
-          className="overlay interaction-overlay"
+          className={`overlay interaction-overlay discover-selection-overlay${
+            discoverChoicesHidden ? " is-peeking" : ""
+          }`}
           role="dialog"
           aria-modal="true"
           aria-labelledby="tavern-spell-discover-title"
           data-testid="tavern-spell-discover-dialog"
           onKeyDown={trapModalFocus}
         >
-          <div className="modal discover-modal">
+          <div
+            className="modal discover-modal"
+            inert={discoverChoicesHidden}
+            aria-hidden={discoverChoicesHidden || undefined}
+          >
             <span className="discover-kicker">发现</span>
             <h2
               className="discover-title"
@@ -10245,14 +13285,23 @@ export default function GameClient() {
                     <TavernSpellCard
                       card={option}
                       testId={`tavern-spell-discover-option-${index}`}
-                      onClick={() => {
-                        send({
-                          type: "RESOLVE_INTERACTION",
+                      onClick={() =>
+                        resolveDiscoverChoiceWithPresentation({
                           interactionId:
                             tavernSpellDiscoverInteraction.interactionId,
-                          optionInstanceId: option.instanceId,
-                        });
-                      }}
+                          options:
+                            tavernSpellDiscoverInteraction.options.map(
+                              (candidate) => ({
+                                kind: "tavernSpell" as const,
+                                card: candidate,
+                              }),
+                            ),
+                          selectedOptionId: option.instanceId,
+                          title: "发现酒馆法术",
+                          copy: "选择一张加入手牌；竞技表演者可以发现当前牌池中的任意等级酒馆法术。",
+                          rewardStrategy: "selected",
+                        })
+                      }
                     />
                     <div className="discover-option-summary">
                       <span>
@@ -10271,6 +13320,15 @@ export default function GameClient() {
               </p>
             )}
           </div>
+          <button
+            type="button"
+            className="discover-visibility-toggle"
+            aria-pressed={!discoverChoicesHidden}
+            data-testid="toggle-discover-visibility"
+            onClick={toggleDiscoverChoices}
+          >
+            {discoverChoicesHidden ? "待选择 · 显示" : "隐藏"}
+          </button>
         </div>
       )}
 
