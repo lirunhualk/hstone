@@ -732,6 +732,44 @@ test("Groundbreaker uses all prior player spell history, counts itself as a Naga
   }
 });
 
+test("Felboar keeps Tavern Special at seven total offers after consuming a shop minion", () => {
+  let state = createGame(0xf521);
+  let player = humanPlayer(state);
+  state.lobbySystemsEnabled = true;
+  state.systemEventId = "system-event-tavern-special";
+  player.systemEventCounters.fullHouseActive = 1;
+  player.board = [definitionMinion("BG28_633", "felboar-tavern-special")];
+  player.hand = [
+    tavernSpell("tavern-spell-tavern-coin", "felboar-coin-a"),
+    tavernSpell("tavern-spell-tavern-coin", "felboar-coin-b"),
+    tavernSpell("tavern-spell-tavern-coin", "felboar-coin-c"),
+  ];
+  player.shop = Array.from({ length: 6 }, (_, index) =>
+    definitionMinion("BG25_001", `felboar-shop-${index}`),
+  );
+  player.spellShop = tavernSpell(
+    "tavern-spell-tavern-coin",
+    "felboar-shop-spell",
+  );
+
+  state = gameReducer(state, {
+    type: "CAST_TAVERN_SPELL",
+    cardInstanceId: "felboar-coin-a",
+  });
+  state = gameReducer(state, {
+    type: "CAST_TAVERN_SPELL",
+    cardInstanceId: "felboar-coin-b",
+  });
+  state = gameReducer(state, {
+    type: "CAST_TAVERN_SPELL",
+    cardInstanceId: "felboar-coin-c",
+  });
+
+  player = humanPlayer(state);
+  assert.equal(player.shop.length, 6);
+  assert.ok(player.spellShop);
+});
+
 test("Tavern Spells, Blood Gems, and Spellcraft all advance Groundbreaker's global spell history", () => {
   let state = createGame(0xf522);
   let player = humanPlayer(state);

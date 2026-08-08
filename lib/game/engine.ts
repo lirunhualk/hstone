@@ -2786,13 +2786,22 @@ function applyYoggCurseOfFlesh(
 function applyYoggDevouringHunger(
   state: GameState,
   player: PlayerState,
+  trace?: GameActionTrace,
 ): void {
   const consumed = player.shop.splice(0);
   for (const minion of consumed) {
     if (player.board.length > 0) {
       const target =
         player.board[randomIndex(state, player.board.length)];
-      consumeShopMinionInto(state, player, target, minion, 1);
+      consumeShopMinionInto(
+        state,
+        player,
+        target,
+        minion,
+        1,
+        { attack: 0, health: 0 },
+        trace,
+      );
     } else {
       finishConsumedShopMinion(state, player, minion);
     }
@@ -2905,7 +2914,7 @@ function spinYoggWheel(
       applyYoggCurseOfFlesh(state, player);
       break;
     case "devouringHunger":
-      applyYoggDevouringHunger(state, player);
+      applyYoggDevouringHunger(state, player, trace);
       break;
     case "rodOfRoasting":
       applyYoggRodOfRoasting(state, player);
@@ -8132,6 +8141,33 @@ function refillFodderSlot(
   player.shop.push(minion);
 }
 
+function refillShopMinionSlotIfNeeded(
+  state: GameState,
+  player: PlayerState,
+): void {
+  if (!player.systemEventCounters.fullHouseActive) {
+    return;
+  }
+  if (player.shop.length >= tavernMinionCapacity(player)) {
+    return;
+  }
+  const minion = drawTavernMinionFromPool(state, player);
+  if (!minion) {
+    return;
+  }
+  applyTavernBonuses(player, minion);
+  reconcileWhereverMinion(
+    minion,
+    player.astralAutomatonsSummoned ?? 0,
+    player.eternalKnightsDied ?? 0,
+    player.tavernSpellsCast ?? 0,
+    player.deathrattlesTriggered ?? 0,
+    player.magnetizationsThisGame ?? 0,
+  );
+  refreshDynamicMinionDescription(minion, player);
+  player.shop.push(minion);
+}
+
 function resolveShopFodder(
   state: GameState,
   player: PlayerState,
@@ -9601,6 +9637,7 @@ function applyRecruitEffects(
         statScale,
         elementalGrantBonus,
       );
+      refillShopMinionSlotIfNeeded(state, player);
     } else if (effect.kind === "queueDemonFodder") {
       queueDemonFodder(player, effect, scale);
     } else if (effect.kind === "discountNextTavernSpell") {
@@ -10132,6 +10169,7 @@ function consumeShopMinionInto(
   consumed: BoardMinionInstance,
   statScale: number,
   statGrantBonus: CombatStatBuff = { attack: 0, health: 0 },
+  trace?: GameActionTrace,
 ): void {
   const attackGain = consumed.attack * statScale + statGrantBonus.attack;
   const triggeredHealth = player.board.some(
@@ -10143,6 +10181,16 @@ function consumeShopMinionInto(
   const healthGain = consumed.health * statScale + statGrantBonus.health;
   target.health += healthGain + triggeredHealth;
   reconcileConditionalMinion(target);
+  trace?.recruitShopConsumes.push({
+    sourceInstanceId: target.instanceId,
+    sourceName: target.name,
+    consumedInstanceId: consumed.instanceId,
+    consumedName: consumed.name,
+    consumedAttack: consumed.attack,
+    consumedHealth: consumed.health,
+    attackGain,
+    healthGain: healthGain + triggeredHealth,
+  });
   observeRecruitFriendlyAttackGain(player, target, attackGain);
   observeRecruitFriendlyHealthGain(
     player,
@@ -10157,6 +10205,7 @@ function consumeHighestHealthShopMinion(
   player: PlayerState,
   source: BoardMinionInstance,
   statScale: number,
+  trace?: GameActionTrace,
 ): void {
   if (
     !player.board.some(
@@ -10199,6 +10248,7 @@ function consumeHighestHealthShopMinion(
     consumed,
     statScale,
     elementalGrantBonus,
+    trace,
   );
   buffMinions(
     portraitNeighbors,
@@ -10213,6 +10263,7 @@ function haveDemonsConsumeShop(
   state: GameState,
   player: PlayerState,
   statScale: number,
+  trace?: GameActionTrace,
 ): void {
   const demons = player.board.filter((minion) =>
     minionHasTribe(minion, "demon"),
@@ -10223,7 +10274,15 @@ function haveDemonsConsumeShop(
     }
     const consumedIndex = randomIndex(state, player.shop.length);
     const [consumed] = player.shop.splice(consumedIndex, 1);
-    consumeShopMinionInto(state, player, demon, consumed, statScale);
+    consumeShopMinionInto(
+      state,
+      player,
+      demon,
+      consumed,
+      statScale,
+      { attack: 0, health: 0 },
+      trace,
+    );
   }
 }
 
@@ -11786,6 +11845,7 @@ function buyMinion(
     );
   refreshDynamicMinionDescription(minion, player);
   addCardToHand(state, player, minion);
+  refillShopMinionSlotIfNeeded(state, player);
   if (quote.currency === "health") {
     player.health -= quote.cost;
   } else {
@@ -13798,6 +13858,7 @@ function triggerRecruitAfterSpellCast(
           consumed,
           statScale,
         );
+        refillShopMinionSlotIfNeeded(state, player);
       }
       refreshDynamicMinionDescription(source, player);
     }

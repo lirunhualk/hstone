@@ -1701,6 +1701,20 @@ test("Tavern Special activates every minion type and keeps seven offers", () => 
   assert.equal(humanPlayer(state).shop.length, 6);
 });
 
+test("Tavern Special refills back to seven cards after buying a minion", () => {
+  let state = chooseHero(lobbyGameForEvent("system-event-tavern-special"));
+  let player = humanPlayer(state);
+  player.heroPowerId = null;
+  player.gold = 10;
+  assert.equal(player.shop.length, 6);
+  assert.equal(player.spellShop === null ? 0 : 1, 1);
+
+  state = gameReducer(state, { type: "BUY_MINION", shopIndex: 0 });
+  player = humanPlayer(state);
+  assert.equal(player.shop.length, 6);
+  assert.equal(player.spellShop === null ? 0 : 1, 1);
+});
+
 test("registry-only Hero's Call remains loadable for legacy lobbies", () => {
   let state = createLobbyGame(0x4ca11, 999);
   state.systemEventId = "system-event-heros-call";
