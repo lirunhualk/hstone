@@ -3,6 +3,7 @@ import test from "node:test";
 
 import {
   AI_POLICY_VERSION,
+  getAiStrategyProfile,
 } from "../lib/game/ai.ts";
 import {
   hasAiResidualPolicyOverride,
@@ -327,4 +328,297 @@ test("an empty residual-policy scope is benchmark-equivalent to legacy play", ()
       freeze: { decisions: 0, overridesApplied: 0 },
     },
   });
+});
+
+test("AI never kills itself with the tavern-steal damage hero power", () => {
+  const initial = createGame(45_005);
+  initial.round = 12;
+  const player = isolateAiLobby(initial, "player-1");
+  const template = player.shop[0];
+  assert.ok(template);
+  player.heroPowerId = "hero-power-tb_baconshop_hp_049";
+  player.health = 1;
+  player.armor = 0;
+  player.tavernTier = 6;
+  player.gold = 2;
+  player.board = Array.from({ length: 7 }, (_, index) =>
+    clonedMinion(template, `safe-self-damage-board-${index}`, {
+      attack: 100,
+      health: 100,
+      golden: true,
+    }),
+  );
+  player.hand = lockedHand(template, initial.round, 9);
+  player.shop = [clonedMinion(template, "safe-self-damage-offer")];
+  player.spellShop = null;
+  player.additionalSpellShop = [];
+
+  const contexts: Array<DeepReadonly<AiResidualMacroContext>> = [];
+  const candidate = withAiResidualPolicyOverrides(
+    new Map([
+      [
+        player.id,
+        policy((context) => {
+          contexts.push(context);
+          return null;
+        }),
+      ],
+    ]),
+    () => gameReducer(initial, { type: "END_TURN" }),
+  );
+
+  const recruited = playerById(candidate.result, player.id);
+  assert.equal(recruited.alive, true);
+  assert.equal(recruited.health, 1);
+  assert.equal(recruited.heroPowerActiveThisTurn, false);
+  assert.equal(recruited.hand.length, 9);
+  assert.ok(contexts.length > 0);
+  assert.ok(contexts.every((context) => context.health > 0));
+  assert.equal(candidate.diagnostics.invalidContexts, 0);
+});
+
+test("AI holds a minion whose recruit damage would cross its health floor", () => {
+  const initial = createGame(45_006);
+  initial.round = 12;
+  const player = isolateAiLobby(initial, "player-1");
+  const template = player.shop[0];
+  assert.ok(template);
+  player.heroPowerId = null;
+  player.health = 1;
+  player.armor = 0;
+  player.tavernTier = 6;
+  player.gold = 0;
+  player.board = [
+    clonedMinion(template, "safe-recruit-damage-watcher", {
+      definitionId: "wrath-weaver",
+      tribe: "demon",
+      tribes: ["demon"],
+      attack: 1,
+      health: 3,
+    }),
+  ];
+  player.hand = [
+    clonedMinion(template, "unsafe-recruit-damage-minion", {
+      definitionId: "vulgar-homunculus",
+      tribe: "demon",
+      tribes: ["demon"],
+      attack: 2,
+      health: 4,
+    }),
+  ];
+  player.shop = [];
+  player.spellShop = null;
+  player.additionalSpellShop = [];
+
+  const candidate = withAiResidualPolicyOverrides(
+    new Map([[player.id, policy(() => null)]]),
+    () => gameReducer(initial, { type: "END_TURN" }),
+  );
+
+  const recruited = playerById(candidate.result, player.id);
+  assert.equal(recruited.alive, true);
+  assert.equal(recruited.health, 1);
+  assert.ok(
+    recruited.hand.some(
+      (card) => card.instanceId === "unsafe-recruit-damage-minion",
+    ),
+  );
+  assert.equal(candidate.diagnostics.invalidContexts, 0);
+});
+
+test("all seven AI profiles enforce both sides of their recruit-damage floor", () => {
+  for (let seat = 1; seat <= 7; seat += 1) {
+    const playerId = `player-${seat}`;
+    const floor = getAiStrategyProfile(playerId).healthSpendFloor;
+    for (const [label, health, shouldPlay] of [
+      ["below", floor + 1, false],
+      ["exact", floor + 2, true],
+    ] as const) {
+      const initial = createGame(46_000 + seat * 10 + Number(shouldPlay));
+      initial.round = 12;
+      const player = isolateAiLobby(initial, playerId);
+      const template = player.shop[0];
+      assert.ok(template);
+      player.heroPowerId = null;
+      player.health = health;
+      player.armor = 0;
+      player.tavernTier = 6;
+      player.gold = 0;
+      player.board = [];
+      const instanceId = `profile-${seat}-${label}-floor-minion`;
+      player.hand = [
+        clonedMinion(template, instanceId, {
+          definitionId: "vulgar-homunculus",
+          tribe: "demon",
+          tribes: ["demon"],
+          attack: 2,
+          health: 4,
+        }),
+      ];
+      player.shop = [];
+      player.spellShop = null;
+      player.additionalSpellShop = [];
+
+      const recruited = playerById(
+        gameReducer(initial, { type: "END_TURN" }),
+        playerId,
+      );
+      assert.equal(
+        recruited.hand.some((card) => card.instanceId === instanceId),
+        !shouldPlay,
+        `${playerId} must ${shouldPlay ? "play at" : "hold below"} floor ${floor}`,
+      );
+      assert.equal(
+        recruited.board.some((minion) => minion.instanceId === instanceId),
+        shouldPlay,
+        `${playerId} board result at ${label} boundary`,
+      );
+      assert.equal(
+        recruited.health,
+        shouldPlay ? floor : health,
+        `${playerId} health result at ${label} boundary`,
+      );
+    }
+  }
+});
+
+test("AI still plays a self-damaging minion when Soul Rewinder restores it", () => {
+  const initial = createGame(45_007);
+  initial.round = 12;
+  const player = isolateAiLobby(initial, "player-1");
+  const template = player.shop[0];
+  assert.ok(template);
+  player.heroPowerId = null;
+  player.health = 1;
+  player.armor = 0;
+  player.tavernTier = 6;
+  player.gold = 0;
+  player.board = [
+    clonedMinion(template, "safe-soul-rewinder", {
+      definitionId: "BG26_174",
+      tribe: "demon",
+      tribes: ["demon"],
+      attack: 3,
+      health: 6,
+    }),
+  ];
+  player.hand = [
+    clonedMinion(template, "rewound-self-damage-minion", {
+      definitionId: "vulgar-homunculus",
+      tribe: "demon",
+      tribes: ["demon"],
+      attack: 2,
+      health: 4,
+    }),
+  ];
+  player.shop = [];
+  player.spellShop = null;
+  player.additionalSpellShop = [];
+
+  const candidate = withAiResidualPolicyOverrides(
+    new Map([[player.id, policy(() => null)]]),
+    () => gameReducer(initial, { type: "END_TURN" }),
+  );
+
+  const recruited = playerById(candidate.result, player.id);
+  assert.equal(recruited.alive, true);
+  assert.equal(recruited.health, 1);
+  assert.equal(recruited.hand.length, 0);
+  assert.ok(
+    recruited.board.some(
+      (minion) => minion.instanceId === "rewound-self-damage-minion",
+    ),
+  );
+  assert.equal(candidate.diagnostics.invalidContexts, 0);
+});
+
+test("AI projects Golden battlecry self-damage with the engine's real amount", () => {
+  const initial = createGame(45_009);
+  initial.round = 12;
+  const player = isolateAiLobby(initial, "player-1");
+  const template = player.shop[0];
+  assert.ok(template);
+  player.heroPowerId = null;
+  player.health = 11;
+  player.armor = 0;
+  player.tavernTier = 6;
+  player.gold = 0;
+  player.board = [];
+  player.hand = [
+    clonedMinion(template, "safe-golden-battlecry-damage-minion", {
+      definitionId: "vulgar-homunculus",
+      tribe: "demon",
+      tribes: ["demon"],
+      attack: 4,
+      health: 8,
+      golden: true,
+    }),
+  ];
+  player.shop = [];
+  player.spellShop = null;
+  player.additionalSpellShop = [];
+
+  const candidate = withAiResidualPolicyOverrides(
+    new Map([[player.id, policy(() => null)]]),
+    () => gameReducer(initial, { type: "END_TURN" }),
+  );
+
+  const recruited = playerById(candidate.result, player.id);
+  assert.equal(recruited.alive, true);
+  assert.equal(recruited.health, 9);
+  assert.equal(recruited.hand.length, 0);
+  assert.ok(
+    recruited.board.some(
+      (minion) =>
+        minion.instanceId === "safe-golden-battlecry-damage-minion",
+    ),
+  );
+  assert.equal(candidate.diagnostics.invalidContexts, 0);
+});
+
+test("AI holds a Discover minion whose selected tier could cause lethal damage", () => {
+  const initial = createGame(45_008);
+  initial.round = 12;
+  const player = isolateAiLobby(initial, "player-1");
+  const template = player.shop[0];
+  assert.ok(template);
+  player.heroPowerId = null;
+  player.health = 1;
+  player.armor = 0;
+  player.tavernTier = 6;
+  player.gold = 0;
+  player.board = [
+    clonedMinion(template, "safe-discover-damage-board", {
+      definitionId: "scallywag",
+      tribe: "pirate",
+      tribes: ["pirate"],
+      attack: 100,
+      health: 100,
+    }),
+  ];
+  player.hand = [
+    clonedMinion(template, "unsafe-discover-damage-minion", {
+      definitionId: "BG26_525",
+      tribe: "demon",
+      tribes: ["demon"],
+    }),
+  ];
+  player.shop = [];
+  player.spellShop = null;
+  player.additionalSpellShop = [];
+
+  const candidate = withAiResidualPolicyOverrides(
+    new Map([[player.id, policy(() => null)]]),
+    () => gameReducer(initial, { type: "END_TURN" }),
+  );
+
+  const recruited = playerById(candidate.result, player.id);
+  assert.equal(recruited.alive, true);
+  assert.equal(recruited.health, 1);
+  assert.ok(
+    recruited.hand.some(
+      (card) => card.instanceId === "unsafe-discover-damage-minion",
+    ),
+  );
+  assert.equal(candidate.diagnostics.invalidContexts, 0);
 });

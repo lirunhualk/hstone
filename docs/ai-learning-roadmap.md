@@ -1,6 +1,157 @@
 # 七名 AI 的学习与自博弈路线
 
-目标不是把公开视频硬编码成一套固定流派，而是把可复核的人类决策原则转成数据、评测和可迭代策略。当前引擎已经有确定性随机种子、共享玩家规则、七套软权重、可完成 8 bot 对局的阶段级 headless 接口，以及一个受控席位加七名现有 AI 的动作级训练环境；专家样本 schema、历史策略池、短程 Recruit planner、随机动作执行后重规划边界、部署席位成对门禁、高置信残差安全 seam 和七席 legacy 宏观专家 rollout 均已落地。v3 粗粒度 planner 已通过正确性与隐私验证但在 12-seed 诊断中显著降低吃鸡率，因此后续改为“现有强规则策略作专家与回退，只学习残差”，而不是继续扩大替代式搜索；当前 residual provider 为空，尚未部署任何学习候选。
+目标不是把公开视频硬编码成一套固定流派，而是把可复核的人类决策原则转成数据、评测和可迭代策略。当前引擎已经有确定性随机种子、共享玩家规则、七套软权重、可完成 8 bot 对局的阶段级 headless 接口，以及一个受控席位加七名现有 AI 的动作级训练环境；专家样本 schema、历史策略池、短程 Recruit planner、随机动作执行后重规划边界、部署席位成对门禁、高置信残差安全 seam 和七席 legacy 宏观专家 rollout 均已落地。v3 粗粒度 planner 已通过正确性与隐私验证但在 12-seed 诊断中显著降低吃鸡率，因此后续改为“现有强规则策略作专家与回退，只学习残差”，而不是继续扩大替代式搜索。截至 2026-08-08，正式运行时使用 `AI_POLICY_VERSION=video-strategy-v4-safe-recruit-health`；它增加了七席共享的规则级生命安全守卫，但 residual provider 仍为空，尚未部署任何学习候选。
+
+## 2026-08-08：v4 安全策略与学习实验终态
+
+v4 已部署的变化是确定性的引擎安全规则，不是逻辑回归模型。七种 profile 共用以下边界：
+
+- 当“夜鬼淘金”式英雄技能偷取酒馆牌并直接扣除 2 点生命、且会跨过安全底线时，不执行这次不安全激活。
+- 在招募阶段打出随从前，投影直接英雄伤害、场上 `afterFriendlyPlayed.heroDamage`（按引擎的金色组件倍率）、普通 `damageHero` 战吼（按实际战吼触发次数，含 `War Drum`）以及 `BG26_525` 交互战吼（按其 golden repeat）的发现等级伤害；把护甲计入可承受量，并按当前 profile 的健康底线，在投影会穿越底线时保守持牌。
+- 场上存在灵魂回溯者（Soul Rewinder）时，观察者按其已实现的招募阶段伤害回溯规则处理，不把可回溯伤害误判成必须持牌。除此之外，七席不会因人设偏好绕过同一生命安全守卫。
+
+本轮严格视频语料由 7 个 runtime-compatible Bilibili 来源组成，共 `60` 个决策窗口、`64` 条训练样本；标签分布为 `upgradeNow=12`、`defer=10`、`refreshOnce=11`、`stop=10`、`freeze=10`、`unfreeze=11`。新增复核来源包括 [伊莉斯+腐蚀秘典，打开上限！想玩什么随心所欲！](https://www.bilibili.com/video/BV1w9Ti6tEMq/) 与 [龙族巅峰，人均十万，暴打背靠背！](https://www.bilibili.com/video/BV1y1VD6DEj7/)。补丁 `35.4.2` 的窗口只允许使用跨补丁不变的宏观按钮、金币合法性和招募到战斗阶段边界，明确排除卡牌、数值、英雄、饰品和异常规则；另行登记的 `36.2` 来源仅作 evidence，因晚于当前固定运行时而不进入训练。
+
+标签边界是机器可核的：直接标签必须能从目标决策本身观察；推断 `defer` 或 `stop` 时，必须由目标动作之外的一次可见操作把资源从“足以执行目标动作”推进到“立即不足”，并记录操作前、操作后和所需费用；推断 `unfreeze` 只允许发生在招募阶段进入战斗阶段的边界。一次刷新本身永远不能标成 `stop`。每个训练窗口还绑定 BVID、时间点和复核媒体 SHA-256，避免同一页面的视频字节漂移后仍被当成原证据。
+
+固定媒体 SHA 分组的三折逻辑回归产物通过了结构、来源与哈希验证，但三个分类头均未通过事前固定的离线质量门禁：
+
+| 分类头 | 两类召回率 | Balanced accuracy | Lift | Coverage | Covered accuracy | `qualityPassed` |
+| --- | --- | ---: | ---: | ---: | ---: | --- |
+| upgrade | `0.75 / 0.40` | `0.575000` | `+0.075000` | `0` | — | false |
+| refresh | `0.272727 / 0.50` | `0.386364` | `-0.113636` | `0.190476` | `0.250000` | false |
+| freeze | `0.50 / 0.636364` | `0.568182` | `+0.068182` | `0.333333` | `0.428571` | false |
+
+产物绑定如下：
+
+- artifact SHA-256：`00c68092851d2bcef989c34034e695cccf8dec6a00bf4495fc49a5d92d93f964`
+- runtime payload SHA-256：`5303146fe0c6e2a90512dea463e4d027f9b61f3c47991218aa7e66205b4bfaaf`
+- dataset SHA-256：`35ca24d17803ee6a5a389d049bf561bb6253a39a41e432a320a99832becac832`
+
+视频样本没有配对的 legacy baseline，因此整体 `promotionGate.passed=false` 还包含 `pairedBaselineComplete=false`；但这不是唯一否决理由，三个头各自的 `qualityPassed` 已经全部为 `false`。流程在离线门禁处停止：没有部署该 runtime payload，没有运行研究模拟，也没有执行预留的正式 `304` / `305` 种子区间。`30_400_001–30_400_064` 与 `30_500_001–30_500_096` 现已在共享 seed ledger 中显式标为 `sealed`；通用、planner、residual 和 policy-suite benchmark 均须在创建策略或报告进度前拒绝访问，不能只靠文档约定。以上结果只描述小型公开视频语料的离线分类表现和本地安全规则，不能外推为真实天梯胜率或已经证明七名 AI 的对局强度提升。
+
+另一个不依赖逻辑回归的公开视频规则候选 `video-residual-buy-spike-before-level` 随后只进入开发诊断：当旧策略准备升本，但升本后不足以正常买牌、当前商店存在显著即时提升且血量或场面要求节奏时，以 `0.95` 置信度改为延后升本。全新诊断种子 `91_000_001–91_000_004` 同时覆盖 `neutral-v1` 与 `live-lobby-v1`、八个物理轮换，共完成 `128/128` 个 baseline/candidate 运行和 `448/448` 个 profile pair，无失败、截断或平局；候选在 `43,121` 次调用中覆盖 `175` 次。结果仅有平均名次差 `-0.017857`（负数较好，95% seed-cluster 区间 `[-0.062778, +0.027064]`）、前四率差 `+0.006696`（`[-0.020194, +0.033587]`）和吃鸡率差 `0`（`[-0.025935, +0.025935]`）。对子与健康升本 profile 的平均名次分别恶化 `+0.28125 / +0.234375`；因此它在 4-seed 诊断即停止，不扩大到 24-seed 晋级门禁，也不部署。这里的开发区间是候选筛除证据，不是正式 promotion 证据。
+
+同一研究队列中的“后期高本、资源有余量时更积极升本”候选也只运行了开发筛选。`92_000_001–92_000_004` 覆盖双场景与八轮换，完成 `128/128` 局和 `448/448` 个 profile pair，产生 `47` 次真实覆盖；平均名次差为 `-0.0513`，95% seed-cluster 区间 `[-0.1775, +0.0749]`，前四率和吃鸡率均为 `+0.00893`。健康升本 profile 仅触发 `2` 次，既没有稳定总体证据，也没有解决已知弱项，因此在 4-seed 阶段否决，不扩样、不部署。
+
+为避免不断围绕未经量化的直觉试规则，随后先用全新开发种子 `92_100_001–92_100_008` 对当前 v4 七个 profile 建立双场景、八物理轮换的绝对基线；`64/64` 局全部完成，无平局或截断。结果如下：
+
+| Profile | 平均名次 | 前四率 | 吃鸡率 |
+| --- | ---: | ---: | ---: |
+| balanced | `3.8906` | `0.6406` | `0.1563` |
+| magnetic | `3.7188` | `0.6250` | `0.2031` |
+| tempo | `3.9063` | `0.6563` | `0.1406` |
+| triple | `4.1875` | `0.5781` | `0.1094` |
+| powerLevel | `5.0000` | `0.3125` | `0.0781` |
+| economy | `4.3438` | `0.5469` | `0.1563` |
+| deathrattle | `4.5469` | `0.5156` | `0.0625` |
+
+该小样本只用于发现研究方向，不能把 profile 间的绝对值当作严格因果比较。它指出健康升本、亡语和经济 profile 的决赛转化仍值得优先研究。
+
+### 满场差 1 金的原子换将候选：开发筛选否决
+
+在现有 v4 满场替换逻辑只会“先买再卖”的安全边界上，本轮增加了一个仅供 headless 反事实评测的 `sell-one-v5` 候选：满场且手牌不超过 8 张时，如果一个确定的金币报价恰好只差 1 金，允许出售当前最弱且实际售价恰为 1 金的场上随从，再购买锁定的同一报价。来源带 `afterSold`、出售发现等副作用时直接弃权；完整交易必须在克隆状态上通过“出售→重新取得报价→重新评分→购买”，目标在出售后的分数仍须至少比来源高出当前 profile 的 `replacementMargin`，且不能留下待处理交互。成功克隆才以保留根状态和八个既有 `PlayerState` 引用的方式原子安装；任何安装失败都回滚。普通 `advanceHeadlessGame`、UI、reducer 和生产 v4 没有候选开关。
+
+评测器为每个 `(seed, scenario, rotation)` 只建立一次 canonical legacy baseline，再分别只把七个正式 profile 中一个焦点席位切为候选；候选第一次真正改变动作前要求初始 JSON 哈希和 RNG 完全一致，之后不伪称随机轨迹仍相同。结果按 seed 聚类并同时报告总体、场景、profile 与物理席位；物理席位只作干扰诊断。任一不完整对局、失败、平局、截断、哈希漂移、零决策分叉、出售后异常或诊断账本不闭合都会 fail closed。预注册晋级门槛要求至少 24 个 seed、平均名次差不高于 `-0.10` 且区间上界低于 0、前四率与吃鸡率区间下界分别不低于 `-0.02 / -0.03`；每个场景和七个 profile 还须通过较宽的分组非劣门槛。
+
+最终有效开发筛选使用 `92_240_001–92_240_008`：`1,024/1,024` 个计划运行和 `896/896` 个焦点 pair 全部完成，零失败、平局、截断或哈希不一致。焦点诊断严格闭账：`eligible=1,291 = dryRunAccepted 271 + scoreAborts 1,020`，另有资格判断前的 `handCapacityAborts=7`；`dryRunAccepted=salesCommitted=purchasesCommitted=decisionDivergences=271`，出售后、报价漂移、资金、交互和执行失败均为 0。
+
+总体平均名次差为 `-0.071429`，95% seed-cluster 区间 `[-0.129119, -0.013738]`；前四率差 `+0.010045`（`[-0.002848, +0.022937]`），吃鸡率差 `+0.004464`（`[-0.006094, +0.015022]`）。虽然总体名次区间方向为正向，但效果没有达到事前固定的 `-0.10` 最小改善，而且 magnetic 的名次区间上界 `+0.274783` 高于分组上限 `+0.25`、前四率区间下界 `-0.106478` 低于 `-0.05`，tempo 的前四率区间下界 `-0.055868` 也低于 `-0.05`。因此 `technicalEvidenceUsable=true`、`screenEvidenceUsable=true`，但 `accepted=false`。流程严格停止，不运行 24-seed 扩样，也不解封或运行 `304` / `305` 正式区间；生产版本继续是 v4。economy 的名次差 `-0.21875` 显示这个交易原语可能适合后续做 profile-aware 研究，但不能据此事后缩小人群并宣布本候选获胜。
+
+### 结算后整队增益守卫：开发筛选否决
+
+`sell-one-v5` 的同批训练诊断显示七个 profile 都有真实交易分叉（balanced / magnetic / tempo / triple / powerLevel / economy / deathrattle 分别为 `35 / 38 / 49 / 32 / 27 / 47 / 43` 次），所以不能把 magnetic 的退化解释成“没有触发”。下一候选在查看任何新种子结果前固定为 headless-only `sell-one-v6-settled-warband`，并完整保留 `sell-one-v5` 作为历史复现模式。v6 沿用 v5 的满场、手牌容量、恰差 1 金、来源实际售价、出售副作用、锁定报价、资金和局部替换分差守卫；唯一新增的策略变化是：在完整克隆中执行出售、重取同一报价、局部复核、购买，再调用一次现有 `playAiHand` 把目标及其自然产生的手牌动作结算到稳定点。若出现待处理交互或执行失败则弃权；只有结算后的场上随从总 `minionScore` 不低于出售前整队总分加该 profile 已存在的 `replacementMargin`，才原子安装克隆。未打出的目标不会计入结算后整队分数；若三连压缩了格子但结算后的整队价值仍过线，则不会仅因场上少于七个实体而误杀。磁力宿主、成长核心、三连与其他协同的损失通过其对整队评分的影响进入同一个守卫；不按 `profile.id` 特判，也不修改任何 profile 参数。
+
+该假设来自公开视频中“低血时优先兑现即时战力”“磁力宿主需计入累计投资和未来引擎价值”“满场仍须保留转型空间并比较相对战力”的稳定原则：[低血稳血与后期转化](https://www.bilibili.com/video/BV1n66KBDEEp/)、[机械磁力投资与循环组件](https://www.bilibili.com/video/BV1e92eBTEUD/) 和 [相对战力与转型空间](https://www.bilibili.com/video/BV1NMB5YEELt/)。复核没有发现能无歧义证明“满场恰差 1 金、卖普通随从后购买目标”的连续视频实例，因此一金交易本身仍是工程推断，不能称为直接模仿学习结果。
+
+开发筛选固定使用从未运行的 `92_300_001–92_300_008`，双场景、八物理轮换、每次只替换一个正式 profile，计划 `1,024` 局和 `896` 个 pair。揭示结果前必须冻结候选语义、专项测试、内容/策略/profile/evaluator hash。除既有技术完整性、总体 `-0.10` 最小名次改善、总体区间和场景/profile 非劣门槛外，本轮新增：七个 profile 各自至少一次真实分叉、各自诊断账本闭合、各自平均名次差必须 `<= 0`。8-seed 筛选若除“至少 24 seed”外任何门槛失败，立即否决，不在同批种子调阈值或补样。
+
+只有 8-seed 筛选除样本数外全部通过，才冻结同一实现并使用独立的 `92_310_001–92_310_024` 做一次 promotion；筛选的 8 seed 不并入 24-seed 推断。promotion 仍要求平均名次差 `<= -0.10` 且 95% 区间上界 `< 0`，前四率/吃鸡率区间下界分别 `>= -0.02 / -0.03`，并通过上述全部场景和七 profile 门槛。任一失败、平局、截断、初始哈希不一致、执行异常或源码/内容/profile 漂移均 fail closed。正式 `304` / `305` 区间继续封存且与本候选无关。
+
+预注册的 `92_300_001–92_300_008` 随后一次性完成：`1,024/1,024` 个计划运行、`896/896` 个 pair，零 runner failure、平局、截断、缺失配对或初始哈希不一致。策略版本保持 `video-strategy-v4-safe-recruit-health`，内容快照前后均为 `54749567…d634d97c`，evaluator core 前后均为 `d7a194ee…fdb3f67`，profile hash 前后均为 `93d9b252…e4cca2d9`。焦点诊断严格闭账：`eligible=1,112 = dryRunAccepted 244 + scoreAborts 850 + settledWarbandScoreAborts 18`，资格判断前另有 `handCapacityAborts=3`；`dryRunAccepted=salesCommitted=purchasesCommitted=decisionDivergences=244`，其余报价、资金、交互、执行和出售后异常均为 0。七个 profile 均有真实分叉，数量依次为 `29 / 39 / 41 / 29 / 32 / 38 / 36`，整队守卫在各 profile 分别拦截 `2 / 2 / 5 / 2 / 2 / 3 / 2` 次。
+
+强度结果没有通过开发筛选。总体平均名次差仅 `-0.032366`，95% seed-cluster 区间 `[-0.086488, +0.021755]`，未达到 `-0.10` 且区间跨过 0；前四率差 `+0.007813`（`[-0.007350, +0.022975]`），吃鸡率差 `+0.011161`（`[-0.002518, +0.024840]`）。magnetic 的名次点估计由旧候选的 `+0.09375` 转为 `-0.09375`，说明守卫确实过滤了部分风险交易，但 tempo / triple 的名次均值仍分别退化 `+0.007813 / +0.015625`，违反新增的逐 profile `<= 0` 门槛；tempo 吃鸡率、triple 前四率和 deathrattle 前四率的分组区间下界也低于 `-0.05`。因此 `technicalEvidenceUsable=true`、`screenEvidenceUsable=true`、`accepted=false`，且失败理由不只有样本数。流程按预注册停止：`92_300_001–92_300_008` 在 seed ledger 中永久标为 consumed，未执行的 `92_310_001–92_310_024` 保持 sealed，不运行 24-seed promotion，也不修改生产 v4。
+
+### 单焦点 cooperative categorical CEM：selection 已完成并被 gate 否决
+
+v6 已在独立的 `92_300_001–92_300_008` 上完成验收并被否决；这批失败结果没有被复用来选择参数。正式七席仍运行 `AI_POLICY_VERSION=video-strategy-v4-safe-recruit-health`。下面的 CEM 已完成 headless training 和一次性 independent selection，但 selection gate 明确否决候选，因此没有进入 roster-final，也不是已部署改进或生产推广证据。
+
+预注册方法为 `single-focus-cooperative-categorical-cem-v1`，注册 ID 为 `cooperative-cem-power-level-v1`。每个候选必须提供完整的 `player-1..player-7` profile 快照，但只允许改变 `player-5 / powerLevel` 的四个字段；其余六个 profile 必须与生产快照逐字节等价，focus profile 的其他字段也保持不变，任何 residual policy override 都被禁止。四个离散 gene grid 与初始 incumbent 固定如下：
+
+| gene | 注册取值 | 初始 incumbent |
+| --- | --- | --- |
+| `upgradeRoundOffset` | `[-1, 0, 1]` | `-1` |
+| `minimumUpgradeHealth` | `[10, 12, 14, 16, 18]` | `14` |
+| `replacementMargin` | `[2, 2.5, 3, 3.5, 4]` | `3` |
+| `maxRefreshes` | `[1, 2, 3, 4, 5]` | `2` |
+
+优化器固定使用 `optimizer seed=93_000_000`、`populationSize=8`、`eliteCount=2`、`generations=4`、`smoothing=0.5`、`probabilityFloor=0.02`。初始分布在每个 gene 内均匀；`mulberry32-v1` 按类别权重无放回采样，每代第 0 个候选保留 incumbent，分数越高越优。完全同分时先保留 incumbent，再按 ASCII candidate ID 排序。`93_000_000` 只驱动参数采样，不是对局 seed，也不属于下述隔离区间。
+
+每个候选都用当前生产策略作为 baseline，在 `initialHealth=40`、`maxRounds=150` 下运行 `neutral-v1` 与 `live-lobby-v1` 两个场景、8 个物理席位 rotation，并对 `player-1..player-7` 的七种 profile 全部成对计分。fresh training 的 8 个 seed 因而对应每候选 `8 × 2 × 8 × 2 = 256` 局、`8 × 2 × 8 × 7 = 896` 个 profile pair；4 代共 32 个候选槽位，计划上限为 `8,192` 局。rotation 只改变 profile 所在物理席位，不放宽“只有 powerLevel 四个 gene 可变”的边界。
+
+候选可行性要求 policy-suite `evidenceUsable=true`，总体平均名次差 `<= 0`，powerLevel 的前四率差 `>= -0.02`、吃鸡率差 `>= -0.03`；其余每个 profile 分别要求平均名次差 `<= +0.25`、前四率差 `>= -0.05`、吃鸡率差 `>= -0.05`。训练 benchmark 自身还必须保持 `promotionAccepted=false`，因为搜索结果不能在本阶段自我晋级。这些是搜索期的 mean-delta 约束，不等同于最终推广门槛。归一化违约量为所有正向越界之和：名次越界除以 `7`，比率越界除以 `1`，不可用 evidence 另加 `1`；缺失 mean 以 `0` 代入效用和越界计算、不额外增加归一化罚分，但仍各自产生一个失败理由；每个失败理由计一次违约。效用与最终分数严格固定为：
+
+```text
+utility = -100 * powerLevelPlacementDelta
+          + 10 * powerLevelTopFourDelta
+          + 5 * powerLevelWinDelta
+          - 1 * overallPlacementDelta
+
+feasibleScore   =  1_000_000 + utility
+infeasibleScore = -1_000_000
+                  - 100_000 * violationCount
+                  - 1_000 * normalizedViolation
+                  + utility
+```
+
+注册运行没有隐式默认授权。CLI 必须同时收到精确的确认串 `run-registered-cooperative-cem-power-level-v1`、protocol SHA-256 `875b635dab585be70c75f576294806069b048ea39709f6d849debf29ad4f512d` 和 implementation SHA-256 `11afa8ce77a348397ef984eef92a72d27a25b999834ad2e9dc0476054f8ecd88`；任一缺失或不匹配都在首局前失败。protocol pin 绑定注册 payload，implementation pin 绑定本次搜索、评测器及递归 `lib/game` 源码清单。注入 evaluator 的运行永远标为 `injected-test`，不能产生 training evidence。
+
+注册 CLI 还必须在任何 CEM 候选或首局对局开始前，原子、只增不改地落盘 `run-attempt.json`。该 marker 绑定 registration、training reservation、seed 区间以及 protocol / implementation pins；一旦存在，就证明这次 seed 尝试已经开始。若进程在第一个候选 checkpoint 前崩溃，即使目录中仍是 0 个 candidate checkpoint，后续也只能显式使用 `--resume-search-only`，不得再伪装成 fresh training。每完成一个候选，才写入一个连续序号的 raw-bound checkpoint，其中同时保存 compact evaluation、原始 `AiPolicySuiteBenchmarkResult`、两项 pin 和 checkpoint hash；恢复时必须是确定性 CEM replay 的严格前缀，任何缺口、乱序、raw/summary 不一致或 provenance 漂移均 fail closed。
+
+resume 只用于把搜索跑完并保留诊断，不会恢复证据资格：凡使用 `search-only`、读取任何 checkpoint/cache，或不是一次无中断 fresh registered run 的 artifact，`trainingEvidenceUsable` 与 `selectionScreenEligible` 都必须为 false。只有显式三重授权、0 个缓存候选、无 resume 且所有候选 benchmark evidence 均可用的完整 fresh run，才可能把训练 artifact 标为可用；这仍不等于可以上线。
+
+本次 fresh registered training 已一次性完成 32 个候选槽位，未使用 resume 或 cache；每个候选完成 `256/256` 局和 `896/896` 个 pair，所有 benchmark evidence 可用。训练 artifact hash 为 `21cd6816bf562c12e0a2b313a58fd77368c074921521acb7f580b53378c0f8b8`，evolution artifact hash 为 `10a6a388050577bb548f5d39b0d3318e89bab57a675412ded319a511c9ffaee0`。选中的可行候选 `cooperative-cem-power-level-v1-g0003-c0000-83a9c758b795` 使用 `upgradeRoundOffset=-1`、`minimumUpgradeHealth=14`、`replacementMargin=3.5`、`maxRefreshes=2`；总体名次差为 `-0.002232`（95% 区间 `[-0.023254,+0.018789]`），powerLevel 名次差为 `-0.15625`（`[-0.383186,+0.070686]`）。它满足搜索期约束并取得 selection 资格，但区间仍跨 0，不能据此推广。
+
+原始 marker、artifact、32 个 raw-bound checkpoint、旧 implementation 的 42 个源码文件和两个 pin anchor 已归档到 tracked evidence bundle。训练结果注册 SHA-256 为 `11dcd989e16b8eef0679b65e4cf0517bdc73e1c937097eb3fc3ffaed74151b7c`；bundle payload / gzip blob / manifest SHA-256 分别为 `a391f271f15afd0946bde35a1599080adb1166aeabf940af39b58008e7e9ce1b`、`af2b63510891f78e7d61877d7ae2f49add6789ea9b1a1694f521736093ca2465`、`38eb37d9eb7ad6993eb52a00b0b826dad68e63465f77a9224dc7ae52455b1a5f`。历史 reader 只依赖冻结的结果注册与归档自身，不依赖后续 selection ledger 或 live CEM pin。
+
+独立 selection 随后在事前冻结的 `93_100_001–93_100_024` 上一次性完成。双场景、8 个物理轮换的 baseline/candidate 共 `768/768` 局，形成 `2,688/2,688` 个 profile pair；runner failure、截断、平局、缺失配对和 provider error 均为 `0`，内容、策略、evaluator 与 candidate profile 前后哈希稳定，因而 `evidenceUsable=true`。这只证明结果可信，不代表候选合格。总体与焦点结果如下，名次差为负才表示改善：
+
+| 范围 | 平均名次差及 95% 区间 | 前四率差及 95% 区间 | 吃鸡率差及 95% 区间 |
+| --- | --- | --- | --- |
+| 全部七 profile | `-0.00409226`；`[-0.01652328, +0.00833876]` | `-0.00037202`；`[-0.00502090, +0.00427686]` | `+0.00334821`；`[+0.00148341, +0.00521302]` |
+| powerLevel | `+0.09635417`；`[-0.01149406, +0.20420240]` | `-0.02343750`；`[-0.04781986, +0.00094486]` | `-0.00520833`；`[-0.02710899, +0.01669232]` |
+
+selection gate 的精确失败理由只有三条，且都来自 powerLevel：
+
+1. `powerLevel placement mean delta must be at most -0.1`：实际为 `+0.09635417`，不仅没有达到至少 `0.10` 的改善，点估计方向还变差。
+2. `powerLevel placement confidence interval upper bound must be below 0`：区间上界为 `+0.20420240`，无法排除真实退化。
+3. `powerLevel top-four confidence interval lower bound must be at least -0.02`：下界为 `-0.04781986`，越过事前固定的非劣底线。
+
+这不是基础设施失败，也不能用总体吃鸡率的小幅正向结果覆盖焦点否决。训练 8 个 seed cluster 中，powerLevel 名次有 `7/8` 显示改善；独立 selection 的 24 个 cluster 却只有 `5` 个改善、`4` 个持平、`15` 个恶化。训练期 powerLevel 名次差 `-0.15625` 在 selection 反转为 `+0.09635417`，而且 `neutral-v1 / live-lobby-v1` 的点估计都恶化，分别为 `+0.08854167 / +0.10416667`。因此本轮把 8-seed 搜索收益明确判为过拟合，不能复用 `93_100` 调参、补样或重跑。
+
+权威 selection result SHA-256 为 `1bcf2fc7d17d73b014a6f460871149cad8b7cfac4cce1a4a821af6ecbd8d46f7`。artifact / checkpoint / raw benchmark SHA-256 分别为 `d3cfa2193d0ebcf9c3258591404a34596e83cb6b871b147d9105cf322001077b`、`47645dc8c269dbc46bc02fab4f7fb70bdd8af33d0ad82631b185cb6ef9f6d6e6`、`6d661e2b5fdb0ae409a4349b7474c1d6f494d3d54280d54d2736b9f2fa697e88`。selection 的源码快照、双 marker、raw-bound checkpoint 与 artifact 已保存到 tracked evidence bundle；archive payload / gzip blob / manifest SHA-256 分别为 `cffdb55a3d19404f03c5d0a1dd832c8dd824536714995ccaeb88e87db8a8391b`、`211cd71dbc2f363ffc77b5d329d3f056c03e891c941f5fc29542cae219f76973`、`1b85c47f8b14ba15cfe593dd06a2ba6680f1033e2bb7690d0a3d38754db4d310`。
+
+seed ledger 的边界已经固定，当前没有可运行的新 CEM 区间：
+
+| 阶段 | seed 区间 | 当前处置 |
+| --- | --- | --- |
+| 已暴露训练区间 | `93_000_001–93_000_008` | 在能力协议建立前被测试路径暴露，已永久 quarantine 并标为 consumed，绝不作为训练证据 |
+| fresh CEM training | `93_010_001–93_010_008` | 完整 registered training 已完成并归档，永久标为 consumed，不得重跑 |
+| independent selection | `93_100_001–93_100_024` | 完整 registered selection 已完成、归档并被 gate 否决；永久标为 consumed，不得重跑或复用 |
+| roster final | `93_200_001–93_200_096` | sealed 且从未运行；本轮 selection 失败后不得解封 |
+
+本轮 CEM 分支到此终止：生产继续保持 `video-strategy-v4-safe-recruit-health`，没有候选进入 `93_200`。下一轮不再只围绕 powerLevel 做大网格搜索，而采用以下事前约束：
+
+1. 用同一套 `4` 个小步长 delta 参数化全部七个 profile，限制每个 delta 在预注册邻域内，避免针对单一 profile 形成独立的大搜索空间。
+2. 参数搜索使用全新 training 区间，模型与门槛冻结后才揭示完全独立的 validation 区间；validation 不参与候选选择、阈值调整或追加样本。
+3. training 只对候选做七 profile 联合替换（joint intervention）；训练结束后只冻结一个候选进入 validation，再评测一次 joint intervention 和七次仅替换一个 profile 的 single intervention，既量化整体效果，也分离 profile 自身收益与同桌外部性，且禁止在 validation 中择优；joint 的七档与每个 single 的焦点档都必须有真实策略决策分叉，零暴露不能作为非劣证据。
+4. 优化目标以七 profile 宏平均为基础，并加入风险调整后的最差 profile 目标和明确的逐 profile 非劣约束；不能用一个 profile 的大收益抵消另一个 profile 的可靠退化。
+
+`93_300_001–93_300_016` 与 `93_310_001–93_310_024` 只能作为下一轮 development / validation 的拟议命名区间：截至 2026-08-08，它们尚未写入 seed ledger、尚未注册或 reserved，也从未运行。只有新协议、实现、门槛、归档方案与 fail-before-game 测试全部冻结后，才能另行决定是否登记；本文不构成运行授权。
+
+v4 安全守卫另有一条只用于 headless 的单座位反事实基准：每个 seed/scenario 先跑一局全 `legacy-v3`，再分别只把 `player-1..player-7` 中一个物理座位切到 `safe-v4`，其余座位保持 v3；正常 reducer、UI、存档和生产 `advanceHeadlessGame` 没有关闭安全守卫的开关。开发区间 `90_040_001–90_040_004` 覆盖 `neutral-v1` 与 `live-lobby-v1`，共完成 `64/64` 局、`56/56` 个原始 pair 和 `28/28` 个 seed/profile 逻辑配对，无失败、截断或平局。名次、前四率和吃鸡率差均为 `0`，四 seed 的 95% seed-cluster 区间也均为 `[0, 0]`。受控座位共遇到 `33` 次随从自伤候选，其中 `31` 次由已实现的伤害回溯观察者豁免，另外 `2` 次不会穿过安全底线；没有英雄技能自伤机会、底线穿越、致死风险或实际决策分叉。因此这批自然模拟触达了伤害投影路径，却没有触达 v4 与 v3 真正分叉的护栏，不能据此证明或否定对局强度变化，也不扩大到 24-seed promotion 门禁。v4 暂保留为经过七 profile 边界测试的 hard safety invariant；基准现在要求 legacy 原本要执行的下一动作确实被 v4 改写，单纯过滤一张本来不会选择的低分危险牌不算 treatment exposure，零实际决策分叉时即使其他统计门槛满足也会 fail closed。修正该口径后只在同一开发区间做了等价性复现，不把重复运行当成新的独立样本；结果逐项一致，当前 evaluator SHA-256 为 `dab8ca5fc3a4c2d351ac7ce941b3afbd34c13e6a698dfba1106a44855ba71333`。
+
+反事实审查同时修正了两处投影语义：`War Drum` 只按当前回合尚未消费的真实饰品计数增加战吼次数，不再“持有即永久 +2”；将手牌中的 Soul Rewinder 打到场上时，也把它自身纳入本次 `afterFriendlyPlayed` 伤害的回溯观察者。benchmark override 绑定到本次克隆状态并由 `try/finally` 清理，且只接受 canonical `player-0..player-7` roster，避免同步重入或伪造大厅把 v3 行为泄漏到普通游戏。
 
 ## 证据到训练样本
 
@@ -54,7 +205,7 @@ step(actionToken) -> { observation, legalActions, accepted, ownBattle, rewardSig
 
 默认 `legalActions` 继续以“有界候选枚举 + 真实 reducer 裁决”优先保证正确性；同一 state revision 的 mask 会缓存，fork 直接克隆当前状态。planner 专用 mask 排除其评分尚未使用的 `MOVE_MINION`，并复用引擎已有的费用、容量、合法目标和磁力查询走无副作用快速路径；固定 seed 的线性 walker 会在每个 revision 先构造 fast mask，再与 reducer mask 的动作描述和顺序逐项比较。每步另报告是否跨过私有 RNG 边界，但不暴露 RNG 值。动作在执行前被保守分为 deterministic、replan、terminal 和 unsupported；replan transition 不执行动作，也不返回 environment 或 observation，调用者把 token 提交给真实 episode 后必须重新规划。这样刷新、随机生成、发现和可能带随机触发的购买不再被永久剪枝，也不能偷看 counterfactual 随机结果。`scripts/benchmark-ai.ts` 继续负责完整大厅名次、前四率、吃鸡率和策略诊断；中性训练/基准环境尚未自动处理英雄、饰品和异常选择。
 
-2026-08-01 的 v2 端到端诊断明确阻止了直接上线 planner：seed `0x8b10` 的完整候选曾用时约 116.8 秒，缩小预算后仍约 28.9 秒，而且刷新被结构性剪枝、五个 profile 的升本价值为零、满场时会囤手牌。planner v3 修复了这些机制问题，并把单 seed 七席完整评测降到十几秒量级；但在本轮正式策略修复之前的 evaluator 快照 `bf338145…abc3e` 上，12 个独立 seed、84 个部署席位配对的结果仍明确拒绝策略替换。候选平均名次差 `+0.2976`（正数更差），95% 区间 `[-0.0341, +0.6293]`；前四率差 `-0.0119`；吃鸡率差 `-0.0952`，95% 区间 `[-0.1399, -0.0505]`。所有 runner、动作、边界和重规划完整性计数均为零，所以这是策略质量否决，不是基础设施故障。它继续保留为训练与正确性 seam，实际七名 AI 仍走现有强规则策略；正式策略自身现已升级为 `video-strategy-v3-certified-replacements`，仅修复已持有实体的对子自计数、普通金色/磁力三连误值和满场先卖后买的破坏性边界，不等同于接入 planner。
+2026-08-01 的 v2 端到端诊断明确阻止了直接上线 planner：seed `0x8b10` 的完整候选曾用时约 116.8 秒，缩小预算后仍约 28.9 秒，而且刷新被结构性剪枝、五个 profile 的升本价值为零、满场时会囤手牌。planner v3 修复了这些机制问题，并把单 seed 七席完整评测降到十几秒量级；但在当时正式策略修复之前的 evaluator 快照 `bf338145…abc3e` 上，12 个独立 seed、84 个部署席位配对的结果仍明确拒绝策略替换。候选平均名次差 `+0.2976`（正数更差），95% 区间 `[-0.0341, +0.6293]`；前四率差 `-0.0119`；吃鸡率差 `-0.0952`，95% 区间 `[-0.1399, -0.0505]`。所有 runner、动作、边界和重规划完整性计数均为零，所以这是策略质量否决，不是基础设施故障。它继续保留为训练与正确性 seam，实际七名 AI 仍走现有强规则策略；当时正式策略升级为 `video-strategy-v3-certified-replacements`，仅修复已持有实体的对子自计数、普通金色/磁力三连误值和满场先卖后买的破坏性边界，不等同于接入 planner。当前 v4 版本与本轮未部署的逻辑回归结果见文首终态。
 
 `scripts/benchmark-ai-recruit-planner.ts` 已把后续判断固定为部署席位成对评测：每个 seed 只跑一场未轮换基线，再逐个替换正式七席；每席保留精确名次或截断区间，七席先在 seed 内等权聚合，然后计算 seed-cluster 95% 置信区间。输出包含完整 profile、内容/策略/planner/environment 版本、配置和 evaluator/profile hash；长跑结束会重算 evaluator hash，源码中途漂移、任一 incomplete plan、拒绝动作、缺失 pair、平局或 runner failure 都会自动否决。默认单 seed 只用于诊断，绝不会满足 24-seed 接受门槛。
 
