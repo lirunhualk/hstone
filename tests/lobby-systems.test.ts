@@ -1369,6 +1369,10 @@ test("Refund Trick minions cost 1, sell gives 0, upgrade costs -2", () => {
   let player = humanPlayer(state);
   assert.equal(player.gold, 1);
 
+  state = continueThroughCombat(state);
+  player = humanPlayer(state);
+  assert.equal(player.gold, 2);
+
   assert.equal(getMinionPurchaseCost(state, player.id), 1);
   const shopMinion = player.shop[0];
   assert.ok(shopMinion);

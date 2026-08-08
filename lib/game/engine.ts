@@ -84,6 +84,7 @@ import {
   hasAiResidualPolicyOverride,
   resolveAiResidualMacroChoice,
 } from "./ai-residual-policy.ts";
+import { recruitGoldCapacity } from "./gold.ts";
 import type {
   AvengeEffect,
   ApplyBloodGemsToTribeEffect,
@@ -36084,7 +36085,7 @@ function beginNextRecruit(state: GameState): void {
         "goldCarryover";
     const carriedGold = carryoverActive ? Math.max(0, player.gold) : 0;
     player.gold =
-      Math.min(player.maxGold, state.round + 2) +
+      recruitGoldCapacity(state, player) +
       player.pendingNextTurnGold +
       carriedGold;
     if (carryoverActive && carriedGold >= 5) {

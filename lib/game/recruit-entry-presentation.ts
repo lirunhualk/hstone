@@ -1,4 +1,5 @@
 import type { GameState, PlayerState } from "./types";
+import { recruitGoldCapacity } from "./gold";
 
 export type RecruitEntryStage =
   | "curtain"
@@ -80,7 +81,7 @@ function shopOfferInstanceIds(player: PlayerState): string[] {
 }
 
 function displayedGoldSlots(state: GameState, player: PlayerState): number {
-  const turnAllowance = Math.min(player.maxGold, state.round + 2);
+  const turnAllowance = recruitGoldCapacity(state, player);
   return Math.max(player.gold, turnAllowance);
 }
 

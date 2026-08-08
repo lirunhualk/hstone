@@ -182,6 +182,7 @@ import {
   transitionRecruitEntryPresentation,
   type RecruitEntryPresentationState,
 } from "../lib/game/recruit-entry-presentation";
+import { recruitGoldCapacity } from "../lib/game/gold";
 import {
   createSpellCastPresentation,
   spellCastPresentationAnnouncement,
@@ -8718,7 +8719,7 @@ export default function GameClient() {
     : recruitEntryPresentation?.gold ?? human.gold;
   const defaultGoldCapacity = Math.max(
     human.gold,
-    Math.min(human.maxGold, game.round + 2),
+    recruitGoldCapacity(game, human),
   );
   const displayedGoldCapacity = recruitEntryShowsPreviousGold
     ? recruitEntryPresentation?.previousMaxGold ?? defaultGoldCapacity
