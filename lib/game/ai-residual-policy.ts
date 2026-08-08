@@ -297,21 +297,44 @@ function cloneAndFreezeJson(
   ancestors.add(value);
   try {
     if (Array.isArray(value)) {
-      const symbolKeys = Object.getOwnPropertySymbols(value);
-      if (symbolKeys.length > 0) {
-        throw new InvalidResidualContextError("symbol keys are not allowed");
+      if (Object.getPrototypeOf(value) !== Array.prototype) {
+        throw new InvalidResidualContextError(
+          "only ordinary arrays are allowed",
+        );
       }
-      const clone: unknown[] = [];
-      for (let index = 0; index < value.length; index += 1) {
-        if (!Object.prototype.hasOwnProperty.call(value, index)) {
-          throw new InvalidResidualContextError("sparse arrays are not allowed");
-        }
-        clone.push(cloneAndFreezeJson(value[index], ancestors));
+      const lengthDescriptor = Object.getOwnPropertyDescriptor(value, "length");
+      if (
+        lengthDescriptor === undefined ||
+        !("value" in lengthDescriptor) ||
+        !Number.isSafeInteger(lengthDescriptor.value) ||
+        lengthDescriptor.value < 0
+      ) {
+        throw new InvalidResidualContextError("array length is invalid");
       }
-      if (Object.keys(value).length !== value.length) {
+      const length = lengthDescriptor.value as number;
+      const ownKeys = Reflect.ownKeys(value);
+      if (ownKeys.length !== length + 1 || ownKeys[length] !== "length") {
         throw new InvalidResidualContextError(
           "array properties other than indexes are not allowed",
         );
+      }
+      const clone: unknown[] = [];
+      for (let index = 0; index < length; index += 1) {
+        const key = String(index);
+        if (ownKeys[index] !== key) {
+          throw new InvalidResidualContextError("sparse arrays are not allowed");
+        }
+        const descriptor = Object.getOwnPropertyDescriptor(value, key);
+        if (
+          descriptor === undefined ||
+          descriptor.enumerable !== true ||
+          !("value" in descriptor)
+        ) {
+          throw new InvalidResidualContextError(
+            "array entries must be enumerable data properties",
+          );
+        }
+        clone.push(cloneAndFreezeJson(descriptor.value, ancestors));
       }
       return Object.freeze(clone);
     }
@@ -580,6 +603,21 @@ function validatedFrozenContext(
     throw new InvalidResidualContextError("invalid macro context");
   }
   return cloned;
+}
+
+/**
+ * Reuses the engine residual boundary's exact-key, privacy, range, and legal
+ * mask validation for offline feature extraction. Invalid or hostile values
+ * fail closed instead of exposing the private validation error type.
+ */
+export function snapshotAiResidualMacroContext(
+  context: AiResidualMacroContext,
+): DeepReadonly<AiResidualMacroContext> | null {
+  try {
+    return validatedFrozenContext(context);
+  } catch {
+    return null;
+  }
 }
 
 function isThenable(value: unknown): boolean {

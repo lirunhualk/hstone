@@ -1973,6 +1973,12 @@ export interface BattleEvent {
   targetPlayerId?: PlayerId;
   targetInstanceId?: string;
   amount?: number;
+  /** Raw post-combat damage before the solo-lobby cap is applied. */
+  uncappedAmount?: number;
+  /** Active solo-lobby damage cap for this combat, when Top 4 has not begun. */
+  damageCap?: 5 | 10 | 15;
+  /** Damage prevented by the cap before Armor or lethal prevention resolves. */
+  damagePreventedByCap?: number;
   armorAbsorbed?: number;
   healthDamage?: number;
   attackDelta?: number;
@@ -2071,6 +2077,7 @@ export type DiscoverDestination =
     }
   | { kind: "magnetize"; targetInstanceId: string }
   | { kind: "transform"; targetInstanceId: string }
+  | { kind: "replaceShop"; targetInstanceId: string }
   | {
       kind: "customUndeadFirst";
       sourceTrinketDefinitionId: string;
@@ -2284,6 +2291,10 @@ export interface ScheduledPairing {
 
 export interface BattleSummary {
   round: number;
+  /** Number of living players snapshotted before any pairing resolves. */
+  alivePlayersAtCombatStart?: number;
+  /** Cap locked for every pairing this round; null means the lobby was Top 4. */
+  damageCap?: 5 | 10 | 15 | null;
   playerAId: PlayerId;
   playerBId: PlayerId;
   playerAName: string;

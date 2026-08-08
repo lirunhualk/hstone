@@ -56,7 +56,6 @@ export const UNSUPPORTED_HERO_POWER_EFFECTS = new Set<HeroPowerEffect>([
   "activeStealFirstKillNextCombat",
   "activeRandomBuffChooseUpgrade",
   "activeRefreshHigherTier",
-  "activeReplaceHigherTier",
   "activeStealTavernCardDamage",
   "activeBuildCustomUndead",
   "alternatingStatBuff",
@@ -99,7 +98,6 @@ export const UNSUPPORTED_HERO_POWER_EFFECTS = new Set<HeroPowerEffect>([
   "nextTavernSpellDiscountDelayed",
   "chooseTrinketAtTurn5",
   "chooseGreaterTrinketAtTurn8",
-  "activeGiveDivineShield",
   "chooseSecret",
   "discoverHeroPowerAtTurn4",
 ]);

@@ -13,6 +13,10 @@ import type {
   PlayerState,
   TavernSpellInstance,
 } from "./types.ts";
+import {
+  TRIPLE_FORGE_PRESENTATION_STAGES,
+  tripleForgePresentationDuration,
+} from "./triple-forge-presentation.ts";
 
 export type RecruitPresentationCurrency = "gold" | "health";
 
@@ -35,8 +39,10 @@ export type RecruitPresentationEvent =
     }
   | {
       kind: "cardMove";
-      motion: "shop-to-hand" | "board-to-bob";
+      motion: "shop-to-hand" | "hand-to-board" | "board-to-bob";
       card: RecruitPresentationCard;
+      /** Final zero-based board position after an accepted hand play. */
+      boardIndex?: number;
       purchaseCost?: number;
       purchaseCurrency?: RecruitPresentationCurrency;
     }
@@ -91,6 +97,24 @@ export function completeRecruitPresentation<
   return queue[0]?.token === activeToken ? queue.slice(1) : queue;
 }
 
+export function groupRecruitPresentationEvents(
+  events: readonly RecruitPresentationEvent[],
+): RecruitPresentationEvent[][] {
+  if (events.length === 0) return [];
+  if (events.every((event) => event.kind === "bloodGemPulse")) {
+    return events.map((event) => [event]);
+  }
+
+  const triples = events.filter((event) => event.kind === "triple");
+  if (triples.length <= 1) return [[...events]];
+
+  const leadingEvents = events.filter((event) => event.kind !== "triple");
+  return [
+    [...leadingEvents, triples[0]],
+    ...triples.slice(1).map((triple) => [triple]),
+  ];
+}
+
 function playerFor(
   state: GameState,
   playerId: string,
@@ -143,14 +167,13 @@ function tripleEvents(
     beforeOwned.map((minion) => minion.instanceId),
   );
   const afterIds = new Set(afterOwned.map((minion) => minion.instanceId));
-  const newlyForged = afterOwned.filter(
+  const newlyGolden = afterOwned.filter(
     (minion) =>
       minion.golden === true &&
-      minion.grantsTripleReward === true &&
       !beforeIds.has(minion.instanceId),
   );
 
-  return newlyForged.map((golden) => {
+  return newlyGolden.flatMap((golden) => {
     const mixedOwnershipIds = golden.poolCopiesByDefinitionId
       ? new Set(Object.keys(golden.poolCopiesByDefinitionId))
       : null;
@@ -174,14 +197,29 @@ function tripleEvents(
         ? purchasedMinion.instanceId
         : null;
 
-    return {
+    const knownConsumedInstanceIds = orderedUnique([
+      ...missingOwnedIds,
+      ...(purchasedId ? [purchasedId] : []),
+    ]).slice(0, 3);
+
+    // A real forge can replace or suppress the usual Triple Reward (for
+    // example Circus Prize, False Idols, Easy Triple Coin, or Golden Arena).
+    // Those results deliberately clear `grantsTripleReward`, so keep them
+    // visible when the transition also consumed at least two compatible
+    // non-golden copies. Effect-created golden tokens consume no such pair
+    // and therefore remain excluded.
+    if (
+      golden.grantsTripleReward !== true &&
+      knownConsumedInstanceIds.length < 2
+    ) {
+      return [];
+    }
+
+    return [{
       kind: "triple" as const,
       golden,
-      knownConsumedInstanceIds: orderedUnique([
-        ...missingOwnedIds,
-        ...(purchasedId ? [purchasedId] : []),
-      ]).slice(0, 3),
-    };
+      knownConsumedInstanceIds,
+    }];
   });
 }
 
@@ -249,6 +287,45 @@ export function deriveRecruitPresentation(
     events.push(
       ...bloodGemPulseEvents(beforePlayer, trace),
     );
+  } else if (
+    action.type === "PLAY_HAND_CARD" ||
+    action.type === "PLAY_MINION"
+  ) {
+    const playedCard =
+      action.type === "PLAY_HAND_CARD"
+        ? beforePlayer.hand.find(
+            (card) => card.instanceId === action.cardInstanceId,
+          )
+        : beforePlayer.hand[action.handIndex];
+    const wasAlreadyOnBoard =
+      playedCard?.kind === "minion" &&
+      beforePlayer.board.some(
+        (minion) => minion.instanceId === playedCard.instanceId,
+      );
+    const finalBoardIndex =
+      playedCard?.kind === "minion"
+        ? afterPlayer.board.findIndex(
+            (minion) => minion.instanceId === playedCard.instanceId,
+          )
+        : -1;
+    const remainsInHand =
+      playedCard !== undefined &&
+      afterPlayer.hand.some(
+        (card) => card.instanceId === playedCard.instanceId,
+      );
+    if (
+      playedCard?.kind === "minion" &&
+      !wasAlreadyOnBoard &&
+      !remainsInHand &&
+      finalBoardIndex >= 0
+    ) {
+      events.push({
+        kind: "cardMove",
+        motion: "hand-to-board",
+        card: playedCard,
+        boardIndex: finalBoardIndex,
+      });
+    }
   } else if (action.type === "BUY_MINION") {
     const offered = beforePlayer.shop[action.shopIndex];
     const stillOffered =
@@ -433,7 +510,9 @@ export function recruitPresentationAnnouncement(
     parts.push(
       move.motion === "shop-to-hand"
         ? `购买${move.card.name}`
-        : `出售${move.card.name}`,
+        : move.motion === "hand-to-board"
+          ? `打出${move.card.name}`
+          : `出售${move.card.name}`,
     );
   } else if (refresh?.kind === "shopRefresh") {
     parts.push(refresh.free ? "免费刷新酒馆" : "刷新酒馆");
@@ -458,12 +537,26 @@ export function recruitPresentationAnnouncement(
 
 export function recruitPresentationDuration(
   events: readonly RecruitPresentationEvent[],
+  reducedMotion = false,
 ): number {
   if (events.some((event) => event.kind === "bloodGemPulse")) {
     return 720;
   }
   if (events.some((event) => event.kind === "triple")) {
-    return 1500;
+    return TRIPLE_FORGE_PRESENTATION_STAGES.reduce(
+      (duration, stage) =>
+        duration + tripleForgePresentationDuration(stage, reducedMotion),
+      0,
+    );
+  }
+  if (
+    events.some(
+      (event) =>
+        event.kind === "cardMove" &&
+        event.motion === "hand-to-board",
+    )
+  ) {
+    return 900;
   }
   return events.filter((event) => event.kind === "currency").length > 1
     ? 1260

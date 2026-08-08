@@ -19,6 +19,8 @@ test("recruit planner benchmark rejects protected seeds before progress", () => 
     30_100_001,
     30_200_001,
     30_300_001,
+    30_400_001,
+    30_500_001,
   ]) {
     assert.throws(
       () =>

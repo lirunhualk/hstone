@@ -1,0 +1,468 @@
+{
+  "formatVersion": 1,
+  "registrationId": "cooperative-cem-power-level-v1",
+  "bundle": {
+    "relativePath": "training-evidence-v1.json.gz",
+    "compression": "gzip-level-9-mtime-0",
+    "canonicalJson": "canonical-ai-policy-evolution-json-v1",
+    "uncompressedBytes": 34964659,
+    "compressedBytes": 1509477,
+    "payloadSha256": "a391f271f15afd0946bde35a1599080adb1166aeabf940af39b58008e7e9ce1b",
+    "blobSha256": "af2b63510891f78e7d61877d7ae2f49add6789ea9b1a1694f521736093ca2465"
+  },
+  "sourceSnapshot": {
+    "implementationSha256": "11afa8ce77a348397ef984eef92a72d27a25b999834ad2e9dc0476054f8ecd88",
+    "protocolSha256": "875b635dab585be70c75f576294806069b048ea39709f6d849debf29ad4f512d",
+    "protocolPayloadSha256": "875b635dab585be70c75f576294806069b048ea39709f6d849debf29ad4f512d",
+    "sourceFileCount": 42,
+    "sourceFiles": [
+      {
+        "relativePath": "lib/game/ai-logistic-residual-policy.ts",
+        "normalizedUtf8Sha256": "7aabf04d345a13e5d0f32e0750c032a78c38dd79ee77afa68dfcea271c16659d"
+      },
+      {
+        "relativePath": "lib/game/ai-recruit-planner.ts",
+        "normalizedUtf8Sha256": "fc0167728d94c1653cf46c81c96075ce13c08367c2c028fae095103b7a60d626"
+      },
+      {
+        "relativePath": "lib/game/ai-residual-features.ts",
+        "normalizedUtf8Sha256": "a33f825be40b7e8d906a8ff541a61f7a68325b0d22aaa7e3d8be9d3546aa5491"
+      },
+      {
+        "relativePath": "lib/game/ai-residual-policy.ts",
+        "normalizedUtf8Sha256": "9bc992ff1df5f477b2fff2cd05a8f9cedd69be8647bd63d537c948f46bef4f12"
+      },
+      {
+        "relativePath": "lib/game/ai-training-environment.ts",
+        "normalizedUtf8Sha256": "9e301987cfd0c27cb44d68f41306d8eefefe6e78956aa3c4aa6ccb222c83ea0f"
+      },
+      {
+        "relativePath": "lib/game/ai-training.ts",
+        "normalizedUtf8Sha256": "05ff2823f469d08f08b3aa0f7a816502f5c4aacd74a9cba852cdf53e885293b2"
+      },
+      {
+        "relativePath": "lib/game/ai-video-residual-policy.ts",
+        "normalizedUtf8Sha256": "65c105b953112340cedaf893dfe30460435ee90e1a687c67f59c6fec6917e9bb"
+      },
+      {
+        "relativePath": "lib/game/ai.ts",
+        "normalizedUtf8Sha256": "68da30d4072f0b951848d3f249713e0bf8aad58cb4cb01d6cf378c8ba9726569"
+      },
+      {
+        "relativePath": "lib/game/buddies.ts",
+        "normalizedUtf8Sha256": "bb04a2703f9edff771bc43f22d8de20c9e3bbcf4a0bc51599a0e2aa410508c0d"
+      },
+      {
+        "relativePath": "lib/game/card-inspection.ts",
+        "normalizedUtf8Sha256": "f605a997be4b0545d305c293bbde8a634e081ab2c387540e73c6793508f42da2"
+      },
+      {
+        "relativePath": "lib/game/client-save.ts",
+        "normalizedUtf8Sha256": "27643973431e804277813b0f43fe2e09e4889dd1829a1400777bf860a60bffff"
+      },
+      {
+        "relativePath": "lib/game/combat-presentation.ts",
+        "normalizedUtf8Sha256": "3399e73c44f4a66ad8e488f27846d38db58a24d247aa5161ead346ae6c386484"
+      },
+      {
+        "relativePath": "lib/game/content.ts",
+        "normalizedUtf8Sha256": "9f21eebd66f8dc36b751a228bc574c8237422a9d3a58d9c67d87b512bb1116fd"
+      },
+      {
+        "relativePath": "lib/game/darkmoon-prizes.ts",
+        "normalizedUtf8Sha256": "e6e3865034f0631983ebd3dc735eaae1300de9bce9767bebf12e02f2de81dfe3"
+      },
+      {
+        "relativePath": "lib/game/drag-preview.ts",
+        "normalizedUtf8Sha256": "6ea7456d599e042ac55702f760530bf92a9280b71afc6ea20e9e98bbf57a166a"
+      },
+      {
+        "relativePath": "lib/game/engine.ts",
+        "normalizedUtf8Sha256": "ba7195b176496c33fb28c92535a32a9c62480ba473fac636370ad486e0711c49"
+      },
+      {
+        "relativePath": "lib/game/generated/battlegrounds-36.0.3-247416.zhCN.json",
+        "normalizedUtf8Sha256": "d88ae1e62b58f8ca94979c284e726cf09f3f05f606dee5ade226bf32fe71c4f9"
+      },
+      {
+        "relativePath": "lib/game/generated/battlegrounds-trinkets-36.0.3-247416.zhCN.json",
+        "normalizedUtf8Sha256": "638005728573514c7b7054efd6b95648099a42a86f0cc2e2301290ceb63f3a70"
+      },
+      {
+        "relativePath": "lib/game/hero-powers.ts",
+        "normalizedUtf8Sha256": "f2dd741a4b23a6f1cf76afc2f8c69544345e95b569157191de343ea2e8fb837d"
+      },
+      {
+        "relativePath": "lib/game/hero-secrets.ts",
+        "normalizedUtf8Sha256": "0053258009b38644298f9e4142194976c1156a88dcaf3837e1e6d953ca0506d8"
+      },
+      {
+        "relativePath": "lib/game/interaction-presentation.ts",
+        "normalizedUtf8Sha256": "d56451a210ae1c6fe685c9ca2325ccaa02adbc2902a1a6176390519b56bef412"
+      },
+      {
+        "relativePath": "lib/game/lobby-systems.ts",
+        "normalizedUtf8Sha256": "7c6c8ef65dc85587e32adf14bc1a405fef2f7d6569f30a0a1793132cf8505815"
+      },
+      {
+        "relativePath": "lib/game/minion-presentation.ts",
+        "normalizedUtf8Sha256": "585e4dd0400be20e5e9499d0f787e607054923f05e225d99ef9e66f379a2fc0c"
+      },
+      {
+        "relativePath": "lib/game/opponent-intelligence.ts",
+        "normalizedUtf8Sha256": "a711970c36948d7e65cfd3ae80c79598d927a995f88a769289790afe7957198e"
+      },
+      {
+        "relativePath": "lib/game/playback.ts",
+        "normalizedUtf8Sha256": "6578c41ea1b95a773676f0854d8d66c1a6c95f9999b5c1b3aeff6e740f82d14a"
+      },
+      {
+        "relativePath": "lib/game/recruit-presentation.ts",
+        "normalizedUtf8Sha256": "b7e5a6e0d1df0535b017ad6d4c316c1ca14b21a9e2e9e9b2154ad3d671b5ea36"
+      },
+      {
+        "relativePath": "lib/game/save.ts",
+        "normalizedUtf8Sha256": "a7196a94df7334544e8bf25796106985f63e226275666556ec742b2ea7602ede"
+      },
+      {
+        "relativePath": "lib/game/setup.ts",
+        "normalizedUtf8Sha256": "9ee19008b651edf6fb642e1962c1118bc1d45363824cd2ffeab8c501e09db724"
+      },
+      {
+        "relativePath": "lib/game/spellcraft.ts",
+        "normalizedUtf8Sha256": "f9454065b77066bba3abae3020ce59794291d4ce2756eea543ba2d8461632ccb"
+      },
+      {
+        "relativePath": "lib/game/tavern-spells.ts",
+        "normalizedUtf8Sha256": "ba390254ae4f2a2c87250f0bb99effc7ad5e5e270f49c68a647427ffa65b8e67"
+      },
+      {
+        "relativePath": "lib/game/trinket-offers.ts",
+        "normalizedUtf8Sha256": "91fccbc102c99b3e728b389d9784d10051f0871c48543acdb30e159bc39a61b6"
+      },
+      {
+        "relativePath": "lib/game/types.ts",
+        "normalizedUtf8Sha256": "d6287becfcdeee82365f3bcae209ee1d66da4fe664359fc23df67593401fa947"
+      },
+      {
+        "relativePath": "scripts/ai-benchmark-scenarios.ts",
+        "normalizedUtf8Sha256": "82b46fdff7e94057c7a85aa55e8f93aa9a36d34c44adff31530aae8bddb0bda1"
+      },
+      {
+        "relativePath": "scripts/ai-cooperative-cem-implementation-integrity.ts",
+        "normalizedUtf8Sha256": "f017def66a94de761b93e5842dad6ee09a00b8d1148e1ae416a2af769e5f006f"
+      },
+      {
+        "relativePath": "scripts/ai-cooperative-cem-registration.ts",
+        "normalizedUtf8Sha256": "5e380c3a61f77fa336e7c8454cdbed9db1bbbe786243158b22ee8e690750561f"
+      },
+      {
+        "relativePath": "scripts/ai-cooperative-cem.ts",
+        "normalizedUtf8Sha256": "2dbfe13f5380849dc5a641ead247c911db93dab734dc5ca15ae6fe9701daff65"
+      },
+      {
+        "relativePath": "scripts/ai-policy-evolution.ts",
+        "normalizedUtf8Sha256": "3abe5ea5068bf1b7bd1b1fc739f6e2008dd786e5f9b257ccea8e10f22d490bc2"
+      },
+      {
+        "relativePath": "scripts/ai-seed-ledger.ts",
+        "normalizedUtf8Sha256": "2a99ca5c95646bbdca28623d8492e3150e6bbd900358de83f508939fbb10bfbf"
+      },
+      {
+        "relativePath": "scripts/ai-training-screen-registration.ts",
+        "normalizedUtf8Sha256": "7a0bb6318a44f7ead9cecb9d086ff4ff174a6953fce423ee9290a3a16648ff72"
+      },
+      {
+        "relativePath": "scripts/benchmark-ai-policy-suite.ts",
+        "normalizedUtf8Sha256": "8393fa06227d6844c136d01c5b4541b16f1e446322f11d359cc0529bf76c358c"
+      },
+      {
+        "relativePath": "scripts/benchmark-ai-recruit-planner.ts",
+        "normalizedUtf8Sha256": "56fe507eae383f35a50af18ce9e5c4dd9783e4b425e4ca8f9841575eaafd03c3"
+      },
+      {
+        "relativePath": "scripts/run-ai-cooperative-cem.ts",
+        "normalizedUtf8Sha256": "f6eae90b945b905d0ebacfe6c1b28f0500ecc5cea2b2bed3ba42d2d3db444e2d"
+      }
+    ],
+    "literalAnchorFiles": [
+      {
+        "relativePath": "scripts/ai-cooperative-cem-implementation-pin.ts",
+        "normalizedUtf8Sha256": "7a1cb3d5e8b3c1c8ec8b338000557c11a4ad8a66284472adf7341445903843f2"
+      },
+      {
+        "relativePath": "scripts/ai-cooperative-cem-protocol-pin.ts",
+        "normalizedUtf8Sha256": "c2a0abad266e4692e3c7235879f58fc2b1c896a274c0dbaed55707467f6ab7f7"
+      }
+    ]
+  },
+  "runMarkerHash": "ee0f2d47e14a5deb51811edfe973708ba3c261f06ad68d30152cd24278e9faaf",
+  "artifactHash": "21cd6816bf562c12e0a2b313a58fd77368c074921521acb7f580b53378c0f8b8",
+  "evolutionArtifactHash": "10a6a388050577bb548f5d39b0d3318e89bab57a675412ded319a511c9ffaee0",
+  "checkpoints": [
+    {
+      "sequenceIndex": 0,
+      "candidateId": "cooperative-cem-power-level-v1-g0000-c0000-42da37039d6d",
+      "checkpointHash": "291f8cecc03d086abd828f0a4afbf2815b3861a354630fc8dbaa28fc30f3135c",
+      "checkpointCanonicalSha256": "8aed0299609f4315059a3361e1017df8aa6b58f4dda033cca7936d799ab4b048",
+      "evaluationRecordHash": "1642e62c3afed875608600ff0e4270c2b052a8074558ead5c1507f0558d3b758",
+      "rawResultSha256": "9a5dfc04a52fb809b2df77f62bbaf259e20e8bad036025fd9e247e44872cbee4"
+    },
+    {
+      "sequenceIndex": 1,
+      "candidateId": "cooperative-cem-power-level-v1-g0000-c0001-7351bba0cc8f",
+      "checkpointHash": "0e3dfab68007ad77405e615319f996e5065845cfaaa62568b53a7597965ef81d",
+      "checkpointCanonicalSha256": "a7e95bfb73374178737f1c6d584ebf55c8359005c72cba43fef4320536f74982",
+      "evaluationRecordHash": "9fbea2737ed9f3fef9044ee09c9e8b1b7faecf3861e18d8433932851c09f7cce",
+      "rawResultSha256": "61fcbcfc49f1e2575c7c82c5dcc0a1d368b5bfb392a036458bda6a5d94b912a9"
+    },
+    {
+      "sequenceIndex": 2,
+      "candidateId": "cooperative-cem-power-level-v1-g0000-c0002-1d6d1db08bc3",
+      "checkpointHash": "4c575dffd16e8d0f1ef7dfde82ce6953537eed21a90c053af088e01ad8597812",
+      "checkpointCanonicalSha256": "11318aa43110a13f3b35b71c324d390f7c3d4de4c6e2fec94adf58937844b954",
+      "evaluationRecordHash": "9e3c99b06a5fc7690d8d9027a96ab3580a2f25e3e4b4ac2af537b03b11a74824",
+      "rawResultSha256": "9eb894c79f2c56621a3a8a279b0cae115b9afc29e7fce3b97b3291ff3730e307"
+    },
+    {
+      "sequenceIndex": 3,
+      "candidateId": "cooperative-cem-power-level-v1-g0000-c0003-f77b0552a657",
+      "checkpointHash": "0253db1cf971a7a7c244dc6a13fb75c277971ca68c2bdfc4b20334af9fc25f34",
+      "checkpointCanonicalSha256": "6bf357ffbc44394ec372aa0e6e58bbfa4af2d1142a9c9a7dc626364d159caf83",
+      "evaluationRecordHash": "e03864a7a111c65813fde261c55a5876c97608b4857669b814542f7659112691",
+      "rawResultSha256": "7a9e0ee239a8dfc861ff51ff38b8f53c1849a21594ac149d754358def858b799"
+    },
+    {
+      "sequenceIndex": 4,
+      "candidateId": "cooperative-cem-power-level-v1-g0000-c0004-310ac8eb99ea",
+      "checkpointHash": "42e0f4995baf918184372cbe0c276973199f06f45ddc9ba202d67b10eb11760d",
+      "checkpointCanonicalSha256": "a2e5f0ae2b3d55f1234bcf61d8e7fd40f85e789b80d87ac67d6f22c8f06ce066",
+      "evaluationRecordHash": "e0a05a4b32dc013581214598573b190abdc686c294bf3a35cf2ca35cc449a099",
+      "rawResultSha256": "c9c58210b0752a4ff4f70b8878b7266374c339dbe34c09065a24a769216c890e"
+    },
+    {
+      "sequenceIndex": 5,
+      "candidateId": "cooperative-cem-power-level-v1-g0000-c0005-d6310d8601ce",
+      "checkpointHash": "2a7a5c17aeb7fb9e6d3058a621f8d71242be7ab55f1670848f1ece3c4468773a",
+      "checkpointCanonicalSha256": "441525bbdd129c3ee234242818d11f540fdbfc3308c4758edb1628f780f4198a",
+      "evaluationRecordHash": "404805379eb19226fbec3b24d1ba8284376f6f6d34e4511d5d6e504cbc645372",
+      "rawResultSha256": "8ef6267c743210c396b5cdc912036c25b58a120bcb8b8c6a2247b42818e7df05"
+    },
+    {
+      "sequenceIndex": 6,
+      "candidateId": "cooperative-cem-power-level-v1-g0000-c0006-e994465417f7",
+      "checkpointHash": "1fab654632c6643dbdf6ff6448634f953ce601441aaf11cfcc52a60431eac24f",
+      "checkpointCanonicalSha256": "2c6a147bf12d5c5cbca03fa3bace83aac8ec3b3fd0fff41e4bf1dd4c451fec53",
+      "evaluationRecordHash": "687245989d7017888e828c9b541262871c6f4f750137c13dbb81fc651e94731d",
+      "rawResultSha256": "ac1a7bbc3d5de929f03df42fa0f9a7de40c1c037029164876fb2642ce52b0df1"
+    },
+    {
+      "sequenceIndex": 7,
+      "candidateId": "cooperative-cem-power-level-v1-g0000-c0007-bcd5fdfb081a",
+      "checkpointHash": "559565ca4172189ccd8fc0fddad2efc7a253593815cc88105ddcd0f1cfba602a",
+      "checkpointCanonicalSha256": "8abe96550a4b525503a13c1b53826df1aef6eb046752a2c96cd18eedef14635a",
+      "evaluationRecordHash": "c1e9e7a11784d92e6cf33e9c554991e355bb984e25fe5ad1ce213872c0cdc581",
+      "rawResultSha256": "81b2a7c27287133773b76825b598256f9acc5a16185509f8251b350b1dd6b61b"
+    },
+    {
+      "sequenceIndex": 8,
+      "candidateId": "cooperative-cem-power-level-v1-g0001-c0000-42da37039d6d",
+      "checkpointHash": "ff27377535b5f0585b97b1a41b3b8475e2e10bd7076c76b23fc3eccc82000bcd",
+      "checkpointCanonicalSha256": "ff249a01662a9e858c2de4eb4c4e3d38aa0a4b5a5f19894e8882dcdec531f068",
+      "evaluationRecordHash": "9d6e70c1cc39bfd4cdfb09598e7274e25373a5af435cedc0c14c8d3abdf372f2",
+      "rawResultSha256": "9a5dfc04a52fb809b2df77f62bbaf259e20e8bad036025fd9e247e44872cbee4"
+    },
+    {
+      "sequenceIndex": 9,
+      "candidateId": "cooperative-cem-power-level-v1-g0001-c0001-f30ad5553bfa",
+      "checkpointHash": "49964632ee30843fe522ea205604fe512a35ae33d4b8fdc13195b22ccde9277f",
+      "checkpointCanonicalSha256": "f3f0d2f2d20acc6749e4480fd3e3c36d493b6f1190ab661704af5f6cd5cbb7eb",
+      "evaluationRecordHash": "0897f1f4cbc1c04fb8ee5bd99029b163d7447522964849b160d140d6098fe128",
+      "rawResultSha256": "3bf93860a4a35c44cde2a68296e569d2f0d6181c49a0f468b783eb28971981b9"
+    },
+    {
+      "sequenceIndex": 10,
+      "candidateId": "cooperative-cem-power-level-v1-g0001-c0002-192946cdde27",
+      "checkpointHash": "6b429f29fe1a48118fd762b46579a8884686cb411d87e0ddce3bbda91dd6417c",
+      "checkpointCanonicalSha256": "4da88543dc5c5af76e1eea8b6932a9d7f8f165ab55413d7f094f88ad0ba75803",
+      "evaluationRecordHash": "b7fcaedb84c7fc770153a072ec991f1f90ab75bdc9fc26b12815751b965a2afe",
+      "rawResultSha256": "a7043bdab64088df1d5501a74b7efb1c9facbd83ad66f95971fdf65ac746a748"
+    },
+    {
+      "sequenceIndex": 11,
+      "candidateId": "cooperative-cem-power-level-v1-g0001-c0003-1d6d1db08bc3",
+      "checkpointHash": "94d6be3dda0dbc83af334586e2d851d06b4bc20ba2ce01ef5c148a1b626f44e1",
+      "checkpointCanonicalSha256": "ef187bc5b8b8d4875dbabe1a3955447fb8be7258185d34da4e0944b1af08f8fb",
+      "evaluationRecordHash": "d721ea1ca5b593de3c8846a307495609ed85ff14d0f761bcd186788423afc501",
+      "rawResultSha256": "9eb894c79f2c56621a3a8a279b0cae115b9afc29e7fce3b97b3291ff3730e307"
+    },
+    {
+      "sequenceIndex": 12,
+      "candidateId": "cooperative-cem-power-level-v1-g0001-c0004-bc571ec448c9",
+      "checkpointHash": "6863267373c5689b8d5f7b36633f1b9c8ce223dedfded9989ed82ddc6aa6995b",
+      "checkpointCanonicalSha256": "b61898dcd973f0eb32430be2451d64785fd2879e209513b22a4d35077a24bbc1",
+      "evaluationRecordHash": "fabbf1cfac73692944d95c18824781042cf33363b3ce44925c80a4cc8bcc0e91",
+      "rawResultSha256": "37ae5a414a95214a686ccda4a57ee9def558eda3e578b5aa5428da0b975244e1"
+    },
+    {
+      "sequenceIndex": 13,
+      "candidateId": "cooperative-cem-power-level-v1-g0001-c0005-83a9c758b795",
+      "checkpointHash": "e96d0e385e587b05a0f292136a0cc888d14dc039e11c2e6c9b64ebfbca9bd9b5",
+      "checkpointCanonicalSha256": "b4890551baac665f1f845900062598059b5a744286171acec47ba14a149097b1",
+      "evaluationRecordHash": "034ac3dfaa2f65381c4aefdb3d20ff1311e68211fca0f43def4898fb599bdd55",
+      "rawResultSha256": "dbcbd3e7abd7c6653e5512141e9e61a2d13587370c4c469f5351c6bfa439c070"
+    },
+    {
+      "sequenceIndex": 14,
+      "candidateId": "cooperative-cem-power-level-v1-g0001-c0006-024ea16b3fdd",
+      "checkpointHash": "b8e09d7c2bd5f878977f3af924b6f8720c8eb26d8e849b2bb5c88702e6532869",
+      "checkpointCanonicalSha256": "10bbcdfcd462a21338970672b68d62e370e9f05f825f5482ef665f23fae5e101",
+      "evaluationRecordHash": "e96e87b6297536111487edc7e8b14996892b79e09dc0d67a514e6e76371c65df",
+      "rawResultSha256": "d0566e29e1bae30fc1102e41dd878cabfc450f4c4b8a6302bb16fd171d7b28e8"
+    },
+    {
+      "sequenceIndex": 15,
+      "candidateId": "cooperative-cem-power-level-v1-g0001-c0007-679c0b96b573",
+      "checkpointHash": "9c64dd0cb0a0bfda76696e79c36472b76cb1ebab45b339b3151bc140bd820eff",
+      "checkpointCanonicalSha256": "fa65e43201e9de7bd7b4f8b6a471b3ba7bd221f4547e8954410f281147247d6c",
+      "evaluationRecordHash": "8c80e4f5443b11e6a13b83a96bf45170e10d039a802940b34c1d7dd1e7054ec6",
+      "rawResultSha256": "cdb9c3e39defa650d3c561211b37adfe83fa9dad0553cc71e42ab75164ea5487"
+    },
+    {
+      "sequenceIndex": 16,
+      "candidateId": "cooperative-cem-power-level-v1-g0002-c0000-83a9c758b795",
+      "checkpointHash": "e7f1798d80511983969d9e9c9d79d14213220798ef27b835a6f87c19cf8868f0",
+      "checkpointCanonicalSha256": "75d0bbbc24c74492b800199168bbd3d8a06dd863113b0a0382402df8405bde9f",
+      "evaluationRecordHash": "1e24b642f9da7e3c314e96177d51bcec1eaa609950992408a0760c146bbdced8",
+      "rawResultSha256": "dbcbd3e7abd7c6653e5512141e9e61a2d13587370c4c469f5351c6bfa439c070"
+    },
+    {
+      "sequenceIndex": 17,
+      "candidateId": "cooperative-cem-power-level-v1-g0002-c0001-3ea2c07eee3e",
+      "checkpointHash": "f84ae7a120d67e666ca936035cebb93c4955e9a25c27dafe11fb10e5680cfa6a",
+      "checkpointCanonicalSha256": "eb6b185124d85d8f679d262ebdfe952e1f6cfca32a1b9716d18acf32b8396357",
+      "evaluationRecordHash": "75c99aeeac069d5a089cb6b76825cc5735c8b2cc15349b7d6fede4d06d6007cb",
+      "rawResultSha256": "c7f261528e9ce07bb25adedaeb86add0f8622ca3e642083b318cd1691683ae42"
+    },
+    {
+      "sequenceIndex": 18,
+      "candidateId": "cooperative-cem-power-level-v1-g0002-c0002-a00cb25efabd",
+      "checkpointHash": "d1dcf0b3795ce507f77057897216a51584eedff6091beaf86442ec9400947795",
+      "checkpointCanonicalSha256": "7b7e567a0e55bd7d8203be8a7c5c6d88ae01820c315a2ac8b8d862ae07fc841f",
+      "evaluationRecordHash": "2b6e869bfdeb3d6e3d64c0b5757166d3b98b636f2254c3b8f1d8d20907ef8d2b",
+      "rawResultSha256": "d0d5dd2655cc647715a0327dace979a3a5245bf80d548f0664bbc44509a208bc"
+    },
+    {
+      "sequenceIndex": 19,
+      "candidateId": "cooperative-cem-power-level-v1-g0002-c0003-42da37039d6d",
+      "checkpointHash": "f8bdd88e920dba60c1c010902e1c6e81c1cb6611682e85d34deb5968d802be5d",
+      "checkpointCanonicalSha256": "9edc364731d9d43e4d8b97461ba1aac6d709ecfe222d883dc95c433d5d6211fa",
+      "evaluationRecordHash": "07cd5d02af89404ad07b797d4c2a81a2b65ce4270591f4051395697245e0e5c9",
+      "rawResultSha256": "9a5dfc04a52fb809b2df77f62bbaf259e20e8bad036025fd9e247e44872cbee4"
+    },
+    {
+      "sequenceIndex": 20,
+      "candidateId": "cooperative-cem-power-level-v1-g0002-c0004-bc571ec448c9",
+      "checkpointHash": "e6a0d69c59679a62f705dbb781576339e61909128fcfad1f4fbb1989a6248d99",
+      "checkpointCanonicalSha256": "6740f1d64cef6b305446cbc041294be0171b73bd16ccbe0ebf9d0ea385d469d5",
+      "evaluationRecordHash": "f5c556b508760a4926890c5d893cf47652d91c1978829cc8808f3b0677c36b41",
+      "rawResultSha256": "37ae5a414a95214a686ccda4a57ee9def558eda3e578b5aa5428da0b975244e1"
+    },
+    {
+      "sequenceIndex": 21,
+      "candidateId": "cooperative-cem-power-level-v1-g0002-c0005-f30ad5553bfa",
+      "checkpointHash": "b6f92ce3c5741978bd264def0b8cae6abf42247280251a0f9a1e141c9be4e98c",
+      "checkpointCanonicalSha256": "1990d382073655577fd0dae057b5aae2b0d99a833802387914ca6491b0b1d314",
+      "evaluationRecordHash": "8c2f46a2dad5bc9568c720d2b06594fbf72214d13d0dd39ca2124f3bf3d746dc",
+      "rawResultSha256": "3bf93860a4a35c44cde2a68296e569d2f0d6181c49a0f468b783eb28971981b9"
+    },
+    {
+      "sequenceIndex": 22,
+      "candidateId": "cooperative-cem-power-level-v1-g0002-c0006-aaaf9155d164",
+      "checkpointHash": "34fa72e02bcfaaa7fb25da7f1eee6b4349d47d30b708e93ef23b25b23b6e6eef",
+      "checkpointCanonicalSha256": "e008d9afca9810c039cfac5da47fada7e7e32d48e4a3e6984a005e68397b5ac6",
+      "evaluationRecordHash": "8280917e46f84f5bcc6635120ae13f47666c5a60829bbbd4f86849c3d555d57c",
+      "rawResultSha256": "7aac3bb5d9192356c3a6ce35153241c3c831a018ece20834ecbf1845adaf416f"
+    },
+    {
+      "sequenceIndex": 23,
+      "candidateId": "cooperative-cem-power-level-v1-g0002-c0007-74ef1bb2730c",
+      "checkpointHash": "8bf9e8e741025f6b1abf1e1872c82f1cd48e76c52dc0250d39a35c734e3a4fe7",
+      "checkpointCanonicalSha256": "59a6be0e0345cb318c0ea6f0f5f23783299a221da7dba14232598bdae364c339",
+      "evaluationRecordHash": "e4d75e9040e6b90e1d2cd63cde3f854a41600b668d3274076f93388353a1abad",
+      "rawResultSha256": "6c2186d9a4b6c90598e320dc7d30944c31e6a2b11d820063f5edd435d5258237"
+    },
+    {
+      "sequenceIndex": 24,
+      "candidateId": "cooperative-cem-power-level-v1-g0003-c0000-83a9c758b795",
+      "checkpointHash": "82ca5204e0e84b4771e335df169baeeb62c0789852c4875b9617c88b4d460bbf",
+      "checkpointCanonicalSha256": "22fd8deaf1a4ff7a2948e4b4cac7f84abd31a4a1af00654fe8d3fa31620d32c4",
+      "evaluationRecordHash": "a21f7e15a2e1d46562fecc8394bc0927742db5e465d4000ea8250119d7237363",
+      "rawResultSha256": "dbcbd3e7abd7c6653e5512141e9e61a2d13587370c4c469f5351c6bfa439c070"
+    },
+    {
+      "sequenceIndex": 25,
+      "candidateId": "cooperative-cem-power-level-v1-g0003-c0001-42da37039d6d",
+      "checkpointHash": "b3bd6f2dc50bb3c13737eaf0109dbc8fde4cb7d4125103c36f6f4d0adc7385e6",
+      "checkpointCanonicalSha256": "5485f42e0ddc9575d64a5d1a47ace0505a078fdc62b291f2bd7cd409c8ca8c43",
+      "evaluationRecordHash": "4d54450b4f467ce292b9fa8a3b4e23448b0d06d9d3a6ce4221b424c7fb6ac737",
+      "rawResultSha256": "9a5dfc04a52fb809b2df77f62bbaf259e20e8bad036025fd9e247e44872cbee4"
+    },
+    {
+      "sequenceIndex": 26,
+      "candidateId": "cooperative-cem-power-level-v1-g0003-c0002-024ea16b3fdd",
+      "checkpointHash": "d8e33728900a4613e463c8519026fd562296b2255ae034b002a267cd50c4c9e1",
+      "checkpointCanonicalSha256": "5cf67911f25876bee6be0871699b4ecfd021bc1d6b424fdcf34dcc53783341a5",
+      "evaluationRecordHash": "35d00a55dec44f796154a2fd906d895e0429a76244c49c1a29c58eee50739a3a",
+      "rawResultSha256": "d0566e29e1bae30fc1102e41dd878cabfc450f4c4b8a6302bb16fd171d7b28e8"
+    },
+    {
+      "sequenceIndex": 27,
+      "candidateId": "cooperative-cem-power-level-v1-g0003-c0003-aaaf9155d164",
+      "checkpointHash": "c865b43e08a40a0b544cd0e7762a8c59d9ecd12b15b542f6b0c19c50395523ab",
+      "checkpointCanonicalSha256": "cb8845f2c182c12cb6a1cb4e779d2d1183520b12de960a3d5d559d948c8226b9",
+      "evaluationRecordHash": "d719bf15907012ce92b1ed06ff6d8ed8ba4610fe3f4a3b7320cad013555e8eb0",
+      "rawResultSha256": "7aac3bb5d9192356c3a6ce35153241c3c831a018ece20834ecbf1845adaf416f"
+    },
+    {
+      "sequenceIndex": 28,
+      "candidateId": "cooperative-cem-power-level-v1-g0003-c0004-178aa55ee9c2",
+      "checkpointHash": "e7d68f72f7f364f2326888f1d3ce1c676274d3f9775ebaf0e61018f61ed3ae5e",
+      "checkpointCanonicalSha256": "e92620502595103ae22cf7873f517e7b53a5590d3d4c9cb8dc8d3445ef7975cc",
+      "evaluationRecordHash": "a97a812df68c1ff6415f93acaf2ff8ccd6648106a38f7e4909e7234f04ed8ea7",
+      "rawResultSha256": "327fe4dd72af404a73ce7600ab9db2a0dc7929e2bc93e88391c95ef4f98cff3c"
+    },
+    {
+      "sequenceIndex": 29,
+      "candidateId": "cooperative-cem-power-level-v1-g0003-c0005-1dbb4de06582",
+      "checkpointHash": "9d776ed105728f5644b15f09aa60171199fa7222ea02387efd24355c830ddfc3",
+      "checkpointCanonicalSha256": "cf924f9db143e1976feec5b52c60a11025eb34a1031fc90f6c9b0c43b25a472f",
+      "evaluationRecordHash": "aaed0c863e9552445fab5fda18edb2c985b05f030d2890acbafadd657a0a038b",
+      "rawResultSha256": "cf88ef18c2ceae70351aad5705d161ba397a3d7e738d4afa765955c1a3c5f641"
+    },
+    {
+      "sequenceIndex": 30,
+      "candidateId": "cooperative-cem-power-level-v1-g0003-c0006-f8c356538c11",
+      "checkpointHash": "7dfd8517ffc3e01751dab00f482a7cffd3c326e504a297bc1e0d342a3c8db3ba",
+      "checkpointCanonicalSha256": "94d79ba54f234691d55303ef81dad55242030ff02e9e7350c51ac2ec8e13699a",
+      "evaluationRecordHash": "99cb95574884870b66696f341db84a9ebafdc33ade3f4a9aec887abfa7babf15",
+      "rawResultSha256": "aa903bafd835eb3dc4c40c7b15a4594154d3735cc3b7014d17df4fd2aeab9ed1"
+    },
+    {
+      "sequenceIndex": 31,
+      "candidateId": "cooperative-cem-power-level-v1-g0003-c0007-1d6d1db08bc3",
+      "checkpointHash": "f6f5987d1ed419e24f11ce883ce0f93587f9ba839a7ab5182aa2bd229f44c611",
+      "checkpointCanonicalSha256": "eac47355a34de37829d27e0f06cc43f6de7c7e8656ab96fbf808f7ded6e8bffa",
+      "evaluationRecordHash": "25709b6c747a12ba9d0dcbca5e5cf47b55191961ad2205efa115e7ce8021e981",
+      "rawResultSha256": "9eb894c79f2c56621a3a8a279b0cae115b9afc29e7fce3b97b3291ff3730e307"
+    }
+  ],
+  "selected": {
+    "sequenceIndex": 24,
+    "candidateId": "cooperative-cem-power-level-v1-g0003-c0000-83a9c758b795",
+    "checkpointHash": "82ca5204e0e84b4771e335df169baeeb62c0789852c4875b9617c88b4d460bbf",
+    "checkpointCanonicalSha256": "22fd8deaf1a4ff7a2948e4b4cac7f84abd31a4a1af00654fe8d3fa31620d32c4",
+    "evaluationRecordHash": "a21f7e15a2e1d46562fecc8394bc0927742db5e465d4000ea8250119d7237363",
+    "rawResultSha256": "dbcbd3e7abd7c6653e5512141e9e61a2d13587370c4c469f5351c6bfa439c070"
+  }
+}

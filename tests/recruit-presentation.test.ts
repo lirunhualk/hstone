@@ -6,6 +6,7 @@ import {
   gameReducer,
   getTavernSpellPurchaseQuote,
   type BoardMinionInstance,
+  type ConsolationCoinSpellInstance,
   type GameState,
   type PlayerState,
 } from "../lib/game/engine.ts";
@@ -14,6 +15,7 @@ import {
   completeRecruitPresentation,
   deriveRecruitPresentation,
   enqueueRecruitPresentation,
+  groupRecruitPresentationEvents,
   recruitPresentationAnnouncement,
   recruitPresentationDuration,
 } from "../lib/game/recruit-presentation.ts";
@@ -100,6 +102,206 @@ test("rapid presentation batches remain FIFO and stale timers are harmless", () 
   );
   queue = completeRecruitPresentation(queue, refresh.token);
   assert.deepEqual(queue, [sell]);
+});
+
+test("multiple triples become FIFO forge batches without repeating the leading action", () => {
+  const state = createGame(0x7115);
+  const template = humanPlayer(state).shop[0];
+  const firstGolden = minionCopy(template, "first-forge");
+  firstGolden.golden = true;
+  firstGolden.grantsTripleReward = true;
+  const secondGolden = minionCopy(template, "second-forge");
+  secondGolden.golden = true;
+  secondGolden.grantsTripleReward = true;
+
+  const groups = groupRecruitPresentationEvents([
+    {
+      kind: "currency",
+      currency: "gold",
+      delta: -3,
+      reason: "buy",
+    },
+    {
+      kind: "triple",
+      golden: firstGolden,
+      knownConsumedInstanceIds: [],
+    },
+    {
+      kind: "triple",
+      golden: secondGolden,
+      knownConsumedInstanceIds: [],
+    },
+  ]);
+
+  assert.deepEqual(
+    groups.map((group) => group.map((event) => event.kind)),
+    [["currency", "triple"], ["triple"]],
+  );
+  assert.equal(groups[0]?.[1]?.kind, "triple");
+  assert.equal(groups[1]?.[0]?.kind, "triple");
+  if (groups[0]?.[1]?.kind === "triple") {
+    assert.equal(groups[0][1].golden.instanceId, firstGolden.instanceId);
+  }
+  if (groups[1]?.[0]?.kind === "triple") {
+    assert.equal(groups[1][0].golden.instanceId, secondGolden.instanceId);
+  }
+});
+
+test("successful hand plays move the exact minion to its final board index", () => {
+  const before = createGame(0x7114);
+  const player = humanPlayer(before);
+  const played = player.shop.shift();
+  assert.ok(played);
+  player.hand = [played];
+  const action = {
+    type: "PLAY_HAND_CARD",
+    cardInstanceId: played.instanceId,
+    boardIndex: 0,
+  } as const;
+  const after = gameReducer(before, action);
+  const events = deriveRecruitPresentation(before, after, action);
+
+  assert.deepEqual(events.map((event) => event.kind), ["cardMove"]);
+  const move = events[0];
+  assert.equal(move?.kind, "cardMove");
+  if (move?.kind === "cardMove") {
+    assert.equal(move.motion, "hand-to-board");
+    assert.equal(move.card.instanceId, played.instanceId);
+    assert.equal(move.boardIndex, 0);
+  }
+  assert.equal(humanPlayer(after).board[0]?.instanceId, played.instanceId);
+  assert.equal(recruitPresentationAnnouncement(events), `打出${played.name}`);
+  assert.equal(recruitPresentationDuration(events), 900);
+});
+
+test("legacy PLAY_MINION records the clamped final position", () => {
+  const before = createGame(0x7115);
+  const player = humanPlayer(before);
+  const played = player.shop.shift();
+  const existing = player.shop.shift();
+  assert.ok(played);
+  assert.ok(existing);
+  player.board = [existing];
+  player.hand = [played];
+  const action = {
+    type: "PLAY_MINION",
+    handIndex: 0,
+    boardIndex: 99,
+  } as const;
+  const after = gameReducer(before, action);
+  const finalBoardIndex = humanPlayer(after).board.findIndex(
+    (minion) => minion.instanceId === played.instanceId,
+  );
+  const events = deriveRecruitPresentation(before, after, action);
+  const move = events.find((event) => event.kind === "cardMove");
+
+  assert.ok(finalBoardIndex >= 0);
+  assert.equal(move?.kind, "cardMove");
+  if (move?.kind === "cardMove") {
+    assert.equal(move.motion, "hand-to-board");
+    assert.equal(move.boardIndex, finalBoardIndex);
+    assert.notEqual(move.boardIndex, action.boardIndex);
+  }
+});
+
+test("failed hand plays do not claim that a minion reached the board", () => {
+  const before = createGame(0x7116);
+  const player = humanPlayer(before);
+  const played = player.shop.shift();
+  assert.ok(played);
+  player.board = Array.from({ length: 7 }, (_, index) =>
+    minionCopy(played, `full-board-${index}`),
+  );
+  player.hand = [played];
+  const action = {
+    type: "PLAY_HAND_CARD",
+    cardInstanceId: played.instanceId,
+  } as const;
+  const after = gameReducer(before, action);
+
+  assert.deepEqual(
+    deriveRecruitPresentation(before, after, action),
+    [],
+  );
+  assert.equal(humanPlayer(after).hand[0]?.instanceId, played.instanceId);
+});
+
+test("accepted non-minion hand cards never receive hand-to-board motion", () => {
+  const before = createGame(0x7117);
+  const player = humanPlayer(before);
+  const coin: ConsolationCoinSpellInstance = {
+    kind: "consolationCoin",
+    instanceId: "presentation-coin",
+    definitionId: "consolation-coin",
+    cardId: "BG28_521t",
+    name: "补贴铸币",
+    description: "获得1枚铸币。",
+    spellFamily: "coin",
+  };
+  player.hand = [coin];
+  player.gold = 0;
+  const action = {
+    type: "PLAY_HAND_CARD",
+    cardInstanceId: coin.instanceId,
+  } as const;
+  const after = gameReducer(before, action);
+
+  assert.equal(humanPlayer(after).gold, 1);
+  assert.deepEqual(
+    deriveRecruitPresentation(before, after, action),
+    [],
+  );
+});
+
+test("a hand play is presented before a triple forged by the same action", () => {
+  const before = createGame(0x7118);
+  const player = humanPlayer(before);
+  const played = player.shop.shift();
+  assert.ok(played);
+  const tripleTemplate = player.shop.find(
+    (candidate) => candidate.definitionId !== played.definitionId,
+  );
+  assert.ok(tripleTemplate);
+  const firstId = "play-triple-board";
+  const secondId = "play-triple-hand";
+  player.board = [minionCopy(tripleTemplate, firstId)];
+  player.hand = [played, minionCopy(tripleTemplate, secondId)];
+  const action = {
+    type: "PLAY_HAND_CARD",
+    cardInstanceId: played.instanceId,
+    boardIndex: 0,
+  } as const;
+  const after = gameReducer(before, action);
+  const afterPlayer = humanPlayer(after);
+  afterPlayer.board = afterPlayer.board.filter(
+    (minion) => minion.instanceId !== firstId,
+  );
+  afterPlayer.hand = afterPlayer.hand.filter(
+    (card) => card.instanceId !== secondId,
+  );
+  const golden = minionCopy(tripleTemplate, "play-triggered-golden");
+  golden.golden = true;
+  golden.grantsTripleReward = true;
+  afterPlayer.hand.push(golden);
+
+  const events = deriveRecruitPresentation(before, after, action);
+  assert.deepEqual(
+    events.map((event) => event.kind),
+    ["cardMove", "triple"],
+  );
+  const move = events[0];
+  assert.equal(move?.kind, "cardMove");
+  if (move?.kind === "cardMove") {
+    assert.equal(move.motion, "hand-to-board");
+    assert.equal(move.card.instanceId, played.instanceId);
+  }
+  assert.ok(
+    recruitPresentationAnnouncement(events).startsWith(
+      `打出${played.name}，凑成三连，获得`,
+    ),
+  );
+  assert.equal(recruitPresentationDuration(events), 590);
+  assert.equal(recruitPresentationDuration(events, true), 120);
 });
 
 test("successful minion purchases present payment before the card move", () => {
@@ -488,6 +690,39 @@ test("new golden tokens are not mislabeled as triples", () => {
   );
 });
 
+test("a forged golden still presents when its normal Triple Reward is replaced", () => {
+  const before = createGame(0x7114);
+  const beforePlayer = humanPlayer(before);
+  const template = beforePlayer.shop[0];
+  beforePlayer.board = [
+    minionCopy(template, "replacement-triple-first"),
+    minionCopy(template, "replacement-triple-second"),
+  ];
+  beforePlayer.hand = [];
+
+  const after = structuredClone(before);
+  const afterPlayer = humanPlayer(after);
+  afterPlayer.board = [];
+  const golden = minionCopy(template, "replacement-triple-golden");
+  golden.golden = true;
+  golden.grantsTripleReward = false;
+  afterPlayer.hand = [golden];
+
+  const events = deriveRecruitPresentation(before, after, {
+    type: "SELL_MINION",
+    boardIndex: 0,
+  });
+  const triple = events.find((event) => event.kind === "triple");
+  assert.equal(triple?.kind, "triple");
+  if (triple?.kind === "triple") {
+    assert.equal(triple.golden.instanceId, golden.instanceId);
+    assert.deepEqual(triple.knownConsumedInstanceIds, [
+      "replacement-triple-first",
+      "replacement-triple-second",
+    ]);
+  }
+});
+
 test("triple traces label only consumed copies visible across the transition", () => {
   const before = createGame(0x7113);
   const beforePlayer = humanPlayer(before);
@@ -556,5 +791,6 @@ test("a purchased third copy presents payment, movement, then the triple", () =>
     recruitPresentationAnnouncement(events),
     /凑成三连，获得金色/,
   );
-  assert.equal(recruitPresentationDuration(events), 1500);
+  assert.equal(recruitPresentationDuration(events), 590);
+  assert.equal(recruitPresentationDuration(events, true), 120);
 });

@@ -4,14 +4,19 @@ import test from "node:test";
 import {
   COMBAT_START_INTRO_DURATION_MS,
   combatBuffLabel,
+  combatDamageCapLabel,
   combatIntroOpponent,
   combatPlaybackKey,
+  combatPlaybackRevealCountForEvent,
+  combatPlaybackSessionSnapshot,
   combatTriggerLabel,
-  initialCombatPlayback,
+  createCombatPlaybackState,
+  createCombatPlaybackTimeline,
   isCombatPlaybackEvent,
   projectCombatArmor,
   projectCombatHealth,
   resumeCombatPlayback,
+  transitionCombatPlayback,
 } from "../lib/game/combat-presentation.ts";
 import type {
   BattleEvent,
@@ -139,26 +144,68 @@ test("combat buff labels distinguish permanent changes from ordinary zero-stat k
   );
 });
 
+test("combat damage-cap labels only appear when the cap prevents damage", () => {
+  assert.equal(
+    combatDamageCapLabel({
+      ...event("heroDamage", 0),
+      amount: 5,
+      uncappedAmount: 48,
+      damageCap: 5,
+      damagePreventedByCap: 43,
+    }),
+    "伤害上限 5 · 减免 43",
+  );
+  assert.equal(
+    combatDamageCapLabel({
+      ...event("heroDamage", 1),
+      amount: 4,
+      uncappedAmount: 4,
+      damageCap: 5,
+      damagePreventedByCap: 0,
+    }),
+    undefined,
+  );
+  assert.equal(combatDamageCapLabel(event("damage", 2)), undefined);
+});
+
 test("combat intro completion reveals the first real event or completes an empty battle", () => {
-  assert.deepEqual(initialCombatPlayback(3), {
+  const populated = createCombatPlaybackTimeline(
+    battle({ events: [event("attack", 1), event("damage", 2)] }),
+  );
+  const empty = createCombatPlaybackTimeline(battle());
+
+  assert.deepEqual(createCombatPlaybackState(populated), {
+    battleKey: populated.battleKey,
     revealedCount: 1,
-    complete: false,
+    furthestRevealedCount: 1,
+    resultUnlocked: false,
+    status: "playing",
+    revision: 0,
   });
-  assert.deepEqual(initialCombatPlayback(0), {
+  assert.deepEqual(createCombatPlaybackState(empty), {
+    battleKey: empty.battleKey,
     revealedCount: 0,
-    complete: true,
+    furthestRevealedCount: 0,
+    resultUnlocked: true,
+    status: "complete",
+    revision: 0,
   });
 });
 
 test("combat playback identity survives an equivalent battle object replacement", () => {
-  const original = battle();
+  const original = battle({
+    events: Array.from({ length: 10 }, (_, index) =>
+      event("trigger", index),
+    ),
+  });
   const restored = JSON.parse(JSON.stringify(original)) as BattleSummary;
   const key = combatPlaybackKey(original);
+  const restoredTimeline = createCombatPlaybackTimeline(restored);
 
   assert.notEqual(restored, original);
   assert.equal(combatPlaybackKey(restored), key);
   assert.deepEqual(
-    resumeCombatPlayback(restored, 10, {
+    resumeCombatPlayback(restoredTimeline, {
       battleKey: key,
       revealedCount: 4,
       complete: false,
@@ -166,7 +213,10 @@ test("combat playback identity survives an equivalent battle object replacement"
     {
       battleKey: key,
       revealedCount: 4,
-      complete: false,
+      furthestRevealedCount: 4,
+      resultUnlocked: false,
+      status: "playing",
+      revision: 0,
     },
   );
   assert.notEqual(
@@ -174,42 +224,365 @@ test("combat playback identity survives an equivalent battle object replacement"
     key,
   );
   assert.equal(
-    resumeCombatPlayback(battle({ round: original.round + 1 }), 10, {
-      battleKey: key,
-      revealedCount: 4,
-      complete: false,
-    }),
+    resumeCombatPlayback(
+      createCombatPlaybackTimeline(
+        battle({ round: original.round + 1 }),
+      ),
+      {
+        battleKey: key,
+        revealedCount: 4,
+        complete: false,
+      },
+    ),
     null,
   );
 });
 
 test("combat playback session data is validated and clamped before resume", () => {
-  const summary = battle();
+  const summary = battle({
+    events: [event("attack", 1), event("damage", 2), event("death", 3)],
+  });
   const battleKey = combatPlaybackKey(summary);
+  const timeline = createCombatPlaybackTimeline(summary);
 
   assert.deepEqual(
-    resumeCombatPlayback(summary, 3, {
+    resumeCombatPlayback(timeline, {
       battleKey,
       revealedCount: 99,
       complete: false,
     }),
-    { battleKey, revealedCount: 3, complete: false },
+    {
+      battleKey,
+      revealedCount: 3,
+      furthestRevealedCount: 3,
+      resultUnlocked: false,
+      status: "playing",
+      revision: 0,
+    },
   );
   assert.deepEqual(
-    resumeCombatPlayback(summary, 3, {
+    resumeCombatPlayback(timeline, {
       battleKey,
       revealedCount: 3,
       complete: true,
     }),
-    { battleKey, revealedCount: 3, complete: true },
+    {
+      battleKey,
+      revealedCount: 3,
+      furthestRevealedCount: 3,
+      resultUnlocked: true,
+      status: "complete",
+      revision: 0,
+    },
+  );
+  assert.deepEqual(
+    resumeCombatPlayback(timeline, {
+      battleKey,
+      revealedCount: 2,
+      furthestRevealedCount: 2,
+      resultUnlocked: false,
+      status: "paused",
+    }),
+    {
+      battleKey,
+      revealedCount: 2,
+      furthestRevealedCount: 2,
+      resultUnlocked: false,
+      status: "paused",
+      revision: 0,
+    },
   );
   assert.equal(
-    resumeCombatPlayback(summary, 3, {
+    resumeCombatPlayback(timeline, {
       battleKey,
       revealedCount: -1,
       complete: false,
     }),
     null,
+  );
+  assert.equal(
+    resumeCombatPlayback(timeline, {
+      battleKey,
+      revealedCount: 1,
+      status: "stopped",
+    }),
+    null,
+  );
+});
+
+test("combat playback timeline filters framing events and maps log rows", () => {
+  const summary = battle({
+    events: [
+      event("battleStart", 0),
+      event("attack", 2),
+      event("shieldBroken", 4),
+      event("death", 7),
+      event("battleEnd", 9),
+    ],
+  });
+  const timeline = createCombatPlaybackTimeline(summary);
+
+  assert.deepEqual(
+    timeline.events.map(({ type }) => type),
+    ["attack", "shieldBroken", "death"],
+  );
+  assert.equal(
+    combatPlaybackRevealCountForEvent(summary.events, 0),
+    null,
+  );
+  assert.equal(
+    combatPlaybackRevealCountForEvent(summary.events, 4),
+    2,
+  );
+  assert.equal(
+    combatPlaybackRevealCountForEvent(summary.events, 9),
+    null,
+  );
+});
+
+test("combat playback state machine pauses, steps, seeks, replays, and completes", () => {
+  const timeline = createCombatPlaybackTimeline(
+    battle({
+      events: [event("attack", 1), event("damage", 2), event("death", 3)],
+    }),
+  );
+  const initial = createCombatPlaybackState(timeline);
+  const paused = transitionCombatPlayback(
+    initial,
+    { type: "pause" },
+    timeline,
+  );
+
+  assert.deepEqual(paused, {
+    battleKey: timeline.battleKey,
+    revealedCount: 1,
+    furthestRevealedCount: 1,
+    resultUnlocked: false,
+    status: "paused",
+    revision: 1,
+  });
+  assert.equal(
+    transitionCombatPlayback(
+      paused,
+      {
+        type: "tick",
+        expectedRevision: paused.revision,
+        expectedRevealedCount: paused.revealedCount,
+      },
+      timeline,
+    ),
+    paused,
+  );
+
+  const atStart = transitionCombatPlayback(
+    paused,
+    { type: "step", direction: "backward" },
+    timeline,
+  );
+  assert.equal(atStart.revealedCount, 0);
+  assert.equal(atStart.status, "paused");
+
+  const first = transitionCombatPlayback(
+    atStart,
+    { type: "step", direction: "forward" },
+    timeline,
+  );
+  const lockedSeek = transitionCombatPlayback(
+    first,
+    { type: "seek", revealedCount: 99 },
+    timeline,
+  );
+  assert.equal(first.revealedCount, 1);
+  assert.equal(lockedSeek.revealedCount, 1);
+  assert.equal(lockedSeek.furthestRevealedCount, 1);
+
+  const second = transitionCombatPlayback(
+    lockedSeek,
+    { type: "step", direction: "forward" },
+    timeline,
+  );
+  const last = transitionCombatPlayback(
+    second,
+    { type: "step", direction: "forward" },
+    timeline,
+  );
+  assert.deepEqual(last, {
+    battleKey: timeline.battleKey,
+    revealedCount: 3,
+    furthestRevealedCount: 3,
+    resultUnlocked: false,
+    status: "paused",
+    revision: 6,
+  });
+
+  const complete = transitionCombatPlayback(
+    last,
+    { type: "step", direction: "forward" },
+    timeline,
+  );
+  assert.equal(complete.status, "complete");
+  assert.equal(complete.resultUnlocked, true);
+  const lastAfterResult = transitionCombatPlayback(
+    complete,
+    { type: "step", direction: "backward" },
+    timeline,
+  );
+  assert.deepEqual(
+    {
+      revealedCount: lastAfterResult.revealedCount,
+      furthestRevealedCount: lastAfterResult.furthestRevealedCount,
+      resultUnlocked: lastAfterResult.resultUnlocked,
+      status: lastAfterResult.status,
+    },
+    {
+      revealedCount: 3,
+      furthestRevealedCount: 3,
+      resultUnlocked: true,
+      status: "paused",
+    },
+  );
+  const replayed = transitionCombatPlayback(
+    complete,
+    { type: "replay" },
+    timeline,
+  );
+  assert.equal(replayed.revealedCount, 1);
+  assert.equal(replayed.furthestRevealedCount, 3);
+  assert.equal(replayed.resultUnlocked, true);
+  assert.equal(replayed.status, "playing");
+
+  const skipped = transitionCombatPlayback(
+    paused,
+    { type: "skip" },
+    timeline,
+  );
+  assert.equal(skipped.revealedCount, 3);
+  assert.equal(skipped.furthestRevealedCount, 3);
+  assert.equal(skipped.resultUnlocked, true);
+  assert.equal(skipped.status, "complete");
+
+  assert.deepEqual(combatPlaybackSessionSnapshot(replayed), {
+    battleKey: timeline.battleKey,
+    revealedCount: 1,
+    furthestRevealedCount: 3,
+    resultUnlocked: true,
+    status: "playing",
+  });
+});
+
+test("automatic playback holds the final event before revealing the result", () => {
+  const timeline = createCombatPlaybackTimeline(
+    battle({
+      events: [event("attack", 1), event("damage", 2), event("death", 3)],
+    }),
+  );
+  let state = createCombatPlaybackState(timeline);
+
+  state = transitionCombatPlayback(
+    state,
+    {
+      type: "tick",
+      expectedRevision: state.revision,
+      expectedRevealedCount: state.revealedCount,
+    },
+    timeline,
+  );
+  assert.deepEqual(
+    { revealedCount: state.revealedCount, status: state.status },
+    { revealedCount: 2, status: "playing" },
+  );
+  state = transitionCombatPlayback(
+    state,
+    {
+      type: "tick",
+      expectedRevision: state.revision,
+      expectedRevealedCount: state.revealedCount,
+    },
+    timeline,
+  );
+  assert.deepEqual(
+    { revealedCount: state.revealedCount, status: state.status },
+    { revealedCount: 3, status: "playing" },
+  );
+  state = transitionCombatPlayback(
+    state,
+    {
+      type: "tick",
+      expectedRevision: state.revision,
+      expectedRevealedCount: state.revealedCount,
+    },
+    timeline,
+  );
+  assert.equal(state.status, "complete");
+  assert.equal(state.resultUnlocked, true);
+
+  const replayed = transitionCombatPlayback(
+    state,
+    { type: "replay" },
+    timeline,
+  );
+  const paused = transitionCombatPlayback(
+    replayed,
+    { type: "pause" },
+    timeline,
+  );
+  const resumed = transitionCombatPlayback(
+    paused,
+    { type: "play" },
+    timeline,
+  );
+  assert.equal(
+    transitionCombatPlayback(
+      resumed,
+      {
+        type: "tick",
+        expectedRevision: replayed.revision,
+        expectedRevealedCount: replayed.revealedCount,
+      },
+      timeline,
+    ),
+    resumed,
+  );
+});
+
+test("empty and stale combat playback transitions are safe no-ops", () => {
+  const emptyTimeline = createCombatPlaybackTimeline(battle());
+  const empty = createCombatPlaybackState(emptyTimeline);
+  for (const action of [
+    { type: "play" },
+    { type: "pause" },
+    {
+      type: "tick",
+      expectedRevision: empty.revision,
+      expectedRevealedCount: empty.revealedCount,
+    },
+    { type: "step", direction: "backward" },
+    { type: "step", direction: "forward" },
+    { type: "seek", revealedCount: 2 },
+    { type: "replay" },
+    { type: "skip" },
+    { type: "reschedule" },
+  ] as const) {
+    assert.equal(
+      transitionCombatPlayback(empty, action, emptyTimeline),
+      empty,
+    );
+  }
+
+  const otherTimeline = createCombatPlaybackTimeline(
+    battle({ round: 5, events: [event("attack", 1)] }),
+  );
+  assert.equal(
+    transitionCombatPlayback(
+      empty,
+      {
+        type: "tick",
+        expectedRevision: empty.revision,
+        expectedRevealedCount: empty.revealedCount,
+      },
+      otherTimeline,
+    ),
+    empty,
   );
 });
 

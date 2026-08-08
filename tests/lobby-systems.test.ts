@@ -1256,11 +1256,15 @@ test("Aman'Thul starts everyone at Tavern Tier 3 with 9 gold", () => {
   assert.ok(state.players.every((player) => player.gold === 9));
 });
 
-test("Full House tavern always has 7 cards", () => {
+test("Full House keeps six minion offers beside its Tavern Spell", () => {
   let state = chooseHero(lobbyGameForEvent("system-event-full-house"));
-  state = gameReducer(state, { type: "REFRESH_SHOP" });
   let player = humanPlayer(state);
-  assert.ok(player.shop.length >= 5);
+  player.heroPowerId = null;
+  player.gold = 10;
+
+  state = gameReducer(state, { type: "REFRESH_SHOP" });
+  player = humanPlayer(state);
+  assert.equal(player.shop.length, 6);
 
   state = gameReducer(state, { type: "REFRESH_SHOP" });
   player = humanPlayer(state);
@@ -1825,7 +1829,7 @@ test("Hero Power quotes are pure, dynamic, and target-aware", () => {
       cost: 1,
       affordable: true,
       usable: true,
-      targetKind: "board",
+      targetKind: "shopOrBoard",
     },
   );
   assert.equal(

@@ -69,6 +69,10 @@ import {
   normalizeInitialHealth,
 } from "./setup.ts";
 import {
+  getSoloCombatDamageCap,
+  type SoloCombatDamageCap,
+} from "./damage-cap.ts";
+import {
   AI_POLICY_VERSION,
   aiRefreshLimit,
   aiTargetBoardSize,
@@ -246,6 +250,8 @@ export {
 } from "./lobby-systems.ts";
 
 export { areTrinketOfferCandidatesValid } from "./trinket-offers.ts";
+
+export { getSoloCombatDamageCap } from "./damage-cap.ts";
 
 export {
   AI_STRATEGY_PROFILES,
@@ -4075,7 +4081,9 @@ function offerTrinkets(
       random: () => nextRandom(state),
     });
   };
-  const humanOptions = isEligible(human) ? drawOptions(human) : [];
+  const humanCanChoose =
+    human.isHuman && human.alive && isEligible(human);
+  const humanOptions = humanCanChoose ? drawOptions(human) : [];
   for (const player of state.players) {
     if (!player.alive || player.isHuman || !isEligible(player)) {
       continue;
@@ -4113,7 +4121,7 @@ function offerTrinkets(
       }
     }
   }
-  if (!isEligible(human)) {
+  if (!humanCanChoose) {
     return false;
   }
   const replaceTrinketId = options.replaceTrinketId?.(human) ?? null;
@@ -4418,15 +4426,24 @@ function beginHerosCallForLobby(
   if (sharedOptions.length === 0) {
     return false;
   }
-  for (const player of state.players) {
-    if (player.id === human.id || player.hand.length >= MAX_HAND_SIZE) {
-      continue;
+  const grantBestOption = (player: PlayerState): boolean => {
+    if (player.hand.length >= MAX_HAND_SIZE) {
+      return false;
     }
     const selected = bestMinionByScore(player, sharedOptions);
     const gained = createMinionInstance(state, selected.definitionId, 0);
     gained.sellValue = 1;
-    addCardToHand(state, player, gained);
+    if (!addCardToHand(state, player, gained)) {
+      return false;
+    }
     resolveTriples(state, player);
+    return true;
+  };
+  for (const player of state.players) {
+    if (player.id === human.id) {
+      continue;
+    }
+    grantBestOption(player);
   }
   for (const option of sharedOptions) {
     reconcileWhereverMinion(
@@ -4437,6 +4454,10 @@ function beginHerosCallForLobby(
       human.deathrattlesTriggered ?? 0,
       human.magnetizationsThisGame ?? 0,
     );
+  }
+  if (!human.isHuman) {
+    grantBestOption(human);
+    return true;
   }
   state.pendingInteraction = {
     kind: "discover",
@@ -6542,6 +6563,42 @@ function applyTavernBonuses(
   applyCurrentTurnTavernBonuses(player, minion);
 }
 
+function prepareTavernMinionForShop(
+  state: GameState,
+  player: PlayerState,
+  minion: BoardMinionInstance,
+): void {
+  applyTavernBonuses(player, minion);
+  reconcileWhereverMinion(
+    minion,
+    player.astralAutomatonsSummoned ?? 0,
+    player.eternalKnightsDied ?? 0,
+    player.tavernSpellsCast ?? 0,
+    player.deathrattlesTriggered ?? 0,
+    player.magnetizationsThisGame ?? 0,
+  );
+  refreshDynamicMinionDescription(minion, player);
+  if (player.systemEventCounters.incubatingActive) {
+    const definition = getMinionDefinition(minion.definitionId);
+    const tribes =
+      definition.tribes ??
+      (definition.tribe === "neutral" ? [] : [definition.tribe]);
+    if (tribes.length === 0) {
+      minion.tribes = ["all"];
+      minion.tribe = "all";
+    }
+  }
+  if (player.systemEventCounters.goldenArenaActive) {
+    const definition = getMinionDefinition(minion.definitionId);
+    minion.golden = true;
+    minion.cardId = definition.goldenCardId ?? definition.cardId;
+    minion.name = `金色·${definition.name}`;
+    minion.attack = definition.attack * 2;
+    minion.health = definition.health * 2;
+    minion.sellValue = 1;
+  }
+}
+
 function applyOwnedUndeadArmyBonus(
   player: PlayerState,
   minion: BoardMinionInstance,
@@ -6720,6 +6777,18 @@ function advanceTrinketCounter(
   return true;
 }
 
+function perRoundTrinketTriggerUses(
+  player: PlayerState,
+  definition: TrinketDefinition,
+  round: number,
+  limit: number,
+): number {
+  const radix = limit + 1;
+  const encoded = player.trinketCounters[definition.id] ?? 0;
+  const encodedRound = Math.floor(encoded / radix);
+  return encodedRound === round ? encoded % radix : 0;
+}
+
 function consumePerRoundTrinketTrigger(
   player: PlayerState,
   definition: TrinketDefinition,
@@ -6727,9 +6796,12 @@ function consumePerRoundTrinketTrigger(
   limit: number,
 ): boolean {
   const radix = limit + 1;
-  const encoded = player.trinketCounters[definition.id] ?? 0;
-  const encodedRound = Math.floor(encoded / radix);
-  const used = encodedRound === round ? encoded % radix : 0;
+  const used = perRoundTrinketTriggerUses(
+    player,
+    definition,
+    round,
+    limit,
+  );
   if (used >= limit) {
     return false;
   }
@@ -7968,33 +8040,7 @@ function fillShop(
     if (!minion) {
       break;
     }
-    applyTavernBonuses(player, minion);
-    reconcileWhereverMinion(
-      minion,
-      player.astralAutomatonsSummoned ?? 0,
-      player.eternalKnightsDied ?? 0,
-      player.tavernSpellsCast ?? 0,
-      player.deathrattlesTriggered ?? 0,
-      player.magnetizationsThisGame ?? 0,
-    );
-    refreshDynamicMinionDescription(minion, player);
-    if (player.systemEventCounters.incubatingActive) {
-      const def = getMinionDefinition(minion.definitionId);
-      const defTribes = def.tribes ?? (def.tribe === "neutral" ? [] : [def.tribe]);
-      if (defTribes.length === 0) {
-        minion.tribes = ["all"];
-        minion.tribe = "all";
-      }
-    }
-    if (player.systemEventCounters.goldenArenaActive) {
-      const def = getMinionDefinition(minion.definitionId);
-      minion.golden = true;
-      minion.cardId = def.goldenCardId ?? def.cardId;
-      minion.name = `金色·${def.name}`;
-      minion.attack = def.attack * 2;
-      minion.health = def.health * 2;
-      minion.sellValue = 1;
-    }
+    prepareTavernMinionForShop(state, player, minion);
     player.shop.push(minion);
     tavernRefreshed = true;
   }
@@ -18365,6 +18411,26 @@ function returnDiscoverOptions(
   }
 }
 
+function replaceShopMinionFromDiscover(
+  state: GameState,
+  player: PlayerState,
+  selected: BoardMinionInstance,
+  targetInstanceId: string,
+): boolean {
+  const targetIndex = player.shop.findIndex(
+    (minion) => minion.instanceId === targetInstanceId,
+  );
+  if (targetIndex < 0) {
+    return false;
+  }
+
+  const [replaced] = player.shop.splice(targetIndex, 1);
+  returnMinionToPool(state, replaced);
+  prepareTavernMinionForShop(state, player, selected);
+  player.shop.splice(targetIndex, 0, selected);
+  return true;
+}
+
 function prepareDiscoverSelection(
   player: PlayerState,
   selected: BoardMinionInstance,
@@ -18714,6 +18780,27 @@ function beginDiscoverInteraction(
     } else if (destination.kind === "transform") {
       if (
         !transformFriendlyMinionFromDiscover(
+          state,
+          player,
+          selected,
+          destination.targetInstanceId,
+        )
+      ) {
+        returnMinionToPool(state, selected);
+        if (battlecry) {
+          const unresolvedTriggers = Math.ceil(
+            discoveries /
+              Math.max(1, battlecryEffectRepetitionsPerTrigger),
+          );
+          for (let trigger = 0; trigger < unresolvedTriggers; trigger += 1) {
+            observeRecruitBattlecryTriggered(player);
+          }
+        }
+        return false;
+      }
+    } else if (destination.kind === "replaceShop") {
+      if (
+        !replaceShopMinionFromDiscover(
           state,
           player,
           selected,
@@ -20183,6 +20270,32 @@ function resolvePendingInteraction(
       return next;
     }
     triggerRecruitAfterSpellCast(next, nextPlayer);
+  } else if (destination.kind === "replaceShop") {
+    if (
+      !replaceShopMinionFromDiscover(
+        next,
+        nextPlayer,
+        nextSelected,
+        destination.targetInstanceId,
+      )
+    ) {
+      returnMinionToPool(next, nextSelected);
+      if (nextPending.battlecry) {
+        const unresolvedTriggers = Math.ceil(
+          nextPending.remainingDiscoveries /
+            Math.max(
+              1,
+              nextPending.battlecryEffectRepetitionsPerTrigger ?? 1,
+            ),
+        );
+        for (let trigger = 0; trigger < unresolvedTriggers; trigger += 1) {
+          observeRecruitBattlecryTriggered(nextPlayer);
+        }
+      }
+      next.pendingInteraction = null;
+      finishCardPlayed(next, nextPlayer);
+      return next;
+    }
   } else {
     return state;
   }
@@ -20641,6 +20754,397 @@ function aiReservedCombatHandMinionIds(
   );
 }
 
+/**
+ * Benchmark-only switch for comparing the pre-v4 recruit behavior with the
+ * production safety guard. Normal games never install this override and
+ * therefore always use `safe-v4`.
+ */
+export type AiRecruitSafetyMode = "legacy-v3" | "safe-v4";
+
+export interface AiRecruitSafetyPlayerDiagnostics {
+  minionDamageOpportunities: number;
+  minionBlocks: number;
+  heroPowerDamageOpportunities: number;
+  heroPowerBlocks: number;
+  decisionDivergences: number;
+  rewinderExemptions: number;
+  floorCrossings: number;
+  lethalRisks: number;
+}
+
+export interface AiRecruitSafetyDiagnostics {
+  byPlayer: Record<PlayerId, AiRecruitSafetyPlayerDiagnostics>;
+}
+
+interface ActiveAiRecruitSafetyBenchmark {
+  state: GameState;
+  modes: ReadonlyMap<PlayerId, AiRecruitSafetyMode>;
+  diagnostics: AiRecruitSafetyDiagnostics;
+  seenOpportunities: Set<string>;
+}
+
+let activeAiRecruitSafetyBenchmark: ActiveAiRecruitSafetyBenchmark | null =
+  null;
+
+function activeAiRecruitSafetyForState(
+  state: GameState,
+): ActiveAiRecruitSafetyBenchmark | null {
+  return activeAiRecruitSafetyBenchmark?.state === state
+    ? activeAiRecruitSafetyBenchmark
+    : null;
+}
+
+function aiRecruitSafetyMode(
+  state: GameState,
+  playerId: PlayerId,
+): AiRecruitSafetyMode {
+  return activeAiRecruitSafetyForState(state)?.modes.get(playerId) ??
+    "safe-v4";
+}
+
+function aiRecruitSafetyDiagnosticsFor(
+  state: GameState,
+  playerId: PlayerId,
+): AiRecruitSafetyPlayerDiagnostics | null {
+  return (
+    activeAiRecruitSafetyForState(state)?.diagnostics.byPlayer[playerId] ??
+    null
+  );
+}
+
+function aiRecruitDamageWillBeRewound(
+  player: PlayerState,
+  playedMinion?: BoardMinionInstance,
+): boolean {
+  const observers = playedMinion
+    ? [...player.board, playedMinion]
+    : player.board;
+  return observers.some((minion) =>
+    minionEffectSources(minion).some(
+      (component) =>
+        getMinionDefinition(component.definitionId).afterHeroDamaged !==
+        undefined,
+    ),
+  );
+}
+
+interface AiMinionPlayDamageProjection {
+  rawDamage: number;
+  effectiveDamage: number;
+  rewound: boolean;
+}
+
+function projectedAiMinionPlayDamage(
+  state: GameState,
+  player: PlayerState,
+  minion: BoardMinionInstance,
+): AiMinionPlayDamageProjection {
+  let damage = 0;
+  for (const watcher of player.board) {
+    for (const component of minionEffectSources(watcher)) {
+      const trigger = getMinionDefinition(
+        component.definitionId,
+      ).afterFriendlyPlayed;
+      if (trigger && minionHasTribe(minion, trigger.tribe)) {
+        damage += (trigger.heroDamage ?? 0) * (component.golden ? 2 : 1);
+      }
+    }
+  }
+  const availableWarDrums = player.trinketIds.reduce(
+    (count, definitionId) => {
+      const definition = getTrinketDefinition(definitionId);
+      return definition.cardId === WAR_DRUM_CARD_ID &&
+        perRoundTrinketTriggerUses(player, definition, state.round, 1) < 1
+        ? count + 1
+        : count;
+    },
+    0,
+  );
+  const battlecryTriggers =
+    battlecryTriggerCount(player) + availableWarDrums * 2;
+  for (const component of minionEffectSources(minion)) {
+    const definition = getMinionDefinition(component.definitionId);
+    for (const effect of definition.battlecry ?? []) {
+      if (effect.kind === "damageHero") {
+        // Recruit battlecries repeat through Brann/War Drum, but their
+        // self-damage amount is not stat-scaled by the source being Golden.
+        damage += effect.amount * battlecryTriggers;
+      }
+    }
+    const interactiveBattlecry = definition.interactiveBattlecry;
+    if (
+      interactiveBattlecry?.kind === "discoverMinion" &&
+      interactiveBattlecry.damageHeroByDiscoveredTier
+    ) {
+      const repetitions =
+        battlecryTriggers *
+        (component.golden && interactiveBattlecry.goldenMode === "repeat"
+          ? 2
+          : 1);
+      damage += player.tavernTier * repetitions;
+    }
+  }
+  const rewound =
+    damage > 0 && aiRecruitDamageWillBeRewound(player, minion);
+  return {
+    rawDamage: damage,
+    effectiveDamage: rewound ? 0 : damage,
+    rewound,
+  };
+}
+
+function canAiSafelyPlayMinion(
+  state: GameState,
+  player: PlayerState,
+  minion: BoardMinionInstance,
+): boolean {
+  const projection = projectedAiMinionPlayDamage(state, player, minion);
+  if (projection.rawDamage === 0) {
+    return true;
+  }
+  const floor = getAiStrategyProfile(player.id).healthSpendFloor;
+  const remainingEffectiveHealth =
+    player.health + player.armor - projection.effectiveDamage;
+  const crossesFloor =
+    projection.effectiveDamage > 0 && remainingEffectiveHealth < floor;
+  const isLethal =
+    projection.effectiveDamage > 0 && remainingEffectiveHealth <= 0;
+  const benchmark = activeAiRecruitSafetyForState(state);
+  const diagnostics = aiRecruitSafetyDiagnosticsFor(state, player.id);
+  if (benchmark && diagnostics) {
+    const opportunityKey = [
+      "minion",
+      state.round,
+      player.id,
+      minion.instanceId,
+      projection.rawDamage,
+      projection.effectiveDamage,
+      player.health,
+      player.armor,
+      floor,
+    ].join(":");
+    if (!benchmark.seenOpportunities.has(opportunityKey)) {
+      benchmark.seenOpportunities.add(opportunityKey);
+      diagnostics.minionDamageOpportunities += 1;
+      if (projection.rewound) {
+        diagnostics.rewinderExemptions += 1;
+      }
+      if (crossesFloor) {
+        diagnostics.floorCrossings += 1;
+      }
+      if (isLethal) {
+        diagnostics.lethalRisks += 1;
+      }
+      if (
+        crossesFloor &&
+        aiRecruitSafetyMode(state, player.id) === "safe-v4"
+      ) {
+        diagnostics.minionBlocks += 1;
+      }
+    }
+  }
+  return (
+    aiRecruitSafetyMode(state, player.id) === "legacy-v3" ||
+    !crossesFloor
+  );
+}
+
+/**
+ * Headless-only counterfactual for one narrowly certified capital sale. Live
+ * games do not install this override and therefore remain on `legacy-v4`.
+ */
+export type AiCapitalSaleMode =
+  | "legacy-v4"
+  | "sell-one-v5"
+  | "sell-one-v6-settled-warband";
+
+export interface AiCapitalSalePlayerDiagnostics {
+  eligible: number;
+  dryRunAccepted: number;
+  salesCommitted: number;
+  purchasesCommitted: number;
+  decisionDivergences: number;
+  postSaleAborts: number;
+  handCapacityAborts: number;
+  offerMutationAborts: number;
+  fundingAborts: number;
+  scoreAborts: number;
+  settledWarbandScoreAborts: number;
+  interactionAborts: number;
+  executionFailureAborts: number;
+}
+
+export interface AiCapitalSaleDiagnostics {
+  byPlayer: Record<PlayerId, AiCapitalSalePlayerDiagnostics>;
+}
+
+interface ActiveAiCapitalSaleBenchmark {
+  state: GameState;
+  modes: ReadonlyMap<PlayerId, AiCapitalSaleMode>;
+  diagnostics: AiCapitalSaleDiagnostics;
+  seenOpportunities: Set<string>;
+}
+
+let activeAiCapitalSaleBenchmark: ActiveAiCapitalSaleBenchmark | null = null;
+let aiCapitalSaleBenchmarkCallActive = false;
+
+function activeAiCapitalSaleForState(
+  state: GameState,
+): ActiveAiCapitalSaleBenchmark | null {
+  return activeAiCapitalSaleBenchmark?.state === state
+    ? activeAiCapitalSaleBenchmark
+    : null;
+}
+
+function aiCapitalSaleDiagnosticsFor(
+  state: GameState,
+  playerId: PlayerId,
+): AiCapitalSalePlayerDiagnostics | null {
+  return activeAiCapitalSaleForState(state)?.diagnostics.byPlayer[playerId] ??
+    null;
+}
+
+type AiHandMinionAction =
+  | {
+      kind: "play";
+      source: BoardMinionInstance;
+    }
+  | {
+      kind: "magnetize";
+      source: BoardMinionInstance;
+      target: BoardMinionInstance;
+    }
+  | {
+      kind: "replace";
+      source: BoardMinionInstance;
+      boardIndex: number;
+    };
+
+function aiHandMinionsAfterAncientSoulReservation(
+  player: PlayerState,
+  candidates: readonly BoardMinionInstance[],
+): BoardMinionInstance[] {
+  const canKeepAncientSoulInHand =
+    player.board.length > 0 ||
+    candidates.some(
+      (card) =>
+        card.definitionId !== ANCIENT_SOUL_DEFINITION_ID || card.golden,
+    );
+  return canKeepAncientSoulInHand
+    ? candidates.filter(
+        (card) =>
+          card.definitionId !== ANCIENT_SOUL_DEFINITION_ID || card.golden,
+      )
+    : [...candidates];
+}
+
+function chooseAiHandMinionAction(
+  player: PlayerState,
+  minions: readonly BoardMinionInstance[],
+): AiHandMinionAction | null {
+  if (minions.length === 0) {
+    return null;
+  }
+  if (player.board.length >= MAX_BOARD_SIZE) {
+    const magneticOptions = minions
+      .map((source) => ({
+        source,
+        targets: player.board.filter((target) =>
+          canMagnetize(source, target),
+        ),
+      }))
+      .filter((option) => option.targets.length > 0)
+      .sort((left, right) => {
+        const scoreDifference =
+          minionScore(player, right.source, "magneticAttachment") -
+          minionScore(player, left.source, "magneticAttachment");
+        return scoreDifference !== 0
+          ? scoreDifference
+          : left.source.instanceId.localeCompare(right.source.instanceId);
+      });
+    const magnetic = magneticOptions[0];
+    if (magnetic) {
+      return {
+        kind: "magnetize",
+        source: magnetic.source,
+        target: bestMinionByScore(player, magnetic.targets),
+      };
+    }
+    const profile = getAiStrategyProfile(player.id);
+    const strongestHandMinion = bestMinionByScore(player, minions);
+    const weakestIndex = weakestBoardIndex(player);
+    const handScore = minionScore(player, strongestHandMinion);
+    const weakestScore = minionScore(player, player.board[weakestIndex]);
+    return handScore >= weakestScore + profile.replacementMargin
+      ? {
+          kind: "replace",
+          source: strongestHandMinion,
+          boardIndex: weakestIndex,
+        }
+      : null;
+  }
+  let bestIndex = 0;
+  let bestScore = Number.NEGATIVE_INFINITY;
+  for (let index = 0; index < minions.length; index += 1) {
+    const score = minionScore(player, minions[index]);
+    if (score > bestScore) {
+      bestScore = score;
+      bestIndex = index;
+    }
+  }
+  return { kind: "play", source: minions[bestIndex] };
+}
+
+function aiHandMinionActionKey(action: AiHandMinionAction | null): string {
+  if (!action) {
+    return "none";
+  }
+  if (action.kind === "magnetize") {
+    return `${action.kind}:${action.source.instanceId}:${action.target.instanceId}`;
+  }
+  if (action.kind === "replace") {
+    return `${action.kind}:${action.source.instanceId}:${action.boardIndex}`;
+  }
+  return `${action.kind}:${action.source.instanceId}`;
+}
+
+function recordAiMinionDecisionDivergence(
+  state: GameState,
+  player: PlayerState,
+  legacyAction: AiHandMinionAction | null,
+  safeAction: AiHandMinionAction | null,
+): void {
+  if (aiRecruitSafetyMode(state, player.id) !== "safe-v4") {
+    return;
+  }
+  const legacyKey = aiHandMinionActionKey(legacyAction);
+  const safeKey = aiHandMinionActionKey(safeAction);
+  if (legacyKey === safeKey) {
+    return;
+  }
+  const benchmark = activeAiRecruitSafetyForState(state);
+  const diagnostics = aiRecruitSafetyDiagnosticsFor(state, player.id);
+  if (!benchmark || !diagnostics) {
+    return;
+  }
+  const decisionKey = [
+    "minion-decision",
+    state.round,
+    player.id,
+    legacyKey,
+    safeKey,
+    player.health,
+    player.armor,
+    player.gold,
+    player.hand.map((card) => card.instanceId).join(","),
+    player.board.map((minion) => minion.instanceId).join(","),
+  ].join(":");
+  if (!benchmark.seenOpportunities.has(decisionKey)) {
+    benchmark.seenOpportunities.add(decisionKey);
+    diagnostics.decisionDivergences += 1;
+  }
+}
+
 function playAiHand(state: GameState, player: PlayerState): void {
   while (
     player.hand.length > 0 ||
@@ -20676,27 +21180,32 @@ function playAiHand(state: GameState, player: PlayerState): void {
     );
     const reservedCombatTargets =
       aiReservedCombatHandMinionIds(state, player);
-    const unreservedPlayableMinions = playableMinions.filter(
+    const legacyPlayableMinions = playableMinions.filter(
       (card) =>
         !reservedCombatTargets.has(card.instanceId) &&
         getMinionDefinition(card.definitionId)
           .inHandStartOfCombat === undefined,
     );
-    const canKeepAncientSoulInHand =
-      player.board.length > 0 ||
-      unreservedPlayableMinions.some(
-        (card) =>
-          card.definitionId !== ANCIENT_SOUL_DEFINITION_ID ||
-          card.golden,
-      );
-    const minions = canKeepAncientSoulInHand
-      ? unreservedPlayableMinions.filter(
-          (card) =>
-            card.definitionId !== ANCIENT_SOUL_DEFINITION_ID ||
-            card.golden,
-        )
-      : unreservedPlayableMinions;
-    if (minions.length === 0) {
+    const safePlayableMinions = legacyPlayableMinions.filter((card) =>
+      canAiSafelyPlayMinion(state, player, card),
+    );
+    const legacyMinions = aiHandMinionsAfterAncientSoulReservation(
+      player,
+      legacyPlayableMinions,
+    );
+    const minions = aiHandMinionsAfterAncientSoulReservation(
+      player,
+      safePlayableMinions,
+    );
+    const legacyAction = chooseAiHandMinionAction(player, legacyMinions);
+    const action = chooseAiHandMinionAction(player, minions);
+    recordAiMinionDecisionDivergence(
+      state,
+      player,
+      legacyAction,
+      action,
+    );
+    if (!action) {
       if (playBestAiTavernSpell(state, player)) {
         continue;
       }
@@ -20708,74 +21217,33 @@ function playAiHand(state: GameState, player: PlayerState): void {
       }
       break;
     }
-    if (player.board.length >= MAX_BOARD_SIZE) {
-      const magneticOptions = minions
-        .map((source) => ({
-          source,
-          targets: player.board.filter((target) =>
-            canMagnetize(source, target),
-          ),
-        }))
-        .filter((option) => option.targets.length > 0)
-        .sort((left, right) => {
-          const scoreDifference =
-            minionScore(player, right.source, "magneticAttachment") -
-            minionScore(player, left.source, "magneticAttachment");
-          return scoreDifference !== 0
-            ? scoreDifference
-            : left.source.instanceId.localeCompare(
-                right.source.instanceId,
-              );
-        });
-      const magnetic = magneticOptions[0];
-      if (!magnetic) {
-        const profile = getAiStrategyProfile(player.id);
-        const strongestHandMinion = bestMinionByScore(player, minions);
-        const weakestIndex = weakestBoardIndex(player);
-        const handScore = minionScore(player, strongestHandMinion);
-        const weakestScore = minionScore(
-          player,
-          player.board[weakestIndex],
-        );
-        if (
-          handScore >= weakestScore + profile.replacementMargin &&
-          sellMinion(state, player, weakestIndex)
-        ) {
-          continue;
-        }
-        if (playBestAiTavernSpell(state, player)) {
-          continue;
-        }
-        if (playBestAiSpellcraft(state, player)) {
-          continue;
-        }
-        if (playBestAiBloodGem(state, player)) {
-          continue;
-        }
-        break;
+    if (action.kind === "replace") {
+      if (sellMinion(state, player, action.boardIndex)) {
+        continue;
       }
-      const target = bestMinionByScore(player, magnetic.targets);
+      if (playBestAiTavernSpell(state, player)) {
+        continue;
+      }
+      if (playBestAiSpellcraft(state, player)) {
+        continue;
+      }
+      if (playBestAiBloodGem(state, player)) {
+        continue;
+      }
+      break;
+    }
+    if (action.kind === "magnetize") {
       if (!magnetizeMinion(
         state,
         player,
-        magnetic.source.instanceId,
-        target.instanceId,
+        action.source.instanceId,
+        action.target.instanceId,
       )) {
         break;
       }
       continue;
     }
-    let bestIndex = 0;
-    let bestScore = Number.NEGATIVE_INFINITY;
-    for (let index = 0; index < minions.length; index += 1) {
-      const score = minionScore(player, minions[index]);
-      if (score > bestScore) {
-        bestScore = score;
-        bestIndex = index;
-      }
-    }
-    const chosen = minions[bestIndex];
-    playHandCard(state, player, chosen.instanceId);
+    playHandCard(state, player, action.source.instanceId);
   }
 }
 
@@ -21056,10 +21524,14 @@ function bestShopIndex(player: PlayerState): number {
 function bestPurchasableShopIndex(
   state: GameState,
   player: PlayerState,
+  excludedInstanceId?: string | null,
 ): number {
   let bestIndex = -1;
   let bestScore = Number.NEGATIVE_INFINITY;
   for (let index = 0; index < player.shop.length; index += 1) {
+    if (player.shop[index].instanceId === excludedInstanceId) {
+      continue;
+    }
     if (!canAiPurchaseMinion(state, player, index)) {
       continue;
     }
@@ -21075,12 +21547,14 @@ function bestPurchasableShopIndex(
 function bestMagneticShopIndex(
   state: GameState,
   player: PlayerState,
+  excludedInstanceId?: string | null,
 ): number {
   let bestIndex = -1;
   let bestScore = Number.NEGATIVE_INFINITY;
   for (let index = 0; index < player.shop.length; index += 1) {
     const offer = player.shop[index];
     if (
+      offer.instanceId === excludedInstanceId ||
       !canAiPurchaseMinion(state, player, index) ||
       !player.board.some((target) => canMagnetize(offer, target))
     ) {
@@ -21763,18 +22237,66 @@ function sellAiMaturePatientScouts(
   return sold;
 }
 
+function canAiSafelyActivateDamageHeroPower(
+  state: GameState,
+  player: PlayerState,
+  definition: HeroPowerDefinition,
+): boolean {
+  if (definition.effect !== "activeStealTavernCardDamage") {
+    return true;
+  }
+  const damage = 2;
+  const floor = getAiStrategyProfile(player.id).healthSpendFloor;
+  const remainingHealth = player.health - damage;
+  const crossesFloor = !canAiSpendHealth(player, damage);
+  const isLethal = remainingHealth <= 0;
+  const benchmark = activeAiRecruitSafetyForState(state);
+  const diagnostics = aiRecruitSafetyDiagnosticsFor(state, player.id);
+  if (benchmark && diagnostics) {
+    const opportunityKey = [
+      "hero-power",
+      state.round,
+      player.id,
+      definition.id,
+      player.health,
+      floor,
+    ].join(":");
+    if (!benchmark.seenOpportunities.has(opportunityKey)) {
+      benchmark.seenOpportunities.add(opportunityKey);
+      diagnostics.heroPowerDamageOpportunities += 1;
+      if (crossesFloor) {
+        diagnostics.floorCrossings += 1;
+      }
+      if (isLethal) {
+        diagnostics.lethalRisks += 1;
+      }
+      if (
+        crossesFloor &&
+        aiRecruitSafetyMode(state, player.id) === "safe-v4"
+      ) {
+        diagnostics.heroPowerBlocks += 1;
+        diagnostics.decisionDivergences += 1;
+      }
+    }
+  }
+  return (
+    aiRecruitSafetyMode(state, player.id) === "legacy-v3" ||
+    !crossesFloor
+  );
+}
+
 function tryActivateAiHeroPower(
   state: GameState,
   player: PlayerState,
-): void {
+): string | null {
   if (
     !player.heroPowerId ||
     !heroPowerCanBeManuallyActivated(player.heroPowerId)
   ) {
-    return;
+    return null;
   }
   if (player.heroPowerActiveThisTurn) {
-    return;
+    return null;
   }
   const definition = getHeroPowerDefinition(player.heroPowerId);
   const targetMode = heroPowerNeedsTarget(definition.effect);
@@ -21783,7 +22305,22 @@ function tryActivateAiHeroPower(
     if (getHeroPowerActivationQuote(state, player.id)?.usable) {
       activateHeroPower(state, player);
     }
-    return;
+    return null;
+  }
+
+  if (targetMode === "shopOrBoard") {
+    const targetInstanceId = selectAiGeorgeDivineShieldTarget(state, player);
+    if (
+      targetInstanceId &&
+      getHeroPowerActivationQuote(
+        state,
+        player.id,
+        targetInstanceId,
+      )?.usable
+    ) {
+      activateHeroPower(state, player, targetInstanceId);
+    }
+    return null;
   }
 
   if (targetMode === "board" && player.board.length > 0) {
@@ -21802,29 +22339,108 @@ function tryActivateAiHeroPower(
     ) {
       activateHeroPower(state, player, targetInstanceId);
     }
-    return;
+    return null;
   }
 
   if (targetMode === "shop" && player.shop.length > 0) {
     const targetShopIndex = selectAiHeroPowerShopTarget(
+      state,
       player,
       definition.effect,
     );
+    const targetInstanceId =
+      targetShopIndex >= 0
+        ? player.shop[targetShopIndex]?.instanceId
+        : undefined;
     if (
-      targetShopIndex >= 0 &&
+      targetInstanceId &&
       getHeroPowerActivationQuote(
         state,
         player.id,
-        player.shop[targetShopIndex].instanceId,
-      )?.usable
+        targetInstanceId,
+      )?.usable &&
+      canAiSafelyActivateDamageHeroPower(state, player, definition)
     ) {
-      activateHeroPower(
-        state,
-        player,
-        player.shop[targetShopIndex].instanceId,
-      );
+      if (activateHeroPower(state, player, targetInstanceId)) {
+        const replacement = player.shop[targetShopIndex];
+        return definition.effect === "activeReplaceHigherTier" &&
+          replacement &&
+          replacement.tier < getMaximumTavernTier(state)
+          ? replacement.instanceId
+          : null;
+      }
     }
   }
+  return null;
+}
+
+function georgeDivineShieldTargetScore(
+  player: PlayerState,
+  minion: BoardMinionInstance,
+  owned: boolean,
+): number {
+  let score = minionScore(player, minion) * 0.35 + Math.max(0, minion.attack);
+  if (minion.poisonous || minion.venomous) score += 80;
+  if (minion.cleave) score += 18 + Math.max(0, minion.attack) * 0.55;
+  if (minion.windfury) score += 12 + Math.max(0, minion.attack) * 0.35;
+  if (minion.taunt) score += 5;
+  if (minion.golden) score += 4;
+  if (owned) score += 12;
+  return score;
+}
+
+function selectAiGeorgeDivineShieldTarget(
+  state: GameState,
+  player: PlayerState,
+): string | null {
+  const heroPowerCost = heroPowerActivationCost(
+    player,
+    "activeGiveDivineShield",
+  );
+  const candidates: Array<{
+    instanceId: string;
+    owned: boolean;
+    score: number;
+  }> = player.board
+    .filter(
+      (minion) =>
+        !minion.divineShield || minion.temporaryDivineShield === true,
+    )
+    .map((minion) => ({
+      instanceId: minion.instanceId,
+      owned: true,
+      score: georgeDivineShieldTargetScore(player, minion, true),
+    }));
+
+  for (let index = 0; index < player.shop.length; index += 1) {
+    const minion = player.shop[index];
+    const purchaseQuote = getMinionPurchaseQuote(state, player.id, index);
+    const affordableAfterPower =
+      purchaseQuote !== null &&
+      (purchaseQuote.currency === "health"
+        ? purchaseQuote.affordable
+        : player.gold - heroPowerCost >= purchaseQuote.cost);
+    if (
+      (minion.divineShield && minion.temporaryDivineShield !== true) ||
+      !affordableAfterPower ||
+      !canAiPurchaseMinion(state, player, index)
+    ) {
+      continue;
+    }
+    candidates.push({
+      instanceId: minion.instanceId,
+      owned: false,
+      score: georgeDivineShieldTargetScore(player, minion, false),
+    });
+  }
+
+  candidates.sort(
+    (left, right) =>
+      right.score - left.score ||
+      Number(right.owned) - Number(left.owned) ||
+      left.instanceId.localeCompare(right.instanceId),
+  );
+  return candidates[0]?.instanceId ?? null;
 }
 
 function selectAiHeroPowerBoardTarget(
@@ -21837,10 +22453,15 @@ function selectAiHeroPowerBoardTarget(
   switch (effect) {
     case "activeGiveDivineShield": {
       const candidates = player.board.filter(
-        (m) => !m.divineShield && !m.venomous && !m.poisonous,
+        (m) => !m.divineShield || m.temporaryDivineShield === true,
       );
       if (candidates.length === 0) return null;
-      candidates.sort((a, b) => b.attack - a.attack);
+      candidates.sort(
+        (a, b) =>
+          georgeDivineShieldTargetScore(player, b, true) -
+            georgeDivineShieldTargetScore(player, a, true) ||
+          a.instanceId.localeCompare(b.instanceId),
+      );
       return candidates[0].instanceId;
     }
     case "activeScalingTargetBuff": {
@@ -21869,6 +22490,7 @@ function selectAiHeroPowerBoardTarget(
 }
 
 function selectAiHeroPowerShopTarget(
+  state: GameState,
   player: PlayerState,
   effect: HeroPowerDefinition["effect"],
 ): number {
@@ -21891,17 +22513,382 @@ function selectAiHeroPowerShopTarget(
       return bestIndex;
     }
     case "activeReplaceHigherTier": {
-      for (let i = 0; i < player.shop.length; i++) {
-        const minion = player.shop[i];
-        if (minion.tier < Math.min(6, player.tavernTier)) {
-          return i;
-        }
-      }
-      return -1;
+      return player.shop
+        .map((minion, index) => ({ minion, index }))
+        .filter(
+          ({ minion }) => minion.tier < getMaximumTavernTier(state),
+        )
+        .sort(
+          (left, right) =>
+            right.minion.tier - left.minion.tier ||
+            minionScore(player, left.minion) -
+              minionScore(player, right.minion) ||
+            left.index - right.index,
+        )
+        .find(
+          ({ minion }) =>
+            getHeroPowerActivationQuote(
+              state,
+              player.id,
+              minion.instanceId,
+            )?.usable === true,
+        )?.index ?? -1;
     }
     default:
       return -1;
   }
+}
+
+interface AiCapitalSalePlan {
+  sourceInstanceId: string;
+  targetInstanceId: string;
+  targetCost: number;
+  soldScore: number;
+  warbandScoreBefore: number;
+}
+
+interface AiCapitalSaleAttemptResult {
+  actions: number;
+  completed: boolean;
+}
+
+function bestOneGoldShortShopOffer(
+  state: GameState,
+  player: PlayerState,
+): { instanceId: string; cost: number } | null {
+  let best: { instanceId: string; cost: number; score: number } | null = null;
+  for (let index = 0; index < player.shop.length; index += 1) {
+    const offer = player.shop[index];
+    const quote = getMinionPurchaseQuote(state, player.id, index);
+    if (
+      !quote ||
+      quote.currency !== "gold" ||
+      quote.affordable ||
+      quote.cost !== player.gold + 1
+    ) {
+      continue;
+    }
+    const score = minionScore(player, offer);
+    if (
+      !best ||
+      score > best.score ||
+      (score === best.score && offer.instanceId < best.instanceId)
+    ) {
+      best = {
+        instanceId: offer.instanceId,
+        cost: quote.cost,
+        score,
+      };
+    }
+  }
+  return best
+    ? { instanceId: best.instanceId, cost: best.cost }
+    : null;
+}
+
+function aiWarbandScore(player: PlayerState): number {
+  return player.board.reduce(
+    (total, minion) => total + minionScore(player, minion),
+    0,
+  );
+}
+
+function createAiCapitalSalePlan(
+  state: GameState,
+  player: PlayerState,
+  benchmark: ActiveAiCapitalSaleBenchmark,
+  diagnostics: AiCapitalSalePlayerDiagnostics,
+): AiCapitalSalePlan | null {
+  if (player.board.length !== MAX_BOARD_SIZE) {
+    return null;
+  }
+  const target = bestOneGoldShortShopOffer(state, player);
+  if (!target) {
+    return null;
+  }
+  const weakestIndex = weakestBoardIndex(player);
+  const source = player.board[weakestIndex];
+  const opportunityKey = [
+    "capital-sale",
+    state.round,
+    player.id,
+    source.instanceId,
+    target.instanceId,
+  ].join(":");
+  if (benchmark.seenOpportunities.has(opportunityKey)) {
+    return null;
+  }
+  benchmark.seenOpportunities.add(opportunityKey);
+  if (player.hand.length > MAX_HAND_SIZE - 2) {
+    diagnostics.handCapacityAborts += 1;
+    return null;
+  }
+  const definition = getMinionDefinition(source.definitionId);
+  if (
+    getMinionSellValue(state, player.id, source) !== 1 ||
+    definition.afterSold !== undefined ||
+    definition.sellDiscover !== undefined
+  ) {
+    return null;
+  }
+  diagnostics.eligible += 1;
+  return {
+    sourceInstanceId: source.instanceId,
+    targetInstanceId: target.instanceId,
+    targetCost: target.cost,
+    soldScore: minionScore(player, source),
+    warbandScoreBefore: aiWarbandScore(player),
+  };
+}
+
+type AiCapitalSaleAbortReason =
+  | "hand"
+  | "offer"
+  | "funding"
+  | "interaction"
+  | "score"
+  | "settled-warband-score"
+  | "execution";
+
+type AiCapitalSalePostSaleValidation =
+  | { ok: true; shopIndex: number }
+  | { ok: false; reason: AiCapitalSaleAbortReason };
+
+function validateAiCapitalSaleAfterSale(
+  state: GameState,
+  player: PlayerState,
+  plan: AiCapitalSalePlan,
+): AiCapitalSalePostSaleValidation {
+  if (state.pendingInteraction !== null) {
+    return { ok: false, reason: "interaction" };
+  }
+  if (player.hand.length >= MAX_HAND_SIZE) {
+    return { ok: false, reason: "hand" };
+  }
+  const shopIndex = player.shop.findIndex(
+    (offer) => offer.instanceId === plan.targetInstanceId,
+  );
+  if (shopIndex < 0) {
+    return { ok: false, reason: "offer" };
+  }
+  const quote = getMinionPurchaseQuote(state, player.id, shopIndex);
+  if (
+    !quote ||
+    quote.currency !== "gold" ||
+    quote.cost !== plan.targetCost
+  ) {
+    return { ok: false, reason: "offer" };
+  }
+  if (!quote.affordable) {
+    return { ok: false, reason: "funding" };
+  }
+  const candidateScore = minionScore(player, player.shop[shopIndex]);
+  if (
+    candidateScore <
+    plan.soldScore + getAiStrategyProfile(player.id).replacementMargin
+  ) {
+    return { ok: false, reason: "score" };
+  }
+  return { ok: true, shopIndex };
+}
+
+function recordAiCapitalSaleValidationAbort(
+  diagnostics: AiCapitalSalePlayerDiagnostics,
+  reason: AiCapitalSaleAbortReason,
+): void {
+  switch (reason) {
+    case "hand":
+      diagnostics.handCapacityAborts += 1;
+      break;
+    case "offer":
+      diagnostics.offerMutationAborts += 1;
+      break;
+    case "funding":
+      diagnostics.fundingAborts += 1;
+      break;
+    case "score":
+      diagnostics.scoreAborts += 1;
+      break;
+    case "settled-warband-score":
+      diagnostics.settledWarbandScoreAborts += 1;
+      break;
+    case "interaction":
+      diagnostics.interactionAborts += 1;
+      break;
+    case "execution":
+      diagnostics.executionFailureAborts += 1;
+      break;
+  }
+}
+
+type AiCapitalSaleDryRunResult =
+  | { ok: true; state: GameState }
+  | { ok: false; reason: AiCapitalSaleAbortReason };
+
+function dryRunAiCapitalSale(
+  state: GameState,
+  playerId: PlayerId,
+  plan: AiCapitalSalePlan,
+  mode: AiCapitalSaleMode,
+): AiCapitalSaleDryRunResult {
+  const dryState = cloneState(state);
+  const dryPlayer = findPlayer(dryState, playerId);
+  if (!dryPlayer) {
+    return { ok: false, reason: "execution" };
+  }
+  const sourceIndex = dryPlayer.board.findIndex(
+    (minion) => minion.instanceId === plan.sourceInstanceId,
+  );
+  if (sourceIndex < 0 || !sellMinion(dryState, dryPlayer, sourceIndex)) {
+    return { ok: false, reason: "execution" };
+  }
+  const validation = validateAiCapitalSaleAfterSale(
+    dryState,
+    dryPlayer,
+    plan,
+  );
+  if (!validation.ok) {
+    return validation;
+  }
+  if (!buyMinion(dryState, dryPlayer, validation.shopIndex)) {
+    return { ok: false, reason: "execution" };
+  }
+  if (dryState.pendingInteraction !== null) {
+    return { ok: false, reason: "interaction" };
+  }
+  if (
+    dryPlayer.shop.some(
+      (offer) => offer.instanceId === plan.targetInstanceId,
+    )
+  ) {
+    return { ok: false, reason: "execution" };
+  }
+  if (mode === "sell-one-v6-settled-warband") {
+    try {
+      playAiHand(dryState, dryPlayer);
+    } catch {
+      return { ok: false, reason: "execution" };
+    }
+    if (dryState.pendingInteraction !== null) {
+      return { ok: false, reason: "interaction" };
+    }
+    if (
+      aiWarbandScore(dryPlayer) <
+      plan.warbandScoreBefore +
+        getAiStrategyProfile(playerId).replacementMargin
+    ) {
+      return { ok: false, reason: "settled-warband-score" };
+    }
+  }
+  return { ok: true, state: dryState };
+}
+
+function replaceEnumerableProperties(
+  target: object,
+  source: object,
+): void {
+  const targetRecord = target as Record<string, unknown>;
+  const sourceRecord = source as Record<string, unknown>;
+  for (const key of Object.keys(targetRecord)) {
+    if (!(key in sourceRecord) && !Reflect.deleteProperty(targetRecord, key)) {
+      throw new Error(`failed to delete state property ${key}`);
+    }
+  }
+  Object.assign(targetRecord, sourceRecord);
+}
+
+function applyValidatedGameStateClone(
+  state: GameState,
+  next: GameState,
+): void {
+  if (state.players.length !== next.players.length) {
+    throw new Error("capital-sale clone changed the player count");
+  }
+  const currentPlayers = new Map(
+    state.players.map((current) => [current.id, current] as const),
+  );
+  if (currentPlayers.size !== state.players.length) {
+    throw new Error("capital-sale state has duplicate player identities");
+  }
+  const preservedPlayers = next.players.map((nextPlayer) => {
+    const current = currentPlayers.get(nextPlayer.id);
+    if (!current) {
+      throw new Error(
+        `capital-sale clone introduced unknown player ${nextPlayer.id}`,
+      );
+    }
+    return current;
+  });
+  if (new Set(preservedPlayers).size !== state.players.length) {
+    throw new Error("capital-sale clone duplicated a player identity");
+  }
+  next.players.forEach((nextPlayer, index) => {
+    replaceEnumerableProperties(preservedPlayers[index], nextPlayer);
+  });
+  replaceEnumerableProperties(state, {
+    ...next,
+    players: preservedPlayers,
+  });
+}
+
+function installValidatedGameStateClone(
+  state: GameState,
+  next: GameState,
+): void {
+  const rollback = cloneState(state);
+  try {
+    applyValidatedGameStateClone(state, next);
+  } catch (error) {
+    try {
+      applyValidatedGameStateClone(state, rollback);
+    } catch (rollbackError) {
+      throw new AggregateError(
+        [error, rollbackError],
+        "capital-sale atomic install and rollback both failed",
+      );
+    }
+    throw error;
+  }
+}
+
+function tryAiCapitalSale(
+  state: GameState,
+  player: PlayerState,
+): AiCapitalSaleAttemptResult {
+  const benchmark = activeAiCapitalSaleForState(state);
+  const diagnostics = aiCapitalSaleDiagnosticsFor(state, player.id);
+  if (!benchmark || !diagnostics) {
+    return { actions: 0, completed: false };
+  }
+  const plan = createAiCapitalSalePlan(
+    state,
+    player,
+    benchmark,
+    diagnostics,
+  );
+  if (!plan) {
+    return { actions: 0, completed: false };
+  }
+  const mode = benchmark.modes.get(player.id) ?? "legacy-v4";
+  const dryRun = dryRunAiCapitalSale(state, player.id, plan, mode);
+  if (!dryRun.ok) {
+    recordAiCapitalSaleValidationAbort(diagnostics, dryRun.reason);
+    return { actions: 0, completed: false };
+  }
+  diagnostics.dryRunAccepted += 1;
+  if (mode === "legacy-v4") {
+    return { actions: 0, completed: false };
+  }
+  try {
+    installValidatedGameStateClone(state, dryRun.state);
+  } catch (error) {
+    diagnostics.executionFailureAborts += 1;
+    throw error;
+  }
+  diagnostics.decisionDivergences += 1;
+  diagnostics.salesCommitted += 1;
+  diagnostics.purchasesCommitted += 1;
+  return { actions: 2, completed: true };
 }
 
 function runAiRecruit(state: GameState, player: PlayerState): void {
@@ -21912,7 +22899,20 @@ function runAiRecruit(state: GameState, player: PlayerState): void {
   actions += sellAiMaturePatientScouts(state, player);
   actions += sellAiLossBonusMinions(state, player);
 
-  tryActivateAiHeroPower(state, player);
+  const deferGeorgePowerForOpeningUpgrade =
+    player.heroPowerId !== null &&
+    getHeroPowerDefinition(player.heroPowerId).effect ===
+      "activeGiveDivineShield" &&
+    shouldUpgradeAiTavernWithResidual(
+      state,
+      player,
+      "opening",
+      actions,
+      0,
+    );
+  let galakrondChainTargetInstanceId = deferGeorgePowerForOpeningUpgrade
+    ? null
+    : tryActivateAiHeroPower(state, player);
 
   if (
     shouldUpgradeAiTavernWithResidual(
@@ -21928,7 +22928,12 @@ function runAiRecruit(state: GameState, player: PlayerState): void {
     actions += 1;
   }
 
+  if (deferGeorgePowerForOpeningUpgrade) {
+    galakrondChainTargetInstanceId = tryActivateAiHeroPower(state, player);
+  }
+
   let refreshes = 0;
+  let capitalSaleCommitted = false;
   while (actions < 50) {
     playAiHand(state, player);
     actions += sellAiMaturePatientScouts(state, player);
@@ -21951,7 +22956,11 @@ function runAiRecruit(state: GameState, player: PlayerState): void {
       actions += 1;
       continue;
     }
-    const shopIndex = bestPurchasableShopIndex(state, player);
+    const shopIndex = bestPurchasableShopIndex(
+      state,
+      player,
+      galakrondChainTargetInstanceId,
+    );
     const bestMinionOffer =
       shopIndex >= 0 ? player.shop[shopIndex] : undefined;
     const minionPurchaseQuote =
@@ -22067,7 +23076,11 @@ function runAiRecruit(state: GameState, player: PlayerState): void {
           continue;
         }
       } else {
-        const magneticShopIndex = bestMagneticShopIndex(state, player);
+        const magneticShopIndex = bestMagneticShopIndex(
+          state,
+          player,
+          galakrondChainTargetInstanceId,
+        );
         if (
           magneticShopIndex >= 0 &&
           buyMinion(state, player, magneticShopIndex)
@@ -22092,6 +23105,15 @@ function runAiRecruit(state: GameState, player: PlayerState): void {
           playAiHand(state, player);
           continue;
         }
+      }
+    }
+
+    if (!capitalSaleCommitted) {
+      const capitalSale = tryAiCapitalSale(state, player);
+      actions += capitalSale.actions;
+      if (capitalSale.completed) {
+        capitalSaleCommitted = true;
+        continue;
       }
     }
 
@@ -22199,6 +23221,15 @@ function runAiRecruit(state: GameState, player: PlayerState): void {
           targetBoardSize: aiTargetBoardSize(state.round),
         }) === "refreshOnce";
     }
+    if (
+      galakrondChainTargetInstanceId !== null &&
+      player.shop.some(
+        (minion) =>
+          minion.instanceId === galakrondChainTargetInstanceId,
+      )
+    ) {
+      shouldRefresh = false;
+    }
     if (shouldRefresh) {
       refreshShop(state, player);
       refreshes += 1;
@@ -22241,7 +23272,15 @@ function runAiRecruit(state: GameState, player: PlayerState): void {
     bestRemainingSpell !== undefined &&
     tavernSpellAiScore(player, bestRemainingSpell) >=
       8 - profile.freezeScoreBonus;
-  const legacyShouldFreeze = freezeMinion || freezeSpell;
+  const preservesGalakrondChain =
+    galakrondChainTargetInstanceId !== null &&
+    player.shop.some(
+      (minion) =>
+        minion.instanceId === galakrondChainTargetInstanceId &&
+        minion.tier < getMaximumTavernTier(state),
+    );
+  const legacyShouldFreeze =
+    preservesGalakrondChain || freezeMinion || freezeSpell;
   let shouldFreeze = legacyShouldFreeze;
   if (hasAiResidualPolicyOverride(player.id)) {
     const bestRemainingTripleProgress = Math.min(
@@ -22294,6 +23333,9 @@ function runAiRecruit(state: GameState, player: PlayerState): void {
         freezeSpellReason: freezeSpell,
         unspentGold: player.gold,
       }) === "freeze";
+  }
+  if (preservesGalakrondChain) {
+    shouldFreeze = true;
   }
   player.frozen = shouldFreeze;
   reconcileConditionalMinions(player);
@@ -34127,8 +35169,15 @@ function applyCombatHeroDamage(
   actor: PlayerState,
   target: PlayerState,
   amount: number,
+  damageCap: SoloCombatDamageCap | null,
 ): number {
-  let resolvedAmount = Math.max(0, amount);
+  const uncappedAmount = Math.max(0, amount);
+  const cappedAmount =
+    damageCap === null
+      ? uncappedAmount
+      : Math.min(uncappedAmount, damageCap);
+  let resolvedAmount = cappedAmount;
+  const damagePreventedByCap = uncappedAmount - cappedAmount;
   const iceBlock = consumeIceBlockSecretForLethalCombatDamage(
     target,
     resolvedAmount,
@@ -34180,12 +35229,24 @@ function applyCombatHeroDamage(
     actorPlayerId: actor.id,
     targetPlayerId: target.id,
     amount: resolvedAmount,
+    ...(damageCap === null
+      ? {}
+      : {
+          uncappedAmount,
+          damageCap,
+          damagePreventedByCap,
+        }),
     armorAbsorbed: damage.armorAbsorbed,
     healthDamage: damage.healthDamage,
-    message:
+    message: `${
+      damagePreventedByCap > 0
+        ? `伤害上限 ${damageCap} 将 ${uncappedAmount} 点伤害压至 ${cappedAmount} 点。`
+        : ""
+    }${
       damage.armorAbsorbed > 0
         ? `${target.name}受到 ${resolvedAmount} 点伤害，护甲抵挡 ${damage.armorAbsorbed} 点。`
-        : `${target.name}受到 ${resolvedAmount} 点伤害。`,
+        : `${target.name}受到 ${resolvedAmount} 点伤害。`
+    }`,
   });
   return resolvedAmount;
 }
@@ -34195,6 +35256,13 @@ function simulateBattle(
   pairing: Pairing,
 ): BattleSummary {
   const { playerA, playerB, isGhost } = pairing;
+  const alivePlayersAtCombatStart = state.players.filter(
+    (player) => player.alive,
+  ).length;
+  const damageCap = getSoloCombatDamageCap(
+    state.round,
+    alivePlayersAtCombatStart,
+  );
   resetThornedPauldrons(playerA);
   if (!isGhost) {
     resetThornedPauldrons(playerB);
@@ -34574,6 +35642,7 @@ function simulateBattle(
         playerA,
         playerB,
         damageToPlayerB,
+        damageCap,
       );
     } else {
       damageToPlayerB = 0;
@@ -34591,6 +35660,7 @@ function simulateBattle(
       playerB,
       playerA,
       damageToPlayerA,
+      damageCap,
     );
   } else if (state.round > 60) {
     const fatigueDamage = state.round - 60;
@@ -34600,6 +35670,7 @@ function simulateBattle(
       playerB,
       playerA,
       fatigueDamage,
+      damageCap,
     );
     if (!isGhost) {
       damageToPlayerB = applyCombatHeroDamage(
@@ -34608,6 +35679,7 @@ function simulateBattle(
         playerA,
         playerB,
         fatigueDamage,
+        damageCap,
       );
     }
   }
@@ -34686,6 +35758,8 @@ function simulateBattle(
     playerA.id === state.humanPlayerId || playerB.id === state.humanPlayerId;
   return {
     round: state.round,
+    alivePlayersAtCombatStart,
+    damageCap,
     playerAId: playerA.id,
     playerBId: playerB.id,
     playerAName: playerA.name,
@@ -35844,22 +36918,259 @@ export function createHeadlessGame(
   return state;
 }
 
-/** Advance exactly one recruit/combat phase without mutating the input. */
-export function advanceHeadlessGame(state: GameState): GameState {
-  if (state.players.some((player) => player.isHuman)) {
-    throw new Error("headless games cannot contain a human player");
+function assertHeadlessInvariant(
+  state: GameState,
+  stage: "input" | "output" | "initialization",
+): void {
+  const human = state.players.find((player) => player.isHuman);
+  if (human) {
+    throw new Error(
+      `headless games cannot contain a human player ` +
+        `(${stage}: ${human.id})`,
+    );
   }
-  if (state.pendingInteraction !== null) {
-    throw new Error("headless games cannot pause for an interaction");
+  const pending = state.pendingInteraction;
+  if (pending !== null) {
+    throw new Error(
+      `headless games cannot pause for an interaction ` +
+        `(${stage}: ${pending.kind} ${pending.interactionId} owned by ` +
+        `${pending.playerId})`,
+    );
   }
+}
 
-  const next = cloneState(state);
+function advanceMutableHeadlessGame(next: GameState): void {
   if (next.phase === "recruit") {
     endTurn(next);
   } else if (next.phase === "combat") {
     beginNextRecruit(next);
   }
+}
+
+/** Advance exactly one recruit/combat phase without mutating the input. */
+export function advanceHeadlessGame(state: GameState): GameState {
+  assertHeadlessInvariant(state, "input");
+  const next = cloneState(state);
+  advanceMutableHeadlessGame(next);
+  assertHeadlessInvariant(next, "output");
   return next;
+}
+
+function createEmptyAiRecruitSafetyDiagnostics(
+  state: GameState,
+): AiRecruitSafetyDiagnostics {
+  const byPlayer: Record<PlayerId, AiRecruitSafetyPlayerDiagnostics> = {};
+  for (const player of state.players) {
+    byPlayer[player.id] = {
+      minionDamageOpportunities: 0,
+      minionBlocks: 0,
+      heroPowerDamageOpportunities: 0,
+      heroPowerBlocks: 0,
+      decisionDivergences: 0,
+      rewinderExemptions: 0,
+      floorCrossings: 0,
+      lethalRisks: 0,
+    };
+  }
+  return { byPlayer };
+}
+
+function validatedAiRecruitSafetyModes(
+  state: GameState,
+  modes: Readonly<Record<PlayerId, AiRecruitSafetyMode>>,
+): ReadonlyMap<PlayerId, AiRecruitSafetyMode> {
+  if (!modes || typeof modes !== "object" || Array.isArray(modes)) {
+    throw new Error("headless recruit-safety modes must be a player map");
+  }
+  const canonicalPlayerIds = Array.from(
+    { length: 8 },
+    (_, index) => `player-${index}`,
+  );
+  const statePlayerIds = state.players
+    .map((player) => player.id)
+    .sort((left, right) => left.localeCompare(right));
+  if (
+    canonicalPlayerIds.length !== statePlayerIds.length ||
+    canonicalPlayerIds.some(
+      (playerId, index) => playerId !== statePlayerIds[index],
+    )
+  ) {
+    throw new Error(
+      "headless recruit-safety benchmark requires canonical player-0..player-7",
+    );
+  }
+  const providedPlayerIds = Object.keys(modes).sort((left, right) =>
+    left.localeCompare(right),
+  );
+  if (
+    canonicalPlayerIds.length !== providedPlayerIds.length ||
+    canonicalPlayerIds.some(
+      (playerId, index) => playerId !== providedPlayerIds[index],
+    )
+  ) {
+    throw new Error(
+      "headless recruit-safety modes must contain exactly the game players",
+    );
+  }
+  const validated = new Map<PlayerId, AiRecruitSafetyMode>();
+  for (const playerId of canonicalPlayerIds) {
+    const mode = modes[playerId];
+    if (mode !== "legacy-v3" && mode !== "safe-v4") {
+      throw new Error(
+        `invalid headless recruit-safety mode for ${playerId}: ${String(mode)}`,
+      );
+    }
+    validated.set(playerId, mode);
+  }
+  return validated;
+}
+
+/**
+ * Benchmark-only counterfactual advance. The override exists only for this
+ * synchronous headless step, is restored with `finally`, and is not stored in
+ * GameState or exposed through the normal reducer/UI paths.
+ */
+export function advanceHeadlessGameWithAiRecruitSafetyModes(
+  state: GameState,
+  modes: Readonly<Record<PlayerId, AiRecruitSafetyMode>>,
+): { state: GameState; diagnostics: AiRecruitSafetyDiagnostics } {
+  assertHeadlessInvariant(state, "input");
+  if (activeAiRecruitSafetyBenchmark) {
+    throw new Error("headless recruit-safety benchmark is already active");
+  }
+  const validatedModes = validatedAiRecruitSafetyModes(state, modes);
+  const next = cloneState(state);
+  const diagnostics = createEmptyAiRecruitSafetyDiagnostics(next);
+  activeAiRecruitSafetyBenchmark = {
+    state: next,
+    modes: validatedModes,
+    diagnostics,
+    seenOpportunities: new Set<string>(),
+  };
+  try {
+    advanceMutableHeadlessGame(next);
+    assertHeadlessInvariant(next, "output");
+    return {
+      state: next,
+      diagnostics,
+    };
+  } finally {
+    activeAiRecruitSafetyBenchmark = null;
+  }
+}
+
+function createEmptyAiCapitalSaleDiagnostics(
+  state: GameState,
+): AiCapitalSaleDiagnostics {
+  const byPlayer: Record<PlayerId, AiCapitalSalePlayerDiagnostics> = {};
+  for (const player of state.players) {
+    byPlayer[player.id] = {
+      eligible: 0,
+      dryRunAccepted: 0,
+      salesCommitted: 0,
+      purchasesCommitted: 0,
+      decisionDivergences: 0,
+      postSaleAborts: 0,
+      handCapacityAborts: 0,
+      offerMutationAborts: 0,
+      fundingAborts: 0,
+      scoreAborts: 0,
+      settledWarbandScoreAborts: 0,
+      interactionAborts: 0,
+      executionFailureAborts: 0,
+    };
+  }
+  return { byPlayer };
+}
+
+function validatedAiCapitalSaleModes(
+  state: GameState,
+  modes: Readonly<Record<PlayerId, AiCapitalSaleMode>>,
+): ReadonlyMap<PlayerId, AiCapitalSaleMode> {
+  if (!modes || typeof modes !== "object" || Array.isArray(modes)) {
+    throw new Error("headless capital-sale modes must be a player map");
+  }
+  const canonicalPlayerIds = Array.from(
+    { length: 8 },
+    (_, index) => `player-${index}`,
+  );
+  const statePlayerIds = state.players
+    .map((player) => player.id)
+    .sort((left, right) => left.localeCompare(right));
+  if (
+    canonicalPlayerIds.length !== statePlayerIds.length ||
+    canonicalPlayerIds.some(
+      (playerId, index) => playerId !== statePlayerIds[index],
+    )
+  ) {
+    throw new Error(
+      "headless capital-sale benchmark requires canonical player-0..player-7",
+    );
+  }
+  const providedPlayerIds = Object.keys(modes).sort((left, right) =>
+    left.localeCompare(right),
+  );
+  if (
+    canonicalPlayerIds.length !== providedPlayerIds.length ||
+    canonicalPlayerIds.some(
+      (playerId, index) => playerId !== providedPlayerIds[index],
+    )
+  ) {
+    throw new Error(
+      "headless capital-sale modes must contain exactly the game players",
+    );
+  }
+  const validated = new Map<PlayerId, AiCapitalSaleMode>();
+  for (const playerId of canonicalPlayerIds) {
+    const mode = modes[playerId];
+    if (
+      mode !== "legacy-v4" &&
+      mode !== "sell-one-v5" &&
+      mode !== "sell-one-v6-settled-warband"
+    ) {
+      throw new Error(
+        `invalid headless capital-sale mode for ${playerId}: ${String(mode)}`,
+      );
+    }
+    validated.set(playerId, mode);
+  }
+  return validated;
+}
+
+/**
+ * Advance one synchronous headless phase with an ephemeral per-seat capital
+ * sale policy. The override is bound to the cloned state by identity and is
+ * never serialized into GameState or observed by reducer/UI production paths.
+ */
+export function advanceHeadlessGameWithAiCapitalSaleModes(
+  state: GameState,
+  modes: Readonly<Record<PlayerId, AiCapitalSaleMode>>,
+): { state: GameState; diagnostics: AiCapitalSaleDiagnostics } {
+  assertHeadlessInvariant(state, "input");
+  if (
+    aiCapitalSaleBenchmarkCallActive ||
+    activeAiCapitalSaleBenchmark !== null
+  ) {
+    throw new Error("headless capital-sale benchmark is already active");
+  }
+  aiCapitalSaleBenchmarkCallActive = true;
+  try {
+    const validatedModes = validatedAiCapitalSaleModes(state, modes);
+    const next = cloneState(state);
+    const diagnostics = createEmptyAiCapitalSaleDiagnostics(next);
+    activeAiCapitalSaleBenchmark = {
+      state: next,
+      modes: validatedModes,
+      diagnostics,
+      seenOpportunities: new Set<string>(),
+    };
+    advanceMutableHeadlessGame(next);
+    assertHeadlessInvariant(next, "output");
+    return { state: next, diagnostics };
+  } finally {
+    activeAiCapitalSaleBenchmark = null;
+    aiCapitalSaleBenchmarkCallActive = false;
+  }
 }
 
 /**
@@ -35930,6 +37241,47 @@ export function createLobbyGame(
   return state;
 }
 
+/**
+ * Create a production-equivalent eight-bot lobby with Heroes, the shared
+ * system event, and all scheduled Trinket offers enabled. The replay anchor
+ * chooses the first already-shuffled Hero offer, then joins the same AI paths
+ * as the other seven seats.
+ */
+export function createHeadlessLobbyGame(
+  seed?: number,
+  initialHealth = DEFAULT_INITIAL_HEALTH,
+): GameState {
+  const state = createLobbyGame(seed, initialHealth);
+  const offer = state.pendingInteraction;
+  if (
+    offer?.kind !== "heroChoice" ||
+    offer.playerId !== state.humanPlayerId
+  ) {
+    throw new Error("headless lobby did not produce its Hero offer");
+  }
+  const selectedHeroId = offer.optionIds[0];
+  if (!selectedHeroId) {
+    throw new Error("headless lobby produced an empty Hero offer");
+  }
+  for (const player of state.players) {
+    player.isHuman = false;
+  }
+  const resolved = gameReducer(state, {
+    type: "RESOLVE_INTERACTION",
+    interactionId: offer.interactionId,
+    optionInstanceId: selectedHeroId,
+  });
+  if (resolved === state) {
+    throw new Error("headless lobby failed to resolve its Hero offer");
+  }
+  assertHeadlessInvariant(resolved, "initialization");
+  const anchor = humanPlayer(resolved);
+  if (anchor.heroId !== selectedHeroId || !anchor.heroPowerId) {
+    throw new Error("headless lobby failed to assign its replay-anchor Hero");
+  }
+  return resolved;
+}
+
 export function heroPowerActiveCost(effect: HeroPowerDefinition["effect"]): number {
   switch (effect) {
     case "activeRandomTavernSpell": return 1;
@@ -35977,14 +37329,16 @@ const HERO_POWER_SHOP_TARGET_EFFECTS = new Set<HeroPowerDefinition["effect"]>([
 ]);
 
 const HERO_POWER_BOARD_TARGET_EFFECTS = new Set<HeroPowerDefinition["effect"]>([
-  "activeGiveDivineShield",
   "activeScalingTargetBuff",
   "activeKillUndeadForUndead",
 ]);
 
+export type HeroPowerTargetKind = "shop" | "board" | "shopOrBoard";
+
 export function heroPowerNeedsTarget(
   effect: HeroPowerDefinition["effect"],
-): "shop" | "board" | null {
+): HeroPowerTargetKind | null {
+  if (effect === "activeGiveDivineShield") return "shopOrBoard";
   if (HERO_POWER_SHOP_TARGET_EFFECTS.has(effect)) return "shop";
   if (HERO_POWER_BOARD_TARGET_EFFECTS.has(effect)) return "board";
   return null;
@@ -35994,7 +37348,7 @@ export interface HeroPowerActivationQuote {
   cost: number;
   affordable: boolean;
   usable: boolean;
-  targetKind: "shop" | "board" | null;
+  targetKind: HeroPowerTargetKind | null;
 }
 
 function heroPowerActivationCost(
@@ -36135,25 +37489,26 @@ function activateHeroPowerMutating(
         return false;
       }
       const currentTier = player.shop[shopIndex].tier;
-      const maxTier = Math.min(6, player.tavernTier);
-      if (currentTier >= maxTier) {
+      const maximumTier = getMaximumTavernTier(state);
+      if (currentTier >= maximumTier) {
         return false;
       }
-      const replacement = drawMatchingFromPool(
-        state,
-        player.tavernTier,
-        (d) =>
-          d.tier > currentTier &&
-          d.tier <= maxTier &&
-          d.id !== player.shop[shopIndex].definitionId,
-      );
-      if (!replacement) {
+      const nextTier = (currentTier + 1) as MinionTier;
+      if (
+        !beginDiscoverInteraction(
+          state,
+          player,
+          definition.id,
+          sharedPoolDiscoverFilterForExactTier(state, nextTier),
+          1,
+          { kind: "replaceShop", targetInstanceId },
+          undefined,
+          undefined,
+          definition.id,
+        )
+      ) {
         return false;
       }
-      player.shop.splice(shopIndex, 1);
-      player.shop.splice(shopIndex, 0, replacement);
-      reconcileConditionalMinion(replacement);
-      refreshDynamicMinionDescription(replacement, player);
       break;
     }
     case "activeDoubleHealthTavernMinion": {
@@ -36199,13 +37554,14 @@ function activateHeroPowerMutating(
       if (!targetInstanceId) {
         return false;
       }
-      const target = player.board.find(
+      const target = [...player.board, ...player.shop].find(
         (m) => m.instanceId === targetInstanceId,
       );
-      if (!target || target.divineShield) {
+      if (!target) {
         return false;
       }
       target.divineShield = true;
+      target.temporaryDivineShield = false;
       reconcileConditionalMinion(target);
       refreshDynamicMinionDescription(target, player);
       break;
@@ -36245,7 +37601,9 @@ function activateHeroPowerMutating(
         ),
         1,
         { kind: "hand" },
-        "tavernSpellCast",
+        undefined,
+        undefined,
+        definition.id,
       )) {
         return false;
       }
@@ -36266,7 +37624,9 @@ function activateHeroPowerMutating(
         } as DiscoverFilter,
         1,
         { kind: "hand" },
-        "tavernSpellCast",
+        undefined,
+        undefined,
+        definition.id,
       )) {
         return false;
       }
@@ -36286,7 +37646,9 @@ function activateHeroPowerMutating(
         } as DiscoverFilter,
         1,
         { kind: "hand" },
-        "tavernSpellCast",
+        undefined,
+        undefined,
+        definition.id,
       )) {
         return false;
       }
@@ -36756,7 +38118,12 @@ export function getHeroPowerActivationQuote(
       targetInstanceId,
     );
   } else {
-    const candidates = targetKind === "shop" ? player.shop : player.board;
+    const candidates =
+      targetKind === "shop"
+        ? player.shop
+        : targetKind === "board"
+          ? player.board
+          : [...player.shop, ...player.board];
     usable = candidates.some((candidate) =>
       canActivateHeroPowerOnClone(
         state,

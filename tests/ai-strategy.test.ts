@@ -54,6 +54,20 @@ import {
   evaluateAiBenchmarkSeedAccess,
 } from "../scripts/ai-seed-ledger.ts";
 import {
+  AI_COOPERATIVE_CEM_PROTOCOL_SHA256,
+  AI_COOPERATIVE_CEM_QUARANTINED_TRAINING_SEEDS,
+  AI_COOPERATIVE_CEM_REGISTERED_RUN_CONFIRMATION,
+  AI_COOPERATIVE_CEM_REGISTRATION,
+  AI_COOPERATIVE_CEM_REGISTRATION_ID,
+  AI_COOPERATIVE_CEM_ROSTER_FINAL_SEEDS,
+  AI_COOPERATIVE_CEM_SELECTION_SEEDS,
+  AI_COOPERATIVE_CEM_TRAINING_RESERVATION_ID,
+  AI_COOPERATIVE_CEM_TRAINING_RESERVATION_MODE,
+  AI_COOPERATIVE_CEM_TRAINING_SEEDS,
+  computeAiCooperativeCemProtocolSha256,
+} from "../scripts/ai-cooperative-cem-registration.ts";
+import { AI_COOPERATIVE_CEM_IMPLEMENTATION_SHA256 } from "../scripts/ai-cooperative-cem-implementation-integrity.ts";
+import {
   AI_POLICY_CONFIRMATION_MINIMUM_SEED_CLUSTERS,
   AI_POLICY_CONFIRMATION_REGISTRATION,
   AI_POLICY_CONFIRMATION_REGISTRATION_ID,
@@ -467,6 +481,139 @@ test("benchmark provenance recursively hashes TypeScript and pinned JSON", (t) =
   assert.equal(computeAiBenchmarkEvaluatorHash(gameDirectory), auxiliaryEvaluator);
 });
 
+test("cooperative CEM registration canonically freezes the full protocol", () => {
+  const pending: unknown[] = [AI_COOPERATIVE_CEM_REGISTRATION];
+  while (pending.length > 0) {
+    const value = pending.pop();
+    if (value === null || typeof value !== "object") continue;
+    assert.equal(Object.isFrozen(value), true);
+    pending.push(...Object.values(value));
+  }
+
+  assert.equal(
+    AI_COOPERATIVE_CEM_REGISTRATION.id,
+    AI_COOPERATIVE_CEM_REGISTRATION_ID,
+  );
+  assert.deepEqual(AI_COOPERATIVE_CEM_REGISTRATION.focus, {
+    playerId: "player-5",
+    strategyId: "powerLevel",
+  });
+  assert.deepEqual(AI_COOPERATIVE_CEM_REGISTRATION.optimizer, {
+    seed: 93_000_000,
+    populationSize: 8,
+    eliteCount: 2,
+    generations: 4,
+    smoothing: 0.5,
+    probabilityFloor: 0.02,
+    candidateIdPrefix: "cooperative-cem-power-level-v1",
+  });
+  assert.deepEqual(AI_COOPERATIVE_CEM_REGISTRATION.optimizerSemantics, {
+    artifactFormatVersion: 1,
+    prng: "mulberry32-v1",
+    initialDistribution: "uniform-per-gene",
+    sampling: "categorical-weighted-without-replacement",
+    retainIncumbentAtCandidateIndexZero: true,
+    eliteSelection: "higher-score-is-better",
+    exactTie: "retain-incumbent-then-ascii-candidate-id",
+    probabilityDecimals: 12,
+    validation: "seed-replayed-sampling-and-derived-candidate-ids",
+  });
+  assert.deepEqual(AI_COOPERATIVE_CEM_REGISTRATION.genes, [
+    { name: "upgradeRoundOffset", values: [-1, 0, 1] },
+    { name: "minimumUpgradeHealth", values: [10, 12, 14, 16, 18] },
+    { name: "replacementMargin", values: [2, 2.5, 3, 3.5, 4] },
+    { name: "maxRefreshes", values: [1, 2, 3, 4, 5] },
+  ]);
+  assert.deepEqual(AI_COOPERATIVE_CEM_REGISTRATION.benchmark, {
+    maxRounds: 150,
+    initialHealth: 40,
+    scenarioIds: ["neutral-v1", "live-lobby-v1"],
+    rotations: [0, 1, 2, 3, 4, 5, 6, 7],
+    scoredPlayerIds: [
+      "player-1",
+      "player-2",
+      "player-3",
+      "player-4",
+      "player-5",
+      "player-6",
+      "player-7",
+    ],
+  });
+  assert.deepEqual(AI_COOPERATIVE_CEM_REGISTRATION.candidateScope, {
+    completePlayerProfilesRequired: true,
+    mutablePlayerIds: ["player-5"],
+    mutableStrategyIds: ["powerLevel"],
+    mutableGenes: [
+      "upgradeRoundOffset",
+      "minimumUpgradeHealth",
+      "replacementMargin",
+      "maxRefreshes",
+    ],
+    nonFocusProfiles: "byte-equivalent-production-snapshots",
+    residualPolicyOverrides: "forbidden",
+  });
+  assert.deepEqual(AI_COOPERATIVE_CEM_REGISTRATION.objective, {
+    scoreDirection: "higher-is-better",
+    feasibility: {
+      evidenceUsable: true,
+      overallPlacementMeanDeltaMaximum: 0,
+      focusTopFourMeanDeltaMinimum: -0.02,
+      focusWinMeanDeltaMinimum: -0.03,
+      nonFocusPlacementMeanDeltaMaximum: 0.25,
+      nonFocusTopFourMeanDeltaMinimum: -0.05,
+      nonFocusWinMeanDeltaMinimum: -0.05,
+    },
+    violationNormalization: {
+      aggregation: "sum-positive-margin-excess",
+      evidenceUnusableNormalizedPenalty: 1,
+      missingMeanDeltaFallback: 0,
+      missingMeanDeltaNormalizedPenalty: 0,
+      placementScale: 7,
+      rateScale: 1,
+      violationCount: "one-per-reason",
+    },
+    scoreEncoding: {
+      feasibleBase: 1_000_000,
+      infeasibleBase: -1_000_000,
+      violationCountPenalty: 100_000,
+      normalizedViolationPenalty: 1_000,
+      utilityWeights: {
+        focusPlacement: -100,
+        focusTopFour: 10,
+        focusWin: 5,
+        overallPlacement: -1,
+      },
+      exactTie: "retain-incumbent-then-candidate-id",
+    },
+  });
+  assert.deepEqual(AI_COOPERATIVE_CEM_REGISTRATION.phases.training, {
+    ...AI_COOPERATIVE_CEM_TRAINING_SEEDS,
+    reservationId: AI_COOPERATIVE_CEM_TRAINING_RESERVATION_ID,
+    reservationMode: AI_COOPERATIVE_CEM_TRAINING_RESERVATION_MODE,
+  });
+  assert.deepEqual(AI_COOPERATIVE_CEM_REGISTRATION.phases.selection, {
+    ...AI_COOPERATIVE_CEM_SELECTION_SEEDS,
+    disposition: "sealed",
+  });
+  assert.deepEqual(AI_COOPERATIVE_CEM_REGISTRATION.phases.rosterFinal, {
+    ...AI_COOPERATIVE_CEM_ROSTER_FINAL_SEEDS,
+    disposition: "sealed",
+  });
+  assert.match(AI_COOPERATIVE_CEM_PROTOCOL_SHA256, /^[0-9a-f]{64}$/);
+  assert.equal(
+    AI_COOPERATIVE_CEM_PROTOCOL_SHA256,
+    "875b635dab585be70c75f576294806069b048ea39709f6d849debf29ad4f512d",
+  );
+  assert.equal(
+    AI_COOPERATIVE_CEM_REGISTRATION.protocolSha256,
+    AI_COOPERATIVE_CEM_PROTOCOL_SHA256,
+  );
+  assert.equal(
+    computeAiCooperativeCemProtocolSha256(),
+    AI_COOPERATIVE_CEM_PROTOCOL_SHA256,
+  );
+});
+
 test("immutable seed ledger protects consumed and sealed intervals", () => {
   assert.equal(Object.isFrozen(AI_BENCHMARK_SEED_LEDGER), true);
   assert.equal(AI_BENCHMARK_SEED_LEDGER.every(Object.isFrozen), true);
@@ -499,6 +646,14 @@ test("immutable seed ledger protects consumed and sealed intervals", () => {
       ["consumed", 30_100_001, 30_100_064],
       ["sealed", 30_200_001, 30_200_096],
       ["consumed", 30_300_001, 30_300_064],
+      ["sealed", 30_400_001, 30_400_064],
+      ["sealed", 30_500_001, 30_500_096],
+      ["consumed", 92_300_001, 92_300_008],
+      ["sealed", 92_310_001, 92_310_024],
+      ["consumed", 93_000_001, 93_000_008],
+      ["consumed", 93_010_001, 93_010_008],
+      ["consumed", 93_100_001, 93_100_024],
+      ["sealed", 93_200_001, 93_200_096],
     ],
   );
   assert.deepEqual(
@@ -524,6 +679,18 @@ test("immutable seed ledger protects consumed and sealed intervals", () => {
       startSeed: 30_300_001,
       endSeed: 30_300_064,
       retirementReason: "task-scheduler-one-shot-claim-created-formal-screen",
+    },
+  );
+  assert.deepEqual(
+    AI_BENCHMARK_SEED_LEDGER.find(
+      (entry) => entry.startSeed === 92_300_001,
+    ),
+    {
+      id: "capital-sale-settled-warband-v6-development-screen-92300001-consumed-v1",
+      disposition: "consumed",
+      startSeed: 92_300_001,
+      endSeed: 92_300_008,
+      retirementReason: "completed-development-screen-rejected",
     },
   );
   assert.deepEqual(
@@ -642,6 +809,134 @@ test("immutable seed ledger protects consumed and sealed intervals", () => {
     false,
   );
   assert.equal(
+    evaluateAiBenchmarkSeedAccess({ startSeed: 92_300_001, seeds: 8 })
+      .allowed,
+    false,
+  );
+  assert.equal(
+    evaluateAiBenchmarkSeedAccess({ startSeed: 92_310_001, seeds: 24 })
+      .allowed,
+    false,
+  );
+  assert.deepEqual(
+    AI_BENCHMARK_SEED_LEDGER.find(
+      (entry) => entry.startSeed === 93_000_001,
+    ),
+    {
+      id: "cooperative-cem-power-level-training-93000001-quarantined-v1",
+      disposition: "consumed",
+      startSeed: 93_000_001,
+      endSeed: 93_000_008,
+      retirementReason:
+        "infrastructure-smoke-path-exposed-before-protocol-contract",
+    },
+  );
+  assert.deepEqual(AI_COOPERATIVE_CEM_QUARANTINED_TRAINING_SEEDS, {
+    startSeed: 93_000_001,
+    seeds: 8,
+    endSeed: 93_000_008,
+  });
+  assert.deepEqual(
+    AI_BENCHMARK_SEED_LEDGER.find(
+      (entry) => entry.startSeed === 93_010_001,
+    ),
+    {
+      id: "cooperative-cem-power-level-training-93010001-consumed-v1",
+      disposition: "consumed",
+      startSeed: 93_010_001,
+      endSeed: 93_010_008,
+      retirementReason:
+        "completed-registered-training-artifact-21cd6816bf562c12e0a2b313a58fd77368c074921521acb7f580b53378c0f8b8",
+    },
+  );
+  for (const request of [
+    { startSeed: 93_010_001, seeds: 8 },
+    {
+      startSeed: 93_010_001,
+      seeds: 7,
+      reservationId: AI_COOPERATIVE_CEM_TRAINING_RESERVATION_ID,
+      reservationMode: AI_COOPERATIVE_CEM_TRAINING_RESERVATION_MODE,
+      reservationProtocolSha256: AI_COOPERATIVE_CEM_PROTOCOL_SHA256,
+    },
+    {
+      startSeed: 93_010_000,
+      seeds: 10,
+      reservationId: AI_COOPERATIVE_CEM_TRAINING_RESERVATION_ID,
+      reservationMode: AI_COOPERATIVE_CEM_TRAINING_RESERVATION_MODE,
+      reservationProtocolSha256: AI_COOPERATIVE_CEM_PROTOCOL_SHA256,
+    },
+    {
+      startSeed: 93_010_001,
+      seeds: 8,
+      reservationId: "forged-cooperative-cem-registration",
+      reservationMode: AI_COOPERATIVE_CEM_TRAINING_RESERVATION_MODE,
+      reservationProtocolSha256: AI_COOPERATIVE_CEM_PROTOCOL_SHA256,
+    },
+    {
+      startSeed: 93_010_001,
+      seeds: 8,
+      reservationId: AI_COOPERATIVE_CEM_TRAINING_RESERVATION_ID,
+      reservationMode: AI_COOPERATIVE_CEM_TRAINING_RESERVATION_MODE,
+    },
+    {
+      startSeed: 93_010_001,
+      seeds: 8,
+      reservationId: AI_COOPERATIVE_CEM_TRAINING_RESERVATION_ID,
+      reservationMode: AI_COOPERATIVE_CEM_TRAINING_RESERVATION_MODE,
+      reservationProtocolSha256: "0".repeat(64),
+    },
+    {
+      startSeed: 93_010_001,
+      seeds: 8,
+      reservationId: AI_COOPERATIVE_CEM_TRAINING_RESERVATION_ID,
+      reservationMode: AI_COOPERATIVE_CEM_TRAINING_RESERVATION_MODE,
+      reservationProtocolSha256: AI_COOPERATIVE_CEM_PROTOCOL_SHA256,
+      reservationImplementationSha256: "not-the-registered-implementation",
+      reservationConfirmation: AI_COOPERATIVE_CEM_REGISTERED_RUN_CONFIRMATION,
+    },
+    {
+      startSeed: 93_010_001,
+      seeds: 8,
+      reservationId: AI_COOPERATIVE_CEM_TRAINING_RESERVATION_ID,
+      reservationMode: AI_COOPERATIVE_CEM_TRAINING_RESERVATION_MODE,
+      reservationProtocolSha256: AI_COOPERATIVE_CEM_PROTOCOL_SHA256,
+      reservationImplementationSha256:
+        AI_COOPERATIVE_CEM_IMPLEMENTATION_SHA256,
+      reservationConfirmation: "not-the-registered-confirmation",
+    },
+  ]) {
+    assert.equal(evaluateAiBenchmarkSeedAccess(request).allowed, false);
+  }
+  assert.deepEqual(
+    evaluateAiBenchmarkSeedAccess({
+      startSeed: 93_010_001,
+      seeds: 8,
+      reservationId: AI_COOPERATIVE_CEM_TRAINING_RESERVATION_ID,
+      reservationMode: AI_COOPERATIVE_CEM_TRAINING_RESERVATION_MODE,
+      reservationProtocolSha256: AI_COOPERATIVE_CEM_PROTOCOL_SHA256,
+      reservationImplementationSha256:
+        AI_COOPERATIVE_CEM_IMPLEMENTATION_SHA256,
+      reservationConfirmation: AI_COOPERATIVE_CEM_REGISTERED_RUN_CONFIRMATION,
+    }),
+    {
+      allowed: false,
+      ledgerEntryId:
+        "cooperative-cem-power-level-training-93010001-consumed-v1",
+      reason:
+        "seed range overlaps consumed ledger entry cooperative-cem-power-level-training-93010001-consumed-v1",
+    },
+  );
+  assert.equal(
+    evaluateAiBenchmarkSeedAccess({ startSeed: 93_100_001, seeds: 24 })
+      .allowed,
+    false,
+  );
+  assert.equal(
+    evaluateAiBenchmarkSeedAccess({ startSeed: 93_200_001, seeds: 96 })
+      .allowed,
+    false,
+  );
+  assert.equal(
     evaluateAiBenchmarkSeedAccess({ startSeed: 31_200_001, seeds: 1 })
       .allowed,
     true,
@@ -655,6 +950,10 @@ test("generic benchmark rejects protected seeds before the first game", () => {
     [30_100_001, 64, /seed ledger rejected access.*aborted-unobserved/],
     [30_200_001, 96, /seed ledger rejected access.*sealed ledger entry/],
     [30_300_001, 1, /seed ledger rejected access.*consumed ledger entry/],
+    [30_400_001, 64, /seed ledger rejected access.*sealed ledger entry/],
+    [30_500_001, 96, /seed ledger rejected access.*sealed ledger entry/],
+    [92_300_001, 8, /seed ledger rejected access.*consumed ledger entry/],
+    [92_310_001, 24, /seed ledger rejected access.*sealed ledger entry/],
   ] as const) {
     assert.throws(
       () =>
