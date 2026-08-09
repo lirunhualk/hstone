@@ -11987,6 +11987,13 @@ function buyTavernSpell(
       (candidate) => candidate.instanceId !== spell.instanceId,
     );
   }
+  if (
+    (player.systemEventCounters.fullHouseActive ||
+      playerHasTrinketCardId(player, TAVERN_FAN_CARD_ID)) &&
+    tavernOfferCount(player) < tavernCardCapacity(player)
+  ) {
+    fillShop(state, player, false);
+  }
   if (currency === "health") {
     damageRecruitPlayer(player, cost);
   } else {

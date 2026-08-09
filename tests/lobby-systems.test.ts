@@ -1271,6 +1271,36 @@ test("Full House keeps six minion offers beside its Tavern Spell", () => {
   assert.equal(player.shop.length, 6);
 });
 
+test("Full House refills back to seven total offers after buying its Tavern Spell", () => {
+  let state = chooseHero(lobbyGameForEvent("system-event-full-house"));
+  let player = humanPlayer(state);
+  player.heroPowerId = null;
+  player.gold = 10;
+  player.hand = [];
+
+  state = gameReducer(state, { type: "REFRESH_SHOP" });
+  player = humanPlayer(state);
+  assert.equal(player.shop.length, 6);
+  assert.equal(player.additionalSpellShop.length, 0);
+
+  const spellBefore = player.spellShop;
+  assert.ok(spellBefore);
+
+  state = gameReducer(state, {
+    type: "BUY_TAVERN_SPELL",
+    spellInstanceId: spellBefore.instanceId,
+  });
+  player = humanPlayer(state);
+
+  assert.equal(player.hand.at(-1)?.instanceId, spellBefore.instanceId);
+  assert.equal(
+    player.shop.length +
+      (player.spellShop ? 1 : 0) +
+      player.additionalSpellShop.length,
+    7,
+  );
+});
+
 test("Titan Grip first minion purchase each turn is free", () => {
   let state = chooseHero(lobbyGameForEvent("system-event-titan-grip"));
   let player = humanPlayer(state);
