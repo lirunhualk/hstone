@@ -10207,6 +10207,8 @@ function consumeShopMinionInto(
   statGrantBonus: CombatStatBuff = { attack: 0, health: 0 },
   trace?: GameActionTrace,
 ): void {
+  const sourceBefore = trace ? cloneMinion(target) : null;
+  const consumedSnapshot = trace ? cloneMinion(consumed) : null;
   const attackGain = consumed.attack * statScale + statGrantBonus.attack;
   const triggeredHealth = player.board.some(
     (candidate) => candidate.instanceId === target.instanceId,
@@ -10217,16 +10219,22 @@ function consumeShopMinionInto(
   const healthGain = consumed.health * statScale + statGrantBonus.health;
   target.health += healthGain + triggeredHealth;
   reconcileConditionalMinion(target);
-  trace?.recruitShopConsumes.push({
-    sourceInstanceId: target.instanceId,
-    sourceName: target.name,
-    consumedInstanceId: consumed.instanceId,
-    consumedName: consumed.name,
-    consumedAttack: consumed.attack,
-    consumedHealth: consumed.health,
-    attackGain,
-    healthGain: healthGain + triggeredHealth,
-  });
+  if (trace && sourceBefore && consumedSnapshot) {
+    trace.recruitShopConsumes.push({
+      playerId: player.id,
+      sourceInstanceId: target.instanceId,
+      sourceName: target.name,
+      consumedInstanceId: consumed.instanceId,
+      consumedName: consumed.name,
+      consumedAttack: consumed.attack,
+      consumedHealth: consumed.health,
+      attackGain,
+      healthGain: healthGain + triggeredHealth,
+      sourceBefore,
+      sourceAfter: cloneMinion(target),
+      consumed: consumedSnapshot,
+    });
+  }
   observeRecruitFriendlyAttackGain(player, target, attackGain);
   observeRecruitFriendlyHealthGain(
     player,
@@ -26992,19 +27000,29 @@ function applyPersistentTribeBuff(
   context: CombatContext,
   ownerId: PlayerId,
   minion: MinionInstance,
+  sourceAlreadyIncludesOwnedTribeBuffs = false,
 ): void {
+  const owner = sourceAlreadyIncludesOwnedTribeBuffs
+    ? findPlayer(context.state, ownerId)
+    : null;
   for (const [tribe, buff] of Object.entries(
     context.tribeBuffs[ownerId],
   ) as [Tribe, CombatStatBuff][]) {
     if (!buff || !minionHasTribe(minion, tribe)) {
       continue;
     }
+    const inheritedAttack =
+      tribe === "undead" ? (owner?.undeadArmyAttackBonus ?? 0) : 0;
+    const inheritedHealth =
+      tribe === "undead" ? (owner?.undeadArmyHealthBonus ?? 0) : 0;
+    const attack = Math.max(0, buff.attack - inheritedAttack);
+    const health = Math.max(0, buff.health - inheritedHealth);
     const triggeredHealth = healthGainedFromExternalAttack(
       minion,
-      buff.attack,
+      attack,
     );
-    minion.attack += buff.attack;
-    minion.health += buff.health + triggeredHealth;
+    minion.attack += attack;
+    minion.health += health + triggeredHealth;
   }
 }
 
@@ -27456,7 +27474,13 @@ function insertCombatMinion(
     summonReason !== "deathlyStrikerFromHand" &&
     summonReason !== "stitchedSalvagerCopy"
   ) {
-    applyPersistentTribeBuff(context, ownerId, summoned);
+    applyPersistentTribeBuff(
+      context,
+      ownerId,
+      summoned,
+      summonReason === "rallyFromHand" ||
+        summonReason === "startOfCombatFromHand",
+    );
   }
   applyCombatSummonHeroPower(context, ownerId, summoned);
   if (summonReason !== "stitchedSalvagerCopy") {
@@ -36860,11 +36884,11 @@ function beginNextRecruit(state: GameState): void {
       player.frozen = false;
       player.spellOnlyRefreshActive = false;
       fillShop(state, player);
-      applyQueuedDemonFodderToRefresh(state, player, false);
+      applyQueuedDemonFodderToRefresh(state, player);
     } else {
       releaseShop(state, player);
       fillShop(state, player);
-      applyQueuedDemonFodderToRefresh(state, player, false);
+      applyQueuedDemonFodderToRefresh(state, player);
     }
     reconcileConditionalMinions(player);
   }
@@ -38467,18 +38491,6 @@ function reduceGame(
       }
       break;
     }
-    case "RESOLVE_SHOP_FODDER":
-      if (
-        player.shop.some(
-          (minion) =>
-            getMinionDefinition(minion.definitionId).shopFodder === true,
-        ) &&
-        player.board.some((minion) => minionHasTribe(minion, "demon"))
-      ) {
-        resolveShopFodder(next, player);
-        accepted = true;
-      }
-      break;
     case "END_TURN":
       endTurn(next);
       accepted = true;

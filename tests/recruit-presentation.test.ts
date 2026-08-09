@@ -8,6 +8,7 @@ import {
   getTavernSpellPurchaseQuote,
   type BoardMinionInstance,
   type ConsolationCoinSpellInstance,
+  type GameActionTrace,
   type GameState,
   type PlayerState,
 } from "../lib/game/engine.ts";
@@ -20,6 +21,7 @@ import {
   groupRecruitPresentationEvents,
   recruitPresentationAnnouncement,
   recruitPresentationDuration,
+  type RecruitPresentationEvent,
 } from "../lib/game/recruit-presentation.ts";
 
 function humanPlayer(state: GameState): PlayerState {
@@ -88,6 +90,33 @@ function definitionMinion(
     attachments: [],
     ...overrides,
   };
+}
+
+function shopConsumePresentationFixture(
+  playerId: string,
+  sourceBefore: BoardMinionInstance,
+  consumed: BoardMinionInstance,
+  attackGain: number,
+  healthGain: number,
+): RecruitPresentationEvent {
+  const sourceAfter = structuredClone(sourceBefore);
+  sourceAfter.attack += attackGain;
+  sourceAfter.health += healthGain;
+  return {
+    kind: "shopConsume",
+    playerId,
+    sourceInstanceId: sourceBefore.instanceId,
+    sourceName: sourceBefore.name,
+    consumedInstanceId: consumed.instanceId,
+    consumedName: consumed.name,
+    consumedAttack: consumed.attack,
+    consumedHealth: consumed.health,
+    attackGain,
+    healthGain,
+    sourceBefore: structuredClone(sourceBefore),
+    sourceAfter,
+    consumed: structuredClone(consumed),
+  } as unknown as RecruitPresentationEvent;
 }
 
 function exhaustHumanShop(state: GameState): void {
@@ -846,7 +875,7 @@ test("a purchased third copy presents payment, movement, then the triple", () =>
   assert.equal(recruitPresentationDuration(events, true), 120);
 });
 
-test("shop consume traces produce a stronger consume announcement", () => {
+test("shop consume traces follow the triggering action with immutable card snapshots", () => {
   const state = createGame(0x7120);
   const player = humanPlayer(state);
   const demon = definitionMinion("BG35_801", "presentation-fodder-demon", {
@@ -877,52 +906,264 @@ test("shop consume traces produce a stronger consume announcement", () => {
 
   assert.deepEqual(
     events.map((event) => event.kind),
-    ["shopConsume", "shopRefresh"],
+    ["shopRefresh", "shopConsume"],
   );
-  const consume = events[0];
+  assert.deepEqual(
+    groupRecruitPresentationEvents(events).map((group) =>
+      group.map((event) => event.kind)
+    ),
+    [["shopRefresh"], ["shopConsume"]],
+  );
+  const consume = events[1];
   assert.equal(consume?.kind, "shopConsume");
   if (consume?.kind === "shopConsume") {
+    const snapshot = consume as typeof consume & {
+      playerId: string;
+      sourceBefore: BoardMinionInstance;
+      sourceAfter: BoardMinionInstance;
+      consumed: BoardMinionInstance;
+    };
+    assert.equal(snapshot.playerId, player.id);
     assert.equal(consume.sourceName, demon.name);
     assert.equal(consume.consumedName, "恶魔饲料");
     assert.equal(consume.attackGain, 2);
     assert.equal(consume.healthGain, 2);
+    assert.notEqual(snapshot.sourceBefore, demon);
+    assert.equal(snapshot.sourceBefore.instanceId, demon.instanceId);
+    assert.equal(snapshot.sourceBefore.attack, 10);
+    assert.equal(snapshot.sourceBefore.health, 10);
+    assert.equal(snapshot.sourceBefore.cardId, demon.cardId);
+    assert.equal(snapshot.sourceAfter.instanceId, demon.instanceId);
+    assert.equal(snapshot.sourceAfter.attack, 12);
+    assert.equal(snapshot.sourceAfter.health, 12);
+    assert.equal(snapshot.consumed.instanceId, consume.consumedInstanceId);
+    assert.equal(snapshot.consumed.name, "恶魔饲料");
+    assert.equal(snapshot.consumed.attack, 2);
+    assert.equal(snapshot.consumed.health, 2);
+    assert.ok(snapshot.consumed.cardId.length > 0);
+
+    const liveSource = humanPlayer(transition.state).board.find(
+      (candidate) => candidate.instanceId === demon.instanceId,
+    );
+    assert.ok(liveSource);
+    assert.notEqual(snapshot.sourceAfter, liveSource);
+    liveSource.attack = 999;
+    liveSource.health = 999;
+    assert.equal(snapshot.sourceAfter.attack, 12);
+    assert.equal(snapshot.sourceAfter.health, 12);
   }
   assert.match(
     recruitPresentationAnnouncement(events),
     /吞食恶魔饲料，获得\+2\/\+2/,
   );
-  assert.equal(recruitPresentationDuration(events), 1300);
-  assert.equal(recruitPresentationDuration(events, true), 140);
+  assert.equal(recruitPresentationDuration(events), 1800);
+  assert.equal(recruitPresentationDuration(events, true), 900);
+});
+
+test("every derived shop consume carries stable renderable before-and-after cards", () => {
+  const state = createGame(0x7124);
+  const player = humanPlayer(state);
+  const demon = definitionMinion("BG35_801", "snapshot-fodder-demon", {
+    tribe: "demon",
+    tribes: ["demon"],
+    attack: 13,
+    health: 17,
+  });
+  player.board = [demon];
+  player.shop = [];
+  player.spellShop = null;
+  player.additionalSpellShop = [];
+  player.demonFodderRefreshQueue = [1];
+  player.freeRefreshes = 1;
+  for (const definitionId of Object.keys(state.pool)) {
+    state.pool[definitionId] = 0;
+  }
+  state.pool.BG35_814 = 10;
+
+  const action = { type: "REFRESH_SHOP" } as const;
+  const transition = gameTransition(state, action);
+  const consume = deriveRecruitPresentation(
+    state,
+    transition.state,
+    action,
+    transition.trace,
+  ).find((event) => event.kind === "shopConsume");
+  assert.ok(consume);
+  const snapshot = consume as typeof consume & {
+    playerId: string;
+    sourceBefore: BoardMinionInstance;
+    sourceAfter: BoardMinionInstance;
+    consumed: BoardMinionInstance;
+  };
+
+  assert.equal(snapshot.playerId, player.id);
+  assert.deepEqual(
+    [snapshot.sourceBefore.attack, snapshot.sourceBefore.health],
+    [13, 17],
+  );
+  assert.deepEqual(
+    [snapshot.sourceAfter.attack, snapshot.sourceAfter.health],
+    [15, 19],
+  );
+  assert.deepEqual(
+    [snapshot.consumed.attack, snapshot.consumed.health],
+    [2, 2],
+  );
+  assert.equal(snapshot.sourceBefore.cardId, demon.cardId);
+  assert.equal(snapshot.sourceAfter.cardId, demon.cardId);
+  assert.ok(snapshot.consumed.cardId.length > 0);
+
+  const liveSource = humanPlayer(transition.state).board.find(
+    (candidate) => candidate.instanceId === demon.instanceId,
+  );
+  assert.ok(liveSource);
+  assert.notEqual(snapshot.sourceBefore, demon);
+  assert.notEqual(snapshot.sourceAfter, liveSource);
+  liveSource.attack = -1;
+  assert.equal(snapshot.sourceBefore.attack, 13);
+  assert.equal(snapshot.sourceAfter.attack, 15);
+  assert.equal(consume.consumedAttack, 2);
+});
+
+test("shop consume traces expose only the human player's private recruit events", () => {
+  const before = createGame(0x7122);
+  const after = structuredClone(before);
+  const human = humanPlayer(before);
+  const opponent = before.players.find(
+    (candidate) => candidate.id !== before.humanPlayerId,
+  );
+  assert.ok(opponent);
+  const humanSource = definitionMinion(
+    "BG35_801",
+    "human-consume-source",
+    { attack: 5, health: 6 },
+  );
+  const opponentSource = definitionMinion(
+    "BG35_801",
+    "opponent-consume-source",
+    { attack: 20, health: 20 },
+  );
+  const mealTemplate = human.shop[0];
+  assert.ok(mealTemplate);
+  const humanMeal = minionCopy(mealTemplate, "human-consumed-card");
+  const opponentMeal = minionCopy(mealTemplate, "opponent-consumed-card");
+  const humanConsume = shopConsumePresentationFixture(
+    human.id,
+    humanSource,
+    humanMeal,
+    2,
+    2,
+  );
+  const opponentConsume = shopConsumePresentationFixture(
+    opponent.id,
+    opponentSource,
+    opponentMeal,
+    2,
+    2,
+  );
+  const trace = {
+    recruitBloodGemPulses: [],
+    recruitShopConsumes: [opponentConsume, humanConsume],
+  } as unknown as GameActionTrace;
+
+  const events = deriveRecruitPresentation(
+    before,
+    after,
+    { type: "TOGGLE_FREEZE" },
+    trace,
+  );
+
+  assert.equal(events.length, 1);
+  assert.equal(events[0]?.kind, "shopConsume");
+  if (events[0]?.kind === "shopConsume") {
+    const consume = events[0] as Extract<
+      RecruitPresentationEvent,
+      { kind: "shopConsume" }
+    > & { playerId: string };
+    assert.equal(consume.playerId, human.id);
+    assert.equal(consume.sourceInstanceId, humanSource.instanceId);
+    assert.equal(consume.consumedInstanceId, humanMeal.instanceId);
+  }
+});
+
+test("mixed recruit events keep causal order and isolate every shop consume batch", () => {
+  const state = createGame(0x7123);
+  const player = humanPlayer(state);
+  const template = player.shop[0];
+  const source = definitionMinion(
+    "BG35_801",
+    "mixed-consume-source",
+    { attack: 7, health: 8 },
+  );
+  const first = shopConsumePresentationFixture(
+    player.id,
+    source,
+    minionCopy(template, "mixed-first-meal"),
+    3,
+    4,
+  );
+  const secondSource = structuredClone(source);
+  secondSource.attack += 3;
+  secondSource.health += 4;
+  const second = shopConsumePresentationFixture(
+    player.id,
+    secondSource,
+    minionCopy(template, "mixed-second-meal"),
+    1,
+    2,
+  );
+  const cardMove: RecruitPresentationEvent = {
+    kind: "cardMove",
+    motion: "hand-to-board",
+    card: source,
+    boardIndex: 0,
+  };
+
+  const groups = groupRecruitPresentationEvents([
+    cardMove,
+    first,
+    second,
+  ]);
+
+  assert.deepEqual(
+    groups.map((group) => group.map((event) => event.kind)),
+    [["cardMove"], ["shopConsume"], ["shopConsume"]],
+  );
+  assert.equal(groups[1]?.[0], first);
+  assert.equal(groups[2]?.[0], second);
 });
 
 test("multiple shop consumes are all surfaced in the same recruit announcement", () => {
-  const template = humanPlayer(createGame(0x7121)).shop[0];
-  const first = {
-    kind: "shopConsume" as const,
-    sourceInstanceId: "first-source",
-    sourceName: "挑食魔犬",
-    consumedInstanceId: "first-meal",
-    consumedName: template.name,
-    consumedAttack: template.attack,
-    consumedHealth: template.health,
-    attackGain: 3,
-    healthGain: 4,
-  };
-  const second = {
-    kind: "shopConsume" as const,
-    sourceInstanceId: "second-source",
-    sourceName: "饥饿的魔蝠",
-    consumedInstanceId: "second-meal",
-    consumedName: "恶魔饲料",
-    consumedAttack: 2,
-    consumedHealth: 2,
-    attackGain: 4,
-    healthGain: 4,
-  };
+  const state = createGame(0x7121);
+  const player = humanPlayer(state);
+  const template = player.shop[0];
+  const firstSource = definitionMinion("BG35_801", "first-source");
+  firstSource.name = "挑食魔犬";
+  const firstMeal = minionCopy(template, "first-meal");
+  const first = shopConsumePresentationFixture(
+    player.id,
+    firstSource,
+    firstMeal,
+    3,
+    4,
+  );
+  const secondSource = definitionMinion("BG35_801", "second-source");
+  secondSource.name = "饥饿的魔蝠";
+  const secondMeal = minionCopy(template, "second-meal");
+  secondMeal.name = "恶魔饲料";
+  secondMeal.attack = 2;
+  secondMeal.health = 2;
+  const second = shopConsumePresentationFixture(
+    player.id,
+    secondSource,
+    secondMeal,
+    4,
+    4,
+  );
 
   assert.equal(
     recruitPresentationAnnouncement([first, second]),
     `挑食魔犬吞食${template.name}，获得+3/+4，饥饿的魔蝠吞食恶魔饲料，获得+4/+4`,
   );
-  assert.equal(recruitPresentationDuration([first, second]), 1560);
+  assert.equal(recruitPresentationDuration([first, second]), 1800);
 });

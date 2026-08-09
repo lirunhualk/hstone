@@ -494,28 +494,6 @@ type RecruitPresentationBatch = {
   tripleHandoff: RecruitTripleHandoffGeometry | null;
 };
 
-type ConsumeVisualGeometry = {
-  sourceLeft: number;
-  sourceTop: number;
-  sourceWidth: number;
-  sourceHeight: number;
-  mealLeft: number;
-  mealTop: number;
-  mealWidth: number;
-  mealHeight: number;
-};
-
-type RecruitConsumeVisual = {
-  token: number;
-  sourceInstanceId: string;
-  sourceName: string;
-  consumedInstanceId: string;
-  consumedName: string;
-  attackGain: number;
-  healthGain: number;
-  geometry: ConsumeVisualGeometry;
-};
-
 type DiscoverPresentationOption =
   | {
       kind: "minion";
@@ -628,7 +606,6 @@ type PendingRecruitEntryFeedback = {
   rewardNotice: CombatRewardSummary | null;
   rewardIds: string[];
   presentationEvents: RecruitPresentationEvent[];
-  resolveShopFodderAfterEntry?: boolean;
 };
 
 function humanPlayerForPresentation(
@@ -897,38 +874,6 @@ function captureRecruitMotion(
       targetRect.top +
       targetRect.height / 2 -
       (sourceRect.top + sourceRect.height / 2),
-  };
-}
-
-function captureRecruitConsumeVisual(
-  event: Extract<RecruitPresentationEvent, { kind: "shopConsume" }>,
-): Omit<RecruitConsumeVisual, "token"> | null {
-  const source = document.querySelector<HTMLElement>(
-    `[data-unit-instance-id="${event.sourceInstanceId}"]`,
-  );
-  const meal = cardElementForPresentation(event.consumedInstanceId);
-  if (!source || !meal) {
-    return null;
-  }
-  const sourceRect = source.getBoundingClientRect();
-  const mealRect = meal.getBoundingClientRect();
-  return {
-    sourceInstanceId: event.sourceInstanceId,
-    sourceName: event.sourceName,
-    consumedInstanceId: event.consumedInstanceId,
-    consumedName: event.consumedName,
-    attackGain: event.attackGain,
-    healthGain: event.healthGain,
-    geometry: {
-      sourceLeft: sourceRect.left,
-      sourceTop: sourceRect.top,
-      sourceWidth: sourceRect.width,
-      sourceHeight: sourceRect.height,
-      mealLeft: mealRect.left,
-      mealTop: mealRect.top,
-      mealWidth: mealRect.width,
-      mealHeight: mealRect.height,
-    },
   };
 }
 
@@ -4468,8 +4413,6 @@ export default function GameClient() {
   const [newCombatRewardIds, setNewCombatRewardIds] = useState<string[]>(
     [],
   );
-  const [recruitConsumeVisual, setRecruitConsumeVisual] =
-    useState<RecruitConsumeVisual | null>(null);
   const [battlePlayback, setBattlePlayback] =
     useState<CombatPlaybackState | null>(null);
   const [combatEntryPresentation, setCombatEntryPresentation] =
@@ -4515,6 +4458,10 @@ export default function GameClient() {
   const preCombatHandIdsRef = useRef<Set<string> | null>(null);
   const activeRecruitPresentation =
     recruitPresentationQueue[0] ?? null;
+  const activeRecruitConsume =
+    activeRecruitPresentation?.events.find(
+      (event) => event.kind === "shopConsume",
+    ) ?? null;
   const activeRecruitBloodGemPulse =
     activeRecruitPresentation?.events.find(
       (event) => event.kind === "bloodGemPulse",
@@ -4622,6 +4569,7 @@ export default function GameClient() {
     (
       events: readonly RecruitPresentationEvent[],
       motion: RecruitMotionGeometry | null = null,
+      replaceCurrent = false,
     ) => {
       if (events.length === 0) return;
       const eventGroups = groupRecruitPresentationEvents(events);
@@ -4645,10 +4593,9 @@ export default function GameClient() {
         };
         return presentation;
       });
-      setRecruitPresentationQueue((current) => [
-        ...current,
-        ...presentations,
-      ]);
+      setRecruitPresentationQueue((current) =>
+        replaceCurrent ? presentations : [...current, ...presentations],
+      );
     },
     [],
   );
@@ -4762,48 +4709,6 @@ export default function GameClient() {
   }, [clearCombatRewardFeedback, combatRewardNotice]);
 
   useEffect(() => {
-    const syncVisual = () => {
-      if (!activeRecruitPresentation) {
-        setRecruitConsumeVisual(null);
-        return;
-      }
-      const consume = activeRecruitPresentation.events.find(
-        (event) => event.kind === "shopConsume",
-      );
-      if (consume?.kind !== "shopConsume") {
-        setRecruitConsumeVisual(null);
-        return;
-      }
-      const visual = captureRecruitConsumeVisual(consume);
-      setRecruitConsumeVisual(
-        visual
-          ? {
-              ...visual,
-              token: activeRecruitPresentation.token,
-            }
-          : null,
-      );
-    };
-    window.addEventListener("resize", syncVisual);
-    queueMicrotask(syncVisual);
-    return () => {
-      window.removeEventListener("resize", syncVisual);
-    };
-  }, [activeRecruitPresentation]);
-
-  useEffect(() => {
-    if (!recruitConsumeVisual) {
-      return;
-    }
-    const timer = window.setTimeout(() => {
-      setRecruitConsumeVisual((current) =>
-        current?.token === recruitConsumeVisual.token ? null : current,
-      );
-    }, 1700);
-    return () => window.clearTimeout(timer);
-  }, [recruitConsumeVisual]);
-
-  useEffect(() => {
     if (
       !activeRecruitPresentation ||
       activeRecruitPresentation.tripleForge !== null
@@ -4811,11 +4716,18 @@ export default function GameClient() {
       return;
     }
     const activeToken = activeRecruitPresentation.token;
+    const reducedMotion =
+      window.matchMedia?.("(prefers-reduced-motion: reduce)").matches ??
+      false;
     const presentationTimer = window.setTimeout(() => {
       setRecruitPresentationQueue((current) =>
         completeRecruitPresentation(current, activeToken),
       );
-    }, recruitPresentationDuration(activeRecruitPresentation.events));
+    },
+    recruitPresentationDuration(
+      activeRecruitPresentation.events,
+      reducedMotion,
+    ));
     return () => window.clearTimeout(presentationTimer);
   }, [activeRecruitPresentation]);
 
@@ -5102,14 +5014,6 @@ export default function GameClient() {
     if (recruitEntryPresentation?.stage !== "complete") return;
     const completionTimer = window.setTimeout(() => {
       const pending = pendingRecruitEntryFeedbackRef.current;
-      if (pending?.resolveShopFodderAfterEntry) {
-        pendingRecruitEntryFeedbackRef.current = {
-          ...pending,
-          resolveShopFodderAfterEntry: false,
-        };
-        send({ type: "RESOLVE_SHOP_FODDER" });
-        return;
-      }
       if (pending && pending.presentationEvents.length > 0) {
         pendingRecruitEntryFeedbackRef.current = {
           ...pending,
@@ -5162,13 +5066,19 @@ export default function GameClient() {
         transition.trace,
       );
       gameRef.current = next;
-      if (action.type === "END_TURN" || action.type === "CONTINUE") {
+      if (action.type === "CONTINUE") {
         setRecruitPresentationQueue([]);
       } else if (
         events.length > 0 &&
         options.deferRecruitPresentation !== true
       ) {
-        enqueueRecruitPresentationEvents(events, motion);
+        enqueueRecruitPresentationEvents(
+          events,
+          motion,
+          action.type === "END_TURN",
+        );
+      } else if (action.type === "END_TURN") {
+        setRecruitPresentationQueue([]);
       }
       if (started) {
         safeWriteLocalStorage(SAVE_KEY, JSON.stringify(next));
@@ -5213,12 +5123,6 @@ export default function GameClient() {
       game.players.find((player) => player.id === game.humanPlayerId) ??
       game.players[0],
     [game],
-  );
-  const hasVisibleShopFodder = human.shop.some(
-    (minion) => getMinionDefinition(minion.definitionId).shopFodder === true,
-  );
-  const hasFriendlyDemon = human.board.some((minion) =>
-    minionHasTribe(minion, "demon"),
   );
   const humanHero = human.heroId
     ? getHeroDefinition(human.heroId)
@@ -5346,8 +5250,14 @@ export default function GameClient() {
       (event) =>
         event.kind === "cardMove" && event.motion === "hand-to-board",
     ) ?? false;
+  const recruitConsumeBlocksInteraction =
+    recruitPresentationQueue.some((presentation) =>
+      presentation.events.some((event) => event.kind === "shopConsume"),
+    );
   const recruitPresentationBlocksInteraction =
-    recruitTripleBlocksInteraction || recruitPlayBlocksInteraction;
+    recruitTripleBlocksInteraction ||
+    recruitPlayBlocksInteraction ||
+    recruitConsumeBlocksInteraction;
   const trinketChoicePresentationBlocksInteraction =
     trinketChoicePresentation?.stage === "confirmFocus" ||
     trinketChoicePresentation?.stage === "effectHandoff";
@@ -5957,6 +5867,8 @@ export default function GameClient() {
     game.phase === "combat" &&
     battleKey !== null &&
     combatEntryStage !== null;
+  const combatEntryDeferredByConsume =
+    game.phase === "combat" && recruitConsumeBlocksInteraction;
   const pageModalOpen =
     (loaded && !started) ||
     showRestart ||
@@ -6924,6 +6836,7 @@ export default function GameClient() {
   useEffect(() => {
     clearCombatIntroTimer();
     if (
+      combatEntryDeferredByConsume ||
       !combatEntryPresentation ||
       !battleKey ||
       !combatTimeline ||
@@ -6973,6 +6886,7 @@ export default function GameClient() {
   }, [
     battleKey,
     clearCombatIntroTimer,
+    combatEntryDeferredByConsume,
     combatEntryPresentation,
     combatTimeline,
     game.phase,
@@ -7131,7 +7045,6 @@ export default function GameClient() {
         rewardNotice,
         rewardIds: [...entry.rewardHandInstanceIds],
         presentationEvents: events,
-        resolveShopFodderAfterEntry: hasVisibleShopFodder && hasFriendlyDemon,
       };
       setRecruitEntryPresentation(entry);
       return;
@@ -11394,6 +11307,7 @@ export default function GameClient() {
         )}
 
       {combatIntroActive &&
+        !combatEntryDeferredByConsume &&
         combatEntryStage !== "complete" &&
         battle &&
         introOpponent && (
@@ -11900,66 +11814,93 @@ export default function GameClient() {
         </div>
       )}
 
-      {recruitConsumeVisual && (
-        <>
-          <div
-            className="recruit-consume-source-highlight"
-            aria-hidden="true"
-            style={
-              {
-                left: recruitConsumeVisual.geometry.sourceLeft,
-                top: recruitConsumeVisual.geometry.sourceTop,
-                width: recruitConsumeVisual.geometry.sourceWidth,
-                height: recruitConsumeVisual.geometry.sourceHeight,
-              } as CSSProperties
-            }
-          />
-          <div
-            className="recruit-consume-meal-ghost"
-            aria-hidden="true"
-            style={
-              {
-                left: recruitConsumeVisual.geometry.mealLeft,
-                top: recruitConsumeVisual.geometry.mealTop,
-                width: recruitConsumeVisual.geometry.mealWidth,
-                height: recruitConsumeVisual.geometry.mealHeight,
-                "--consume-travel-x": `${
-                  recruitConsumeVisual.geometry.sourceLeft +
-                  recruitConsumeVisual.geometry.sourceWidth / 2 -
-                  (recruitConsumeVisual.geometry.mealLeft +
-                    recruitConsumeVisual.geometry.mealWidth / 2)
-                }px`,
-                "--consume-travel-y": `${
-                  recruitConsumeVisual.geometry.sourceTop +
-                  recruitConsumeVisual.geometry.sourceHeight / 2 -
-                  (recruitConsumeVisual.geometry.mealTop +
-                    recruitConsumeVisual.geometry.mealHeight / 2)
-                }px`,
-              } as CSSProperties
-            }
-          >
-            <span className="recruit-consume-meal-label">
-              {recruitConsumeVisual.consumedName}
-            </span>
+      {activeRecruitConsume?.kind === "shopConsume" && (
+        <section
+          className="recruit-consume-overlay"
+          aria-hidden="true"
+          data-attack-gain={activeRecruitConsume.attackGain}
+          data-consumed-instance-id={
+            activeRecruitConsume.consumedInstanceId
+          }
+          data-health-gain={activeRecruitConsume.healthGain}
+          data-source-instance-id={activeRecruitConsume.sourceInstanceId}
+          data-testid="recruit-consume-stage"
+          key={`consume-${activeRecruitPresentation?.token ?? 0}-${activeRecruitConsume.consumed.instanceId}`}
+        >
+          <div className="recruit-consume-panel">
+            <strong className="recruit-consume-title">
+              <span>{activeRecruitConsume.sourceName}</span>
+              <em>吞食</em>
+              <span>{activeRecruitConsume.consumedName}</span>
+            </strong>
+            <div className="recruit-consume-scene">
+              <article className="recruit-consume-participant is-source">
+                <span className="recruit-consume-role">吞食者</span>
+                <div className="recruit-consume-card-stack">
+                  <div
+                    className={`unit-card is-compact recruit-consume-card recruit-consume-source-before${activeRecruitConsume.sourceBefore.golden ? " is-golden" : ""}`}
+                    data-testid="recruit-consume-source-before"
+                    style={
+                      {
+                        "--card-hue":
+                          TRIBE_HUE[activeRecruitConsume.sourceBefore.tribe],
+                      } as CSSProperties
+                    }
+                  >
+                    <UnitCardFace unit={activeRecruitConsume.sourceBefore} />
+                  </div>
+                  <div
+                    className={`unit-card is-compact recruit-consume-card recruit-consume-source-after${activeRecruitConsume.sourceAfter.golden ? " is-golden" : ""}`}
+                    data-testid="recruit-consume-source-after"
+                    style={
+                      {
+                        "--card-hue":
+                          TRIBE_HUE[activeRecruitConsume.sourceAfter.tribe],
+                      } as CSSProperties
+                    }
+                  >
+                    <UnitCardFace unit={activeRecruitConsume.sourceAfter} />
+                  </div>
+                </div>
+                <strong className="recruit-consume-stat-change">
+                  {`${activeRecruitConsume.sourceBefore.attack}/${activeRecruitConsume.sourceBefore.health} → ${activeRecruitConsume.sourceAfter.attack}/${activeRecruitConsume.sourceAfter.health}`}
+                </strong>
+              </article>
+
+              <div className="recruit-consume-arrow">
+                <span>←</span>
+                <small>吞食</small>
+              </div>
+
+              <article className="recruit-consume-participant is-meal">
+                <span className="recruit-consume-role">酒馆随从</span>
+                <div
+                  className={`unit-card is-compact recruit-consume-card recruit-consume-meal${activeRecruitConsume.consumed.golden ? " is-golden" : ""}`}
+                  data-testid="recruit-consume-meal"
+                  style={
+                    {
+                      "--card-hue":
+                        TRIBE_HUE[activeRecruitConsume.consumed.tribe],
+                    } as CSSProperties
+                  }
+                >
+                  <UnitCardFace unit={activeRecruitConsume.consumed} />
+                </div>
+                <strong className="recruit-consume-meal-stats">
+                  {`${activeRecruitConsume.consumed.attack}/${activeRecruitConsume.consumed.health}`}
+                </strong>
+              </article>
+            </div>
+            <div
+              className="recruit-consume-summary"
+              data-testid="recruit-consume-summary"
+            >
+              <span>本次增加</span>
+              <strong>{`+${activeRecruitConsume.attackGain} 攻击`}</strong>
+              <strong>{`+${activeRecruitConsume.healthGain} 生命`}</strong>
+            </div>
           </div>
-          <div
-            className="recruit-consume-gain-burst"
-            aria-hidden="true"
-            style={
-              {
-                left:
-                  recruitConsumeVisual.geometry.sourceLeft +
-                  recruitConsumeVisual.geometry.sourceWidth / 2,
-                top:
-                  recruitConsumeVisual.geometry.sourceTop +
-                  recruitConsumeVisual.geometry.sourceHeight * 0.18,
-              } as CSSProperties
-            }
-          >
-            <strong>{`${recruitConsumeVisual.sourceName} 吞食 ${recruitConsumeVisual.consumedName}`}</strong>
-            <span>{`+${recruitConsumeVisual.attackGain}/+${recruitConsumeVisual.healthGain}`}</span>
-          </div>
-        </>
+        </section>
       )}
 
       {activeRecruitMove?.kind === "cardMove" &&

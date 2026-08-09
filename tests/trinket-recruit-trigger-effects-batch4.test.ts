@@ -275,9 +275,7 @@ test("both Defiler Portrait tiers apply their pinned Demon Fodder bonuses", () =
     const before = { attack: defiler.attack, health: defiler.health };
     player.board = [defiler];
 
-    const recruit = gameReducer(continueThroughCombat(state), {
-      type: "REFRESH_SHOP",
-    });
+    const recruit = continueThroughCombat(state);
     const nextDefiler = humanPlayer(recruit).board.find(
       (minion) => minion.instanceId === defiler.instanceId,
     );
@@ -510,9 +508,7 @@ test("Drakkari Portrait makes end-of-turn effects trigger one extra time", () =>
   const before = { attack: defiler.attack, health: defiler.health };
   player.board = [defiler];
 
-  const recruit = gameReducer(continueThroughCombat(state), {
-    type: "REFRESH_SHOP",
-  });
+  const recruit = continueThroughCombat(state);
   const nextDefiler = humanPlayer(recruit).board.find(
     (minion) => minion.instanceId === defiler.instanceId,
   );

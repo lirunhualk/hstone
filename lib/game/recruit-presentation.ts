@@ -10,6 +10,7 @@ import type {
   GameAction,
   GameActionTrace,
   GameState,
+  PlayerId,
   PlayerState,
   TavernSpellInstance,
 } from "./types.ts";
@@ -82,6 +83,7 @@ export type RecruitPresentationEvent =
     }
   | {
       kind: "shopConsume";
+      playerId: PlayerId;
       sourceInstanceId: string;
       sourceName: string;
       consumedInstanceId: string;
@@ -90,6 +92,9 @@ export type RecruitPresentationEvent =
       consumedHealth: number;
       attackGain: number;
       healthGain: number;
+      sourceBefore: BoardMinionInstance;
+      sourceAfter: BoardMinionInstance;
+      consumed: BoardMinionInstance;
     };
 
 export function enqueueRecruitPresentation<T>(
@@ -108,17 +113,13 @@ export function completeRecruitPresentation<
   return queue[0]?.token === activeToken ? queue.slice(1) : queue;
 }
 
-export function groupRecruitPresentationEvents(
+function groupRecruitPresentationSegment(
   events: readonly RecruitPresentationEvent[],
 ): RecruitPresentationEvent[][] {
   if (events.length === 0) return [];
   if (events.every((event) => event.kind === "bloodGemPulse")) {
     return events.map((event) => [event]);
   }
-  if (events.every((event) => event.kind === "shopConsume")) {
-    return events.map((event) => [event]);
-  }
-
   const triples = events.filter((event) => event.kind === "triple");
   if (triples.length <= 1) return [[...events]];
 
@@ -127,6 +128,28 @@ export function groupRecruitPresentationEvents(
     [...leadingEvents, triples[0]],
     ...triples.slice(1).map((triple) => [triple]),
   ];
+}
+
+export function groupRecruitPresentationEvents(
+  events: readonly RecruitPresentationEvent[],
+): RecruitPresentationEvent[][] {
+  const groups: RecruitPresentationEvent[][] = [];
+  let segment: RecruitPresentationEvent[] = [];
+  const flushSegment = () => {
+    groups.push(...groupRecruitPresentationSegment(segment));
+    segment = [];
+  };
+
+  for (const event of events) {
+    if (event.kind === "shopConsume") {
+      flushSegment();
+      groups.push([event]);
+    } else {
+      segment.push(event);
+    }
+  }
+  flushSegment();
+  return groups;
 }
 
 function playerFor(
@@ -279,11 +302,14 @@ function bloodGemPulseEvents(
 
 function shopConsumeEvents(
   trace: GameActionTrace | undefined,
+  playerId: PlayerId,
 ): RecruitPresentationEvent[] {
-  return (trace?.recruitShopConsumes ?? []).map((consume) => ({
-    kind: "shopConsume",
-    ...consume,
-  }));
+  return (trace?.recruitShopConsumes ?? [])
+    .filter((consume) => consume.playerId === playerId)
+    .map((consume) => ({
+      kind: "shopConsume",
+      ...consume,
+    }));
 }
 
 /**
@@ -305,8 +331,6 @@ export function deriveRecruitPresentation(
 
   const events: RecruitPresentationEvent[] = [];
   let purchasedMinion: BoardMinionInstance | null = null;
-
-  events.push(...shopConsumeEvents(trace));
 
   if (action.type === "CAST_BLOOD_GEM") {
     events.push(
@@ -496,6 +520,7 @@ export function deriveRecruitPresentation(
     }
   }
 
+  events.push(...shopConsumeEvents(trace, playerId));
   events.push(
     ...tripleEvents(beforePlayer, afterPlayer, purchasedMinion),
   );
@@ -580,9 +605,7 @@ export function recruitPresentationDuration(
     (event) => event.kind === "shopConsume",
   ).length;
   if (shopConsumeCount > 0) {
-    return reducedMotion
-      ? 140
-      : 1_300 + Math.max(0, shopConsumeCount - 1) * 260;
+    return reducedMotion ? 900 : 1_800;
   }
   if (events.some((event) => event.kind === "triple")) {
     return TRIPLE_FORGE_PRESENTATION_STAGES.reduce(
