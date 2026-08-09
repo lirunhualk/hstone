@@ -325,6 +325,12 @@ const HELPFUL_UTILITY_MINION_IDS = new Set([
 const DEFAULT_SEED = 0x4853544e;
 export const MAX_BOARD_SIZE = 7;
 export const MAX_HAND_SIZE = 10;
+let activeGameActionTrace: GameActionTrace | undefined;
+
+function currentGameActionTrace(): GameActionTrace | undefined {
+  return activeGameActionTrace;
+}
+
 const BUY_COST = 3;
 const REFRESH_COST = 1;
 const MAX_COMBAT_ATTACKS = 100;
@@ -2914,7 +2920,7 @@ function spinYoggWheel(
       applyYoggCurseOfFlesh(state, player);
       break;
     case "devouringHunger":
-      applyYoggDevouringHunger(state, player, trace);
+      applyYoggDevouringHunger(state, player, currentGameActionTrace());
       break;
     case "rodOfRoasting":
       applyYoggRodOfRoasting(state, player);
@@ -7046,7 +7052,15 @@ function applyAfterMinionPlayedTrinkets(
       const target = otherDemons[randomIndex(state, otherDemons.length)];
       const consumedIndex = randomIndex(state, player.shop.length);
       const [consumed] = player.shop.splice(consumedIndex, 1);
-      consumeShopMinionInto(state, player, target, consumed, 1);
+      consumeShopMinionInto(
+        state,
+        player,
+        target,
+        consumed,
+        1,
+        { attack: 0, health: 0 },
+        currentGameActionTrace(),
+      );
     }
   }
 
@@ -8172,6 +8186,7 @@ function resolveShopFodder(
   state: GameState,
   player: PlayerState,
 ): void {
+  const trace = currentGameActionTrace();
   while (true) {
     const fodderIndex = player.shop.findIndex(
       (minion) =>
@@ -8191,6 +8206,8 @@ function resolveShopFodder(
       target,
       fodder,
       fodder.golden ? 2 : 1,
+      { attack: 0, health: 0 },
+      trace,
     );
     refillFodderSlot(state, player);
   }
@@ -9251,6 +9268,7 @@ function applyRecruitEffects(
   scaleOverride?: number,
   context: RecruitEffectContext = {},
 ): void {
+  const trace = currentGameActionTrace();
   if (!effects) {
     return;
   }
@@ -9636,6 +9654,7 @@ function applyRecruitEffects(
         consumed,
         statScale,
         elementalGrantBonus,
+        trace,
       );
       refillShopMinionSlotIfNeeded(state, player);
     } else if (effect.kind === "queueDemonFodder") {
@@ -10483,6 +10502,7 @@ function applyOneEndOfTurnEffect(
   scale: number,
   payoffRepetitions = 1,
 ): void {
+  const trace = currentGameActionTrace();
   if (
     effect.kind === "gainBloodGems" ||
     effect.kind === "gainTavernSpell" ||
@@ -10571,6 +10591,7 @@ function applyOneEndOfTurnEffect(
       player,
       source,
       effect.goldenMode === "doubleStats" ? scale : 1,
+      trace,
     );
     return;
   }
@@ -10580,6 +10601,7 @@ function applyOneEndOfTurnEffect(
       state,
       player,
       effect.goldenMode === "doubleStats" ? scale : 1,
+      trace,
     );
     return;
   }
@@ -13857,6 +13879,8 @@ function triggerRecruitAfterSpellCast(
           source,
           consumed,
           statScale,
+          { attack: 0, health: 0 },
+          currentGameActionTrace(),
         );
         refillShopMinionSlotIfNeeded(state, player);
       }
@@ -26539,6 +26563,20 @@ function applyStartOfCombatEffects(
         }
 
         if (effect.kind === "buff") {
+          if (effect.target === "friendlyTribe") {
+            const tribe = effect.tribe;
+            if (!tribe) {
+              continue;
+            }
+            const current = context.tribeBuffs[ownerId][tribe] ?? {
+              attack: 0,
+              health: 0,
+            };
+            context.tribeBuffs[ownerId][tribe] = {
+              attack: current.attack + effect.attack * scale,
+              health: current.health + effect.health * scale,
+            };
+          }
           const targets =
             effect.target === "self"
               ? [source]
@@ -27388,8 +27426,6 @@ function insertCombatMinion(
     context.magnetizationsThisGame[ownerId],
   );
   if (
-    summonReason !== "rallyFromHand" &&
-    summonReason !== "startOfCombatFromHand" &&
     summonReason !== "deathlyStrikerFromHand" &&
     summonReason !== "stitchedSalvagerCopy"
   ) {
@@ -38258,6 +38294,9 @@ function reduceGame(
   trace?: GameActionTrace,
   acceptance?: { accepted: boolean },
 ): GameState {
+  const previousTrace = activeGameActionTrace;
+  activeGameActionTrace = trace;
+  try {
   if (acceptance) {
     acceptance.accepted = false;
   }
@@ -38421,11 +38460,15 @@ function reduceGame(
     }
   }
   return next;
+  } finally {
+    activeGameActionTrace = previousTrace;
+  }
 }
 
 function createGameActionTrace(): GameActionTrace {
   return {
     recruitBloodGemPulses: [],
+    recruitShopConsumes: [],
   };
 }
 

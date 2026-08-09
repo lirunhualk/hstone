@@ -494,6 +494,27 @@ type RecruitPresentationBatch = {
   tripleHandoff: RecruitTripleHandoffGeometry | null;
 };
 
+type ConsumeVisualGeometry = {
+  sourceLeft: number;
+  sourceTop: number;
+  sourceWidth: number;
+  sourceHeight: number;
+  mealLeft: number;
+  mealTop: number;
+  mealWidth: number;
+  mealHeight: number;
+};
+
+type RecruitConsumeVisual = {
+  token: number;
+  sourceInstanceId: string;
+  sourceName: string;
+  consumedInstanceId: string;
+  attackGain: number;
+  healthGain: number;
+  geometry: ConsumeVisualGeometry;
+};
+
 type DiscoverPresentationOption =
   | {
       kind: "minion";
@@ -874,6 +895,37 @@ function captureRecruitMotion(
       targetRect.top +
       targetRect.height / 2 -
       (sourceRect.top + sourceRect.height / 2),
+  };
+}
+
+function captureRecruitConsumeVisual(
+  event: Extract<RecruitPresentationEvent, { kind: "shopConsume" }>,
+): Omit<RecruitConsumeVisual, "token"> | null {
+  const source = document.querySelector<HTMLElement>(
+    `[data-unit-instance-id="${event.sourceInstanceId}"]`,
+  );
+  const meal = cardElementForPresentation(event.consumedInstanceId);
+  if (!source || !meal) {
+    return null;
+  }
+  const sourceRect = source.getBoundingClientRect();
+  const mealRect = meal.getBoundingClientRect();
+  return {
+    sourceInstanceId: event.sourceInstanceId,
+    sourceName: event.sourceName,
+    consumedInstanceId: event.consumedInstanceId,
+    attackGain: event.attackGain,
+    healthGain: event.healthGain,
+    geometry: {
+      sourceLeft: sourceRect.left,
+      sourceTop: sourceRect.top,
+      sourceWidth: sourceRect.width,
+      sourceHeight: sourceRect.height,
+      mealLeft: mealRect.left,
+      mealTop: mealRect.top,
+      mealWidth: mealRect.width,
+      mealHeight: mealRect.height,
+    },
   };
 }
 
@@ -4413,6 +4465,8 @@ export default function GameClient() {
   const [newCombatRewardIds, setNewCombatRewardIds] = useState<string[]>(
     [],
   );
+  const [recruitConsumeVisual, setRecruitConsumeVisual] =
+    useState<RecruitConsumeVisual | null>(null);
   const [battlePlayback, setBattlePlayback] =
     useState<CombatPlaybackState | null>(null);
   const [combatEntryPresentation, setCombatEntryPresentation] =
@@ -4703,6 +4757,48 @@ export default function GameClient() {
     );
     return () => window.clearTimeout(noticeTimer);
   }, [clearCombatRewardFeedback, combatRewardNotice]);
+
+  useEffect(() => {
+    if (!activeRecruitPresentation) {
+      setRecruitConsumeVisual(null);
+      return;
+    }
+    const consume = activeRecruitPresentation.events.find(
+      (event) => event.kind === "shopConsume",
+    );
+    if (consume?.kind !== "shopConsume") {
+      setRecruitConsumeVisual(null);
+      return;
+    }
+    const syncVisual = () => {
+      const visual = captureRecruitConsumeVisual(consume);
+      setRecruitConsumeVisual(
+        visual
+          ? {
+              ...visual,
+              token: activeRecruitPresentation.token,
+            }
+          : null,
+      );
+    };
+    syncVisual();
+    window.addEventListener("resize", syncVisual);
+    return () => {
+      window.removeEventListener("resize", syncVisual);
+    };
+  }, [activeRecruitPresentation]);
+
+  useEffect(() => {
+    if (!recruitConsumeVisual) {
+      return;
+    }
+    const timer = window.setTimeout(() => {
+      setRecruitConsumeVisual((current) =>
+        current?.token === recruitConsumeVisual.token ? null : current,
+      );
+    }, 1080);
+    return () => window.clearTimeout(timer);
+  }, [recruitConsumeVisual]);
 
   useEffect(() => {
     if (
@@ -8676,6 +8772,10 @@ export default function GameClient() {
   const activeRecruitAction =
     tripleForgeHasTakenOver
       ? "triple-merge"
+      : activeRecruitPresentation?.events.some(
+            (event) => event.kind === "shopConsume",
+          )
+        ? "shop-consume"
       : activeRecruitMove?.kind === "cardMove"
       ? activeRecruitMove.motion
       : activeRecruitRefresh
@@ -8690,6 +8790,21 @@ export default function GameClient() {
   const recruitFeedbackTitle =
     tripleForgeHasTakenOver && activeRecruitTriple?.kind === "triple"
       ? `三连 · ${activeRecruitTriple.golden.name}`
+      : activeRecruitPresentation?.events.some(
+            (event) => event.kind === "shopConsume",
+          )
+        ? activeRecruitPresentation.events.filter(
+              (event) => event.kind === "shopConsume",
+            ).length > 1
+          ? `连续吞食 · ${activeRecruitPresentation.events.filter((event) => event.kind === "shopConsume").length} 次`
+          : (() => {
+              const consume = activeRecruitPresentation.events.find(
+                (event) => event.kind === "shopConsume",
+              );
+              return consume?.kind === "shopConsume"
+                ? `吞食 · ${consume.sourceName}`
+                : "吞食酒馆随从";
+            })()
       : activeRecruitMove?.kind === "cardMove"
       ? activeRecruitMove.motion === "shop-to-hand"
         ? `购买 · ${activeRecruitMove.card.name}`
@@ -11765,6 +11880,51 @@ export default function GameClient() {
           <strong>{recruitFeedbackTitle}</strong>
           <span>{activeRecruitPresentation.announcement}</span>
         </div>
+      )}
+
+      {recruitConsumeVisual && (
+        <>
+          <div
+            className="recruit-consume-meal-ghost"
+            aria-hidden="true"
+            style={
+              {
+                left: recruitConsumeVisual.geometry.mealLeft,
+                top: recruitConsumeVisual.geometry.mealTop,
+                width: recruitConsumeVisual.geometry.mealWidth,
+                height: recruitConsumeVisual.geometry.mealHeight,
+                "--consume-travel-x": `${
+                  recruitConsumeVisual.geometry.sourceLeft +
+                  recruitConsumeVisual.geometry.sourceWidth / 2 -
+                  (recruitConsumeVisual.geometry.mealLeft +
+                    recruitConsumeVisual.geometry.mealWidth / 2)
+                }px`,
+                "--consume-travel-y": `${
+                  recruitConsumeVisual.geometry.sourceTop +
+                  recruitConsumeVisual.geometry.sourceHeight / 2 -
+                  (recruitConsumeVisual.geometry.mealTop +
+                    recruitConsumeVisual.geometry.mealHeight / 2)
+                }px`,
+              } as CSSProperties
+            }
+          />
+          <div
+            className="recruit-consume-gain-burst"
+            aria-hidden="true"
+            style={
+              {
+                left:
+                  recruitConsumeVisual.geometry.sourceLeft +
+                  recruitConsumeVisual.geometry.sourceWidth / 2,
+                top:
+                  recruitConsumeVisual.geometry.sourceTop +
+                  recruitConsumeVisual.geometry.sourceHeight * 0.18,
+              } as CSSProperties
+            }
+          >
+            {`+${recruitConsumeVisual.attackGain}/+${recruitConsumeVisual.healthGain}`}
+          </div>
+        </>
       )}
 
       {activeRecruitMove?.kind === "cardMove" &&

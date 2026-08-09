@@ -79,6 +79,17 @@ export type RecruitPresentationEvent =
       pulseCount: number;
       boardBeforePulse: BoardMinionInstance[];
       boardAfterPulse: BoardMinionInstance[];
+    }
+  | {
+      kind: "shopConsume";
+      sourceInstanceId: string;
+      sourceName: string;
+      consumedInstanceId: string;
+      consumedName: string;
+      consumedAttack: number;
+      consumedHealth: number;
+      attackGain: number;
+      healthGain: number;
     };
 
 export function enqueueRecruitPresentation<T>(
@@ -263,6 +274,15 @@ function bloodGemPulseEvents(
   });
 }
 
+function shopConsumeEvents(
+  trace: GameActionTrace | undefined,
+): RecruitPresentationEvent[] {
+  return (trace?.recruitShopConsumes ?? []).map((consume) => ({
+    kind: "shopConsume",
+    ...consume,
+  }));
+}
+
 /**
  * Derives short-lived recruit presentation from an immutable reducer
  * transition. The events intentionally stay outside GameState and saves.
@@ -282,6 +302,8 @@ export function deriveRecruitPresentation(
 
   const events: RecruitPresentationEvent[] = [];
   let purchasedMinion: BoardMinionInstance | null = null;
+
+  events.push(...shopConsumeEvents(trace));
 
   if (action.type === "CAST_BLOOD_GEM") {
     events.push(
@@ -488,6 +510,9 @@ export function recruitPresentationAnnouncement(
   const bloodGemPulse = events.find(
     (event) => event.kind === "bloodGemPulse",
   );
+  const shopConsumes = events.filter(
+    (event) => event.kind === "shopConsume",
+  );
   const parts: string[] = [];
 
   if (bloodGemPulse?.kind === "bloodGemPulse") {
@@ -505,6 +530,12 @@ export function recruitPresentationAnnouncement(
             }颗）`
           : ""
       }`,
+    );
+  } else if (shopConsumes.length > 0) {
+    parts.push(
+      ...shopConsumes.map((consume) =>
+        `${consume.sourceName}吞食${consume.consumedName}，获得+${consume.attackGain}/+${consume.healthGain}`,
+      ),
     );
   } else if (move?.kind === "cardMove") {
     parts.push(
@@ -541,6 +572,14 @@ export function recruitPresentationDuration(
 ): number {
   if (events.some((event) => event.kind === "bloodGemPulse")) {
     return 720;
+  }
+  const shopConsumeCount = events.filter(
+    (event) => event.kind === "shopConsume",
+  ).length;
+  if (shopConsumeCount > 0) {
+    return reducedMotion
+      ? 140
+      : 1_300 + Math.max(0, shopConsumeCount - 1) * 260;
   }
   if (events.some((event) => event.kind === "triple")) {
     return TRIPLE_FORGE_PRESENTATION_STAGES.reduce(

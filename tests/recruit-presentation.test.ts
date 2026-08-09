@@ -3,6 +3,7 @@ import test from "node:test";
 
 import {
   createGame,
+  gameTransition,
   gameReducer,
   getTavernSpellPurchaseQuote,
   type BoardMinionInstance,
@@ -10,6 +11,7 @@ import {
   type GameState,
   type PlayerState,
 } from "../lib/game/engine.ts";
+import { getMinionDefinition } from "../lib/game/content.ts";
 import { getTavernSpellDefinition } from "../lib/game/tavern-spells.ts";
 import {
   completeRecruitPresentation,
@@ -36,6 +38,55 @@ function minionCopy(
     ...structuredClone(source),
     instanceId,
     golden: false,
+  };
+}
+
+function definitionMinion(
+  definitionId: string,
+  instanceId: string,
+  overrides: Partial<BoardMinionInstance> = {},
+): BoardMinionInstance {
+  const definition = getMinionDefinition(definitionId);
+  return {
+    kind: "minion",
+    instanceId,
+    definitionId: definition.id,
+    cardId: definition.cardId,
+    name: definition.name,
+    tier: definition.tier,
+    tribe: definition.tribe,
+    tribes: [...(definition.tribes ?? [])],
+    associatedTribes: [...(definition.associatedTribes ?? [])],
+    effectSupport: definition.effectSupport ?? "partial",
+    sellValue: definition.sellValue ?? 1,
+    attack: definition.attack,
+    health: definition.health,
+    golden: false,
+    taunt: definition.taunt ?? false,
+    divineShield: definition.divineShield ?? false,
+    reborn: definition.reborn ?? false,
+    poisonous: definition.poisonous ?? false,
+    venomous: definition.venomous ?? false,
+    windfury: definition.windfury ?? false,
+    cleave: definition.cleave ?? false,
+    alwaysAttacksLowestAttack:
+      definition.alwaysAttacksLowestAttack ?? false,
+    description: definition.description,
+    bloodGemAttack: 0,
+    bloodGemHealth: 0,
+    temporaryAttack: 0,
+    temporaryHealth: 0,
+    temporaryTaunt: false,
+    temporaryDivineShield: false,
+    temporaryVenomous: false,
+    temporaryCrabDeathrattles: 0,
+    temporaryGoldenCrabDeathrattles: 0,
+    crabDeathrattles: 0,
+    goldenCrabDeathrattles: 0,
+    grantsTripleReward: false,
+    poolCopies: 1,
+    attachments: [],
+    ...overrides,
   };
 }
 
@@ -793,4 +844,85 @@ test("a purchased third copy presents payment, movement, then the triple", () =>
   );
   assert.equal(recruitPresentationDuration(events), 590);
   assert.equal(recruitPresentationDuration(events, true), 120);
+});
+
+test("shop consume traces produce a stronger consume announcement", () => {
+  let state = createGame(0x7120);
+  const player = humanPlayer(state);
+  const demon = definitionMinion("BG35_801", "presentation-fodder-demon", {
+    tribe: "demon",
+    tribes: ["demon"],
+    attack: 10,
+    health: 10,
+  });
+  player.board = [demon];
+  player.shop = [];
+  player.spellShop = null;
+  player.additionalSpellShop = [];
+  player.demonFodderRefreshQueue = [1];
+  player.freeRefreshes = 1;
+  for (const definitionId of Object.keys(state.pool)) {
+    state.pool[definitionId] = 0;
+  }
+  state.pool.BG35_814 = 10;
+
+  const action = { type: "REFRESH_SHOP" } as const;
+  const transition = gameTransition(state, action);
+  const events = deriveRecruitPresentation(
+    state,
+    transition.state,
+    action,
+    transition.trace,
+  );
+
+  assert.deepEqual(
+    events.map((event) => event.kind),
+    ["shopConsume", "shopRefresh"],
+  );
+  const consume = events[0];
+  assert.equal(consume?.kind, "shopConsume");
+  if (consume?.kind === "shopConsume") {
+    assert.equal(consume.sourceName, demon.name);
+    assert.equal(consume.consumedName, "恶魔饲料");
+    assert.equal(consume.attackGain, 2);
+    assert.equal(consume.healthGain, 2);
+  }
+  assert.match(
+    recruitPresentationAnnouncement(events),
+    /吞食恶魔饲料，获得\+2\/\+2/,
+  );
+  assert.equal(recruitPresentationDuration(events), 1300);
+  assert.equal(recruitPresentationDuration(events, true), 140);
+});
+
+test("multiple shop consumes are all surfaced in the same recruit announcement", () => {
+  const template = humanPlayer(createGame(0x7121)).shop[0];
+  const first = {
+    kind: "shopConsume" as const,
+    sourceInstanceId: "first-source",
+    sourceName: "挑食魔犬",
+    consumedInstanceId: "first-meal",
+    consumedName: template.name,
+    consumedAttack: template.attack,
+    consumedHealth: template.health,
+    attackGain: 3,
+    healthGain: 4,
+  };
+  const second = {
+    kind: "shopConsume" as const,
+    sourceInstanceId: "second-source",
+    sourceName: "饥饿的魔蝠",
+    consumedInstanceId: "second-meal",
+    consumedName: "恶魔饲料",
+    consumedAttack: 2,
+    consumedHealth: 2,
+    attackGain: 4,
+    healthGain: 4,
+  };
+
+  assert.equal(
+    recruitPresentationAnnouncement([first, second]),
+    `挑食魔犬吞食${template.name}，获得+3/+4，饥饿的魔蝠吞食恶魔饲料，获得+4/+4`,
+  );
+  assert.equal(recruitPresentationDuration([first, second]), 1560);
 });

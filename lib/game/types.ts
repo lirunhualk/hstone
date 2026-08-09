@@ -2418,8 +2418,20 @@ export interface RecruitBloodGemPulseResolution {
   targetAfter: BoardMinionInstance;
 }
 
+export interface RecruitShopConsumeResolution {
+  sourceInstanceId: string;
+  sourceName: string;
+  consumedInstanceId: string;
+  consumedName: string;
+  consumedAttack: number;
+  consumedHealth: number;
+  attackGain: number;
+  healthGain: number;
+}
+
 export interface GameActionTrace {
   recruitBloodGemPulses: RecruitBloodGemPulseResolution[];
+  recruitShopConsumes: RecruitShopConsumeResolution[];
 }
 
 export interface GameTransition {

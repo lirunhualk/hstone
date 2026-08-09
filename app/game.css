@@ -8874,10 +8874,28 @@ button.battle-log-event[aria-current="step"] {
     linear-gradient(135deg, rgb(52 28 74 / 97%), rgb(57 38 13 / 97%));
 }
 
+.recruit-feedback-toast[data-action="shop-consume"] {
+  bottom: 204px;
+  border-color: rgb(193 114 255 / 76%);
+  background:
+    radial-gradient(circle at top, rgb(125 41 176 / 34%), transparent 55%),
+    linear-gradient(135deg, rgb(46 15 18 / 98%), rgb(28 13 41 / 98%));
+  box-shadow:
+    0 18px 44px rgb(0 0 0 / 48%),
+    0 0 34px rgb(186 91 255 / 34%);
+}
+
 .recruit-feedback-toast > strong {
   color: #fff2c8;
   font-size: 14px;
   font-weight: 950;
+}
+
+.recruit-feedback-toast[data-action="shop-consume"] > strong {
+  color: #ffd6ff;
+  font-size: 15px;
+  letter-spacing: 0.05em;
+  text-shadow: 0 0 18px rgb(198 96 255 / 35%);
 }
 
 .recruit-feedback-toast > span {
@@ -8889,6 +8907,15 @@ button.battle-log-event[aria-current="step"] {
   line-height: 1.3;
   text-overflow: ellipsis;
   white-space: nowrap;
+}
+
+.recruit-feedback-toast[data-action="shop-consume"] > span {
+  overflow: visible;
+  color: #f6e8ff;
+  font-size: 12px;
+  line-height: 1.45;
+  text-overflow: clip;
+  white-space: normal;
 }
 
 .recruit-card-motion {
@@ -8918,6 +8945,86 @@ button.battle-log-event[aria-current="step"] {
 
 .recruit-card-motion[data-triple-forge="true"] {
   animation-duration: 100ms;
+}
+
+.recruit-consume-meal-ghost {
+  position: fixed;
+  z-index: 276;
+  pointer-events: none;
+  border-radius: 18px;
+  border: 1px solid rgb(255 169 241 / 55%);
+  background:
+    radial-gradient(circle at 30% 20%, rgb(255 233 253 / 36%), transparent 38%),
+    linear-gradient(135deg, rgb(164 65 110 / 36%), rgb(80 27 103 / 52%));
+  box-shadow:
+    0 0 24px rgb(214 87 255 / 30%),
+    inset 0 0 18px rgb(255 255 255 / 12%);
+  transform-origin: center;
+  animation: recruit-consume-meal 760ms cubic-bezier(0.18, 0.8, 0.2, 1)
+    both;
+}
+
+.recruit-consume-gain-burst {
+  position: fixed;
+  z-index: 277;
+  pointer-events: none;
+  padding: 6px 12px;
+  border-radius: 999px;
+  border: 1px solid rgb(255 187 251 / 55%);
+  background: linear-gradient(135deg, rgb(82 25 93 / 94%), rgb(155 53 95 / 90%));
+  box-shadow:
+    0 0 28px rgb(221 103 255 / 34%),
+    0 10px 24px rgb(0 0 0 / 28%);
+  color: #fff3c7;
+  font-size: 18px;
+  font-weight: 950;
+  letter-spacing: 0.04em;
+  white-space: nowrap;
+  transform: translate(-50%, -50%);
+  animation: recruit-consume-gain-burst 920ms cubic-bezier(0.16, 0.84, 0.22, 1)
+    both;
+}
+
+@keyframes recruit-consume-meal {
+  0% {
+    opacity: 0;
+    transform: scale(1) translate(0, 0);
+    filter: saturate(1);
+  }
+
+  12% {
+    opacity: 1;
+    transform: scale(1.03) translate(0, 0);
+  }
+
+  100% {
+    opacity: 0;
+    transform: scale(0.44)
+      translate(var(--consume-travel-x), var(--consume-travel-y));
+    filter: saturate(1.45) brightness(0.9);
+  }
+}
+
+@keyframes recruit-consume-gain-burst {
+  0% {
+    opacity: 0;
+    transform: translate(-50%, -30%) scale(0.76);
+  }
+
+  18% {
+    opacity: 1;
+    transform: translate(-50%, -58%) scale(1.08);
+  }
+
+  72% {
+    opacity: 1;
+    transform: translate(-50%, -90%) scale(1);
+  }
+
+  100% {
+    opacity: 0;
+    transform: translate(-50%, -126%) scale(0.92);
+  }
 }
 
 .recruit-triple-stage {
