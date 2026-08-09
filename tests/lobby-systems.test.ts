@@ -1860,6 +1860,39 @@ test("Plane Alignment grants only one majority-type minion per turn", () => {
   assert.equal(player.hand.length, 1);
 });
 
+test("False Idols turns a played golden minion triple reward into 1 gold", () => {
+  let state = chooseHero(lobbyGameForEvent("system-event-false-idols"));
+  const player = humanPlayer(state);
+  const template = player.shop[0];
+  assert.ok(template);
+  const definition = getMinionDefinition(template.definitionId);
+  const golden = definitionMinion(template, definition.id, "false-idols-golden", {
+    golden: true,
+    cardId: definition.goldenCardId ?? definition.cardId,
+    name: `金色·${definition.name}`,
+    attack: definition.attack * 2,
+    health: definition.health * 2,
+    description: `金色随从：基础属性已翻倍；可倍增的效果会按金色规则结算。普通版本牌面：${definition.description}`,
+    grantsTripleReward: true,
+  });
+  player.hand = [golden];
+  player.board = [];
+  player.gold = 0;
+
+  state = gameReducer(state, {
+    type: "PLAY_HAND_CARD",
+    cardInstanceId: golden.instanceId,
+  });
+
+  const nextPlayer = humanPlayer(state);
+  assert.equal(nextPlayer.gold, 1);
+  assert.equal(
+    nextPlayer.hand.some((card) => card.kind === "tripleReward"),
+    false,
+  );
+  assert.equal(nextPlayer.board[0]?.grantsTripleReward, false);
+});
+
 test("Hero Power quotes are pure, dynamic, and target-aware", () => {
   let state = createGame(77, 999);
   let player = humanPlayer(state);

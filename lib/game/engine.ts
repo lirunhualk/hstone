@@ -5308,6 +5308,24 @@ function grantTripleRewardBeforeGeneratedCards(
     return;
   }
   minion.grantsTripleReward = false;
+  if (
+    state.lobbySystemsEnabled &&
+    state.systemEventId &&
+    getSystemEventDefinition(state.systemEventId).effect === "circusPrize"
+  ) {
+    grantRandomDarkmoonPrizes(state, player, 1);
+    return;
+  }
+  if (
+    player.systemEventCounters.falseIdolsActive ||
+    playerHasHeroPower(player, "easyTripleCoin")
+  ) {
+    player.gold += 1;
+    return;
+  }
+  if (player.systemEventCounters.goldenArenaActive) {
+    return;
+  }
   if (player.hand.length < MAX_HAND_SIZE) {
     addCardToHand(
       state,
