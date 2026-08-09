@@ -4762,18 +4762,18 @@ export default function GameClient() {
   }, [clearCombatRewardFeedback, combatRewardNotice]);
 
   useEffect(() => {
-    if (!activeRecruitPresentation) {
-      setRecruitConsumeVisual(null);
-      return;
-    }
-    const consume = activeRecruitPresentation.events.find(
-      (event) => event.kind === "shopConsume",
-    );
-    if (consume?.kind !== "shopConsume") {
-      setRecruitConsumeVisual(null);
-      return;
-    }
     const syncVisual = () => {
+      if (!activeRecruitPresentation) {
+        setRecruitConsumeVisual(null);
+        return;
+      }
+      const consume = activeRecruitPresentation.events.find(
+        (event) => event.kind === "shopConsume",
+      );
+      if (consume?.kind !== "shopConsume") {
+        setRecruitConsumeVisual(null);
+        return;
+      }
       const visual = captureRecruitConsumeVisual(consume);
       setRecruitConsumeVisual(
         visual
@@ -4784,8 +4784,8 @@ export default function GameClient() {
           : null,
       );
     };
-    syncVisual();
     window.addEventListener("resize", syncVisual);
+    queueMicrotask(syncVisual);
     return () => {
       window.removeEventListener("resize", syncVisual);
     };
@@ -9222,7 +9222,7 @@ export default function GameClient() {
             disabled={interactionLocked}
             onClick={openRestartDialog}
           >
-            重开
+            战斗！
           </button>
           <button
             type="button"
@@ -13625,7 +13625,7 @@ export default function GameClient() {
                 data-testid="confirm-restart"
                 disabled={configuredInitialHealth === null}
               >
-                重开本局
+                战斗！
               </button>
             </div>
           </form>

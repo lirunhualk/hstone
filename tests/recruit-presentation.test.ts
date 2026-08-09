@@ -847,7 +847,7 @@ test("a purchased third copy presents payment, movement, then the triple", () =>
 });
 
 test("shop consume traces produce a stronger consume announcement", () => {
-  let state = createGame(0x7120);
+  const state = createGame(0x7120);
   const player = humanPlayer(state);
   const demon = definitionMinion("BG35_801", "presentation-fodder-demon", {
     tribe: "demon",

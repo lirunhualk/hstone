@@ -1,5 +1,5 @@
 import type { GameState, PlayerState } from "./types";
-import { recruitGoldCapacity } from "./gold";
+import { recruitGoldCapacity } from "./gold.ts";
 
 export type RecruitEntryStage =
   | "curtain"
