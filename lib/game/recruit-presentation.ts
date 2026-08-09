@@ -115,6 +115,9 @@ export function groupRecruitPresentationEvents(
   if (events.every((event) => event.kind === "bloodGemPulse")) {
     return events.map((event) => [event]);
   }
+  if (events.every((event) => event.kind === "shopConsume")) {
+    return events.map((event) => [event]);
+  }
 
   const triples = events.filter((event) => event.kind === "triple");
   if (triples.length <= 1) return [[...events]];

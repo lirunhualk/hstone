@@ -270,22 +270,28 @@ test("Lab Assistant queues three manual Fodder refreshes with Golden and Brann s
   );
 });
 
-test("automatic turn refreshes preserve Fodder queues, while a manual Refresh consumes one slot", () => {
+test("Woodland Desecrator makes the recruit-entry refresh consume the first Fodder slot, and a later manual Refresh consumes the next one", () => {
   let state = createGame(0xf402);
   let player = humanPlayer(state);
   const source = definitionMinion(
-    "BG35_150",
-    "manual-only-lab-assistant",
+    "BG35_151",
+    "entry-woodland-desecrator",
   );
-  player.board = [];
-  player.hand = [source];
-  state = playHandCard(state, source.instanceId);
+  player.board = [source];
+  player.hand = [];
   prepareDuel(state);
 
   state = gameReducer(state, { type: "END_TURN" });
   state = continueAfterCombat(state);
   player = humanPlayer(state);
-  assert.deepEqual(player.demonFodderRefreshQueue, [1, 1, 1]);
+  assert.deepEqual(player.demonFodderRefreshQueue, [1, 1]);
+  assert.equal(
+    player.shop.filter(
+      (minion) =>
+        minion.definitionId === "live-demon-fodder-token",
+    ).length,
+    1,
+  );
 
   player.shop = [];
   player.spellShop = null;
@@ -295,7 +301,7 @@ test("automatic turn refreshes preserve Fodder queues, while a manual Refresh co
   clearMinionPool(state);
   state = gameReducer(state, { type: "REFRESH_SHOP" });
   player = humanPlayer(state);
-  assert.deepEqual(player.demonFodderRefreshQueue, [1, 1]);
+  assert.deepEqual(player.demonFodderRefreshQueue, [1]);
   assert.equal(
     player.shop.filter(
       (minion) =>

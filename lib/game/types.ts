@@ -2401,6 +2401,7 @@ export type GameAction =
   | { type: "MOVE_MINION"; fromIndex: number; toIndex: number }
   | { type: "END_TURN" }
   | { type: "CONTINUE" }
+  | { type: "RESOLVE_SHOP_FODDER" }
   | { type: "ACTIVATE_HERO_POWER"; targetInstanceId?: string };
 
 /**

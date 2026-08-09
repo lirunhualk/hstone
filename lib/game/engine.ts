@@ -1164,6 +1164,20 @@ function damagePlayer(
   return { armorAbsorbed, healthDamage };
 }
 
+function canSurviveHeroDamage(
+  player: PlayerState,
+  amount: number,
+): boolean {
+  return player.health + player.armor > Math.max(0, amount);
+}
+
+function remainingHealthAfterHeroDamage(
+  player: PlayerState,
+  amount: number,
+): number {
+  return player.health - Math.max(0, amount - player.armor);
+}
+
 function consumeSafeBadgeForLethalCombatDamage(
   player: PlayerState,
   amount: number,
@@ -8216,6 +8230,7 @@ function resolveShopFodder(
 function applyQueuedDemonFodderToRefresh(
   state: GameState,
   player: PlayerState,
+  resolveImmediately = true,
 ): void {
   const fodderCount = player.demonFodderRefreshQueue.shift() ?? 0;
   while (
@@ -8253,7 +8268,9 @@ function applyQueuedDemonFodderToRefresh(
     fodder.attack += portraitBonus;
     fodder.health += portraitBonus;
     player.shop.push(fodder);
-    resolveShopFodder(state, player);
+    if (resolveImmediately) {
+      resolveShopFodder(state, player);
+    }
   }
 }
 
@@ -8395,7 +8412,7 @@ export function getMinionPurchaseQuote(
     affordable:
       player.hand.length < MAX_HAND_SIZE &&
       (currency === "health"
-        ? player.health > cost
+        ? canSurviveHeroDamage(player, cost)
         : player.gold >= cost),
   };
 }
@@ -8640,7 +8657,7 @@ export function getTavernSpellPurchaseQuote(
     affordable:
       player.hand.length < MAX_HAND_SIZE &&
       (currency === "health"
-        ? player.health > cost
+        ? canSurviveHeroDamage(player, cost)
         : player.gold >= cost),
   };
 }
@@ -11869,7 +11886,7 @@ function buyMinion(
   addCardToHand(state, player, minion);
   refillShopMinionSlotIfNeeded(state, player);
   if (quote.currency === "health") {
-    player.health -= quote.cost;
+    damageRecruitPlayer(player, quote.cost);
   } else {
     const freeFirst =
       (state.lobbySystemsEnabled &&
@@ -11971,7 +11988,7 @@ function buyTavernSpell(
     );
   }
   if (currency === "health") {
-    player.health -= cost;
+    damageRecruitPlayer(player, cost);
   } else {
     spendGold(state, player, cost);
   }
@@ -21338,7 +21355,10 @@ function canAiSpendHealth(
   cost: number,
 ): boolean {
   const floor = getAiStrategyProfile(player.id).healthSpendFloor;
-  return player.health > cost && player.health - cost >= floor;
+  return (
+    canSurviveHeroDamage(player, cost) &&
+    remainingHealthAfterHeroDamage(player, cost) >= floor
+  );
 }
 
 function canAiPurchaseMinion(
@@ -22333,9 +22353,9 @@ function canAiSafelyActivateDamageHeroPower(
   }
   const damage = 2;
   const floor = getAiStrategyProfile(player.id).healthSpendFloor;
-  const remainingHealth = player.health - damage;
+  const remainingHealth = remainingHealthAfterHeroDamage(player, damage);
   const crossesFloor = !canAiSpendHealth(player, damage);
-  const isLethal = remainingHealth <= 0;
+  const isLethal = !canSurviveHeroDamage(player, damage);
   const benchmark = activeAiRecruitSafetyForState(state);
   const diagnostics = aiRecruitSafetyDiagnosticsFor(state, player.id);
   if (benchmark && diagnostics) {
@@ -36833,9 +36853,11 @@ function beginNextRecruit(state: GameState): void {
       player.frozen = false;
       player.spellOnlyRefreshActive = false;
       fillShop(state, player);
+      applyQueuedDemonFodderToRefresh(state, player, false);
     } else {
       releaseShop(state, player);
       fillShop(state, player);
+      applyQueuedDemonFodderToRefresh(state, player, false);
     }
     reconcileConditionalMinions(player);
   }
@@ -37645,7 +37667,7 @@ function activateHeroPowerMutating(
       const [minion] = player.shop.splice(shopIndex, 1);
       addCardToHand(state, player, minion);
       fillShop(state, player);
-      player.health -= 2;
+      damageRecruitPlayer(player, 2);
       break;
     }
     case "activeGiveDivineShield": {
@@ -38438,6 +38460,18 @@ function reduceGame(
       }
       break;
     }
+    case "RESOLVE_SHOP_FODDER":
+      if (
+        player.shop.some(
+          (minion) =>
+            getMinionDefinition(minion.definitionId).shopFodder === true,
+        ) &&
+        player.board.some((minion) => minionHasTribe(minion, "demon"))
+      ) {
+        resolveShopFodder(next, player);
+        accepted = true;
+      }
+      break;
     case "END_TURN":
       endTurn(next);
       accepted = true;

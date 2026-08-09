@@ -372,3 +372,26 @@ test("the state machine accepts the engine's real CONTINUE boundary", () => {
   assert.equal(presentation.round, combat.state.round + 1);
   assert.equal(presentation.gold, humanPlayer(nextRecruit.state).gold);
 });
+
+test("a real CONTINUE entry can open with queued Demon Fodder already in the Tavern", () => {
+  const recruit = createGame(0x7e09);
+  const human = humanPlayer(recruit);
+  human.board = [];
+  human.shop = [];
+  human.spellShop = null;
+  human.additionalSpellShop = [];
+  human.demonFodderRefreshQueue = [1, 1, 1];
+  const combat = gameTransition(recruit, { type: "END_TURN" });
+  assert.equal(combat.accepted, true);
+  const nextRecruit = gameTransition(combat.state, { type: "CONTINUE" });
+  assert.equal(nextRecruit.accepted, true);
+  const nextHuman = humanPlayer(nextRecruit.state);
+
+  assert.deepEqual(nextHuman.demonFodderRefreshQueue, [1, 1]);
+  assert.equal(
+    nextHuman.shop.filter(
+      (minion) => minion.definitionId === "live-demon-fodder-token",
+    ).length,
+    1,
+  );
+});

@@ -8950,6 +8950,10 @@ button.battle-log-event[aria-current="step"] {
 .recruit-consume-meal-ghost {
   position: fixed;
   z-index: 276;
+  display: flex;
+  align-items: flex-end;
+  justify-content: center;
+  padding-bottom: 10px;
   pointer-events: none;
   border-radius: 18px;
   border: 1px solid rgb(255 169 241 / 55%);
@@ -8960,15 +8964,42 @@ button.battle-log-event[aria-current="step"] {
     0 0 24px rgb(214 87 255 / 30%),
     inset 0 0 18px rgb(255 255 255 / 12%);
   transform-origin: center;
-  animation: recruit-consume-meal 760ms cubic-bezier(0.18, 0.8, 0.2, 1)
+  animation: recruit-consume-meal 1320ms cubic-bezier(0.18, 0.8, 0.2, 1)
     both;
+}
+
+.recruit-consume-source-highlight {
+  position: fixed;
+  z-index: 275;
+  pointer-events: none;
+  border-radius: 18px;
+  border: 2px solid rgb(239 124 255 / 82%);
+  box-shadow:
+    0 0 0 2px rgb(48 11 61 / 45%) inset,
+    0 0 30px rgb(228 109 255 / 34%);
+  animation: recruit-consume-source-highlight 1450ms ease-in-out both;
+}
+
+.recruit-consume-meal-label {
+  padding: 4px 10px;
+  border-radius: 999px;
+  background: rgb(34 10 46 / 72%);
+  box-shadow: 0 0 16px rgb(222 111 255 / 24%);
+  color: #ffeaff;
+  font-size: 12px;
+  font-weight: 800;
+  letter-spacing: 0.03em;
 }
 
 .recruit-consume-gain-burst {
   position: fixed;
   z-index: 277;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 4px;
   pointer-events: none;
-  padding: 6px 12px;
+  padding: 10px 14px;
   border-radius: 999px;
   border: 1px solid rgb(255 187 251 / 55%);
   background: linear-gradient(135deg, rgb(82 25 93 / 94%), rgb(155 53 95 / 90%));
@@ -8976,13 +9007,26 @@ button.battle-log-event[aria-current="step"] {
     0 0 28px rgb(221 103 255 / 34%),
     0 10px 24px rgb(0 0 0 / 28%);
   color: #fff3c7;
-  font-size: 18px;
-  font-weight: 950;
-  letter-spacing: 0.04em;
+  font-size: 17px;
   white-space: nowrap;
   transform: translate(-50%, -50%);
-  animation: recruit-consume-gain-burst 920ms cubic-bezier(0.16, 0.84, 0.22, 1)
+  animation: recruit-consume-gain-burst 1500ms cubic-bezier(0.16, 0.84, 0.22, 1)
     both;
+}
+
+.recruit-consume-gain-burst > strong {
+  color: #fff1ff;
+  font-size: 14px;
+  font-weight: 900;
+  letter-spacing: 0.03em;
+}
+
+.recruit-consume-gain-burst > span {
+  color: #fff3c7;
+  font-size: 20px;
+  font-weight: 950;
+  letter-spacing: 0.05em;
+  text-shadow: 0 0 18px rgb(255 220 142 / 24%);
 }
 
 @keyframes recruit-consume-meal {
@@ -8994,7 +9038,12 @@ button.battle-log-event[aria-current="step"] {
 
   12% {
     opacity: 1;
-    transform: scale(1.03) translate(0, 0);
+    transform: scale(1.06) translate(0, 0);
+  }
+
+  42% {
+    opacity: 1;
+    transform: scale(0.98) translate(0, 0);
   }
 
   100% {
@@ -9018,12 +9067,34 @@ button.battle-log-event[aria-current="step"] {
 
   72% {
     opacity: 1;
-    transform: translate(-50%, -90%) scale(1);
+    transform: translate(-50%, -108%) scale(1);
   }
 
   100% {
     opacity: 0;
-    transform: translate(-50%, -126%) scale(0.92);
+    transform: translate(-50%, -146%) scale(0.92);
+  }
+}
+
+@keyframes recruit-consume-source-highlight {
+  0% {
+    opacity: 0;
+    transform: scale(0.96);
+  }
+
+  16% {
+    opacity: 1;
+    transform: scale(1.02);
+  }
+
+  74% {
+    opacity: 1;
+    transform: scale(1);
+  }
+
+  100% {
+    opacity: 0;
+    transform: scale(1.03);
   }
 }
 

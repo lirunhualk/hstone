@@ -510,6 +510,7 @@ type RecruitConsumeVisual = {
   sourceInstanceId: string;
   sourceName: string;
   consumedInstanceId: string;
+  consumedName: string;
   attackGain: number;
   healthGain: number;
   geometry: ConsumeVisualGeometry;
@@ -627,6 +628,7 @@ type PendingRecruitEntryFeedback = {
   rewardNotice: CombatRewardSummary | null;
   rewardIds: string[];
   presentationEvents: RecruitPresentationEvent[];
+  resolveShopFodderAfterEntry?: boolean;
 };
 
 function humanPlayerForPresentation(
@@ -914,6 +916,7 @@ function captureRecruitConsumeVisual(
     sourceInstanceId: event.sourceInstanceId,
     sourceName: event.sourceName,
     consumedInstanceId: event.consumedInstanceId,
+    consumedName: event.consumedName,
     attackGain: event.attackGain,
     healthGain: event.healthGain,
     geometry: {
@@ -4796,7 +4799,7 @@ export default function GameClient() {
       setRecruitConsumeVisual((current) =>
         current?.token === recruitConsumeVisual.token ? null : current,
       );
-    }, 1080);
+    }, 1700);
     return () => window.clearTimeout(timer);
   }, [recruitConsumeVisual]);
 
@@ -5099,6 +5102,14 @@ export default function GameClient() {
     if (recruitEntryPresentation?.stage !== "complete") return;
     const completionTimer = window.setTimeout(() => {
       const pending = pendingRecruitEntryFeedbackRef.current;
+      if (pending?.resolveShopFodderAfterEntry) {
+        pendingRecruitEntryFeedbackRef.current = {
+          ...pending,
+          resolveShopFodderAfterEntry: false,
+        };
+        send({ type: "RESOLVE_SHOP_FODDER" });
+        return;
+      }
       if (pending && pending.presentationEvents.length > 0) {
         pendingRecruitEntryFeedbackRef.current = {
           ...pending,
@@ -5202,6 +5213,12 @@ export default function GameClient() {
       game.players.find((player) => player.id === game.humanPlayerId) ??
       game.players[0],
     [game],
+  );
+  const hasVisibleShopFodder = human.shop.some(
+    (minion) => getMinionDefinition(minion.definitionId).shopFodder === true,
+  );
+  const hasFriendlyDemon = human.board.some((minion) =>
+    minionHasTribe(minion, "demon"),
   );
   const humanHero = human.heroId
     ? getHeroDefinition(human.heroId)
@@ -7114,6 +7131,7 @@ export default function GameClient() {
         rewardNotice,
         rewardIds: [...entry.rewardHandInstanceIds],
         presentationEvents: events,
+        resolveShopFodderAfterEntry: hasVisibleShopFodder && hasFriendlyDemon,
       };
       setRecruitEntryPresentation(entry);
       return;
@@ -11885,6 +11903,18 @@ export default function GameClient() {
       {recruitConsumeVisual && (
         <>
           <div
+            className="recruit-consume-source-highlight"
+            aria-hidden="true"
+            style={
+              {
+                left: recruitConsumeVisual.geometry.sourceLeft,
+                top: recruitConsumeVisual.geometry.sourceTop,
+                width: recruitConsumeVisual.geometry.sourceWidth,
+                height: recruitConsumeVisual.geometry.sourceHeight,
+              } as CSSProperties
+            }
+          />
+          <div
             className="recruit-consume-meal-ghost"
             aria-hidden="true"
             style={
@@ -11907,7 +11937,11 @@ export default function GameClient() {
                 }px`,
               } as CSSProperties
             }
-          />
+          >
+            <span className="recruit-consume-meal-label">
+              {recruitConsumeVisual.consumedName}
+            </span>
+          </div>
           <div
             className="recruit-consume-gain-burst"
             aria-hidden="true"
@@ -11922,7 +11956,8 @@ export default function GameClient() {
               } as CSSProperties
             }
           >
-            {`+${recruitConsumeVisual.attackGain}/+${recruitConsumeVisual.healthGain}`}
+            <strong>{`${recruitConsumeVisual.sourceName} 吞食 ${recruitConsumeVisual.consumedName}`}</strong>
+            <span>{`+${recruitConsumeVisual.attackGain}/+${recruitConsumeVisual.healthGain}`}</span>
           </div>
         </>
       )}

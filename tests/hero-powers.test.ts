@@ -64,6 +64,8 @@ const GALAKROND_HERO_POWER_ID =
   "hero-power-tb_baconshop_hp_011" as const;
 const GEORGE_HERO_POWER_ID =
   "hero-power-tb_baconshop_hp_010" as const;
+const TESS_HERO_POWER_ID =
+  "hero-power-tb_baconshop_hp_049" as const;
 
 function minionFromDefinition(
   template: BoardMinionInstance,
@@ -173,6 +175,23 @@ function prepareGeorgeState(seed = 0x9e0a): GameState {
   state.pendingInteraction = null;
   player.heroId = "hero-tb-15";
   player.heroPowerId = GEORGE_HERO_POWER_ID;
+  player.heroPowerCounters = {};
+  player.heroPowerActiveThisTurn = false;
+  player.gold = 10;
+  player.goldSpentThisTurn = 0;
+  player.hand = [];
+  player.board = [];
+  player.spellShop = null;
+  player.additionalSpellShop = [];
+  return state;
+}
+
+function prepareTessState(seed = 0x9e49): GameState {
+  const state = createGame(seed);
+  const player = humanPlayer(state);
+  state.activeTribes = [...ALL_TRIBES];
+  state.pendingInteraction = null;
+  player.heroPowerId = TESS_HERO_POWER_ID;
   player.heroPowerCounters = {};
   player.heroPowerActiveThisTurn = false;
   player.gold = 10;
@@ -439,6 +458,30 @@ test("a Tavern minion keeps George's shield after purchase and play", () => {
   assert.ok(played);
   assert.equal(played.divineShield, true);
   assert.equal(played.temporaryDivineShield, false);
+});
+
+test("Tess hero power spends Armor before Health", () => {
+  let state = prepareTessState(0x9e49);
+  let player = humanPlayer(state);
+  player.health = 1;
+  player.armor = 2;
+  const target = player.shop[0];
+  assert.ok(target);
+
+  assert.equal(
+    getHeroPowerActivationQuote(state, player.id, target.instanceId)?.usable,
+    true,
+  );
+
+  state = gameReducer(state, {
+    type: "ACTIVATE_HERO_POWER",
+    targetInstanceId: target.instanceId,
+  });
+  player = humanPlayer(state);
+  assert.equal(player.hand.length, 1);
+  assert.equal(player.armor, 0);
+  assert.equal(player.health, 1);
+  assert.equal(player.gold, 8);
 });
 
 test("George AI protects Venomous utility and only shields a shop minion it can buy", () => {
