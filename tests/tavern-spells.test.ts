@@ -1219,6 +1219,40 @@ test("Hasty Excavation is bought with nonlethal Health and then grants Gold", ()
   );
 });
 
+test("Soul Rewinder rewinds Hasty Excavation health purchases", () => {
+  const state = createGame(0x7154);
+  const player = humanPlayer(state);
+  const template = player.shop[0];
+  assert.ok(template);
+  player.board = [
+    definitionMinion(template, "BG26_174", "soul-rewinder", {
+      health: 1,
+    }),
+  ];
+  player.health = 10;
+  player.armor = 0;
+  player.gold = 0;
+  player.hand = [];
+  player.spellShop = tavernSpell(
+    "tavern-spell-hasty-excavation",
+    "rewound-excavation",
+  );
+  player.additionalSpellShop = [];
+
+  const next = gameReducer(state, {
+    type: "BUY_TAVERN_SPELL",
+    spellInstanceId: "rewound-excavation",
+  });
+  const nextPlayer = humanPlayer(next);
+
+  assert.equal(nextPlayer.health, 10);
+  assert.equal(nextPlayer.armor, 0);
+  assert.equal(nextPlayer.hand.length, 1);
+  assert.equal(nextPlayer.hand[0]?.kind, "tavernSpell");
+  assert.equal(nextPlayer.board[0]?.definitionId, "BG26_174");
+  assert.equal(nextPlayer.board[0]?.health, 2);
+});
+
 test("refresh replaces the spell slot while Freeze preserves it for one turn", () => {
   const refreshState = createGame(0x7160);
   const refreshPlayer = humanPlayer(refreshState);
@@ -3897,7 +3931,7 @@ test("Armor Stash sets Armor to exactly 5 and combat damage consumes Armor first
   );
 });
 
-test("paying Health for Hasty Excavation bypasses Armor", () => {
+test("paying Health for Hasty Excavation consumes Armor before Health", () => {
   let state = createGame(0x7501);
   let player = humanPlayer(state);
   player.health = 20;
@@ -3914,8 +3948,8 @@ test("paying Health for Hasty Excavation bypasses Armor", () => {
     spellInstanceId: "armored-excavation",
   });
   player = humanPlayer(state);
-  assert.equal(player.health, 17);
-  assert.equal(player.armor, 5);
+  assert.equal(player.health, 20);
+  assert.equal(player.armor, 2);
 });
 
 test("Upper Hand and Nozdormu's Progeny stack as structured start-of-combat effects", () => {

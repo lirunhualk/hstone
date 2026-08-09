@@ -470,6 +470,47 @@ test("Golden Hungry Forager summons two different highest-Attack physical Murloc
   assert.deepEqual(humanPlayer(combat).hand, handBefore);
 });
 
+test("Expert Aviator summoned Beasts inherit Humming Bird's Start-of-Combat Attack bonus", () => {
+  const state = createGame(0x5d00f);
+  const human = humanPlayer(state);
+  const hummingBird = definitionMinion("BG26_805", "forager-humming-bird", {
+    health: 1_000_000,
+  });
+  const aviator = definitionMinion("BG34_140", "beast-aviator", {
+    health: 1_000_000,
+  });
+  const beast = definitionMinion("BG34_638t", "forager-beast-hand", {
+    tribe: "beast",
+    tribes: ["beast"],
+    attack: 23,
+    health: 29,
+  });
+  const murloc = definitionMinion("BG34_636t", "forager-murloc-hand", {
+    tribe: "murloc",
+    tribes: ["murloc"],
+    attack: 22,
+    health: 99,
+  });
+  human.board = [hummingBird, aviator];
+  human.hand = [beast, murloc];
+  isolateTwoPlayerBattle(state, [enemyWall("forager-beast-wall", 0)]);
+
+  const combat = gameReducer(state, { type: "END_TURN" });
+  const battle = combat.lastBattle;
+  assert.ok(battle);
+  const summon =
+    battle.events.find(
+      (event) =>
+        event.type === "summon" &&
+        event.actorInstanceId === aviator.instanceId &&
+        event.summonReason === "rallyFromHand",
+    ) ?? null;
+
+  assert.ok(summon);
+  assert.equal(summon.minion?.definitionId, beast.definitionId);
+  assert.deepEqual([summon.minion?.attack, summon.minion?.health], [24, 29]);
+});
+
 test("a full-board Golden Hungry Forager spends its two summons across separate later slots", () => {
   const state = createGame(0x5d003);
   const human = humanPlayer(state);

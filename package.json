@@ -8,7 +8,8 @@
   "scripts": {
     "dev": "vinext dev",
     "build": "vinext build",
-    "start": "vinext start",
+    "start": "node scripts/serve-prod.mjs",
+    "start:vinext": "vinext start",
     "assets:sync": "node --experimental-strip-types scripts/sync-card-art.mjs",
     "assets:check": "node scripts/check-no-card-binaries.mjs",
     "data:bg:generate": "node scripts/generate-battlegrounds-pool.mjs",

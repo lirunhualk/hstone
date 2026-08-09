@@ -207,6 +207,174 @@ test("Expert Aviator summons a temporary copy of the highest-Attack hand minion 
   assert.equal(next.pool[highestAttack.definitionId], poolBefore);
 });
 
+test("Expert Aviator does not reapply an owned Undead Army bonus to a rallyFromHand copy", () => {
+  const state = createGame(5110);
+  const human = humanPlayer(state);
+  const aviator = definitionMinion(
+    "BG34_140",
+    "undead-army-expert-aviator",
+    { health: 1_000 },
+  );
+  human.board = [
+    aviator,
+    definitionMinion("BG25_001", "undead-army-aviator-filler", {
+      attack: 0,
+      health: 1_000,
+    }),
+  ];
+  const heldUndead = definitionMinion(
+    "BG25_008",
+    "undead-army-rally-hand",
+    {
+      tribe: "undead",
+      tribes: ["undead"],
+      attack: 7,
+      health: 4,
+    },
+  );
+  keepOnlyOneOpponent(state, [
+    definitionMinion("BG25_001", "undead-army-rally-wall", {
+      attack: 0,
+      health: 1_000,
+      taunt: true,
+      reborn: false,
+    }),
+  ]);
+  human.undeadArmyAttackBonus = 3;
+  human.undeadArmyHealthBonus = 2;
+  human.hand = [heldUndead];
+
+  const combat = gameReducer(state, { type: "END_TURN" });
+  const summon = combat.lastBattle?.events.find(
+    (event) =>
+      event.type === "summon" &&
+      event.actorInstanceId === aviator.instanceId &&
+      event.summonReason === "rallyFromHand",
+  );
+  assert.ok(summon);
+  assert.deepEqual(
+    [summon.minion?.attack, summon.minion?.health],
+    [7, 4],
+  );
+  assert.deepEqual(
+    humanPlayer(combat).hand.map((card) => [
+      card.instanceId,
+      card.kind === "minion" ? card.attack : undefined,
+      card.kind === "minion" ? card.health : undefined,
+    ]),
+    [[heldUndead.instanceId, 7, 4]],
+  );
+});
+
+test("Expert Aviator does not reapply an Undead Army gain that already reached the hand during combat", () => {
+  const state = createGame(5111);
+  const human = humanPlayer(state);
+  const dustbone = definitionMinion(
+    "BG33_323",
+    "combat-army-dustbone",
+    { health: 1_000_000 },
+  );
+  const aviator = definitionMinion(
+    "BG34_140",
+    "combat-army-expert-aviator",
+    { health: 1_000_000 },
+  );
+  human.board = [dustbone, aviator];
+  const heldUndead = definitionMinion(
+    "BG25_008",
+    "combat-army-rally-hand",
+    {
+      tribe: "undead",
+      tribes: ["undead"],
+      attack: 7,
+      health: 4,
+    },
+  );
+  keepOnlyOneOpponent(state, [
+    definitionMinion("BG25_001", "combat-army-rally-wall", {
+      attack: 0,
+      health: 1_000_000,
+      taunt: true,
+      reborn: false,
+    }),
+  ]);
+  human.undeadArmyAttackBonus = 3;
+  human.hand = [heldUndead];
+
+  const combat = gameReducer(state, { type: "END_TURN" });
+  const battle = combat.lastBattle;
+  assert.ok(battle);
+  const armyGain = battle.events.find(
+    (event) =>
+      event.type === "buff" &&
+      event.actorInstanceId === dustbone.instanceId &&
+      event.attackDelta === 2,
+  );
+  const summon = battle.events.find(
+    (event) =>
+      event.type === "summon" &&
+      event.actorInstanceId === aviator.instanceId &&
+      event.summonReason === "rallyFromHand",
+  );
+  assert.ok(armyGain);
+  assert.ok(summon);
+  assert.ok(armyGain.index < summon.index);
+  assert.deepEqual(
+    [summon.minion?.attack, summon.minion?.health],
+    [9, 4],
+  );
+});
+
+test("Expert Aviator keeps combat-only Beast buffs on an Undead hand copy", () => {
+  const state = createGame(5112);
+  const human = humanPlayer(state);
+  const hummingBird = definitionMinion(
+    "BG26_805",
+    "dual-tribe-humming-bird",
+    { health: 1_000_000 },
+  );
+  const aviator = definitionMinion(
+    "BG34_140",
+    "dual-tribe-expert-aviator",
+    { health: 1_000_000 },
+  );
+  human.board = [hummingBird, aviator];
+  const heldDualTribe = definitionMinion(
+    "BG25_008",
+    "dual-tribe-rally-hand",
+    {
+      tribe: "beast",
+      tribes: ["beast", "undead"],
+      attack: 7,
+      health: 4,
+    },
+  );
+  keepOnlyOneOpponent(state, [
+    definitionMinion("BG25_001", "dual-tribe-rally-wall", {
+      attack: 0,
+      health: 1_000_000,
+      taunt: true,
+      reborn: false,
+    }),
+  ]);
+  human.undeadArmyAttackBonus = 3;
+  human.undeadArmyHealthBonus = 2;
+  human.hand = [heldDualTribe];
+
+  const combat = gameReducer(state, { type: "END_TURN" });
+  const summon = combat.lastBattle?.events.find(
+    (event) =>
+      event.type === "summon" &&
+      event.actorInstanceId === aviator.instanceId &&
+      event.summonReason === "rallyFromHand",
+  );
+  assert.ok(summon);
+  assert.deepEqual(
+    [summon.minion?.attack, summon.minion?.health],
+    [8, 4],
+  );
+});
+
 test("Golden Expert Aviator summons the two distinct highest-Attack hand minions in order", () => {
   const state = createGame(5102);
   const human = humanPlayer(state);

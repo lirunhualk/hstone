@@ -1271,6 +1271,36 @@ test("Full House keeps six minion offers beside its Tavern Spell", () => {
   assert.equal(player.shop.length, 6);
 });
 
+test("Full House refills back to seven total offers after buying its Tavern Spell", () => {
+  let state = chooseHero(lobbyGameForEvent("system-event-full-house"));
+  let player = humanPlayer(state);
+  player.heroPowerId = null;
+  player.gold = 10;
+  player.hand = [];
+
+  state = gameReducer(state, { type: "REFRESH_SHOP" });
+  player = humanPlayer(state);
+  assert.equal(player.shop.length, 6);
+  assert.equal(player.additionalSpellShop.length, 0);
+
+  const spellBefore = player.spellShop;
+  assert.ok(spellBefore);
+
+  state = gameReducer(state, {
+    type: "BUY_TAVERN_SPELL",
+    spellInstanceId: spellBefore.instanceId,
+  });
+  player = humanPlayer(state);
+
+  assert.equal(player.hand.at(-1)?.instanceId, spellBefore.instanceId);
+  assert.equal(
+    player.shop.length +
+      (player.spellShop ? 1 : 0) +
+      player.additionalSpellShop.length,
+    7,
+  );
+});
+
 test("Titan Grip first minion purchase each turn is free", () => {
   let state = chooseHero(lobbyGameForEvent("system-event-titan-grip"));
   let player = humanPlayer(state);
@@ -1368,6 +1398,10 @@ test("Refund Trick minions cost 1, sell gives 0, upgrade costs -2", () => {
   let state = chooseHero(lobbyGameForEvent("system-event-refund-trick"));
   let player = humanPlayer(state);
   assert.equal(player.gold, 1);
+
+  state = continueThroughCombat(state);
+  player = humanPlayer(state);
+  assert.equal(player.gold, 2);
 
   assert.equal(getMinionPurchaseCost(state, player.id), 1);
   const shopMinion = player.shop[0];
@@ -1695,6 +1729,20 @@ test("Tavern Special activates every minion type and keeps seven offers", () => 
   player.gold = 10;
   state = gameReducer(state, { type: "REFRESH_SHOP" });
   assert.equal(humanPlayer(state).shop.length, 6);
+});
+
+test("Tavern Special refills back to seven cards after buying a minion", () => {
+  let state = chooseHero(lobbyGameForEvent("system-event-tavern-special"));
+  let player = humanPlayer(state);
+  player.heroPowerId = null;
+  player.gold = 10;
+  assert.equal(player.shop.length, 6);
+  assert.equal(player.spellShop === null ? 0 : 1, 1);
+
+  state = gameReducer(state, { type: "BUY_MINION", shopIndex: 0 });
+  player = humanPlayer(state);
+  assert.equal(player.shop.length, 6);
+  assert.equal(player.spellShop === null ? 0 : 1, 1);
 });
 
 test("registry-only Hero's Call remains loadable for legacy lobbies", () => {

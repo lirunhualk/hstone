@@ -8874,10 +8874,28 @@ button.battle-log-event[aria-current="step"] {
     linear-gradient(135deg, rgb(52 28 74 / 97%), rgb(57 38 13 / 97%));
 }
 
+.recruit-feedback-toast[data-action="shop-consume"] {
+  bottom: 204px;
+  border-color: rgb(193 114 255 / 76%);
+  background:
+    radial-gradient(circle at top, rgb(125 41 176 / 34%), transparent 55%),
+    linear-gradient(135deg, rgb(46 15 18 / 98%), rgb(28 13 41 / 98%));
+  box-shadow:
+    0 18px 44px rgb(0 0 0 / 48%),
+    0 0 34px rgb(186 91 255 / 34%);
+}
+
 .recruit-feedback-toast > strong {
   color: #fff2c8;
   font-size: 14px;
   font-weight: 950;
+}
+
+.recruit-feedback-toast[data-action="shop-consume"] > strong {
+  color: #ffd6ff;
+  font-size: 15px;
+  letter-spacing: 0.05em;
+  text-shadow: 0 0 18px rgb(198 96 255 / 35%);
 }
 
 .recruit-feedback-toast > span {
@@ -8889,6 +8907,15 @@ button.battle-log-event[aria-current="step"] {
   line-height: 1.3;
   text-overflow: ellipsis;
   white-space: nowrap;
+}
+
+.recruit-feedback-toast[data-action="shop-consume"] > span {
+  overflow: visible;
+  color: #f6e8ff;
+  font-size: 12px;
+  line-height: 1.45;
+  text-overflow: clip;
+  white-space: normal;
 }
 
 .recruit-card-motion {
@@ -8918,6 +8945,329 @@ button.battle-log-event[aria-current="step"] {
 
 .recruit-card-motion[data-triple-forge="true"] {
   animation-duration: 100ms;
+}
+
+.recruit-consume-overlay {
+  position: fixed;
+  z-index: 285;
+  inset: 0;
+  display: grid;
+  place-items: center;
+  padding: 68px 12px 18px;
+  overflow: hidden;
+  pointer-events: none;
+  background:
+    radial-gradient(circle at 50% 48%, rgb(211 94 255 / 18%), transparent 42%),
+    linear-gradient(180deg, rgb(11 5 25 / 20%), rgb(11 5 25 / 62%));
+  animation: recruit-consume-overlay 1800ms ease-in-out both;
+}
+
+.recruit-consume-panel {
+  display: grid;
+  width: min(94vw, 650px);
+  max-height: calc(100dvh - 88px);
+  gap: 14px;
+  padding: clamp(14px, 2.8vw, 24px);
+  border: 1px solid rgb(255 194 249 / 58%);
+  border-radius: 24px;
+  isolation: isolate;
+  color: #fff6ff;
+  background:
+    radial-gradient(circle at 50% 0, rgb(238 126 255 / 24%), transparent 46%),
+    linear-gradient(145deg, rgb(48 16 66 / 97%), rgb(20 10 42 / 97%));
+  box-shadow:
+    0 24px 70px rgb(0 0 0 / 54%),
+    0 0 48px rgb(219 89 255 / 22%),
+    inset 0 1px 0 rgb(255 255 255 / 14%);
+  animation: recruit-consume-panel 1800ms cubic-bezier(0.18, 0.82, 0.22, 1)
+    both;
+}
+
+.recruit-consume-title {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 9px;
+  min-width: 0;
+  font-size: clamp(15px, 2.4vw, 21px);
+  font-weight: 900;
+  letter-spacing: 0.02em;
+  text-align: center;
+  text-shadow: 0 2px 16px rgb(229 111 255 / 42%);
+}
+
+.recruit-consume-title > span {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.recruit-consume-title > em {
+  flex: 0 0 auto;
+  padding: 4px 10px;
+  border: 1px solid rgb(255 207 146 / 48%);
+  border-radius: 999px;
+  color: #ffe0a0;
+  background: rgb(85 35 67 / 82%);
+  font-size: 0.72em;
+  font-style: normal;
+}
+
+.recruit-consume-scene {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr);
+  align-items: center;
+  gap: clamp(7px, 2vw, 18px);
+}
+
+.recruit-consume-participant {
+  display: grid;
+  min-width: 0;
+  place-items: center;
+  gap: 7px;
+}
+
+.recruit-consume-role {
+  padding: 3px 9px;
+  border-radius: 999px;
+  color: #eadff2;
+  background: rgb(13 7 28 / 64%);
+  font-size: 11px;
+  font-weight: 800;
+  letter-spacing: 0.08em;
+}
+
+.recruit-consume-card-stack {
+  position: relative;
+  width: clamp(96px, 20vw, 138px);
+  height: clamp(138px, 28vw, 194px);
+}
+
+.unit-card.recruit-consume-card {
+  flex: none;
+  width: clamp(96px, 20vw, 138px);
+  max-width: none;
+  height: clamp(138px, 28vw, 194px);
+  min-height: 0;
+  cursor: default;
+  box-shadow:
+    0 14px 30px rgb(0 0 0 / 42%),
+    0 0 0 2px hsl(var(--card-hue) 72% 65% / 24%);
+}
+
+.recruit-consume-source-before,
+.recruit-consume-source-after {
+  position: absolute;
+  inset: 0;
+}
+
+.recruit-consume-source-before {
+  z-index: 2;
+  animation: recruit-consume-source-before 1700ms ease-in-out both;
+}
+
+.recruit-consume-source-after {
+  z-index: 3;
+  border-color: rgb(255 217 129 / 88%);
+  box-shadow:
+    0 14px 34px rgb(0 0 0 / 44%),
+    0 0 34px rgb(255 191 93 / 30%);
+  animation: recruit-consume-source-after 1700ms cubic-bezier(0.18, 0.82, 0.2, 1)
+    both;
+}
+
+.recruit-consume-meal {
+  position: relative;
+  z-index: 4;
+  animation: recruit-consume-meal 1600ms cubic-bezier(0.18, 0.8, 0.2, 1)
+    both;
+}
+
+.recruit-consume-arrow {
+  position: relative;
+  z-index: 5;
+  display: grid;
+  place-items: center;
+  gap: 1px;
+  color: #ffc976;
+  filter: drop-shadow(0 0 12px rgb(246 149 255 / 54%));
+}
+
+.recruit-consume-arrow > span {
+  font-size: clamp(26px, 5vw, 43px);
+  font-weight: 950;
+  line-height: 0.8;
+}
+
+.recruit-consume-arrow > small {
+  font-size: 10px;
+  font-weight: 900;
+  letter-spacing: 0.08em;
+}
+
+.recruit-consume-stat-change,
+.recruit-consume-meal-stats {
+  color: #fff3c7;
+  font-size: clamp(14px, 2.2vw, 18px);
+  font-weight: 950;
+  letter-spacing: 0.04em;
+  text-shadow: 0 0 14px rgb(255 208 122 / 28%);
+}
+
+.recruit-consume-summary {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: clamp(8px, 2vw, 16px);
+  min-width: 0;
+  padding: 10px 14px;
+  border: 1px solid rgb(255 212 151 / 42%);
+  border-radius: 16px;
+  background: linear-gradient(90deg, rgb(69 28 78 / 82%), rgb(103 42 68 / 88%));
+  box-shadow: inset 0 1px 0 rgb(255 255 255 / 10%);
+  animation: recruit-consume-summary 1700ms ease-in-out both;
+}
+
+.recruit-consume-summary > span {
+  color: #decfe7;
+  font-size: 12px;
+  font-weight: 800;
+}
+
+.recruit-consume-summary > strong {
+  color: #ffe09c;
+  font-size: clamp(16px, 2.7vw, 22px);
+  font-weight: 950;
+  white-space: nowrap;
+}
+
+@keyframes recruit-consume-overlay {
+  0%, 100% {
+    opacity: 0;
+  }
+
+  8%, 88% {
+    opacity: 1;
+  }
+}
+
+@keyframes recruit-consume-panel {
+  0% {
+    opacity: 0;
+    transform: translateY(14px) scale(0.96);
+  }
+
+  10%, 86% {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+
+  100% {
+    opacity: 0;
+    transform: translateY(-8px) scale(0.98);
+  }
+}
+
+@keyframes recruit-consume-source-before {
+  0%, 10% {
+    opacity: 0;
+    transform: scale(0.96);
+  }
+
+  18%, 45% {
+    opacity: 1;
+    transform: scale(1);
+  }
+
+  58%, 100% {
+    opacity: 0;
+    transform: scale(0.92);
+  }
+}
+
+@keyframes recruit-consume-source-after {
+  0%, 48% {
+    opacity: 0;
+    transform: scale(0.84);
+    filter: brightness(1.45) saturate(1.3);
+  }
+
+  60% {
+    opacity: 1;
+    transform: scale(1.08);
+  }
+
+  72%, 100% {
+    opacity: 1;
+    transform: scale(1);
+    filter: brightness(1) saturate(1);
+  }
+}
+
+@keyframes recruit-consume-meal {
+  0%, 8% {
+    opacity: 0;
+    transform: translateX(8px) scale(0.94);
+  }
+
+  16%, 48% {
+    opacity: 1;
+    transform: translateX(0) scale(1);
+    filter: saturate(1);
+  }
+
+  72% {
+    opacity: 0;
+    transform: translateX(calc(-100% - 64px)) scale(0.44);
+    filter: saturate(1.5) brightness(1.15);
+  }
+
+  100% {
+    opacity: 0;
+    transform: translateX(calc(-100% - 64px)) scale(0.2);
+  }
+}
+
+@keyframes recruit-consume-summary {
+  0%, 10% {
+    opacity: 0;
+    transform: translateY(6px);
+  }
+
+  20%, 88% {
+    opacity: 1;
+    transform: translateY(0);
+  }
+
+  100% {
+    opacity: 0;
+    transform: translateY(-4px);
+  }
+}
+
+@media (max-width: 520px) {
+  .recruit-consume-overlay {
+    padding-inline: 8px;
+  }
+
+  .recruit-consume-panel {
+    gap: 10px;
+    padding: 12px 9px;
+    border-radius: 18px;
+  }
+
+  .recruit-consume-title {
+    gap: 5px;
+  }
+
+  .recruit-consume-title > em {
+    padding-inline: 7px;
+  }
+
+  .recruit-consume-summary {
+    gap: 8px;
+    padding: 8px;
+  }
 }
 
 .recruit-triple-stage {
@@ -12271,6 +12621,20 @@ button.battle-log-event[aria-current="step"] {
   .hud-stat.gold.is-refilling > strong,
   .hud-stat.gold.is-refilling .gold-refill-pip.is-new {
     animation: none !important;
+  }
+
+  .recruit-consume-overlay,
+  .recruit-consume-panel,
+  .recruit-consume-source-after,
+  .recruit-consume-meal,
+  .recruit-consume-summary {
+    opacity: 1;
+    animation: none !important;
+    transform: none;
+  }
+
+  .recruit-consume-source-before {
+    display: none;
   }
 
   .recruit-entry-intro.stage-roundBanner .recruit-entry-ribbon,

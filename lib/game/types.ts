@@ -1867,8 +1867,9 @@ export interface PlayerState {
   /** Tavern Spell whose interactive resolution has not completed yet. */
   pendingTavernSpellDefinitionId: string | null;
   /**
-   * Fodder counts for successive manual Refreshes. Each queue slot is consumed
-   * by one successful Refresh action, including a helpful Wisdomball page.
+   * Fodder counts for successive Tavern refresh pages. The recruit-entry page
+   * consumes the first slot; later successful Refreshes consume one each,
+   * including a helpful Wisdomball page.
    */
   demonFodderRefreshQueue: number[];
   /** Recruit-turn economy and persistent Tavern Spell counters. */
@@ -2418,8 +2419,25 @@ export interface RecruitBloodGemPulseResolution {
   targetAfter: BoardMinionInstance;
 }
 
+export interface RecruitShopConsumeResolution {
+  playerId: PlayerId;
+  sourceInstanceId: string;
+  sourceName: string;
+  consumedInstanceId: string;
+  consumedName: string;
+  consumedAttack: number;
+  consumedHealth: number;
+  attackGain: number;
+  healthGain: number;
+  /** Immutable snapshots captured before the engine mutates or removes either card. */
+  sourceBefore: BoardMinionInstance;
+  sourceAfter: BoardMinionInstance;
+  consumed: BoardMinionInstance;
+}
+
 export interface GameActionTrace {
   recruitBloodGemPulses: RecruitBloodGemPulseResolution[];
+  recruitShopConsumes: RecruitShopConsumeResolution[];
 }
 
 export interface GameTransition {

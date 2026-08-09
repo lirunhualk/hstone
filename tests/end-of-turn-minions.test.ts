@@ -4,6 +4,7 @@ import test from "node:test";
 import {
   createGame,
   gameReducer,
+  gameTransition,
   getTavernSpellDefinition,
   type BloodGemSpellInstance,
   type BoardMinionInstance,
@@ -270,22 +271,33 @@ test("Lab Assistant queues three manual Fodder refreshes with Golden and Brann s
   );
 });
 
-test("automatic turn refreshes preserve Fodder queues, while a manual Refresh consumes one slot", () => {
+test("Woodland Desecrator atomically eats its recruit-entry Fodder, while a later refresh waits without a Demon", () => {
   let state = createGame(0xf402);
   let player = humanPlayer(state);
   const source = definitionMinion(
-    "BG35_150",
-    "manual-only-lab-assistant",
+    "BG35_151",
+    "entry-woodland-desecrator",
   );
-  player.board = [];
-  player.hand = [source];
-  state = playHandCard(state, source.instanceId);
+  player.board = [source];
+  player.hand = [];
   prepareDuel(state);
 
   state = gameReducer(state, { type: "END_TURN" });
   state = continueAfterCombat(state);
   player = humanPlayer(state);
-  assert.deepEqual(player.demonFodderRefreshQueue, [1, 1, 1]);
+  assert.deepEqual(player.demonFodderRefreshQueue, [1, 1]);
+  assert.equal(
+    player.shop.filter(
+      (minion) =>
+        minion.definitionId === "live-demon-fodder-token",
+    ).length,
+    0,
+  );
+  assertStats(
+    boardMinion(player, source.instanceId),
+    source.attack + 2,
+    source.health + 2,
+  );
 
   player.shop = [];
   player.spellShop = null;
@@ -295,7 +307,7 @@ test("automatic turn refreshes preserve Fodder queues, while a manual Refresh co
   clearMinionPool(state);
   state = gameReducer(state, { type: "REFRESH_SHOP" });
   player = humanPlayer(state);
-  assert.deepEqual(player.demonFodderRefreshQueue, [1, 1]);
+  assert.deepEqual(player.demonFodderRefreshQueue, [1]);
   assert.equal(
     player.shop.filter(
       (minion) =>
@@ -303,6 +315,115 @@ test("automatic turn refreshes preserve Fodder queues, while a manual Refresh co
     ).length,
     1,
   );
+});
+
+test("recruit-entry Fodder atomically feeds both human and AI Demons and records player-scoped snapshots", () => {
+  let state = createGame(0xf4021);
+  const human = humanPlayer(state);
+  const humanDesecrator = definitionMinion(
+    "BG35_151",
+    "human-entry-desecrator",
+    {
+      attack: 5,
+      health: 7,
+    },
+  );
+  human.board = [humanDesecrator];
+  human.hand = [];
+
+  const aiDesecrator = definitionMinion(
+    "BG35_151",
+    "ai-entry-desecrator",
+    {
+      attack: 11,
+      health: 13,
+    },
+  );
+  const ai = prepareDuel(state, [aiDesecrator]);
+  clearMinionPool(state);
+
+  state = gameReducer(state, { type: "END_TURN" });
+  assert.equal(state.phase, "combat");
+  assert.deepEqual(
+    humanPlayer(state).demonFodderRefreshQueue,
+    [1, 1, 1],
+  );
+  assert.deepEqual(
+    state.players.find((player) => player.id === ai.id)
+      ?.demonFodderRefreshQueue,
+    [1, 1, 1],
+  );
+
+  const transition = gameTransition(state, { type: "CONTINUE" });
+  assert.equal(transition.accepted, true);
+  state = transition.state;
+  assert.equal(state.phase, "recruit");
+
+  const expected = [
+    {
+      playerId: human.id,
+      demonId: humanDesecrator.instanceId,
+      before: [5, 7],
+      after: [7, 9],
+    },
+    {
+      playerId: ai.id,
+      demonId: aiDesecrator.instanceId,
+      before: [11, 13],
+      after: [13, 15],
+    },
+  ] as const;
+  for (const entry of expected) {
+    const player = state.players.find(
+      (candidate) => candidate.id === entry.playerId,
+    );
+    assert.ok(player);
+    assert.deepEqual(player.demonFodderRefreshQueue, [1, 1]);
+    assert.equal(
+      player.shop.some(
+        (minion) =>
+          minion.definitionId === "live-demon-fodder-token",
+      ),
+      false,
+    );
+    assertStats(
+      boardMinion(player, entry.demonId),
+      entry.after[0],
+      entry.after[1],
+    );
+
+    const consume = transition.trace.recruitShopConsumes.find(
+      (event) =>
+        event.playerId === entry.playerId &&
+        event.consumed.definitionId ===
+          "live-demon-fodder-token",
+    );
+    assert.ok(consume);
+    assert.equal(consume.sourceInstanceId, entry.demonId);
+    assert.equal(consume.sourceBefore.instanceId, entry.demonId);
+    assert.deepEqual(
+      [consume.sourceBefore.attack, consume.sourceBefore.health],
+      entry.before,
+    );
+    assert.equal(
+      consume.consumed.definitionId,
+      "live-demon-fodder-token",
+    );
+    assert.deepEqual(
+      [consume.consumed.attack, consume.consumed.health],
+      [2, 2],
+    );
+    assert.deepEqual(
+      [consume.sourceAfter.attack, consume.sourceAfter.health],
+      entry.after,
+    );
+    assert.deepEqual(
+      [consume.attackGain, consume.healthGain],
+      [2, 2],
+    );
+    assert.notStrictEqual(consume.sourceBefore, consume.sourceAfter);
+    assert.notStrictEqual(consume.sourceBefore, consume.consumed);
+  }
 });
 
 test("Fodder waits without a Demon, then feeds a played Demon and refills its slot without owning pool copies", () => {

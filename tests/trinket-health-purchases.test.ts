@@ -213,6 +213,29 @@ test("Pilgrimp Sticker prices one Demon in Health, cannot kill, and resets next 
   );
 });
 
+test("Health-priced minions can spend Armor before Health", () => {
+  let state = createGame(0x8212);
+  let player = humanPlayer(state);
+  installTrinket(player, "BG32_MagicItem_821");
+  player.shop = [minion(state, demonDefinitionId(), "pilgrimp-armor-first")];
+  player.hand = [];
+  player.gold = 0;
+  player.health = 1;
+  player.armor = 3;
+
+  assert.deepEqual(getMinionPurchaseQuote(state, player.id, 0), {
+    currency: "health",
+    cost: 3,
+    affordable: true,
+  });
+
+  state = gameReducer(state, { type: "BUY_MINION", shopIndex: 0 });
+  player = humanPlayer(state);
+  assert.equal(player.hand.length, 1);
+  assert.equal(player.armor, 0);
+  assert.equal(player.health, 1);
+});
+
 test("Bazaar Sticker uses the discounted Tavern Spell quote and a failed full-hand buy consumes nothing", () => {
   let state = createGame(0x8221);
   let player = humanPlayer(state);

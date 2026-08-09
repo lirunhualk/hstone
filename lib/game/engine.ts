@@ -84,6 +84,7 @@ import {
   hasAiResidualPolicyOverride,
   resolveAiResidualMacroChoice,
 } from "./ai-residual-policy.ts";
+import { recruitGoldCapacity } from "./gold.ts";
 import type {
   AvengeEffect,
   ApplyBloodGemsToTribeEffect,
@@ -324,6 +325,12 @@ const HELPFUL_UTILITY_MINION_IDS = new Set([
 const DEFAULT_SEED = 0x4853544e;
 export const MAX_BOARD_SIZE = 7;
 export const MAX_HAND_SIZE = 10;
+let activeGameActionTrace: GameActionTrace | undefined;
+
+function currentGameActionTrace(): GameActionTrace | undefined {
+  return activeGameActionTrace;
+}
+
 const BUY_COST = 3;
 const REFRESH_COST = 1;
 const MAX_COMBAT_ATTACKS = 100;
@@ -1155,6 +1162,20 @@ function damagePlayer(
   player.armor -= armorAbsorbed;
   player.health -= healthDamage;
   return { armorAbsorbed, healthDamage };
+}
+
+function canSurviveHeroDamage(
+  player: PlayerState,
+  amount: number,
+): boolean {
+  return player.health + player.armor > Math.max(0, amount);
+}
+
+function remainingHealthAfterHeroDamage(
+  player: PlayerState,
+  amount: number,
+): number {
+  return player.health - Math.max(0, amount - player.armor);
 }
 
 function consumeSafeBadgeForLethalCombatDamage(
@@ -2785,13 +2806,22 @@ function applyYoggCurseOfFlesh(
 function applyYoggDevouringHunger(
   state: GameState,
   player: PlayerState,
+  trace?: GameActionTrace,
 ): void {
   const consumed = player.shop.splice(0);
   for (const minion of consumed) {
     if (player.board.length > 0) {
       const target =
         player.board[randomIndex(state, player.board.length)];
-      consumeShopMinionInto(state, player, target, minion, 1);
+      consumeShopMinionInto(
+        state,
+        player,
+        target,
+        minion,
+        1,
+        { attack: 0, health: 0 },
+        trace,
+      );
     } else {
       finishConsumedShopMinion(state, player, minion);
     }
@@ -2904,7 +2934,7 @@ function spinYoggWheel(
       applyYoggCurseOfFlesh(state, player);
       break;
     case "devouringHunger":
-      applyYoggDevouringHunger(state, player);
+      applyYoggDevouringHunger(state, player, currentGameActionTrace());
       break;
     case "rodOfRoasting":
       applyYoggRodOfRoasting(state, player);
@@ -7036,7 +7066,15 @@ function applyAfterMinionPlayedTrinkets(
       const target = otherDemons[randomIndex(state, otherDemons.length)];
       const consumedIndex = randomIndex(state, player.shop.length);
       const [consumed] = player.shop.splice(consumedIndex, 1);
-      consumeShopMinionInto(state, player, target, consumed, 1);
+      consumeShopMinionInto(
+        state,
+        player,
+        target,
+        consumed,
+        1,
+        { attack: 0, health: 0 },
+        currentGameActionTrace(),
+      );
     }
   }
 
@@ -8131,10 +8169,38 @@ function refillFodderSlot(
   player.shop.push(minion);
 }
 
+function refillShopMinionSlotIfNeeded(
+  state: GameState,
+  player: PlayerState,
+): void {
+  if (!player.systemEventCounters.fullHouseActive) {
+    return;
+  }
+  if (player.shop.length >= tavernMinionCapacity(player)) {
+    return;
+  }
+  const minion = drawTavernMinionFromPool(state, player);
+  if (!minion) {
+    return;
+  }
+  applyTavernBonuses(player, minion);
+  reconcileWhereverMinion(
+    minion,
+    player.astralAutomatonsSummoned ?? 0,
+    player.eternalKnightsDied ?? 0,
+    player.tavernSpellsCast ?? 0,
+    player.deathrattlesTriggered ?? 0,
+    player.magnetizationsThisGame ?? 0,
+  );
+  refreshDynamicMinionDescription(minion, player);
+  player.shop.push(minion);
+}
+
 function resolveShopFodder(
   state: GameState,
   player: PlayerState,
 ): void {
+  const trace = currentGameActionTrace();
   while (true) {
     const fodderIndex = player.shop.findIndex(
       (minion) =>
@@ -8154,6 +8220,8 @@ function resolveShopFodder(
       target,
       fodder,
       fodder.golden ? 2 : 1,
+      { attack: 0, health: 0 },
+      trace,
     );
     refillFodderSlot(state, player);
   }
@@ -8162,6 +8230,7 @@ function resolveShopFodder(
 function applyQueuedDemonFodderToRefresh(
   state: GameState,
   player: PlayerState,
+  resolveImmediately = true,
 ): void {
   const fodderCount = player.demonFodderRefreshQueue.shift() ?? 0;
   while (
@@ -8199,7 +8268,9 @@ function applyQueuedDemonFodderToRefresh(
     fodder.attack += portraitBonus;
     fodder.health += portraitBonus;
     player.shop.push(fodder);
-    resolveShopFodder(state, player);
+    if (resolveImmediately) {
+      resolveShopFodder(state, player);
+    }
   }
 }
 
@@ -8341,7 +8412,7 @@ export function getMinionPurchaseQuote(
     affordable:
       player.hand.length < MAX_HAND_SIZE &&
       (currency === "health"
-        ? player.health > cost
+        ? canSurviveHeroDamage(player, cost)
         : player.gold >= cost),
   };
 }
@@ -8586,7 +8657,7 @@ export function getTavernSpellPurchaseQuote(
     affordable:
       player.hand.length < MAX_HAND_SIZE &&
       (currency === "health"
-        ? player.health > cost
+        ? canSurviveHeroDamage(player, cost)
         : player.gold >= cost),
   };
 }
@@ -9214,6 +9285,7 @@ function applyRecruitEffects(
   scaleOverride?: number,
   context: RecruitEffectContext = {},
 ): void {
+  const trace = currentGameActionTrace();
   if (!effects) {
     return;
   }
@@ -9599,7 +9671,9 @@ function applyRecruitEffects(
         consumed,
         statScale,
         elementalGrantBonus,
+        trace,
       );
+      refillShopMinionSlotIfNeeded(state, player);
     } else if (effect.kind === "queueDemonFodder") {
       queueDemonFodder(player, effect, scale);
     } else if (effect.kind === "discountNextTavernSpell") {
@@ -10131,7 +10205,10 @@ function consumeShopMinionInto(
   consumed: BoardMinionInstance,
   statScale: number,
   statGrantBonus: CombatStatBuff = { attack: 0, health: 0 },
+  trace?: GameActionTrace,
 ): void {
+  const sourceBefore = trace ? cloneMinion(target) : null;
+  const consumedSnapshot = trace ? cloneMinion(consumed) : null;
   const attackGain = consumed.attack * statScale + statGrantBonus.attack;
   const triggeredHealth = player.board.some(
     (candidate) => candidate.instanceId === target.instanceId,
@@ -10142,6 +10219,22 @@ function consumeShopMinionInto(
   const healthGain = consumed.health * statScale + statGrantBonus.health;
   target.health += healthGain + triggeredHealth;
   reconcileConditionalMinion(target);
+  if (trace && sourceBefore && consumedSnapshot) {
+    trace.recruitShopConsumes.push({
+      playerId: player.id,
+      sourceInstanceId: target.instanceId,
+      sourceName: target.name,
+      consumedInstanceId: consumed.instanceId,
+      consumedName: consumed.name,
+      consumedAttack: consumed.attack,
+      consumedHealth: consumed.health,
+      attackGain,
+      healthGain: healthGain + triggeredHealth,
+      sourceBefore,
+      sourceAfter: cloneMinion(target),
+      consumed: consumedSnapshot,
+    });
+  }
   observeRecruitFriendlyAttackGain(player, target, attackGain);
   observeRecruitFriendlyHealthGain(
     player,
@@ -10156,6 +10249,7 @@ function consumeHighestHealthShopMinion(
   player: PlayerState,
   source: BoardMinionInstance,
   statScale: number,
+  trace?: GameActionTrace,
 ): void {
   if (
     !player.board.some(
@@ -10198,6 +10292,7 @@ function consumeHighestHealthShopMinion(
     consumed,
     statScale,
     elementalGrantBonus,
+    trace,
   );
   buffMinions(
     portraitNeighbors,
@@ -10212,6 +10307,7 @@ function haveDemonsConsumeShop(
   state: GameState,
   player: PlayerState,
   statScale: number,
+  trace?: GameActionTrace,
 ): void {
   const demons = player.board.filter((minion) =>
     minionHasTribe(minion, "demon"),
@@ -10222,7 +10318,15 @@ function haveDemonsConsumeShop(
     }
     const consumedIndex = randomIndex(state, player.shop.length);
     const [consumed] = player.shop.splice(consumedIndex, 1);
-    consumeShopMinionInto(state, player, demon, consumed, statScale);
+    consumeShopMinionInto(
+      state,
+      player,
+      demon,
+      consumed,
+      statScale,
+      { attack: 0, health: 0 },
+      trace,
+    );
   }
 }
 
@@ -10423,6 +10527,7 @@ function applyOneEndOfTurnEffect(
   scale: number,
   payoffRepetitions = 1,
 ): void {
+  const trace = currentGameActionTrace();
   if (
     effect.kind === "gainBloodGems" ||
     effect.kind === "gainTavernSpell" ||
@@ -10511,6 +10616,7 @@ function applyOneEndOfTurnEffect(
       player,
       source,
       effect.goldenMode === "doubleStats" ? scale : 1,
+      trace,
     );
     return;
   }
@@ -10520,6 +10626,7 @@ function applyOneEndOfTurnEffect(
       state,
       player,
       effect.goldenMode === "doubleStats" ? scale : 1,
+      trace,
     );
     return;
   }
@@ -11748,6 +11855,12 @@ function applyGoldenWarbandPurchaseTrinket(
   }
 }
 
+function boughtShopGoldenShouldGrantTripleReward(
+  minion: BoardMinionInstance,
+): boolean {
+  return minion.golden && !minion.grantsTripleReward;
+}
+
 function buyMinion(
   state: GameState,
   player: PlayerState,
@@ -11764,6 +11877,9 @@ function buyMinion(
   }
   claimGeneratedShopMinion(minion);
   applyGoldenWarbandPurchaseTrinket(state, player, minion);
+  if (boughtShopGoldenShouldGrantTripleReward(minion)) {
+    minion.grantsTripleReward = true;
+  }
   applyOwnedUndeadArmyBonus(player, minion);
   applyOwnedBeetleBonus(player, minion);
   reconcileWhereverMinion(
@@ -11776,8 +11892,9 @@ function buyMinion(
     );
   refreshDynamicMinionDescription(minion, player);
   addCardToHand(state, player, minion);
+  refillShopMinionSlotIfNeeded(state, player);
   if (quote.currency === "health") {
-    player.health -= quote.cost;
+    damageRecruitPlayer(player, quote.cost);
   } else {
     const freeFirst =
       (state.lobbySystemsEnabled &&
@@ -11878,8 +11995,15 @@ function buyTavernSpell(
       (candidate) => candidate.instanceId !== spell.instanceId,
     );
   }
+  if (
+    (player.systemEventCounters.fullHouseActive ||
+      playerHasTrinketCardId(player, TAVERN_FAN_CARD_ID)) &&
+    tavernOfferCount(player) < tavernCardCapacity(player)
+  ) {
+    fillShop(state, player, false);
+  }
   if (currency === "health") {
-    player.health -= cost;
+    damageRecruitPlayer(player, cost);
   } else {
     spendGold(state, player, cost);
   }
@@ -13787,7 +13911,10 @@ function triggerRecruitAfterSpellCast(
           source,
           consumed,
           statScale,
+          { attack: 0, health: 0 },
+          currentGameActionTrace(),
         );
+        refillShopMinionSlotIfNeeded(state, player);
       }
       refreshDynamicMinionDescription(source, player);
     }
@@ -21243,7 +21370,10 @@ function canAiSpendHealth(
   cost: number,
 ): boolean {
   const floor = getAiStrategyProfile(player.id).healthSpendFloor;
-  return player.health > cost && player.health - cost >= floor;
+  return (
+    canSurviveHeroDamage(player, cost) &&
+    remainingHealthAfterHeroDamage(player, cost) >= floor
+  );
 }
 
 function canAiPurchaseMinion(
@@ -22238,9 +22368,9 @@ function canAiSafelyActivateDamageHeroPower(
   }
   const damage = 2;
   const floor = getAiStrategyProfile(player.id).healthSpendFloor;
-  const remainingHealth = player.health - damage;
+  const remainingHealth = remainingHealthAfterHeroDamage(player, damage);
   const crossesFloor = !canAiSpendHealth(player, damage);
-  const isLethal = remainingHealth <= 0;
+  const isLethal = !canSurviveHeroDamage(player, damage);
   const benchmark = activeAiRecruitSafetyForState(state);
   const diagnostics = aiRecruitSafetyDiagnosticsFor(state, player.id);
   if (benchmark && diagnostics) {
@@ -26468,6 +26598,20 @@ function applyStartOfCombatEffects(
         }
 
         if (effect.kind === "buff") {
+          if (effect.target === "friendlyTribe") {
+            const tribe = effect.tribe;
+            if (!tribe) {
+              continue;
+            }
+            const current = context.tribeBuffs[ownerId][tribe] ?? {
+              attack: 0,
+              health: 0,
+            };
+            context.tribeBuffs[ownerId][tribe] = {
+              attack: current.attack + effect.attack * scale,
+              health: current.health + effect.health * scale,
+            };
+          }
           const targets =
             effect.target === "self"
               ? [source]
@@ -26856,19 +27000,29 @@ function applyPersistentTribeBuff(
   context: CombatContext,
   ownerId: PlayerId,
   minion: MinionInstance,
+  sourceAlreadyIncludesOwnedTribeBuffs = false,
 ): void {
+  const owner = sourceAlreadyIncludesOwnedTribeBuffs
+    ? findPlayer(context.state, ownerId)
+    : null;
   for (const [tribe, buff] of Object.entries(
     context.tribeBuffs[ownerId],
   ) as [Tribe, CombatStatBuff][]) {
     if (!buff || !minionHasTribe(minion, tribe)) {
       continue;
     }
+    const inheritedAttack =
+      tribe === "undead" ? (owner?.undeadArmyAttackBonus ?? 0) : 0;
+    const inheritedHealth =
+      tribe === "undead" ? (owner?.undeadArmyHealthBonus ?? 0) : 0;
+    const attack = Math.max(0, buff.attack - inheritedAttack);
+    const health = Math.max(0, buff.health - inheritedHealth);
     const triggeredHealth = healthGainedFromExternalAttack(
       minion,
-      buff.attack,
+      attack,
     );
-    minion.attack += buff.attack;
-    minion.health += buff.health + triggeredHealth;
+    minion.attack += attack;
+    minion.health += health + triggeredHealth;
   }
 }
 
@@ -27317,12 +27471,16 @@ function insertCombatMinion(
     context.magnetizationsThisGame[ownerId],
   );
   if (
-    summonReason !== "rallyFromHand" &&
-    summonReason !== "startOfCombatFromHand" &&
     summonReason !== "deathlyStrikerFromHand" &&
     summonReason !== "stitchedSalvagerCopy"
   ) {
-    applyPersistentTribeBuff(context, ownerId, summoned);
+    applyPersistentTribeBuff(
+      context,
+      ownerId,
+      summoned,
+      summonReason === "rallyFromHand" ||
+        summonReason === "startOfCombatFromHand",
+    );
   }
   applyCombatSummonHeroPower(context, ownerId, summoned);
   if (summonReason !== "stitchedSalvagerCopy") {
@@ -36075,7 +36233,7 @@ function beginNextRecruit(state: GameState): void {
         "goldCarryover";
     const carriedGold = carryoverActive ? Math.max(0, player.gold) : 0;
     player.gold =
-      Math.min(player.maxGold, state.round + 2) +
+      recruitGoldCapacity(state, player) +
       player.pendingNextTurnGold +
       carriedGold;
     if (carryoverActive && carriedGold >= 5) {
@@ -36726,9 +36884,11 @@ function beginNextRecruit(state: GameState): void {
       player.frozen = false;
       player.spellOnlyRefreshActive = false;
       fillShop(state, player);
+      applyQueuedDemonFodderToRefresh(state, player);
     } else {
       releaseShop(state, player);
       fillShop(state, player);
+      applyQueuedDemonFodderToRefresh(state, player);
     }
     reconcileConditionalMinions(player);
   }
@@ -37538,7 +37698,7 @@ function activateHeroPowerMutating(
       const [minion] = player.shop.splice(shopIndex, 1);
       addCardToHand(state, player, minion);
       fillShop(state, player);
-      player.health -= 2;
+      damageRecruitPlayer(player, 2);
       break;
     }
     case "activeGiveDivineShield": {
@@ -38187,6 +38347,9 @@ function reduceGame(
   trace?: GameActionTrace,
   acceptance?: { accepted: boolean },
 ): GameState {
+  const previousTrace = activeGameActionTrace;
+  activeGameActionTrace = trace;
+  try {
   if (acceptance) {
     acceptance.accepted = false;
   }
@@ -38350,11 +38513,15 @@ function reduceGame(
     }
   }
   return next;
+  } finally {
+    activeGameActionTrace = previousTrace;
+  }
 }
 
 function createGameActionTrace(): GameActionTrace {
   return {
     recruitBloodGemPulses: [],
+    recruitShopConsumes: [],
   };
 }
 

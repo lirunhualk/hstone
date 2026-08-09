@@ -171,6 +171,53 @@ function battleMinion(
   return minion as BoardMinionInstance;
 }
 
+test("startOfCombatFromHand does not reapply an owned Undead Army bonus", () => {
+  const state = createGame(0x5c010);
+  const human = humanPlayer(state);
+  const summoner = definitionMinion(
+    "BG27_556",
+    "undead-army-start-of-combat-summoner",
+  );
+  const heldDualTribe = definitionMinion(
+    "BG25_008",
+    "undead-army-start-of-combat-hand",
+    {
+      tribe: "murloc",
+      tribes: ["murloc", "undead"],
+      attack: 7,
+      health: 4,
+    },
+  );
+  human.board = [summoner];
+  keepOnlyOneOpponent(state, [
+    enemyWall("undead-army-start-of-combat-wall"),
+  ]);
+  human.undeadArmyAttackBonus = 3;
+  human.undeadArmyHealthBonus = 2;
+  human.hand = [heldDualTribe];
+
+  const combat = gameReducer(state, { type: "END_TURN" });
+  const summon = combat.lastBattle?.events.find(
+    (event) =>
+      event.type === "summon" &&
+      event.actorInstanceId === summoner.instanceId &&
+      event.summonReason === "startOfCombatFromHand",
+  );
+  assert.ok(summon);
+  assert.deepEqual(
+    [summon.minion?.attack, summon.minion?.health],
+    [7, 4],
+  );
+  assert.deepEqual(
+    humanPlayer(combat).hand.map((card) => [
+      card.instanceId,
+      card.kind === "minion" ? card.attack : undefined,
+      card.kind === "minion" ? card.health : undefined,
+    ]),
+    [[heldDualTribe.instanceId, 7, 4]],
+  );
+});
+
 test("the simple Start-of-Combat batch maps exact ordinary and Golden metadata", () => {
   const amber = getMinionDefinition("BG24_500");
   assert.equal(amber.effectSupport, "complete");

@@ -182,6 +182,7 @@ import {
   transitionRecruitEntryPresentation,
   type RecruitEntryPresentationState,
 } from "../lib/game/recruit-entry-presentation";
+import { recruitGoldCapacity } from "../lib/game/gold";
 import {
   createSpellCastPresentation,
   spellCastPresentationAnnouncement,
@@ -4457,6 +4458,10 @@ export default function GameClient() {
   const preCombatHandIdsRef = useRef<Set<string> | null>(null);
   const activeRecruitPresentation =
     recruitPresentationQueue[0] ?? null;
+  const activeRecruitConsume =
+    activeRecruitPresentation?.events.find(
+      (event) => event.kind === "shopConsume",
+    ) ?? null;
   const activeRecruitBloodGemPulse =
     activeRecruitPresentation?.events.find(
       (event) => event.kind === "bloodGemPulse",
@@ -4564,6 +4569,7 @@ export default function GameClient() {
     (
       events: readonly RecruitPresentationEvent[],
       motion: RecruitMotionGeometry | null = null,
+      replaceCurrent = false,
     ) => {
       if (events.length === 0) return;
       const eventGroups = groupRecruitPresentationEvents(events);
@@ -4587,10 +4593,9 @@ export default function GameClient() {
         };
         return presentation;
       });
-      setRecruitPresentationQueue((current) => [
-        ...current,
-        ...presentations,
-      ]);
+      setRecruitPresentationQueue((current) =>
+        replaceCurrent ? presentations : [...current, ...presentations],
+      );
     },
     [],
   );
@@ -4711,11 +4716,18 @@ export default function GameClient() {
       return;
     }
     const activeToken = activeRecruitPresentation.token;
+    const reducedMotion =
+      window.matchMedia?.("(prefers-reduced-motion: reduce)").matches ??
+      false;
     const presentationTimer = window.setTimeout(() => {
       setRecruitPresentationQueue((current) =>
         completeRecruitPresentation(current, activeToken),
       );
-    }, recruitPresentationDuration(activeRecruitPresentation.events));
+    },
+    recruitPresentationDuration(
+      activeRecruitPresentation.events,
+      reducedMotion,
+    ));
     return () => window.clearTimeout(presentationTimer);
   }, [activeRecruitPresentation]);
 
@@ -5054,13 +5066,19 @@ export default function GameClient() {
         transition.trace,
       );
       gameRef.current = next;
-      if (action.type === "END_TURN" || action.type === "CONTINUE") {
+      if (action.type === "CONTINUE") {
         setRecruitPresentationQueue([]);
       } else if (
         events.length > 0 &&
         options.deferRecruitPresentation !== true
       ) {
-        enqueueRecruitPresentationEvents(events, motion);
+        enqueueRecruitPresentationEvents(
+          events,
+          motion,
+          action.type === "END_TURN",
+        );
+      } else if (action.type === "END_TURN") {
+        setRecruitPresentationQueue([]);
       }
       if (started) {
         safeWriteLocalStorage(SAVE_KEY, JSON.stringify(next));
@@ -5232,8 +5250,14 @@ export default function GameClient() {
       (event) =>
         event.kind === "cardMove" && event.motion === "hand-to-board",
     ) ?? false;
+  const recruitConsumeBlocksInteraction =
+    recruitPresentationQueue.some((presentation) =>
+      presentation.events.some((event) => event.kind === "shopConsume"),
+    );
   const recruitPresentationBlocksInteraction =
-    recruitTripleBlocksInteraction || recruitPlayBlocksInteraction;
+    recruitTripleBlocksInteraction ||
+    recruitPlayBlocksInteraction ||
+    recruitConsumeBlocksInteraction;
   const trinketChoicePresentationBlocksInteraction =
     trinketChoicePresentation?.stage === "confirmFocus" ||
     trinketChoicePresentation?.stage === "effectHandoff";
@@ -5843,6 +5867,8 @@ export default function GameClient() {
     game.phase === "combat" &&
     battleKey !== null &&
     combatEntryStage !== null;
+  const combatEntryDeferredByConsume =
+    game.phase === "combat" && recruitConsumeBlocksInteraction;
   const pageModalOpen =
     (loaded && !started) ||
     showRestart ||
@@ -6810,6 +6836,7 @@ export default function GameClient() {
   useEffect(() => {
     clearCombatIntroTimer();
     if (
+      combatEntryDeferredByConsume ||
       !combatEntryPresentation ||
       !battleKey ||
       !combatTimeline ||
@@ -6859,6 +6886,7 @@ export default function GameClient() {
   }, [
     battleKey,
     clearCombatIntroTimer,
+    combatEntryDeferredByConsume,
     combatEntryPresentation,
     combatTimeline,
     game.phase,
@@ -8675,6 +8703,10 @@ export default function GameClient() {
   const activeRecruitAction =
     tripleForgeHasTakenOver
       ? "triple-merge"
+      : activeRecruitPresentation?.events.some(
+            (event) => event.kind === "shopConsume",
+          )
+        ? "shop-consume"
       : activeRecruitMove?.kind === "cardMove"
       ? activeRecruitMove.motion
       : activeRecruitRefresh
@@ -8689,6 +8721,21 @@ export default function GameClient() {
   const recruitFeedbackTitle =
     tripleForgeHasTakenOver && activeRecruitTriple?.kind === "triple"
       ? `三连 · ${activeRecruitTriple.golden.name}`
+      : activeRecruitPresentation?.events.some(
+            (event) => event.kind === "shopConsume",
+          )
+        ? activeRecruitPresentation.events.filter(
+              (event) => event.kind === "shopConsume",
+            ).length > 1
+          ? `连续吞食 · ${activeRecruitPresentation.events.filter((event) => event.kind === "shopConsume").length} 次`
+          : (() => {
+              const consume = activeRecruitPresentation.events.find(
+                (event) => event.kind === "shopConsume",
+              );
+              return consume?.kind === "shopConsume"
+                ? `吞食 · ${consume.sourceName}`
+                : "吞食酒馆随从";
+            })()
       : activeRecruitMove?.kind === "cardMove"
       ? activeRecruitMove.motion === "shop-to-hand"
         ? `购买 · ${activeRecruitMove.card.name}`
@@ -8718,7 +8765,7 @@ export default function GameClient() {
     : recruitEntryPresentation?.gold ?? human.gold;
   const defaultGoldCapacity = Math.max(
     human.gold,
-    Math.min(human.maxGold, game.round + 2),
+    recruitGoldCapacity(game, human),
   );
   const displayedGoldCapacity = recruitEntryShowsPreviousGold
     ? recruitEntryPresentation?.previousMaxGold ?? defaultGoldCapacity
@@ -9088,7 +9135,7 @@ export default function GameClient() {
             disabled={interactionLocked}
             onClick={openRestartDialog}
           >
-            重开
+            战斗！
           </button>
           <button
             type="button"
@@ -11260,6 +11307,7 @@ export default function GameClient() {
         )}
 
       {combatIntroActive &&
+        !combatEntryDeferredByConsume &&
         combatEntryStage !== "complete" &&
         battle &&
         introOpponent && (
@@ -11764,6 +11812,95 @@ export default function GameClient() {
           <strong>{recruitFeedbackTitle}</strong>
           <span>{activeRecruitPresentation.announcement}</span>
         </div>
+      )}
+
+      {activeRecruitConsume?.kind === "shopConsume" && (
+        <section
+          className="recruit-consume-overlay"
+          aria-hidden="true"
+          data-attack-gain={activeRecruitConsume.attackGain}
+          data-consumed-instance-id={
+            activeRecruitConsume.consumedInstanceId
+          }
+          data-health-gain={activeRecruitConsume.healthGain}
+          data-source-instance-id={activeRecruitConsume.sourceInstanceId}
+          data-testid="recruit-consume-stage"
+          key={`consume-${activeRecruitPresentation?.token ?? 0}-${activeRecruitConsume.consumed.instanceId}`}
+        >
+          <div className="recruit-consume-panel">
+            <strong className="recruit-consume-title">
+              <span>{activeRecruitConsume.sourceName}</span>
+              <em>吞食</em>
+              <span>{activeRecruitConsume.consumedName}</span>
+            </strong>
+            <div className="recruit-consume-scene">
+              <article className="recruit-consume-participant is-source">
+                <span className="recruit-consume-role">吞食者</span>
+                <div className="recruit-consume-card-stack">
+                  <div
+                    className={`unit-card is-compact recruit-consume-card recruit-consume-source-before${activeRecruitConsume.sourceBefore.golden ? " is-golden" : ""}`}
+                    data-testid="recruit-consume-source-before"
+                    style={
+                      {
+                        "--card-hue":
+                          TRIBE_HUE[activeRecruitConsume.sourceBefore.tribe],
+                      } as CSSProperties
+                    }
+                  >
+                    <UnitCardFace unit={activeRecruitConsume.sourceBefore} />
+                  </div>
+                  <div
+                    className={`unit-card is-compact recruit-consume-card recruit-consume-source-after${activeRecruitConsume.sourceAfter.golden ? " is-golden" : ""}`}
+                    data-testid="recruit-consume-source-after"
+                    style={
+                      {
+                        "--card-hue":
+                          TRIBE_HUE[activeRecruitConsume.sourceAfter.tribe],
+                      } as CSSProperties
+                    }
+                  >
+                    <UnitCardFace unit={activeRecruitConsume.sourceAfter} />
+                  </div>
+                </div>
+                <strong className="recruit-consume-stat-change">
+                  {`${activeRecruitConsume.sourceBefore.attack}/${activeRecruitConsume.sourceBefore.health} → ${activeRecruitConsume.sourceAfter.attack}/${activeRecruitConsume.sourceAfter.health}`}
+                </strong>
+              </article>
+
+              <div className="recruit-consume-arrow">
+                <span>←</span>
+                <small>吞食</small>
+              </div>
+
+              <article className="recruit-consume-participant is-meal">
+                <span className="recruit-consume-role">酒馆随从</span>
+                <div
+                  className={`unit-card is-compact recruit-consume-card recruit-consume-meal${activeRecruitConsume.consumed.golden ? " is-golden" : ""}`}
+                  data-testid="recruit-consume-meal"
+                  style={
+                    {
+                      "--card-hue":
+                        TRIBE_HUE[activeRecruitConsume.consumed.tribe],
+                    } as CSSProperties
+                  }
+                >
+                  <UnitCardFace unit={activeRecruitConsume.consumed} />
+                </div>
+                <strong className="recruit-consume-meal-stats">
+                  {`${activeRecruitConsume.consumed.attack}/${activeRecruitConsume.consumed.health}`}
+                </strong>
+              </article>
+            </div>
+            <div
+              className="recruit-consume-summary"
+              data-testid="recruit-consume-summary"
+            >
+              <span>本次增加</span>
+              <strong>{`+${activeRecruitConsume.attackGain} 攻击`}</strong>
+              <strong>{`+${activeRecruitConsume.healthGain} 生命`}</strong>
+            </div>
+          </div>
+        </section>
       )}
 
       {activeRecruitMove?.kind === "cardMove" &&
@@ -13429,7 +13566,7 @@ export default function GameClient() {
                 data-testid="confirm-restart"
                 disabled={configuredInitialHealth === null}
               >
-                重开本局
+                战斗！
               </button>
             </div>
           </form>
