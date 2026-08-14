@@ -419,6 +419,13 @@ test("tribe-bound Heroes are filtered from both offers and AI assignments", () =
   assert.equal(mechOnlyIds.has("hero-ysera"), false);
   assert.equal(mechOnlyIds.has("hero-chenvaala"), false);
   assert.equal(mechOnlyIds.has("hero-capn-hoggarr"), false);
+  assert.equal(mechOnlyIds.has("hero-bg20-103"), false);
+  assert.equal(mechOnlyIds.has("hero-tb-55"), false);
+  assert.equal(mechOnlyIds.has("hero-tb-56"), false);
+  assert.equal(mechOnlyIds.has("hero-tb-702"), false);
+  assert.equal(mechOnlyIds.has("hero-bg22-007"), false);
+  assert.equal(mechOnlyIds.has("hero-bg22-200"), false);
+  assert.equal(mechOnlyIds.has("hero-tb-17"), true);
 
   const beastOnlyIds = new Set(
     heroesAvailableForTribes(["beast"]).map((hero) => hero.id),
@@ -436,15 +443,14 @@ test("tribe-bound Heroes are filtered from both offers and AI assignments", () =
         .filter((player) => !player.isHuman)
         .map((player) => player.heroId),
     ];
+    const availableHeroIds = new Set(
+      heroesAvailableForTribes(state.activeTribes).map((hero) => hero.id),
+    );
     for (const heroId of dealtHeroIds) {
       assert.ok(heroId);
-      const hero = getHeroDefinition(heroId);
       assert.ok(
-        !hero.associatedTribes?.length ||
-          hero.associatedTribes.some((tribe) =>
-            state.activeTribes.includes(tribe),
-          ),
-        `${hero.id} must match an active tribe`,
+        availableHeroIds.has(heroId),
+        `${heroId} must match an active tribe`,
       );
     }
   }

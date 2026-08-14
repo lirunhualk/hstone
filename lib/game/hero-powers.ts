@@ -2062,10 +2062,18 @@ export function isHeroDefinitionId(definitionId: string): boolean {
 }
 
 const TRIBE_BOUND_HERO_POWERS: Record<string, readonly Tribe[]> = {
+  "hero-power-bg20_hero_103p": ["quilboar"],
+  "hero-power-bg22_hero_007p": ["naga"],
+  "hero-power-bg22_hero_200p": ["mech"],
   "hero-power-sprout-it-out": ["beast", "undead"],
   "hero-power-dream-portal": ["dragon"],
   "hero-power-avalanche": ["elemental"],
   "hero-power-yo-ho-ogre": ["pirate"],
+  "hero-power-tb_baconshop_hp_015": ["mech"],
+  "hero-power-tb_baconshop_hp_056": ["murloc"],
+  "hero-power-tb_baconshop_hp_064": ["dragon"],
+  "hero-power-tb_baconshop_hp_072": ["pirate"],
+  "hero-power-tb_baconshop_hp_702t": ["undead"],
 };
 
 function heroPowerIsAvailableForTribes(
