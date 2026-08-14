@@ -1376,6 +1376,17 @@ function refreshMinionSupport(
     typeof value.crabDeathrattles === "number"
       ? value.crabDeathrattles
       : 0;
+  if (!Array.isArray(value.learnedDeathrattles)) {
+    value.learnedDeathrattles = [];
+  } else {
+    value.learnedDeathrattles = value.learnedDeathrattles.filter(
+      (entry) =>
+        isRecord(entry) &&
+        typeof entry.sourceInstanceId === "string" &&
+        typeof entry.definitionId === "string" &&
+        typeof entry.golden === "boolean",
+    );
+  }
   value.goldenCrabDeathrattles =
     typeof value.goldenCrabDeathrattles === "number"
       ? value.goldenCrabDeathrattles

@@ -331,6 +331,73 @@ test("maps Sewer Rat and Half-Shell to their exact ordinary and Golden token art
   );
 });
 
+test("Fish of N'Zoth learns a friendly Deathrattle and triggers it when it later dies", () => {
+  const fish = definitionMinion("TB_BaconShop_HP_105t", "fish", {
+    attack: 1,
+    health: 1,
+  });
+  const scallywag = definitionMinion("scallywag", "scallywag", {
+    attack: 1,
+    health: 1,
+  });
+  const filler = inertMinion("filler", {
+    attack: 0,
+    health: 50,
+  });
+  const { state, battle } = runCombat(
+    0xd34f00,
+    [scallywag, fish, filler],
+    [
+      definitionMinion("BG_LOE_077", "enemy-1", {
+        attack: 50,
+        health: 50,
+        taunt: true,
+        reborn: false,
+      }),
+      definitionMinion("BG_LOE_077", "enemy-2", {
+        attack: 50,
+        health: 50,
+        taunt: true,
+        reborn: false,
+      }),
+      definitionMinion("BG_LOE_077", "enemy-3", {
+        attack: 50,
+        health: 50,
+        taunt: true,
+        reborn: false,
+      }),
+    ],
+  );
+  const fishLearned = battle.events.some(
+    (event) =>
+      event.type === "trigger" &&
+      event.actorInstanceId === fish.instanceId &&
+      event.message.includes("学会了") &&
+      event.message.includes(scallywag.name),
+  );
+  assert.equal(fishLearned, true);
+  const fishSummonedPirate = battle.events.some(
+    (event) =>
+      event.type === "summon" &&
+      event.actorInstanceId === fish.instanceId &&
+      event.minion?.definitionId === "sky-pirate-token",
+  );
+  assert.equal(fishSummonedPirate, true);
+
+  const human = humanPlayer(state);
+  const persistentFish = human.board.find(
+    (minion) => minion.instanceId === fish.instanceId,
+  );
+  assert.ok(persistentFish);
+  assert.equal(
+    persistentFish.learnedDeathrattles?.some(
+      (entry) => entry.definitionId === "scallywag",
+    ) ?? false,
+    true,
+  );
+  assert.match(persistentFish.description, /已学会：海盗无赖/u);
+});
+
 function tideBoard(
   prefix: string,
   options: { golden?: boolean; onlyLeft?: boolean; titus?: boolean } = {},

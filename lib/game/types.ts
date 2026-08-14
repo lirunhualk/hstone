@@ -1358,6 +1358,8 @@ export interface MinionInstance {
    * shared pool immediately when Magnetized.
    */
   attachments: MagneticAttachment[];
+  /** Deathrattle components permanently learned by Fish of N'Zoth. */
+  learnedDeathrattles?: LearnedDeathrattle[];
 }
 
 export interface MagneticAttachment {
@@ -1377,6 +1379,12 @@ export interface MagneticAttachment {
   attackGranted: number;
   healthGranted: number;
   attachments: MagneticAttachment[];
+}
+
+export interface LearnedDeathrattle {
+  sourceInstanceId: string;
+  definitionId: string;
+  golden: boolean;
 }
 
 export type BoardMinionInstance = MinionInstance & { kind: "minion" };

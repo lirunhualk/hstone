@@ -515,6 +515,35 @@ test("combat auras are not retained by Tarecgosa or Persistent Poet", () => {
   );
 });
 
+test("Al'Akir hero power keywords are retained by Tarecgosa-style effects", () => {
+  const state = createGame(0x8221);
+  const human = humanPlayer(state);
+  const tarecgosa = definitionMinion("BG21_015", "alakir-tarecgosa", {
+    divineShield: false,
+  });
+  const filler = definitionMinion("BG34_636t", "alakir-filler");
+  human.heroPowerId = "hero-power-swatting-insects";
+  human.board = [tarecgosa, filler];
+  keepOnlyOneOpponent(state, [enemyWall("alakir-wall")]);
+  human.board = [tarecgosa, filler];
+
+  const combat = gameReducer(state, { type: "END_TURN" });
+  const permanent = permanentMinion(combat, tarecgosa.instanceId);
+  assert.equal(permanent.windfury, true);
+  assert.equal(permanent.divineShield, true);
+  assert.equal(permanent.taunt, true);
+
+  const retained = combat.lastBattle?.events.find(
+    (event) =>
+      event.type === "buff" &&
+      event.targetInstanceId === tarecgosa.instanceId &&
+      event.message.includes("随风而行"),
+  );
+  assert.ok(retained);
+  assert.equal(retained.retained, true);
+  assert.equal(retained.retentionMultiplier, 1);
+});
+
 test("Fire-forged Evoker improves by its full base vector for each Recruit Tavern Spell", () => {
   for (const [caseIndex, golden] of [false, true].entries()) {
     let state = createGame(0x8230 + caseIndex);

@@ -128,6 +128,7 @@ import type {
   ImproveElementalStatGrantsEffect,
   ImproveStartOfCombatBuffEffect,
   ImproveUndeadArmyEffect,
+  LearnedDeathrattle,
   MagneticAttachment,
   MinionTier,
   MinionEffect,
@@ -767,6 +768,13 @@ function cloneMinion(minion: MinionInstance): BoardMinionInstance {
           },
         }
       : {}),
+    ...(minion.learnedDeathrattles
+      ? {
+          learnedDeathrattles: minion.learnedDeathrattles.map((entry) => ({
+            ...entry,
+          })),
+        }
+      : {}),
     attachments: minion.attachments.map(cloneMagneticAttachment),
   };
 }
@@ -950,7 +958,62 @@ function minionEffectSources(
   for (const attachment of minion.attachments) {
     collectAttachmentEffectSources(attachment, sources);
   }
+  for (const learned of minion.learnedDeathrattles ?? []) {
+    sources.push({
+      sourceInstanceId: learned.sourceInstanceId,
+      definitionId: learned.definitionId,
+      golden: learned.golden,
+    });
+  }
   return sources;
+}
+
+function minionOwnDeathrattleSources(
+  minion: MinionInstance,
+): MinionEffectSource[] {
+  const sources: MinionEffectSource[] = [];
+  const definition = getMinionDefinition(minion.definitionId);
+  if ((definition.deathrattle?.length ?? 0) > 0) {
+    sources.push({
+      sourceInstanceId: minion.instanceId,
+      definitionId: minion.definitionId,
+      golden: minion.golden,
+    });
+  }
+  for (const learned of minion.learnedDeathrattles ?? []) {
+    sources.push({
+      sourceInstanceId: learned.sourceInstanceId,
+      definitionId: learned.definitionId,
+      golden: learned.golden,
+    });
+  }
+  return sources;
+}
+
+function addLearnedDeathrattles(
+  target: MinionInstance,
+  learnedDeathrattles: readonly MinionEffectSource[],
+): boolean {
+  target.learnedDeathrattles ??= [];
+  let changed = false;
+  for (const learned of learnedDeathrattles) {
+    const exists = target.learnedDeathrattles.some(
+      (candidate) =>
+        candidate.sourceInstanceId === learned.sourceInstanceId &&
+        candidate.definitionId === learned.definitionId &&
+        candidate.golden === learned.golden,
+    );
+    if (exists) {
+      continue;
+    }
+    target.learnedDeathrattles.push({
+      sourceInstanceId: learned.sourceInstanceId,
+      definitionId: learned.definitionId,
+      golden: learned.golden,
+    });
+    changed = true;
+  }
+  return changed;
 }
 
 function deathlyStrikerSourceLineage(
@@ -974,7 +1037,7 @@ function minionHasDeathrattle(minion: MinionInstance): boolean {
     (minion.goldenCrabDeathrattles ?? 0) > 0 ||
     minion.temporaryCrabDeathrattles > 0 ||
     (minion.temporaryGoldenCrabDeathrattles ?? 0) > 0 ||
-    minionEffectSources(minion).some(
+    minionOwnDeathrattleSources(minion).some(
       (component) => {
         const definition = getMinionDefinition(
           component.definitionId,
@@ -4758,6 +4821,7 @@ function createMinionInstance(
     grantsTripleReward: false,
     poolCopies,
     attachments: [],
+    learnedDeathrattles: [],
   };
   state.nextInstanceId += 1;
   refreshDynamicMinionDescription(instance);
@@ -4804,6 +4868,20 @@ function refreshDynamicMinionDescription(
   const printedDescription = minion.golden
     ? goldenMinionDescription(minion.definitionId)
     : definition.description;
+  if (minion.definitionId === FISH_DEFINITION_ID) {
+    const learnedNames = minionOwnDeathrattleSources(minion)
+      .filter(
+        (source) =>
+          source.definitionId !== minion.definitionId &&
+          (getMinionDefinition(source.definitionId).deathrattle?.length ?? 0) > 0,
+      )
+      .map((source) => getMinionDefinition(source.definitionId).name);
+    minion.description =
+      learnedNames.length > 0
+        ? `${printedDescription} 已学会：${learnedNames.join("、")}。`
+        : printedDescription;
+    return;
+  }
   if (definition.battlecryCastsTaughtTavernSpell) {
     const taughtDefinitionId = minion.taughtTavernSpellDefinitionId;
     if (!taughtDefinitionId) {
@@ -13095,7 +13173,7 @@ function destroyRecruitMinion(
   if (minionHasTriggerableDeathrattle(source)) {
     activateThornedPauldrons(player);
   }
-  for (const component of minionEffectSources(source)) {
+  for (const component of minionOwnDeathrattleSources(source)) {
     const deathrattle =
       getMinionDefinition(component.definitionId).deathrattle;
     if (!deathrattle || deathrattle.length === 0) {
@@ -26914,7 +26992,7 @@ function applyNewAuraSource(
 ): Omit<BattleEvent, "index">[] {
   const board = context.boards[ownerId];
   const events: Omit<BattleEvent, "index">[] = [];
-  for (const component of minionEffectSources(source)) {
+  for (const component of minionOwnDeathrattleSources(source)) {
     const aura = getMinionDefinition(component.definitionId).aura;
     if (!aura) {
       continue;
@@ -29054,7 +29132,7 @@ function minionHasTriggerableDeathrattle(
     (minion.goldenCrabDeathrattles ?? 0) > 0 ||
     minion.temporaryCrabDeathrattles > 0 ||
     (minion.temporaryGoldenCrabDeathrattles ?? 0) > 0 ||
-    minionEffectSources(minion).some(
+    minionOwnDeathrattleSources(minion).some(
       (component) =>
         (getMinionDefinition(component.definitionId).deathrattle
           ?.length ?? 0) > 0,
@@ -33035,6 +33113,9 @@ function triggerAfterFriendlyDied(
   eligibleWatcherInstanceIds: ReadonlySet<string>,
 ): void {
   const enemyId = opponentId(context, ownerId);
+  const learnedDeathrattles = minionOwnDeathrattleSources(death.minion).filter(
+    (source) => source.definitionId !== FISH_DEFINITION_ID,
+  );
   for (const watcher of [...context.boards[ownerId]]) {
     if (
       watcher.health <= 0 ||
@@ -33044,10 +33125,46 @@ function triggerAfterFriendlyDied(
           minion.instanceId === watcher.instanceId &&
           minion.health > 0,
       )
-    ) {
-      continue;
-    }
-    for (const component of minionEffectSources(watcher)) {
+      ) {
+        continue;
+      }
+      if (
+        watcher.definitionId === FISH_DEFINITION_ID &&
+        watcher.instanceId !== death.minion.instanceId &&
+        learnedDeathrattles.length > 0
+      ) {
+        const changed = addLearnedDeathrattles(watcher, learnedDeathrattles);
+        if (changed) {
+          refreshDynamicMinionDescription(watcher);
+          const persistentOwner = persistentCombatOwner(context, ownerId);
+          const persistentWatcher = persistentOwner
+            ? findCombatWritebackMinion(
+                context,
+                persistentOwner,
+                ownerId,
+                watcher.instanceId,
+              )
+            : undefined;
+          if (persistentWatcher) {
+            addLearnedDeathrattles(persistentWatcher, learnedDeathrattles);
+            refreshDynamicMinionDescription(
+              persistentWatcher,
+              persistentOwner,
+            );
+          }
+          pushBattleEvent(context.events, {
+            type: "trigger",
+            actorPlayerId: ownerId,
+            actorInstanceId: watcher.instanceId,
+            targetPlayerId: ownerId,
+            targetInstanceId: death.minion.instanceId,
+            actorMinion: cloneMinion(watcher),
+            minion: cloneMinion(death.minion),
+            message: `${watcher.name}学会了${death.minion.name}的亡语。`,
+          });
+        }
+      }
+      for (const component of minionEffectSources(watcher)) {
       if (
         !context.boards[ownerId].some(
           (minion) =>
@@ -35267,26 +35384,30 @@ function applyStartOfCombatHeroPowers(
         trigger < heroPowerTriggerMultiplier(owner);
         trigger += 1
       ) {
-      pushBattleEvent(context.events, {
-        type: "startOfCombat",
-        actorPlayerId: owner.id,
-        targetPlayerId: owner.id,
-        targetInstanceId: target.instanceId,
-        message: `${owner.name}的“随风而行”触发。`,
-      });
-      target.windfury = true;
-      target.divineShield = true;
-      target.taunt = true;
-      pushBattleEvent(context.events, {
-        type: "buff",
-        actorPlayerId: owner.id,
-        targetPlayerId: owner.id,
-        targetInstanceId: target.instanceId,
-        attackDelta: 0,
-        healthDelta: 0,
-        minion: cloneMinion(target),
-        message: `随风而行使${target.name}获得风怒、圣盾和嘲讽。`,
-      });
+        pushBattleEvent(context.events, {
+          type: "startOfCombat",
+          actorPlayerId: owner.id,
+          targetPlayerId: owner.id,
+          targetInstanceId: target.instanceId,
+          message: `${owner.name}的“随风而行”触发。`,
+        });
+        const gain = applyCombatEnchantingGain(context, owner.id, target, {
+          keywords: ["windfury", "divineShield", "taunt"],
+        });
+        pushBattleEvent(context.events, {
+          type: "buff",
+          actorPlayerId: owner.id,
+          targetPlayerId: owner.id,
+          targetInstanceId: target.instanceId,
+          attackDelta: 0,
+          healthDelta: 0,
+          minion: cloneMinion(target),
+          retained: gain.retentionMultiplier > 0,
+          ...(gain.retentionMultiplier > 0
+            ? { retentionMultiplier: gain.retentionMultiplier }
+            : {}),
+          message: `随风而行使${target.name}获得风怒、圣盾和嘲讽。`,
+        });
       }
     }
   }
