@@ -23,7 +23,7 @@ import type {
   Tribe,
 } from "./types.ts";
 
-export const AI_TRAINING_OBSERVATION_VERSION = 3 as const;
+export const AI_TRAINING_OBSERVATION_VERSION = 4 as const;
 
 export type DeepReadonly<T> = T extends readonly (infer Item)[]
   ? readonly DeepReadonly<Item>[]

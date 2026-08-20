@@ -7766,6 +7766,17 @@ button.battle-log-event[aria-current="step"] {
   line-height: 1.4;
 }
 
+.hero-choice-confirmation > .hero-choice-tribes {
+  position: absolute;
+  z-index: 7;
+  bottom: clamp(10px, 2dvh, 18px);
+  left: 50%;
+  width: min(780px, calc(100% - 32px));
+  margin: 0;
+  padding: 8px 12px;
+  transform: translateX(-50%);
+}
+
 .hero-choice-confirmed-card {
   position: relative;
   z-index: 4;

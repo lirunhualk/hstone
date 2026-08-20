@@ -496,9 +496,9 @@ export const SYSTEM_EVENT_DEFINITIONS = [
   },
   {
     id: "system-event-circus-prize",
-    cardId: "BG27_Anomaly_103",
-    name: "马戏团奖赏",
-    description: "三合一奖励不提供手下，改為发现一个等级1暗月奖品。",
+    cardId: "BG27_Anomaly_755",
+    name: "马戏奖品",
+    description: "三合一奖励改为一张可发现等级1暗月奖品的奖励牌；当前仅实现等级1奖品。",
     effect: "circusPrize",
   },
   {

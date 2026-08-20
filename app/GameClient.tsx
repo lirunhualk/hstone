@@ -12211,6 +12211,7 @@ export default function GameClient() {
               </p>
               <div
                 className="hero-choice-tribes"
+                data-testid="hero-choice-confirmation-tribes"
                 aria-label={`本局可用随从种族：${heroChoiceActiveTribes
                   .map((tribe) => tribe.name)
                   .join("、")}`}

@@ -1,4 +1,5 @@
 import assert from "node:assert/strict";
+import { readFileSync } from "node:fs";
 import test from "node:test";
 
 import {
@@ -9,6 +10,14 @@ import {
 } from "../lib/game/hero-choice-presentation.ts";
 
 const OPTION_IDS = ["hero-a", "hero-b", "hero-c", "hero-d"] as const;
+const GAME_CLIENT_SOURCE = readFileSync(
+  new URL("../app/GameClient.tsx", import.meta.url),
+  "utf8",
+).replace(/\s+/gu, " ");
+const GAME_CSS_SOURCE = readFileSync(
+  new URL("../app/game.css", import.meta.url),
+  "utf8",
+);
 
 function presentationFixture(): HeroChoicePresentationState {
   const presentation = createHeroChoicePresentation({
@@ -172,4 +181,26 @@ test("normal and reduced-motion durations are exact for both stages", () => {
   assert.equal(heroChoicePresentationDuration("lobbyReveal"), 1_500);
   assert.equal(heroChoicePresentationDuration("focus", true), 80);
   assert.equal(heroChoicePresentationDuration("lobbyReveal", true), 80);
+});
+
+test("lobby reveal keeps the tribe summary out of the centered hero grid", () => {
+  assert.match(
+    GAME_CLIENT_SOURCE,
+    /className="hero-choice-tribes" data-testid="hero-choice-confirmation-tribes"/u,
+  );
+
+  const confirmationTribes = GAME_CSS_SOURCE.match(
+    /\.hero-choice-confirmation\s*>\s*\.hero-choice-tribes\s*\{([^}]*)\}/u,
+  );
+  const confirmationTribeRules = confirmationTribes?.[1];
+  assert.ok(confirmationTribeRules);
+  assert.match(confirmationTribeRules, /position:\s*absolute;/u);
+  assert.match(confirmationTribeRules, /bottom:\s*clamp\(/u);
+  assert.match(confirmationTribeRules, /left:\s*50%;/u);
+  assert.match(confirmationTribeRules, /width:\s*min\(/u);
+  assert.match(confirmationTribeRules, /margin:\s*0;/u);
+  assert.match(
+    confirmationTribeRules,
+    /transform:\s*translateX\(-50%\);/u,
+  );
 });

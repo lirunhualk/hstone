@@ -981,6 +981,54 @@ function repairMinionEffectCounters(value: unknown): void {
   }
 }
 
+function repairLearnedDeathrattles(value: unknown): void {
+  if (!isRecord(value) || value.kind !== "minion") {
+    return;
+  }
+  if (value.definitionId !== "TB_BaconShop_HP_105t") {
+    delete value.learnedDeathrattles;
+    return;
+  }
+  if (!Array.isArray(value.learnedDeathrattles)) {
+    delete value.learnedDeathrattles;
+    return;
+  }
+  const seen = new Set<string>();
+  const repaired = value.learnedDeathrattles.filter((entry) => {
+    if (
+      !isRecord(entry) ||
+      typeof entry.sourceInstanceId !== "string" ||
+      typeof entry.definitionId !== "string" ||
+      typeof entry.golden !== "boolean"
+    ) {
+      return false;
+    }
+    let definition: ReturnType<typeof getMinionDefinition>;
+    try {
+      definition = getMinionDefinition(entry.definitionId);
+    } catch {
+      return false;
+    }
+    if (
+      (definition.deathrattle?.length ?? 0) === 0 &&
+      definition.printedMechanics?.includes("DEATHRATTLE") !== true
+    ) {
+      return false;
+    }
+    const key = `${entry.sourceInstanceId}\u0000${entry.definitionId}\u0000${entry.golden}`;
+    if (seen.has(key)) {
+      return false;
+    }
+    seen.add(key);
+    return true;
+  });
+  if (repaired.length > 0) {
+    value.learnedDeathrattles = repaired;
+  } else {
+    delete value.learnedDeathrattles;
+  }
+}
+
 function repairTaughtTavernSpell(value: unknown): void {
   if (
     !isRecord(value) ||
@@ -1106,6 +1154,7 @@ function repairV42State(value: Record<string, unknown>): boolean {
         }
         repairSpellcraftRewardTier(card);
         repairMinionEffectCounters(card);
+        repairLearnedDeathrattles(card);
         repairTaughtTavernSpell(card);
       }
     }
@@ -1376,17 +1425,7 @@ function refreshMinionSupport(
     typeof value.crabDeathrattles === "number"
       ? value.crabDeathrattles
       : 0;
-  if (!Array.isArray(value.learnedDeathrattles)) {
-    value.learnedDeathrattles = [];
-  } else {
-    value.learnedDeathrattles = value.learnedDeathrattles.filter(
-      (entry) =>
-        isRecord(entry) &&
-        typeof entry.sourceInstanceId === "string" &&
-        typeof entry.definitionId === "string" &&
-        typeof entry.golden === "boolean",
-    );
-  }
+  repairLearnedDeathrattles(value);
   value.goldenCrabDeathrattles =
     typeof value.goldenCrabDeathrattles === "number"
       ? value.goldenCrabDeathrattles

@@ -16,6 +16,10 @@ import {
   type GameState,
   type PlayerState,
 } from "../lib/game/engine.ts";
+import {
+  LEGACY_SCHEMA_11_CONTENT_VERSION_V51,
+  normalizePersistedGameState,
+} from "../lib/game/save.ts";
 
 function humanPlayer(state: GameState): PlayerState {
   const player = state.players.find(
@@ -396,6 +400,360 @@ test("Fish of N'Zoth learns a friendly Deathrattle and triggers it when it later
     true,
   );
   assert.match(persistentFish.description, /已学会：海盗无赖/u);
+});
+
+test("learned Deathrattles do not leak their Rally into Fish of N'Zoth", () => {
+  const fish = definitionMinion("TB_BaconShop_HP_105t", "rally-safe-fish", {
+    attack: 1,
+    health: 100,
+    taunt: true,
+    learnedDeathrattles: [
+      {
+        sourceInstanceId: "learned-queen-guard",
+        definitionId: "BG34_926",
+        golden: false,
+      },
+    ],
+  });
+  const survivor = inertMinion("rally-safe-survivor", {
+    attack: 0,
+    health: 1_000,
+  });
+  const { battle } = runCombat(
+    0xd34f01,
+    [fish, survivor],
+    [
+      definitionMinion("BG29_611", "rally-safe-enemy", {
+        attack: 60,
+        health: 5_000,
+        taunt: true,
+        reborn: false,
+      }),
+    ],
+  );
+
+  const fishAttacks = battle.events.filter(
+    (event) =>
+      event.type === "attack" &&
+      event.actorInstanceId === fish.instanceId,
+  );
+  const leakedRallyCasts = battle.events.filter(
+    (event) =>
+      event.type === "tavernSpellCast" &&
+      event.actorInstanceId === fish.instanceId &&
+      event.message.includes("进击"),
+  );
+  const learnedDeathrattleCasts = battle.events.filter(
+    (event) =>
+      event.type === "tavernSpellCast" &&
+      event.actorInstanceId === fish.instanceId &&
+      event.message.includes("亡语"),
+  );
+  assert.ok(fishAttacks.length > 0);
+  assert.equal(leakedRallyCasts.length, 0);
+  assert.equal(learnedDeathrattleCasts.length, 1);
+});
+
+test("Golden Fish of N'Zoth doubles each learned Deathrattle after the learned source's Golden multiplier", () => {
+  const cases = [
+    { fishGolden: false, learnedGolden: false, expectedCasts: 1 },
+    { fishGolden: true, learnedGolden: false, expectedCasts: 2 },
+    { fishGolden: false, learnedGolden: true, expectedCasts: 2 },
+    { fishGolden: true, learnedGolden: true, expectedCasts: 4 },
+  ] as const;
+
+  for (const [caseIndex, scenario] of cases.entries()) {
+    const fish = definitionMinion(
+      "TB_BaconShop_HP_105t",
+      `golden-fish-${caseIndex}`,
+      {
+        golden: scenario.fishGolden,
+        attack: 0,
+        health: 1,
+        taunt: true,
+        learnedDeathrattles: [
+          {
+            sourceInstanceId: `learned-golden-queen-${caseIndex}`,
+            definitionId: "BG34_926",
+            golden: scenario.learnedGolden,
+          },
+        ],
+      },
+    );
+    const { battle } = runCombat(
+      0xd34f10 + caseIndex,
+      [fish, inertMinion(`golden-fish-survivor-${caseIndex}`)],
+      [enemyWall(`golden-fish-enemy-${caseIndex}`)],
+    );
+    const learnedDeathrattleCasts = battle.events.filter(
+      (event) =>
+        event.type === "tavernSpellCast" &&
+        event.actorInstanceId === fish.instanceId &&
+        event.message.includes("亡语"),
+    );
+    assert.equal(
+      learnedDeathrattleCasts.length,
+      scenario.expectedCasts,
+      `Fish golden=${scenario.fishGolden}, learned golden=${scenario.learnedGolden}`,
+    );
+  }
+});
+
+test("AI scores learned Fish Deathrattles by conservative trigger equivalents", () => {
+  const state = createGame(0xd34f17);
+  const player = humanPlayer(state);
+  player.board = [];
+  const fish = (
+    instanceId: string,
+    fishGolden: boolean,
+    learnedGolden?: boolean,
+  ) =>
+    definitionMinion("TB_BaconShop_HP_105t", instanceId, {
+      golden: fishGolden,
+      attack: 2,
+      health: 2,
+      learnedDeathrattles:
+        learnedGolden === undefined
+          ? []
+          : [
+              {
+                sourceInstanceId: `${instanceId}-source`,
+                definitionId: "scallywag",
+                golden: learnedGolden,
+              },
+            ],
+    });
+  const emptyScore = scoreMinionForAi(
+    player,
+    fish("ai-empty-fish", false),
+  );
+  const ordinaryScore = scoreMinionForAi(
+    player,
+    fish("ai-ordinary-fish", false, false),
+  );
+  const goldenFishScore = scoreMinionForAi(
+    player,
+    fish("ai-golden-fish", true, false),
+  );
+  const goldenSourceScore = scoreMinionForAi(
+    player,
+    fish("ai-golden-source-fish", false, true),
+  );
+  const fullyGoldenScore = scoreMinionForAi(
+    player,
+    fish("ai-fully-golden-fish", true, true),
+  );
+
+  assert.ok(emptyScore < ordinaryScore);
+  assert.ok(ordinaryScore < goldenFishScore);
+  assert.ok(ordinaryScore < goldenSourceScore);
+  assert.ok(goldenFishScore < fullyGoldenScore);
+  assert.ok(goldenSourceScore < fullyGoldenScore);
+});
+
+test("forging Golden Fish preserves and deduplicates learned Deathrattles before doubling them", () => {
+  let state = createGame(0xd34f18);
+  let player = humanPlayer(state);
+  const duplicateQueen = {
+    sourceInstanceId: "forged-fish-queen",
+    definitionId: "BG34_926",
+    golden: false,
+  } as const;
+  player.board = [
+    definitionMinion("TB_BaconShop_HP_105t", "forged-fish-a", {
+      learnedDeathrattles: [
+        duplicateQueen,
+        {
+          sourceInstanceId: "forged-fish-scallywag",
+          definitionId: "scallywag",
+          golden: false,
+        },
+      ],
+    }),
+  ];
+  player.hand = [
+    definitionMinion("TB_BaconShop_HP_105t", "forged-fish-b", {
+      learnedDeathrattles: [duplicateQueen],
+    }),
+  ];
+  player.shop = [
+    definitionMinion("TB_BaconShop_HP_105t", "forged-fish-c"),
+  ];
+  player.spellShop = null;
+  player.additionalSpellShop = [];
+  player.gold = 10;
+
+  state = gameReducer(state, { type: "BUY_MINION", shopIndex: 0 });
+  player = humanPlayer(state);
+  const goldenFish = player.hand.find(
+    (card): card is BoardMinionInstance =>
+      card.kind === "minion" &&
+      card.definitionId === "TB_BaconShop_HP_105t" &&
+      card.golden,
+  );
+  assert.ok(goldenFish);
+  assert.deepEqual(
+    goldenFish.learnedDeathrattles,
+    [
+      duplicateQueen,
+      {
+        sourceInstanceId: "forged-fish-scallywag",
+        definitionId: "scallywag",
+        golden: false,
+      },
+    ],
+  );
+  goldenFish.grantsTripleReward = false;
+
+  const { battle } = runCombat(
+    0xd34f19,
+    [goldenFish, inertMinion("forged-fish-survivor")],
+    [enemyWall("forged-fish-enemy")],
+  );
+  assert.equal(
+    battle.events.filter(
+      (event) =>
+        event.type === "tavernSpellCast" &&
+        event.actorInstanceId === goldenFish.instanceId &&
+        event.message.includes("亡语"),
+    ).length,
+    2,
+  );
+  assert.equal(
+    battle.events.filter(
+      (event) =>
+        event.type === "summon" &&
+        event.actorInstanceId === goldenFish.instanceId &&
+        event.minion?.definitionId === "sky-pirate-token",
+    ).length,
+    2,
+  );
+});
+
+test("save normalization preserves valid learned Deathrattles while removing duplicates, unknown IDs, and non-Deathrattles", () => {
+  const current = createGame(0xd34f1a);
+  const currentPlayer = humanPlayer(current);
+  const fish = definitionMinion(
+    "TB_BaconShop_HP_105t",
+    "saved-learned-fish",
+    {
+      learnedDeathrattles: [
+        {
+          sourceInstanceId: "saved-learned-queen",
+          definitionId: "BG34_926",
+          golden: true,
+        },
+      ],
+    },
+  );
+  currentPlayer.board = [fish];
+  const roundTrip = normalizePersistedGameState(
+    JSON.parse(JSON.stringify(current)),
+  ) as GameState | null;
+  assert.ok(roundTrip);
+  assert.deepEqual(
+    humanPlayer(roundTrip).board[0]?.learnedDeathrattles,
+    fish.learnedDeathrattles,
+  );
+
+  const legacy = JSON.parse(JSON.stringify(current)) as GameState;
+  legacy.contentVersion = LEGACY_SCHEMA_11_CONTENT_VERSION_V51;
+  humanPlayer(legacy).board.push(
+    definitionMinion("murloc-warleader", "legacy-non-fish-host", {
+      learnedDeathrattles: [
+        {
+          sourceInstanceId: "injected-non-fish-source",
+          definitionId: "scallywag",
+          golden: false,
+        },
+      ],
+    }),
+  );
+  const legacyFish = humanPlayer(legacy).board[0];
+  assert.ok(legacyFish);
+  legacyFish.learnedDeathrattles = [
+    {
+      sourceInstanceId: "legacy-valid-source",
+      definitionId: "scallywag",
+      golden: false,
+    },
+    {
+      sourceInstanceId: "legacy-valid-source",
+      definitionId: "scallywag",
+      golden: false,
+    },
+    {
+      sourceInstanceId: "legacy-unknown-source",
+      definitionId: "unknown-learned-deathrattle",
+      golden: false,
+    },
+    {
+      sourceInstanceId: "legacy-non-deathrattle-source",
+      definitionId: "murloc-warleader",
+      golden: false,
+    },
+    {
+      sourceInstanceId: "legacy-malformed-source",
+      definitionId: "scallywag",
+    } as unknown as NonNullable<
+      BoardMinionInstance["learnedDeathrattles"]
+    >[number],
+  ];
+  const normalizedLegacy = normalizePersistedGameState(legacy) as
+    | GameState
+    | null;
+  assert.ok(normalizedLegacy);
+  assert.deepEqual(
+    humanPlayer(normalizedLegacy).board[0]?.learnedDeathrattles,
+    [
+      {
+        sourceInstanceId: "legacy-valid-source",
+        definitionId: "scallywag",
+        golden: false,
+      },
+    ],
+  );
+  assert.equal(
+    humanPlayer(normalizedLegacy).board[1]?.learnedDeathrattles,
+    undefined,
+  );
+  assert.deepEqual(
+    normalizePersistedGameState(
+      JSON.parse(JSON.stringify(normalizedLegacy)),
+    ),
+    normalizedLegacy,
+  );
+});
+
+test("a newly summoned aura source reapplies its printed aura", () => {
+  const warleader = definitionMinion(
+    "murloc-warleader",
+    "reborn-aura-warleader",
+    {
+      attack: 0,
+      health: 1,
+      taunt: true,
+      reborn: true,
+    },
+  );
+  const ally = definitionMinion(
+    "murloc-tidehunter",
+    "reborn-aura-ally",
+    { attack: 0, health: 1_000 },
+  );
+  const { battle } = runCombat(
+    0xd34f20,
+    [warleader, ally],
+    [enemyWall("reborn-aura-enemy")],
+  );
+  const reappliedAuraEvents = battle.events.filter(
+    (event) =>
+      event.type === "buff" &&
+      event.targetInstanceId === ally.instanceId &&
+      event.attackDelta === 2 &&
+      event.message.includes("光环"),
+  );
+  assert.equal(reappliedAuraEvents.length, 1);
 });
 
 function tideBoard(
