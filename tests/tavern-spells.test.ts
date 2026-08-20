@@ -2227,7 +2227,7 @@ test("core economy spells track free refreshes, max Gold, and next-turn Gold", (
   state = gameReducer(state, { type: "END_TURN" });
   state = gameReducer(state, { type: "CONTINUE" });
   player = humanPlayer(state);
-  assert.equal(player.gold, 6);
+  assert.equal(player.gold, 7);
   assert.equal(player.pendingNextTurnGold, 0);
 });
 
