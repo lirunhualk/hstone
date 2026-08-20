@@ -10,6 +10,7 @@ import type {
   GameState,
   HandCardInstance,
   HelpfulRefreshKind,
+  LearnedDeathrattle,
   MagneticAttachment,
   MinionTier,
   MinionInstance,
@@ -22,7 +23,7 @@ import type {
   Tribe,
 } from "./types.ts";
 
-export const AI_TRAINING_OBSERVATION_VERSION = 3 as const;
+export const AI_TRAINING_OBSERVATION_VERSION = 4 as const;
 
 export type DeepReadonly<T> = T extends readonly (infer Item)[]
   ? readonly DeepReadonly<Item>[]
@@ -50,6 +51,11 @@ export interface AiTrainingMagneticAttachmentObservation {
   attackGranted: number;
   healthGranted: number;
   attachments: AiTrainingMagneticAttachmentObservation[];
+}
+
+export interface AiTrainingLearnedDeathrattleObservation {
+  definitionId: string;
+  golden: boolean;
 }
 
 /**
@@ -101,6 +107,7 @@ export interface AiTrainingMinionObservation {
   grantsTripleReward: boolean;
   taughtTavernSpellDefinitionId: string | null;
   attachments: AiTrainingMagneticAttachmentObservation[];
+  learnedDeathrattles: AiTrainingLearnedDeathrattleObservation[];
 }
 
 export interface AiTrainingBloodGemObservation {
@@ -480,6 +487,15 @@ function observeAttachment(
   };
 }
 
+function observeLearnedDeathrattle(
+  deathrattle: LearnedDeathrattle,
+): AiTrainingLearnedDeathrattleObservation {
+  return {
+    definitionId: deathrattle.definitionId,
+    golden: deathrattle.golden,
+  };
+}
+
 function observeMinion(
   minion: MinionInstance,
 ): AiTrainingMinionObservation {
@@ -531,6 +547,9 @@ function observeMinion(
     taughtTavernSpellDefinitionId:
       minion.taughtTavernSpellDefinitionId ?? null,
     attachments: minion.attachments.map(observeAttachment),
+    learnedDeathrattles: (minion.learnedDeathrattles ?? []).map(
+      observeLearnedDeathrattle,
+    ),
   };
 }
 

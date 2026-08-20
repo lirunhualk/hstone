@@ -2,10 +2,81 @@ import assert from "node:assert/strict";
 import test from "node:test";
 
 import {
+  AI_RECRUIT_PLANNER_VERSION,
   planAiRecruitTurn,
   scoreAiRecruitObservation,
 } from "../lib/game/ai-recruit-planner.ts";
-import { AiTrainingEnvironment } from "../lib/game/ai-training-environment.ts";
+import type {
+  AiTrainingMinionObservation,
+  AiTrainingObservation,
+} from "../lib/game/ai-training.ts";
+import {
+  AiTrainingEnvironment,
+  type AiTrainingLegalAction,
+} from "../lib/game/ai-training-environment.ts";
+
+const FISH_DEFINITION_ID = "TB_BaconShop_HP_105t";
+
+function fishObservation(
+  template: AiTrainingMinionObservation,
+  options: {
+    golden?: boolean;
+    learnedGolden?: boolean;
+    learned?: boolean;
+  } = {},
+): AiTrainingMinionObservation {
+  return {
+    ...structuredClone(template),
+    kind: "minion",
+    definitionId: FISH_DEFINITION_ID,
+    cardId: options.golden ? "TB_BaconUps_307" : FISH_DEFINITION_ID,
+    name: options.golden ? "Golden Fish of N'Zoth" : "Fish of N'Zoth",
+    tier: 1,
+    tribe: "beast",
+    tribes: ["beast"],
+    associatedTribes: [],
+    attack: 10,
+    health: 10,
+    golden: options.golden === true,
+    learnedDeathrattles:
+      options.learned === false
+        ? []
+        : [
+            {
+              definitionId: "scallywag",
+              golden: options.learnedGolden === true,
+            },
+          ],
+  };
+}
+
+function observationWithBoard(
+  board: AiTrainingMinionObservation[],
+): AiTrainingObservation {
+  const observation = structuredClone(
+    new AiTrainingEnvironment(0x8b10, 0).observe(),
+  ) as AiTrainingObservation;
+  observation.own.board = board;
+  observation.own.hand = [];
+  return observation;
+}
+
+function replanOnlyEnvironment(
+  observation: AiTrainingObservation,
+  actions: readonly Readonly<AiTrainingLegalAction>[],
+): AiTrainingEnvironment {
+  const environment = {
+    observe: () => observation,
+    fork: () => environment,
+    plannerLegalActions: () => actions,
+    plannerTransition: (token: string) => {
+      const action = actions.find((candidate) => candidate.token === token);
+      assert.ok(action);
+      return Object.freeze({ kind: "replanBoundary" as const, action });
+    },
+  };
+  return environment as unknown as AiTrainingEnvironment;
+}
 
 function executeRecruitFragments(
   environment: AiTrainingEnvironment,
@@ -141,6 +212,107 @@ test("planner and score are deterministic and validate search bounds", () => {
     () => planAiRecruitTurn(first, { maxActions: 21 }),
     RangeError,
   );
+});
+
+test("planner v4 conservatively values learned Deathrattle trigger-equivalents", () => {
+  assert.equal(AI_RECRUIT_PLANNER_VERSION, 4);
+  const initial = new AiTrainingEnvironment(0x8b10, 0).observe();
+  const template = structuredClone(initial.own.shop[0]) as unknown as
+    AiTrainingMinionObservation;
+  assert.ok(template);
+
+  const visibleBoardPower = (minion: AiTrainingMinionObservation) =>
+    scoreAiRecruitObservation(observationWithBoard([minion])).boardPower;
+  const empty = visibleBoardPower(
+    fishObservation(template, { learned: false }),
+  );
+  const learnedOrdinary = visibleBoardPower(fishObservation(template));
+  const learnedGoldenSource = visibleBoardPower(
+    fishObservation(template, { learnedGolden: true }),
+  );
+  const emptyGoldenHost = visibleBoardPower(
+    fishObservation(template, { golden: true, learned: false }),
+  );
+  const learnedGoldenHost = visibleBoardPower(
+    fishObservation(template, { golden: true }),
+  );
+
+  assert.ok(empty < learnedOrdinary);
+  assert.ok(learnedOrdinary < learnedGoldenSource);
+  assert.ok(learnedGoldenHost > learnedOrdinary);
+  const ordinaryHostMarginal = learnedOrdinary - empty;
+  const goldenHostMarginal = learnedGoldenHost - emptyGoldenHost;
+  const expectedGoldenHostMarginal = ordinaryHostMarginal * 2;
+  assert.ok(
+    Math.abs(goldenHostMarginal - expectedGoldenHostMarginal) <=
+      Number.EPSILON *
+        Math.max(1, Math.abs(expectedGoldenHostMarginal)) *
+        8,
+    "Golden Fish should double the marginal value of its learned Deathrattle",
+  );
+  assert.equal(
+    visibleBoardPower(fishObservation(template, { learnedGolden: true })),
+    learnedGoldenSource,
+  );
+});
+
+test("planner sells the empty Fish before an otherwise equal learned Fish", () => {
+  const initial = new AiTrainingEnvironment(0x8b11, 0).observe();
+  const template = structuredClone(initial.own.shop[0]) as unknown as
+    AiTrainingMinionObservation;
+  assert.ok(template);
+  const emptyFish = fishObservation(template, { learned: false });
+  const learnedFish = fishObservation(template);
+  const fillers = Array.from({ length: 5 }, () => ({
+    ...structuredClone(template),
+    learnedDeathrattles: [],
+  }));
+  const observation = observationWithBoard([
+    learnedFish,
+    emptyFish,
+    ...fillers,
+  ]);
+  observation.own.hand = [
+    {
+      ...structuredClone(template),
+      attack: 1_000,
+      health: 1_000,
+      learnedDeathrattles: [],
+    },
+  ];
+  const sellEmpty: Readonly<AiTrainingLegalAction> = Object.freeze({
+    token: "sell-empty-fish",
+    type: "SELL_MINION",
+    source: { zone: "board" as const, index: 1 },
+    target: null,
+    boardIndex: null,
+    choiceIndex: null,
+    cost: null,
+    plannerDisposition: "replan",
+  });
+  const sellLearned: Readonly<AiTrainingLegalAction> = Object.freeze({
+    ...sellEmpty,
+    token: "sell-learned-fish",
+    source: { zone: "board" as const, index: 0 },
+  });
+  const endTurn: Readonly<AiTrainingLegalAction> = Object.freeze({
+    token: "end-turn",
+    type: "END_TURN",
+    source: null,
+    target: null,
+    boardIndex: null,
+    choiceIndex: null,
+    cost: null,
+    plannerDisposition: "terminal",
+  });
+
+  const plan = planAiRecruitTurn(
+    replanOnlyEnvironment(observation, [sellLearned, sellEmpty, endTurn]),
+    { beamWidth: 2, maxActions: 1 },
+  );
+
+  assert.equal(plan.termination, "replanAfterAction");
+  assert.equal(plan.actions[0]?.token, sellEmpty.token);
 });
 
 test("planner refuses Combat instead of branching on hidden battle state", () => {

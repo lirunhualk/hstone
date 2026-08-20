@@ -5276,6 +5276,10 @@ export default function GameClient() {
   const heroChoiceStage = heroChoicePresentation?.stage ?? "choosing";
   const heroChoiceOptionIds =
     heroChoiceInteraction?.optionIds ?? heroChoicePresentation?.optionIds ?? [];
+  const heroChoiceActiveTribes = game.activeTribes.map((tribe) => ({
+    id: tribe,
+    name: TRIBE_NAMES[tribe],
+  }));
   const selectedHeroChoice = heroChoicePresentation
     ? getHeroDefinition(heroChoicePresentation.selectedHeroId)
     : null;
@@ -12120,6 +12124,22 @@ export default function GameClient() {
                   ? "选择已保存。你的英雄正在进入本局八人大厅。"
                   : "每位英雄拥有不同的英雄技能。选择会立即保存，并用于本局余下时间。"}
               </p>
+              <div
+                className="hero-choice-tribes"
+                data-testid="hero-choice-active-tribes"
+                aria-label={`本局可用随从种族：${heroChoiceActiveTribes
+                  .map((tribe) => tribe.name)
+                  .join("、")}`}
+              >
+                <small>本局随从</small>
+                <div className="hero-choice-tribe-list">
+                  {heroChoiceActiveTribes.map((tribe) => (
+                    <span className="hero-choice-tribe-chip" key={tribe.id}>
+                      {tribe.name}
+                    </span>
+                  ))}
+                </div>
+              </div>
               {systemEvent && (
                 <div
                   className="lobby-event-banner"
@@ -12189,6 +12209,22 @@ export default function GameClient() {
               <p className="discover-copy" id="hero-choice-description">
                 七名 AI 对手已经就位，本局没有回合倒计时。
               </p>
+              <div
+                className="hero-choice-tribes"
+                data-testid="hero-choice-confirmation-tribes"
+                aria-label={`本局可用随从种族：${heroChoiceActiveTribes
+                  .map((tribe) => tribe.name)
+                  .join("、")}`}
+              >
+                <small>本局随从</small>
+                <div className="hero-choice-tribe-list">
+                  {heroChoiceActiveTribes.map((tribe) => (
+                    <span className="hero-choice-tribe-chip" key={tribe.id}>
+                      {tribe.name}
+                    </span>
+                  ))}
+                </div>
+              </div>
               <div
                 className="hero-choice-confirmed-card"
                 data-hero-id={selectedHeroChoice.id}

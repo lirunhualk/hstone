@@ -27,9 +27,13 @@ import {
 import {
   CORRUPTED_TOME_CARD_ID,
   DARKMOON_PRIZE_DEFINITIONS,
+  TIER_ONE_DARKMOON_PRIZE_DEFINITIONS,
+  TIER_ONE_TRIPLE_PRIZE_DEFINITION,
+  TIER_ONE_TRIPLE_PRIZE_DEFINITION_ID,
   TICKATUS_TAG_CARD_ID,
   TRIPLE_PRIZE_DEFINITION,
   TRIPLE_PRIZE_DEFINITION_ID,
+  isTierOneDarkmoonPrizeDefinitionId,
   isTierThreeDarkmoonPrizeDefinitionId,
 } from "./darkmoon-prizes.ts";
 import {
@@ -582,6 +586,8 @@ const EYE_OF_SARGERAS_CARD_ID = "BG30_MagicItem_701" as const;
 const DEMONIC_TAPESTRY_HEALTH_PRICE_COUNTER =
   "demonicTapestryHealthPrice";
 const CHILLMERE_MOSAIC_COST_COUNTER = "chillmereMosaicCost";
+const DARKMOON_EXTRA_TAVERN_SLOT_BUFF_COUNTER =
+  "darkmoonExtraTavernSlotBuff";
 const MAGICFIN_TAG_CARD_ID = "BG35_MagicItem_750" as const;
 const SAFE_BADGE_CARD_ID = "BG35_MagicItem_820" as const;
 const MECHA_JARAXXUS_STICKER_CARD_ID = "BG30_MagicItem_942" as const;
@@ -723,6 +729,7 @@ interface MinionEffectSource {
   sourceInstanceId: string;
   definitionId: string;
   golden: boolean;
+  learnedDeathrattle?: true;
 }
 
 function cloneState(state: GameState): GameState {
@@ -765,6 +772,13 @@ function cloneMinion(minion: MinionInstance): BoardMinionInstance {
           poolCopiesByDefinitionId: {
             ...minion.poolCopiesByDefinitionId,
           },
+        }
+      : {}),
+    ...(minion.learnedDeathrattles
+      ? {
+          learnedDeathrattles: minion.learnedDeathrattles.map((entry) => ({
+            ...entry,
+          })),
         }
       : {}),
     attachments: minion.attachments.map(cloneMagneticAttachment),
@@ -953,6 +967,74 @@ function minionEffectSources(
   return sources;
 }
 
+function definitionHasDeathrattle(definitionId: string): boolean {
+  const definition = getMinionDefinition(definitionId);
+  return (
+    (definition.deathrattle?.length ?? 0) > 0 ||
+    definition.printedMechanics?.includes("DEATHRATTLE") === true
+  );
+}
+
+function minionDeathrattleSources(
+  minion: MinionInstance,
+): MinionEffectSource[] {
+  const sources = minionEffectSources(minion).filter((source) =>
+    definitionHasDeathrattle(source.definitionId),
+  );
+  if (minion.definitionId === FISH_DEFINITION_ID) {
+    for (const learned of minion.learnedDeathrattles ?? []) {
+      sources.push({
+        sourceInstanceId: learned.sourceInstanceId,
+        definitionId: learned.definitionId,
+        golden: learned.golden,
+        learnedDeathrattle: true,
+      });
+    }
+  }
+  return sources;
+}
+
+function deathrattleSourceRepetitions(
+  minion: MinionInstance,
+  source: MinionEffectSource,
+  repetitions: number,
+): number {
+  return (
+    repetitions *
+    (minion.definitionId === FISH_DEFINITION_ID &&
+    minion.golden &&
+    source.learnedDeathrattle
+      ? 2
+      : 1)
+  );
+}
+
+function addLearnedDeathrattles(
+  target: MinionInstance,
+  learnedDeathrattles: readonly MinionEffectSource[],
+): boolean {
+  target.learnedDeathrattles ??= [];
+  let changed = false;
+  for (const learned of learnedDeathrattles) {
+    const exists = target.learnedDeathrattles.some(
+      (candidate) =>
+        candidate.sourceInstanceId === learned.sourceInstanceId &&
+        candidate.definitionId === learned.definitionId &&
+        candidate.golden === learned.golden,
+    );
+    if (exists) {
+      continue;
+    }
+    target.learnedDeathrattles.push({
+      sourceInstanceId: learned.sourceInstanceId,
+      definitionId: learned.definitionId,
+      golden: learned.golden,
+    });
+    changed = true;
+  }
+  return changed;
+}
+
 function deathlyStrikerSourceLineage(
   source: MinionInstance,
   component: MinionEffectSource,
@@ -974,7 +1056,7 @@ function minionHasDeathrattle(minion: MinionInstance): boolean {
     (minion.goldenCrabDeathrattles ?? 0) > 0 ||
     minion.temporaryCrabDeathrattles > 0 ||
     (minion.temporaryGoldenCrabDeathrattles ?? 0) > 0 ||
-    minionEffectSources(minion).some(
+    minionDeathrattleSources(minion).some(
       (component) => {
         const definition = getMinionDefinition(
           component.definitionId,
@@ -4758,6 +4840,7 @@ function createMinionInstance(
     grantsTripleReward: false,
     poolCopies,
     attachments: [],
+    learnedDeathrattles: [],
   };
   state.nextInstanceId += 1;
   refreshDynamicMinionDescription(instance);
@@ -4804,6 +4887,21 @@ function refreshDynamicMinionDescription(
   const printedDescription = minion.golden
     ? goldenMinionDescription(minion.definitionId)
     : definition.description;
+  if (minion.definitionId === FISH_DEFINITION_ID) {
+    const learnedNames = minionDeathrattleSources(minion)
+      .filter(
+        (source) =>
+          source.learnedDeathrattle === true &&
+          source.definitionId !== minion.definitionId &&
+          (getMinionDefinition(source.definitionId).deathrattle?.length ?? 0) > 0,
+      )
+      .map((source) => getMinionDefinition(source.definitionId).name);
+    minion.description =
+      learnedNames.length > 0
+        ? `${printedDescription} 已学会：${learnedNames.join("、")}。`
+        : printedDescription;
+    return;
+  }
   if (definition.battlecryCastsTaughtTavernSpell) {
     const taughtDefinitionId = minion.taughtTavernSpellDefinitionId;
     if (!taughtDefinitionId) {
@@ -5308,6 +5406,24 @@ function grantTripleRewardBeforeGeneratedCards(
     return;
   }
   minion.grantsTripleReward = false;
+  if (
+    state.lobbySystemsEnabled &&
+    state.systemEventId &&
+    getSystemEventDefinition(state.systemEventId).effect === "circusPrize"
+  ) {
+    grantTierOneDarkmoonTripleReward(state, player);
+    return;
+  }
+  if (
+    player.systemEventCounters.falseIdolsActive ||
+    playerHasHeroPower(player, "easyTripleCoin")
+  ) {
+    player.gold += 1;
+    return;
+  }
+  if (player.systemEventCounters.goldenArenaActive) {
+    return;
+  }
   if (player.hand.length < MAX_HAND_SIZE) {
     addCardToHand(
       state,
@@ -5514,6 +5630,9 @@ function addCardToHand(
     return false;
   }
   if (card.kind === "minion") {
+    if (card.effectCounters) {
+      delete card.effectCounters[DARKMOON_EXTRA_TAVERN_SLOT_BUFF_COUNTER];
+    }
     applyOwnedTrinketMinionOverrides(player, card);
   }
   player.hand.push(card);
@@ -7955,7 +8074,7 @@ function observePersistentFriendlyDeath(
   reconcilePlayerWhereverMinions(player);
 }
 
-function tavernMinionCapacity(player: PlayerState): number {
+function baseTavernMinionCapacity(player: PlayerState): number {
   if (player.systemEventCounters.fullHouseActive) {
     return 6;
   }
@@ -7974,6 +8093,77 @@ function tavernMinionCapacity(player: PlayerState): number {
   );
 }
 
+function darkmoonExtraTavernMinionCount(player: PlayerState): number {
+  return Math.max(
+    0,
+    Math.floor(
+      player.systemEventCounters.darkmoonExtraTavernMinions ?? 0,
+    ),
+  );
+}
+
+function tavernMinionCapacity(player: PlayerState): number {
+  return (
+    baseTavernMinionCapacity(player) +
+    darkmoonExtraTavernMinionCount(player)
+  );
+}
+
+function baseTavernCardCapacity(player: PlayerState): number {
+  const base = baseTavernMinionCapacity(player) + 1;
+  return player.systemEventCounters.extraSpellSlot ? base + 1 : base;
+}
+
+function tavernCardCapacity(player: PlayerState): number {
+  return (
+    baseTavernCardCapacity(player) +
+    darkmoonExtraTavernMinionCount(player)
+  );
+}
+
+function isDarkmoonExtraTavernSlotMinion(
+  minion: BoardMinionInstance,
+): boolean {
+  return (
+    effectCounter(minion, DARKMOON_EXTRA_TAVERN_SLOT_BUFF_COUNTER, 0) > 0
+  );
+}
+
+function markAndBuffDarkmoonExtraTavernSlot(
+  minion: BoardMinionInstance,
+): void {
+  if (isDarkmoonExtraTavernSlotMinion(minion)) {
+    return;
+  }
+  buffMinions([minion], 2, 2, [minion]);
+  setEffectCounter(minion, DARKMOON_EXTRA_TAVERN_SLOT_BUFF_COUNTER, 1);
+}
+
+function applyDarkmoonExtraTavernSlotBuffIfNeeded(
+  player: PlayerState,
+  minion: BoardMinionInstance,
+  baselineMinionSize: number,
+  targetMinionSize: number,
+): void {
+  const desiredExtraSlots = Math.min(
+    darkmoonExtraTavernMinionCount(player),
+    Math.max(0, targetMinionSize - baselineMinionSize),
+  );
+  if (desiredExtraSlots === 0) {
+    return;
+  }
+  const markedExtraSlots = player.shop.filter(
+    isDarkmoonExtraTavernSlotMinion,
+  ).length;
+  const remainingSlots = Math.max(0, targetMinionSize - player.shop.length);
+  if (
+    remainingSlots > 0 &&
+    desiredExtraSlots - markedExtraSlots >= remainingSlots
+  ) {
+    markAndBuffDarkmoonExtraTavernSlot(minion);
+  }
+}
+
 function trimTavernForAssignedHeroPower(
   state: GameState,
   player: PlayerState,
@@ -7988,13 +8178,6 @@ function trimTavernForAssignedHeroPower(
       returnMinionToPool(state, released);
     }
   }
-}
-
-function tavernCardCapacity(player: PlayerState): number {
-  const base = player.systemEventCounters.fullHouseActive || playerHasTrinketCardId(player, TAVERN_FAN_CARD_ID)
-    ? 7
-    : tavernMinionCapacity(player) + 1;
-  return player.systemEventCounters.extraSpellSlot ? base + 1 : base;
 }
 
 function applyAfterTavernRefreshEffects(
@@ -8043,6 +8226,20 @@ function applyAfterTavernRefreshEffects(
   applyAfterTavernRefreshedTrinkets(player);
 }
 
+function addDarkmoonExtraTavernMinion(
+  state: GameState,
+  player: PlayerState,
+): boolean {
+  const minion = drawTavernMinionFromPool(state, player);
+  if (!minion) {
+    return false;
+  }
+  prepareTavernMinionForShop(state, player, minion);
+  markAndBuffDarkmoonExtraTavernSlot(minion);
+  player.shop.push(minion);
+  return true;
+}
+
 function fillShop(
   state: GameState,
   player: PlayerState,
@@ -8079,6 +8276,12 @@ function fillShop(
       break;
     }
     prepareTavernMinionForShop(state, player, minion);
+    applyDarkmoonExtraTavernSlotBuffIfNeeded(
+      player,
+      minion,
+      baseTavernMinionCapacity(player),
+      minionTargetSize,
+    );
     player.shop.push(minion);
     tavernRefreshed = true;
   }
@@ -8166,6 +8369,18 @@ function refillFodderSlot(
     player.magnetizationsThisGame ?? 0,
   );
   refreshDynamicMinionDescription(minion, player);
+  applyDarkmoonExtraTavernSlotBuffIfNeeded(
+    player,
+    minion,
+    Math.max(
+      0,
+      baseTavernCardCapacity(player) - tavernSpellShopOffers(player).length,
+    ),
+    Math.max(
+      0,
+      tavernCardCapacity(player) - tavernSpellShopOffers(player).length,
+    ),
+  );
   player.shop.push(minion);
 }
 
@@ -8193,6 +8408,12 @@ function refillShopMinionSlotIfNeeded(
     player.magnetizationsThisGame ?? 0,
   );
   refreshDynamicMinionDescription(minion, player);
+  applyDarkmoonExtraTavernSlotBuffIfNeeded(
+    player,
+    minion,
+    baseTavernMinionCapacity(player),
+    tavernMinionCapacity(player),
+  );
   player.shop.push(minion);
 }
 
@@ -8267,11 +8488,29 @@ function applyQueuedDemonFodderToRefresh(
         : 0);
     fodder.attack += portraitBonus;
     fodder.health += portraitBonus;
+    const spellOfferCount = tavernSpellShopOffers(player).length;
+    applyDarkmoonExtraTavernSlotBuffIfNeeded(
+      player,
+      fodder,
+      Math.max(0, baseTavernCardCapacity(player) - spellOfferCount),
+      Math.max(0, tavernCardCapacity(player) - spellOfferCount),
+    );
     player.shop.push(fodder);
     if (resolveImmediately) {
       resolveShopFodder(state, player);
     }
   }
+}
+
+function grantTierOneDarkmoonTripleReward(
+  state: GameState,
+  player: PlayerState,
+): boolean {
+  return addCardToHand(
+    state,
+    player,
+    createSpellcraftSpell(state, TIER_ONE_TRIPLE_PRIZE_DEFINITION),
+  );
 }
 
 export function getUpgradeCost(
@@ -11182,7 +11421,7 @@ function resolveTriples(
           "circusPrize"
       ) {
         golden.grantsTripleReward = false;
-        grantRandomDarkmoonPrizes(state, player, 1);
+        grantTierOneDarkmoonTripleReward(state, player);
       } else if (player.systemEventCounters.falseIdolsActive) {
         golden.grantsTripleReward = false;
         player.gold += 1;
@@ -11580,6 +11819,12 @@ function resolveTriples(
       golden.attachments = consumed.flatMap((minion) =>
         minion.attachments.map(cloneMagneticAttachment),
       );
+      if (definitionId === FISH_DEFINITION_ID) {
+        addLearnedDeathrattles(
+          golden,
+          consumed.flatMap((minion) => minion.learnedDeathrattles ?? []),
+        );
+      }
       if (
         consumed.some(
           (minion) => minion.effectSupport === "partial",
@@ -12280,33 +12525,44 @@ function boardWithCandidate(
 function beetleSummonCount(
   minion: BoardMinionInstance,
 ): number {
-  return minionEffectSources(minion).reduce((total, component) => {
+  const countEffects = (
+    component: MinionEffectSource,
+    effects: readonly MinionEffect[],
+    repetitions = 1,
+  ) =>
+    effects.reduce((total, effect) => {
+      if (
+        effect.kind !== "summon" ||
+        effect.definitionId !== BEETLE_TOKEN_DEFINITION_ID ||
+        typeof effect.count !== "number"
+      ) {
+        return total;
+      }
+      return (
+        total +
+        effect.count *
+          (component.golden && effect.goldenMode === "doubleCount"
+            ? 2
+            : 1) *
+          repetitions
+      );
+    }, 0);
+  let total = 0;
+  for (const component of minionEffectSources(minion)) {
     const definition = getMinionDefinition(component.definitionId);
-    return (
-      total +
-      [
-        ...(definition.battlecry ?? []),
-        ...(definition.deathrattle ?? []),
-        ...(definition.afterSelfDamaged ?? []),
-      ].reduce((effectTotal, effect) => {
-        if (
-          effect.kind !== "summon" ||
-          effect.definitionId !== BEETLE_TOKEN_DEFINITION_ID ||
-          typeof effect.count !== "number"
-        ) {
-          return effectTotal;
-        }
-        return (
-          effectTotal +
-          effect.count *
-            (component.golden &&
-            effect.goldenMode === "doubleCount"
-              ? 2
-              : 1)
-        );
-      }, 0)
+    total += countEffects(component, [
+      ...(definition.battlecry ?? []),
+      ...(definition.afterSelfDamaged ?? []),
+    ]);
+  }
+  for (const component of minionDeathrattleSources(minion)) {
+    total += countEffects(
+      component,
+      getMinionDefinition(component.definitionId).deathrattle ?? [],
+      deathrattleSourceRepetitions(minion, component, 1),
     );
-  }, 0);
+  }
+  return total;
 }
 
 interface BeetleGrowthPotential {
@@ -12318,26 +12574,37 @@ interface BeetleGrowthPotential {
 function beetleGrowthPotential(
   minion: BoardMinionInstance,
 ): BeetleGrowthPotential {
-  return minionEffectSources(minion).reduce<BeetleGrowthPotential>(
-    (total, component) => {
-      const definition = getMinionDefinition(component.definitionId);
-      const scale = component.golden ? 2 : 1;
-      const growth = (effects: readonly MinionEffect[] | undefined) =>
-        (effects ?? []).reduce(
-          (amount, effect) =>
-            effect.kind === "improveBeetles"
-              ? amount +
-                (effect.attack + effect.health) * scale
-              : amount,
-          0,
-        );
-      total.battlecry += growth(definition.battlecry);
-      total.deathrattle += growth(definition.deathrattle);
-      total.selfDamaged += growth(definition.afterSelfDamaged);
-      return total;
-    },
-    { battlecry: 0, deathrattle: 0, selfDamaged: 0 },
-  );
+  const total: BeetleGrowthPotential = {
+    battlecry: 0,
+    deathrattle: 0,
+    selfDamaged: 0,
+  };
+  const growth = (
+    component: MinionEffectSource,
+    effects: readonly MinionEffect[] | undefined,
+  ) =>
+    (effects ?? []).reduce(
+      (amount, effect) =>
+        effect.kind === "improveBeetles"
+          ? amount +
+            (effect.attack + effect.health) *
+              (component.golden ? 2 : 1)
+          : amount,
+      0,
+    );
+  for (const component of minionEffectSources(minion)) {
+    const definition = getMinionDefinition(component.definitionId);
+    total.battlecry += growth(component, definition.battlecry);
+    total.selfDamaged += growth(component, definition.afterSelfDamaged);
+  }
+  for (const component of minionDeathrattleSources(minion)) {
+    total.deathrattle +=
+      growth(
+        component,
+        getMinionDefinition(component.definitionId).deathrattle,
+      ) * deathrattleSourceRepetitions(minion, component, 1);
+  }
+  return total;
 }
 
 function roogugRedirectCount(minion: MinionInstance): number {
@@ -13077,13 +13344,22 @@ function destroyRecruitMinion(
   if (minionHasTriggerableDeathrattle(source)) {
     activateThornedPauldrons(player);
   }
-  for (const component of minionEffectSources(source)) {
+  for (const component of minionDeathrattleSources(source)) {
     const deathrattle =
       getMinionDefinition(component.definitionId).deathrattle;
     if (!deathrattle || deathrattle.length === 0) {
       continue;
     }
-    for (let repetition = 0; repetition < repetitions; repetition += 1) {
+    const componentRepetitions = deathrattleSourceRepetitions(
+      source,
+      component,
+      repetitions,
+    );
+    for (
+      let repetition = 0;
+      repetition < componentRepetitions;
+      repetition += 1
+    ) {
       observeRecruitDeathrattleTriggered(player);
       applyRecruitEffects(
         state,
@@ -14445,6 +14721,72 @@ function resolveDarkmoonPrizePulse(
   target?: BoardMinionInstance,
 ): void {
   switch (definition.effect) {
+    case "darkmoonPocketChange":
+      for (let coin = 0; coin < 2; coin += 1) {
+        addGeneratedTavernSpellToHand(
+          state,
+          player,
+          "tavern-spell-tavern-coin",
+        );
+      }
+      return;
+    case "darkmoonMightOfStormwind":
+      buffMinions(
+        player.board,
+        player.tavernTier,
+        0,
+        player.board,
+        player,
+      );
+      return;
+    case "darkmoonTheGoodStuff":
+      buffTavernMinionsPermanently(player, 1, 1);
+      return;
+    case "darkmoonRockingAndRolling":
+      player.systemEventCounters.darkmoonFreeRefreshesPerTurn =
+        Math.max(
+          0,
+          Math.floor(
+            player.systemEventCounters.darkmoonFreeRefreshesPerTurn ?? 0,
+          ),
+        ) + 1;
+      return;
+    case "darkmoonNewRecruit":
+      player.systemEventCounters.darkmoonExtraTavernMinions =
+        darkmoonExtraTavernMinionCount(player) + 1;
+      addDarkmoonExtraTavernMinion(state, player);
+      return;
+    case "darkmoonBananaBunch":
+      for (let banana = 0; banana < 2; banana += 1) {
+        addGeneratedTavernSpellToHand(
+          state,
+          player,
+          "tavern-spell-tavern-dish-banana",
+        );
+      }
+      return;
+    case "darkmoonSpreadTome": {
+      const candidates = TAVERN_SPELL_DEFINITIONS.filter(
+        (candidate) =>
+          candidate.cost >= 2 &&
+          tavernSpellIsAvailable(candidate, state.activeTribes),
+      );
+      if (candidates.length > 0) {
+        addCardToHand(
+          state,
+          player,
+          createTavernSpell(
+            state,
+            candidates[randomIndex(state, candidates.length)],
+          ),
+        );
+      }
+      return;
+    }
+    case "darkmoonCrystallized":
+      player.tavernSpellAttackBonus += 1;
+      player.tavernSpellHealthBonus += 1;
+      return;
     case "darkmoonBuyTheHolyLight":
       if (target) {
         buffMinions([target], 10, 0, player.board, player);
@@ -14532,7 +14874,9 @@ function castDarkmoonGeneratedSpell(
   }
   const definition = getSpellcraftDefinition(card.definitionId);
   if (
+    definition.id !== TIER_ONE_TRIPLE_PRIZE_DEFINITION_ID &&
     definition.id !== TRIPLE_PRIZE_DEFINITION_ID &&
+    !isTierOneDarkmoonPrizeDefinitionId(definition.id) &&
     !isTierThreeDarkmoonPrizeDefinitionId(definition.id)
   ) {
     return false;
@@ -14561,13 +14905,17 @@ function castDarkmoonGeneratedSpell(
     (target ? friendlyTargetSpellCastMultiplier(player.board) : 1) +
     extraFirstSpellCasts(state, player);
 
-  if (definition.effect === "darkmoonPrizeDiscover") {
+  if (
+    definition.effect === "darkmoonPrizeDiscover" ||
+    definition.effect === "darkmoonTierOnePrizeDiscover"
+  ) {
     beginDarkmoonPrizeDiscoverInteraction(
       state,
       player,
       card.instanceId,
       castCount,
       "generatedSpellCast",
+      definition.effect === "darkmoonTierOnePrizeDiscover" ? 1 : 3,
     );
     if (state.pendingInteraction === null) {
       for (let cast = 0; cast < castCount; cast += 1) {
@@ -14637,6 +14985,27 @@ function castDarkmoonGeneratedSpell(
     return true;
   }
 
+  if (definition.effect === "darkmoonGachaGift") {
+    beginDiscoverInteraction(
+      state,
+      player,
+      card.instanceId,
+      sharedPoolDiscoverFilterForExactTier(state, 1),
+      castCount,
+      { kind: "hand", allowOverflow: true },
+      "generatedSpellCast",
+      undefined,
+      definition.id,
+    );
+    if (state.pendingInteraction === null) {
+      for (let cast = 0; cast < castCount; cast += 1) {
+        triggerRecruitAfterSpellCast(state, player);
+      }
+      finishCardPlayed(state, player);
+    }
+    return true;
+  }
+
   for (let cast = 0; cast < castCount; cast += 1) {
     resolveDarkmoonPrizePulse(state, player, definition, target);
     if (target) {
@@ -14664,7 +15033,9 @@ function castSpellcraft(
   const definition = getSpellcraftDefinition(card.definitionId);
   if (
     card.spellFamily === "generated" &&
-    (definition.id === TRIPLE_PRIZE_DEFINITION_ID ||
+    (definition.id === TIER_ONE_TRIPLE_PRIZE_DEFINITION_ID ||
+      definition.id === TRIPLE_PRIZE_DEFINITION_ID ||
+      isTierOneDarkmoonPrizeDefinitionId(definition.id) ||
       isTierThreeDarkmoonPrizeDefinitionId(definition.id))
   ) {
     return castDarkmoonGeneratedSpell(
@@ -15552,17 +15923,25 @@ function drawOrGenerateSpecialMinion(
 function addSpecialShopMinion(
   player: PlayerState,
   minion: BoardMinionInstance,
+  baselineMinionSize = baseTavernCardCapacity(player),
+  targetMinionSize = tavernCardCapacity(player),
 ): void {
   applyTavernBonuses(player, minion);
   reconcileWhereverMinion(
     minion,
     player.astralAutomatonsSummoned ?? 0,
     player.eternalKnightsDied ?? 0,
-          player.tavernSpellsCast ?? 0,
-          player.deathrattlesTriggered ?? 0,
-          player.magnetizationsThisGame ?? 0,
-        );
+    player.tavernSpellsCast ?? 0,
+    player.deathrattlesTriggered ?? 0,
+    player.magnetizationsThisGame ?? 0,
+  );
   refreshDynamicMinionDescription(minion, player);
+  applyDarkmoonExtraTavernSlotBuffIfNeeded(
+    player,
+    minion,
+    baselineMinionSize,
+    targetMinionSize,
+  );
   player.shop.push(minion);
 }
 
@@ -15625,6 +16004,7 @@ function fillWarbandCopyPage(
   if (sources.length === 0) {
     return false;
   }
+  const baselineCapacity = baseTavernCardCapacity(player);
   for (const source of sources) {
     addSpecialShopMinion(
       player,
@@ -15632,6 +16012,8 @@ function fillWarbandCopyPage(
         state,
         source.definitionId,
       ),
+      baselineCapacity,
+      sources.length,
     );
   }
   return true;
@@ -17146,6 +17528,12 @@ function refreshShop(state: GameState, player: PlayerState): boolean {
       copy.sellValue = 1;
       copy.grantsTripleReward = false;
       copy.effectCounters = {};
+      applyDarkmoonExtraTavernSlotBuffIfNeeded(
+        player,
+        copy,
+        baseTavernMinionCapacity(player),
+        tavernMinionCapacity(player),
+      );
       player.shop.push(copy);
       player.frozen = true;
     }
@@ -17265,6 +17653,12 @@ function upgradeTavern(state: GameState, player: PlayerState): boolean {
           break;
         }
         applyTavernBonuses(player, minion);
+        applyDarkmoonExtraTavernSlotBuffIfNeeded(
+          player,
+          minion,
+          baseTavernMinionCapacity(player),
+          tavernMinionCapacity(player),
+        );
         player.shop.push(minion);
       }
     } else {
@@ -17407,12 +17801,6 @@ function combatTavernSpellSourceWeight(
     const definition = getMinionDefinition(component.definitionId);
     const scale = component.golden ? 2 : 1;
     weight +=
-      (definition.deathrattle ?? []).filter(
-        (effect) =>
-          effect.kind === "castTavernSpell" ||
-          effect.kind === "castTavernSpellOnAdjacent",
-      ).length * scale;
-    weight +=
       (definition.rally ?? []).filter(
         (effect) =>
           effect.kind === "castTavernSpell" ||
@@ -17422,6 +17810,18 @@ function combatTavernSpellSourceWeight(
       (definition.afterFriendlyAttacks ?? []).filter(
         (effect) => effect.kind === "castTavernSpell",
       ).length * scale;
+  }
+  for (const component of minionDeathrattleSources(minion)) {
+    const definition = getMinionDefinition(component.definitionId);
+    const scale = component.golden ? 2 : 1;
+    weight +=
+      (definition.deathrattle ?? []).filter(
+        (effect) =>
+          effect.kind === "castTavernSpell" ||
+          effect.kind === "castTavernSpellOnAdjacent",
+      ).length *
+      scale *
+      deathrattleSourceRepetitions(minion, component, 1);
   }
   return weight;
 }
@@ -17434,15 +17834,15 @@ function estimatedCombatSummonsOfTribe(
     (minion) => minion.reborn && minionHasTribe(minion, tribe),
   ).length;
   for (const minion of board) {
-    for (const component of minionEffectSources(minion)) {
-      const definition = getMinionDefinition(component.definitionId);
-      for (const effect of [
-        ...(definition.deathrattle ?? []),
-        ...(definition.afterSelfDamaged ?? []),
-      ]) {
+    const countEffects = (
+      component: MinionEffectSource,
+      effects: readonly MinionEffect[],
+      repetitions = 1,
+    ) => {
+      for (const effect of effects) {
         if (effect.kind === "summonRandomMinion") {
           if (effect.filter.tribe === tribe) {
-            summons += 1;
+            summons += repetitions;
           }
           continue;
         }
@@ -17463,8 +17863,22 @@ function estimatedCombatSummonsOfTribe(
           baseCount *
           (component.golden && effect.goldenMode === "doubleCount"
             ? 2
-            : 1);
+            : 1) *
+          repetitions;
       }
+    };
+    for (const component of minionEffectSources(minion)) {
+      countEffects(
+        component,
+        getMinionDefinition(component.definitionId).afterSelfDamaged ?? [],
+      );
+    }
+    for (const component of minionDeathrattleSources(minion)) {
+      countEffects(
+        component,
+        getMinionDefinition(component.definitionId).deathrattle ?? [],
+        deathrattleSourceRepetitions(minion, component, 1),
+      );
     }
   }
   return Math.min(MAX_BOARD_SIZE - 1, summons);
@@ -17498,9 +17912,12 @@ function minionScore(
   const definitions = minionEffectSources(minion).map((component) =>
     getMinionDefinition(component.definitionId),
   );
+  const deathrattleDefinitions = minionDeathrattleSources(minion).map(
+    (component) => getMinionDefinition(component.definitionId),
+  );
   const battlecryScale = battlecryTriggerCount(player);
   const deathrattleScale = 1 + extraDeathrattles(player.board);
-  if (definitions.some((definition) => definition.deathrattle)) {
+  if (deathrattleDefinitions.some((definition) => definition.deathrattle)) {
     score += profile.deathrattleBonus * deathrattleScale;
   }
   if (
@@ -17516,6 +17933,22 @@ function minionScore(
     0,
     MAX_BOARD_SIZE - Math.min(MAX_BOARD_SIZE, projectedBoard.length) + 1,
   );
+  const learnedDeathrattleTriggerEquivalents = minionDeathrattleSources(
+    minion,
+  ).reduce(
+    (total, component) =>
+      component.learnedDeathrattle === true
+        ? total +
+          deathrattleSourceRepetitions(minion, component, 1) *
+            (component.golden ? 2 : 1)
+        : total,
+    0,
+  );
+  score +=
+    learnedDeathrattleTriggerEquivalents *
+    profile.deathrattleBonus *
+    deathrattleScale *
+    0.5;
   const projectedBeetleCount =
     player.nextCombatBeetles +
     projectedBoard.reduce(
@@ -18437,9 +18870,6 @@ function minionScore(
         (definition.battlecry ?? []).some((effect) =>
           AI_ECONOMY_EFFECT_KINDS.has(effect.kind),
         ) ||
-        (definition.deathrattle ?? []).some((effect) =>
-          AI_ECONOMY_EFFECT_KINDS.has(effect.kind),
-        ) ||
         (definition.afterSold ?? []).some((effect) =>
           AI_ECONOMY_EFFECT_KINDS.has(effect.kind),
         ) ||
@@ -18449,6 +18879,11 @@ function minionScore(
         (definition.sellValueAfterLoss ??
           definition.sellValue ??
           1) > 1,
+    ) ||
+    deathrattleDefinitions.some((definition) =>
+      (definition.deathrattle ?? []).some((effect) =>
+        AI_ECONOMY_EFFECT_KINDS.has(effect.kind),
+      ),
     )
   ) {
     score += profile.economyBonus;
@@ -18580,6 +19015,24 @@ function darkmoonPrizeAiScore(
   definition: SpellcraftDefinition,
 ): number {
   switch (definition.effect) {
+    case "darkmoonPocketChange":
+      return Math.min(2, MAX_HAND_SIZE - player.hand.length) * 2;
+    case "darkmoonGachaGift":
+      return 7;
+    case "darkmoonMightOfStormwind":
+      return player.board.length * player.tavernTier;
+    case "darkmoonTheGoodStuff":
+      return 8 + player.shop.length * 2;
+    case "darkmoonRockingAndRolling":
+      return 10;
+    case "darkmoonNewRecruit":
+      return 12;
+    case "darkmoonBananaBunch":
+      return Math.min(2, MAX_HAND_SIZE - player.hand.length) * 5;
+    case "darkmoonSpreadTome":
+      return player.hand.length < MAX_HAND_SIZE ? 7 : 0;
+    case "darkmoonCrystallized":
+      return 9;
     case "darkmoonBuyTheHolyLight":
       return player.board.length > 0 ? 18 : 0;
     case "darkmoonBananas":
@@ -18606,8 +19059,13 @@ function darkmoonPrizeAiScore(
 
 function reserveDarkmoonPrizeOptions(
   state: GameState,
+  prizeTier: 1 | 3,
 ): SpellcraftSpellInstance[] {
-  const candidates = [...DARKMOON_PRIZE_DEFINITIONS];
+  const candidates = [
+    ...(prizeTier === 1
+      ? TIER_ONE_DARKMOON_PRIZE_DEFINITIONS
+      : DARKMOON_PRIZE_DEFINITIONS),
+  ];
   shuffleInPlace(state, candidates);
   return candidates
     .slice(0, 3)
@@ -18620,14 +19078,27 @@ function beginDarkmoonPrizeDiscoverInteraction(
   sourceInstanceId: string,
   discoveries: number,
   completionSource?: "generatedSpellCast",
+  prizeTier: 1 | 3 = 3,
 ): boolean {
-  if (
-    discoveries <= 0 ||
-    (player.isHuman && state.pendingInteraction !== null)
-  ) {
+  if (discoveries <= 0) {
     return false;
   }
-  const options = reserveDarkmoonPrizeOptions(state);
+  const existingInteraction = state.pendingInteraction;
+  if (
+    player.isHuman &&
+    existingInteraction?.kind === "darkmoonPrizeDiscover" &&
+    existingInteraction.playerId === player.id &&
+    existingInteraction.options[0] &&
+    getSpellcraftDefinition(existingInteraction.options[0].definitionId)
+      .sourceTier === prizeTier
+  ) {
+    existingInteraction.remainingDiscoveries += discoveries;
+    return true;
+  }
+  if (player.isHuman && existingInteraction !== null) {
+    return false;
+  }
+  const options = reserveDarkmoonPrizeOptions(state, prizeTier);
   if (options.length === 0) {
     return false;
   }
@@ -18655,6 +19126,7 @@ function beginDarkmoonPrizeDiscoverInteraction(
       sourceInstanceId,
       discoveries - 1,
       completionSource,
+      prizeTier,
     );
     return true;
   }
@@ -19806,6 +20278,10 @@ function resolvePendingInteraction(
     if (nextPending.completionSource === "generatedSpellCast") {
       triggerRecruitAfterSpellCast(next, nextPlayer);
     }
+    const prizeTier =
+      getSpellcraftDefinition(nextSelected.definitionId).sourceTier === 1
+        ? 1
+        : 3;
     next.pendingInteraction = null;
     const continued = beginDarkmoonPrizeDiscoverInteraction(
       next,
@@ -19813,6 +20289,7 @@ function resolvePendingInteraction(
       nextPending.sourceInstanceId,
       nextPending.remainingDiscoveries - 1,
       nextPending.completionSource,
+      prizeTier,
     );
     if (
       !continued &&
@@ -21704,7 +22181,7 @@ function arrangeAiBoard(
   const opponentHasCleave =
     opponent?.board.some((minion) => minion.cleave) ?? false;
   const hasDeathrattle = (minion: BoardMinionInstance) =>
-    minionEffectSources(minion).some(
+    minionDeathrattleSources(minion).some(
       (component) =>
         getMinionDefinition(component.definitionId).deathrattle !==
         undefined,
@@ -29036,7 +29513,7 @@ function minionHasTriggerableDeathrattle(
     (minion.goldenCrabDeathrattles ?? 0) > 0 ||
     minion.temporaryCrabDeathrattles > 0 ||
     (minion.temporaryGoldenCrabDeathrattles ?? 0) > 0 ||
-    minionEffectSources(minion).some(
+    minionDeathrattleSources(minion).some(
       (component) =>
         (getMinionDefinition(component.definitionId).deathrattle
           ?.length ?? 0) > 0,
@@ -33017,6 +33494,9 @@ function triggerAfterFriendlyDied(
   eligibleWatcherInstanceIds: ReadonlySet<string>,
 ): void {
   const enemyId = opponentId(context, ownerId);
+  const learnedDeathrattles = minionDeathrattleSources(death.minion).filter(
+    (source) => source.definitionId !== FISH_DEFINITION_ID,
+  );
   for (const watcher of [...context.boards[ownerId]]) {
     if (
       watcher.health <= 0 ||
@@ -33026,10 +33506,46 @@ function triggerAfterFriendlyDied(
           minion.instanceId === watcher.instanceId &&
           minion.health > 0,
       )
-    ) {
-      continue;
-    }
-    for (const component of minionEffectSources(watcher)) {
+      ) {
+        continue;
+      }
+      if (
+        watcher.definitionId === FISH_DEFINITION_ID &&
+        watcher.instanceId !== death.minion.instanceId &&
+        learnedDeathrattles.length > 0
+      ) {
+        const changed = addLearnedDeathrattles(watcher, learnedDeathrattles);
+        if (changed) {
+          refreshDynamicMinionDescription(watcher);
+          const persistentOwner = persistentCombatOwner(context, ownerId);
+          const persistentWatcher = persistentOwner
+            ? findCombatWritebackMinion(
+                context,
+                persistentOwner,
+                ownerId,
+                watcher.instanceId,
+              )
+            : undefined;
+          if (persistentWatcher) {
+            addLearnedDeathrattles(persistentWatcher, learnedDeathrattles);
+            refreshDynamicMinionDescription(
+              persistentWatcher,
+              persistentOwner,
+            );
+          }
+          pushBattleEvent(context.events, {
+            type: "trigger",
+            actorPlayerId: ownerId,
+            actorInstanceId: watcher.instanceId,
+            targetPlayerId: ownerId,
+            targetInstanceId: death.minion.instanceId,
+            actorMinion: cloneMinion(watcher),
+            minion: cloneMinion(death.minion),
+            message: `${watcher.name}学会了${death.minion.name}的亡语。`,
+          });
+        }
+      }
+      for (const component of minionEffectSources(watcher)) {
       if (
         !context.boards[ownerId].some(
           (minion) =>
@@ -33567,7 +34083,7 @@ function resolveOneDeathrattle(
     1 +
     extraDeathrattles(board) +
     deathlyPhylacteryBonusRepetitions(context, ownerId, source);
-  for (const component of minionEffectSources(source)) {
+  for (const component of minionDeathrattleSources(source)) {
     const effects =
       getMinionDefinition(component.definitionId).deathrattle ?? [];
     const scale = component.golden ? 2 : 1;
@@ -33576,7 +34092,16 @@ function resolveOneDeathrattle(
       ownerId,
       component,
     );
-    for (let repetition = 0; repetition < repetitions; repetition += 1) {
+    const componentRepetitions = deathrattleSourceRepetitions(
+      source,
+      component,
+      repetitions,
+    );
+    for (
+      let repetition = 0;
+      repetition < componentRepetitions;
+      repetition += 1
+    ) {
       if (effects.length > 0) {
         observeCombatDeathrattleTriggered(context, ownerId, source);
       }
@@ -35249,26 +35774,30 @@ function applyStartOfCombatHeroPowers(
         trigger < heroPowerTriggerMultiplier(owner);
         trigger += 1
       ) {
-      pushBattleEvent(context.events, {
-        type: "startOfCombat",
-        actorPlayerId: owner.id,
-        targetPlayerId: owner.id,
-        targetInstanceId: target.instanceId,
-        message: `${owner.name}的“随风而行”触发。`,
-      });
-      target.windfury = true;
-      target.divineShield = true;
-      target.taunt = true;
-      pushBattleEvent(context.events, {
-        type: "buff",
-        actorPlayerId: owner.id,
-        targetPlayerId: owner.id,
-        targetInstanceId: target.instanceId,
-        attackDelta: 0,
-        healthDelta: 0,
-        minion: cloneMinion(target),
-        message: `随风而行使${target.name}获得风怒、圣盾和嘲讽。`,
-      });
+        pushBattleEvent(context.events, {
+          type: "startOfCombat",
+          actorPlayerId: owner.id,
+          targetPlayerId: owner.id,
+          targetInstanceId: target.instanceId,
+          message: `${owner.name}的“随风而行”触发。`,
+        });
+        const gain = applyCombatEnchantingGain(context, owner.id, target, {
+          keywords: ["windfury", "divineShield", "taunt"],
+        });
+        pushBattleEvent(context.events, {
+          type: "buff",
+          actorPlayerId: owner.id,
+          targetPlayerId: owner.id,
+          targetInstanceId: target.instanceId,
+          attackDelta: 0,
+          healthDelta: 0,
+          minion: cloneMinion(target),
+          retained: gain.retentionMultiplier > 0,
+          ...(gain.retentionMultiplier > 0
+            ? { retentionMultiplier: gain.retentionMultiplier }
+            : {}),
+          message: `随风而行使${target.name}获得风怒、圣盾和嘲讽。`,
+        });
       }
     }
   }
@@ -36781,6 +37310,12 @@ function beginNextRecruit(state: GameState): void {
     player.heroRefreshAvailable = playerHasHeroPower(
       player,
       "freeRefreshAtTurnStart",
+    );
+    player.freeRefreshes += Math.max(
+      0,
+      Math.floor(
+        player.systemEventCounters.darkmoonFreeRefreshesPerTurn ?? 0,
+      ),
     );
     const wishbone = ancientWishbone(player);
     if (wishbone) {

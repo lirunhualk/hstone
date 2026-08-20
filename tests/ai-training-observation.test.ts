@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import {
+  AI_TRAINING_OBSERVATION_VERSION,
   createAiTrainingObservation,
   type AiTrainingObservation,
 } from "../lib/game/ai-training.ts";
@@ -231,7 +232,7 @@ test("training observation is an immutable JSON privacy boundary", () => {
   const stateBefore = JSON.stringify(state);
   const observation = createAiTrainingObservation(state, controlledSeat);
   assert.equal(JSON.stringify(state), stateBefore);
-  assert.equal(observation.schemaVersion, 3);
+  assert.equal(observation.schemaVersion, 4);
   assert.equal(observation.controlledSeat, controlledSeat);
   assert.equal(observation.own.board[0]?.name, "OWN_BOARD_ALLOWED");
   assert.equal(observation.own.board[0]?.venomous, true);
@@ -295,6 +296,119 @@ test("training observation is an immutable JSON privacy boundary", () => {
       >
     ).pop();
   }, TypeError);
+});
+
+test("learned deathrattles use deterministic v4 JSON without leaking runtime sources", () => {
+  const state = createGame(0x7a05);
+  const controlledSeat = state.players.findIndex((player) => player.isHuman);
+  assert.notEqual(controlledSeat, -1);
+  const controlled = state.players[controlledSeat];
+  const template = firstAvailableMinion(state);
+  const ordinary = fixtureMinion(
+    template,
+    "ORDINARY_FISH_INSTANCE_SECRET",
+    "ORDINARY_FISH_ALLOWED",
+  );
+  ordinary.golden = false;
+  ordinary.learnedDeathrattles = [
+    {
+      sourceInstanceId: "ORDINARY_LEARNED_SOURCE_SECRET",
+      definitionId: "ordinary-learned-deathrattle",
+      golden: false,
+    },
+  ];
+  const golden = fixtureMinion(
+    template,
+    "GOLDEN_FISH_INSTANCE_SECRET",
+    "GOLDEN_FISH_ALLOWED",
+  );
+  golden.golden = true;
+  golden.learnedDeathrattles = [
+    {
+      sourceInstanceId: "GOLDEN_LEARNED_SOURCE_SECRET",
+      definitionId: "golden-learned-deathrattle",
+      golden: true,
+    },
+  ];
+  controlled.board = [ordinary, golden];
+
+  const hiddenOpponent = state.players.find(
+    (player) => player.id !== controlled.id,
+  );
+  assert.ok(hiddenOpponent);
+  hiddenOpponent.board = [
+    fixtureMinion(
+      template,
+      "HIDDEN_OPPONENT_INSTANCE_SECRET",
+      "HIDDEN_OPPONENT_BOARD_SECRET",
+    ),
+  ];
+  hiddenOpponent.board[0].learnedDeathrattles = [
+    {
+      sourceInstanceId: "HIDDEN_LEARNED_SOURCE_SECRET",
+      definitionId: "HIDDEN_LEARNED_DEATHRATTLE_SECRET",
+      golden: false,
+    },
+  ];
+
+  const observation = createAiTrainingObservation(state, controlledSeat);
+  const serialized = JSON.stringify(observation);
+  const repeatedSerialized = JSON.stringify(
+    createAiTrainingObservation(state, controlledSeat),
+  );
+
+  assert.equal(AI_TRAINING_OBSERVATION_VERSION, 4);
+  assert.equal(observation.schemaVersion, 4);
+  assert.equal(repeatedSerialized, serialized);
+  assert.deepEqual(observation.own.board[0]?.learnedDeathrattles, [
+    {
+      definitionId: "ordinary-learned-deathrattle",
+      golden: false,
+    },
+  ]);
+  assert.deepEqual(observation.own.board[1]?.learnedDeathrattles, [
+    {
+      definitionId: "golden-learned-deathrattle",
+      golden: true,
+    },
+  ]);
+  assert.equal(observation.own.board[0]?.golden, false);
+  assert.equal(observation.own.board[1]?.golden, true);
+  assert.notStrictEqual(
+    observation.own.board[0]?.learnedDeathrattles,
+    ordinary.learnedDeathrattles,
+  );
+  assert.notStrictEqual(
+    observation.own.board[1]?.learnedDeathrattles,
+    golden.learnedDeathrattles,
+  );
+  assertNoForbiddenKeys(observation);
+  for (const secret of [
+    "ORDINARY_LEARNED_SOURCE_SECRET",
+    "GOLDEN_LEARNED_SOURCE_SECRET",
+    "HIDDEN_LEARNED_SOURCE_SECRET",
+    "HIDDEN_LEARNED_DEATHRATTLE_SECRET",
+  ]) {
+    assert.equal(serialized.includes(secret), false, secret);
+  }
+
+  const parsedV4 = JSON.parse(serialized) as Record<string, unknown>;
+  assert.equal(parsedV4.schemaVersion, 4);
+
+  ordinary.learnedDeathrattles[0].definitionId = "mutated-after-observation";
+  ordinary.learnedDeathrattles.push({
+    sourceInstanceId: "LATE_SOURCE_SECRET",
+    definitionId: "late-deathrattle",
+    golden: true,
+  });
+  assert.deepEqual(observation.own.board[0]?.learnedDeathrattles, [
+    {
+      definitionId: "ordinary-learned-deathrattle",
+      golden: false,
+    },
+  ]);
+  assert.equal(serialized.includes("mutated-after-observation"), false);
+  assert.equal(serialized.includes("late-deathrattle"), false);
 });
 
 test("discover filter observation preserves pool and Magnetic constraints", () => {

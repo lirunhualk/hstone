@@ -419,6 +419,13 @@ test("tribe-bound Heroes are filtered from both offers and AI assignments", () =
   assert.equal(mechOnlyIds.has("hero-ysera"), false);
   assert.equal(mechOnlyIds.has("hero-chenvaala"), false);
   assert.equal(mechOnlyIds.has("hero-capn-hoggarr"), false);
+  assert.equal(mechOnlyIds.has("hero-bg20-103"), false);
+  assert.equal(mechOnlyIds.has("hero-tb-55"), false);
+  assert.equal(mechOnlyIds.has("hero-tb-56"), false);
+  assert.equal(mechOnlyIds.has("hero-tb-702"), false);
+  assert.equal(mechOnlyIds.has("hero-bg22-007"), false);
+  assert.equal(mechOnlyIds.has("hero-bg22-200"), false);
+  assert.equal(mechOnlyIds.has("hero-tb-17"), true);
 
   const beastOnlyIds = new Set(
     heroesAvailableForTribes(["beast"]).map((hero) => hero.id),
@@ -436,15 +443,14 @@ test("tribe-bound Heroes are filtered from both offers and AI assignments", () =
         .filter((player) => !player.isHuman)
         .map((player) => player.heroId),
     ];
+    const availableHeroIds = new Set(
+      heroesAvailableForTribes(state.activeTribes).map((hero) => hero.id),
+    );
     for (const heroId of dealtHeroIds) {
       assert.ok(heroId);
-      const hero = getHeroDefinition(heroId);
       assert.ok(
-        !hero.associatedTribes?.length ||
-          hero.associatedTribes.some((tribe) =>
-            state.activeTribes.includes(tribe),
-          ),
-        `${hero.id} must match an active tribe`,
+        availableHeroIds.has(heroId),
+        `${heroId} must match an active tribe`,
       );
     }
   }
@@ -1858,6 +1864,39 @@ test("Plane Alignment grants only one majority-type minion per turn", () => {
   state = continueThroughCombat(state);
   player = humanPlayer(state);
   assert.equal(player.hand.length, 1);
+});
+
+test("False Idols turns a played golden minion triple reward into 1 gold", () => {
+  let state = chooseHero(lobbyGameForEvent("system-event-false-idols"));
+  const player = humanPlayer(state);
+  const template = player.shop[0];
+  assert.ok(template);
+  const definition = getMinionDefinition(template.definitionId);
+  const golden = definitionMinion(template, definition.id, "false-idols-golden", {
+    golden: true,
+    cardId: definition.goldenCardId ?? definition.cardId,
+    name: `金色·${definition.name}`,
+    attack: definition.attack * 2,
+    health: definition.health * 2,
+    description: `金色随从：基础属性已翻倍；可倍增的效果会按金色规则结算。普通版本牌面：${definition.description}`,
+    grantsTripleReward: true,
+  });
+  player.hand = [golden];
+  player.board = [];
+  player.gold = 0;
+
+  state = gameReducer(state, {
+    type: "PLAY_HAND_CARD",
+    cardInstanceId: golden.instanceId,
+  });
+
+  const nextPlayer = humanPlayer(state);
+  assert.equal(nextPlayer.gold, 1);
+  assert.equal(
+    nextPlayer.hand.some((card) => card.kind === "tripleReward"),
+    false,
+  );
+  assert.equal(nextPlayer.board[0]?.grantsTripleReward, false);
 });
 
 test("Hero Power quotes are pure, dynamic, and target-aware", () => {

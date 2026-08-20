@@ -17,7 +17,9 @@ import {
 } from "./ai-training-environment.ts";
 import { getTavernSpellDefinition } from "./tavern-spells.ts";
 
-export const AI_RECRUIT_PLANNER_VERSION = 3 as const;
+export const AI_RECRUIT_PLANNER_VERSION = 4 as const;
+
+const LEARNED_DEATHRATTLE_VISIBLE_WEIGHT = 0.5;
 
 export type AiRecruitPlanTermination =
   | "endTurn"
@@ -107,6 +109,17 @@ function minionVisiblePower(
   const windfuryValue = minion.windfury
     ? Math.max(1, minion.attack * 0.3)
     : 0;
+  // Learned Deathrattles are visible and durable, but their exact combat value
+  // is board-dependent. Count trigger-equivalents conservatively instead of
+  // duplicating the engine's effect-specific resolution rules here.
+  const learnedDeathrattleValue =
+    minion.learnedDeathrattles.reduce(
+      (total, learned) => total + (learned.golden ? 2 : 1),
+      0,
+    ) *
+    (minion.golden ? 2 : 1) *
+    profile.deathrattleBonus *
+    LEARNED_DEATHRATTLE_VISIBLE_WEIGHT;
   const utility =
     (minion.taunt ? 0.7 : 0) +
     (minion.stealth ? 0.5 : 0) +
@@ -126,6 +139,7 @@ function minionVisiblePower(
     poisonValue +
     cleaveValue +
     windfuryValue +
+    learnedDeathrattleValue +
     utility
   );
 }
