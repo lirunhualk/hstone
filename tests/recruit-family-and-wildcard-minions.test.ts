@@ -708,6 +708,42 @@ test("Golden Surprises can combine again with another Surprise", () => {
   assert.equal(triple.poolCopies, 7);
 });
 
+test("False Idols lets one Surprise combine with one matching Elemental", () => {
+  let state = createGame(0xd455);
+  const player = humanPlayer(state);
+  player.systemEventCounters.falseIdolsActive = 1;
+  const target = definitionMinion("BGS_126", "false-idols-surprise-target", {
+    poolCopies: 1,
+  });
+  const surprise = definitionMinion(
+    "BG26_175",
+    "false-idols-surprise-wildcard",
+    {
+      poolCopies: 1,
+    },
+  );
+  player.board = [];
+  player.hand = [target, surprise];
+  player.gold = 0;
+
+  state = playCard(state, surprise.instanceId);
+  const nextPlayer = humanPlayer(state);
+  const triple = minionInHand(nextPlayer, "BGS_126", true);
+  assert.deepEqual([triple.attack, triple.health], [20, 14]);
+  assert.equal(triple.divineShield, true);
+  assert.equal(triple.poolCopies, 2);
+  assert.deepEqual(triple.poolCopiesByDefinitionId, {
+    BGS_126: 1,
+    BG26_175: 1,
+  });
+  assert.equal(triple.grantsTripleReward, false);
+  assert.equal(nextPlayer.gold, 1);
+  assert.equal(
+    nextPlayer.hand.some((card) => card.kind === "tripleReward"),
+    false,
+  );
+});
+
 test("end-of-turn triples wait until the next Recruit phase", () => {
   let state = createGame(0x7426);
   const player = humanPlayer(state);

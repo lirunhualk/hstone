@@ -1899,6 +1899,39 @@ test("False Idols turns a played golden minion triple reward into 1 gold", () =>
   assert.equal(nextPlayer.board[0]?.grantsTripleReward, false);
 });
 
+test("False Idols grants 1 gold when two matching minions combine into a golden minion", () => {
+  let state = chooseHero(lobbyGameForEvent("system-event-false-idols"));
+  const player = humanPlayer(state);
+  const template = player.shop[0];
+  assert.ok(template);
+  const firstCopy = definitionMinion(
+    template,
+    template.definitionId,
+    "false-idols-pair-a",
+  );
+  const secondCopy = definitionMinion(
+    template,
+    template.definitionId,
+    "false-idols-pair-b",
+  );
+  player.hand = [firstCopy];
+  player.shop = [secondCopy];
+  player.gold = getMinionPurchaseCost(state, player.id, 0);
+
+  state = gameReducer(state, { type: "BUY_MINION", shopIndex: 0 });
+
+  const nextPlayer = humanPlayer(state);
+  assert.equal(nextPlayer.gold, 1);
+  assert.equal(nextPlayer.hand.length, 1);
+  assert.equal(nextPlayer.hand[0]?.kind, "minion");
+  assert.equal(nextPlayer.hand[0]?.golden, true);
+  assert.equal(nextPlayer.hand[0]?.grantsTripleReward, false);
+  assert.equal(
+    nextPlayer.hand.some((card) => card.kind === "tripleReward"),
+    false,
+  );
+});
+
 test("Hero Power quotes are pure, dynamic, and target-aware", () => {
   let state = createGame(77, 999);
   let player = humanPlayer(state);

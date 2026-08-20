@@ -11172,6 +11172,39 @@ function ownedTripleMinions(player: PlayerState): BoardMinionInstance[] {
   ];
 }
 
+function tripleCopiesRequiredForDefinition(
+  player: PlayerState,
+  definitionId: string,
+): number {
+  const definition = getMinionDefinition(definitionId);
+  if (
+    playerHasTrinketCardId(player, GOLDEN_PIRATE_STICKER_CARD_ID) &&
+    definitionHasTribe(definition, "pirate")
+  ) {
+    return 2;
+  }
+  if (
+    player.systemEventCounters.falseIdolsActive ||
+    playerHasHeroPower(player, "easyTripleCoin")
+  ) {
+    return 2;
+  }
+  return 3;
+}
+
+function tripleProgressFromCompatibleCount(
+  compatibleCount: number,
+  copiesRequired: number,
+): 0 | 1 | 2 {
+  if (compatibleCount >= copiesRequired - 1) {
+    return 2;
+  }
+  if (copiesRequired > 2 && compatibleCount === copiesRequired - 2) {
+    return 1;
+  }
+  return 0;
+}
+
 function findTripleCombination(
   state: GameState,
   player: PlayerState,
@@ -11191,14 +11224,10 @@ function findTripleCombination(
       (minion) =>
         minion.definitionId === definitionId && minion.golden === false,
     );
-    const copiesRequired =
-      playerHasTrinketCardId(player, GOLDEN_PIRATE_STICKER_CARD_ID) &&
-      definitionHasTribe(definition, "pirate")
-        ? 2
-        : player.systemEventCounters.falseIdolsActive ||
-            playerHasHeroPower(player, "easyTripleCoin")
-          ? 2
-          : 3;
+    const copiesRequired = tripleCopiesRequiredForDefinition(
+      player,
+      definitionId,
+    );
     if (matches.length >= copiesRequired) {
       return {
         definitionId,
@@ -11229,10 +11258,14 @@ function findTripleCombination(
     const matches = wildcardMinions.filter(
       (minion) => minion.definitionId === definitionId,
     );
-    if (matches.length >= 3) {
+    const copiesRequired = tripleCopiesRequiredForDefinition(
+      player,
+      definitionId,
+    );
+    if (matches.length >= copiesRequired) {
       return {
         definitionId,
-        consumed: matches.slice(0, 3),
+        consumed: matches.slice(0, copiesRequired),
         mixed: false,
       };
     }
@@ -11248,7 +11281,11 @@ function findTripleCombination(
       (minion) =>
         minion.definitionId === definitionId && minion.golden === false,
     );
-    if (targets.length === 0 || targets.length >= 3) {
+    const copiesRequired = tripleCopiesRequiredForDefinition(
+      player,
+      definitionId,
+    );
+    if (targets.length === 0 || targets.length >= copiesRequired) {
       continue;
     }
     const compatibleWildcards = wildcardMinions.filter((wildcard) => {
@@ -11257,8 +11294,8 @@ function findTripleCombination(
       ).tripleWildcardFor;
       return tribe !== undefined && definitionHasTribe(definition, tribe);
     });
-    const targetCount = Math.min(2, targets.length);
-    const wildcardCount = 3 - targetCount;
+    const targetCount = Math.min(copiesRequired - 1, targets.length);
+    const wildcardCount = copiesRequired - targetCount;
     if (compatibleWildcards.length < wildcardCount) {
       continue;
     }
@@ -17726,10 +17763,13 @@ function tripleProgressForCandidate(
   }
   if (wildcardTribe !== undefined) {
     // Golden wildcards still count as one physical wildcard card and can be
-    // retripled with two more wildcard entities.
-    let best = owned.filter(
-      (minion) => minion.definitionId === candidate.definitionId,
-    ).length;
+    // retripled as long as the current lobby still has enough wildcard copies
+    // to satisfy the active triple rule.
+    let best = tripleProgressFromCompatibleCount(
+      owned.filter((minion) => minion.definitionId === candidate.definitionId)
+        .length,
+      tripleCopiesRequiredForDefinition(player, candidate.definitionId),
+    );
     const compatibleWildcards = owned.filter(
       (minion) =>
         getMinionDefinition(minion.definitionId).tripleWildcardFor ===
@@ -17748,13 +17788,16 @@ function tripleProgressForCandidate(
         .map((minion) => minion.definitionId),
     );
     for (const definitionId of targetDefinitionIds) {
-      best = Math.max(
-        best,
+      const progress = tripleProgressFromCompatibleCount(
         ownedNormalCount(player, definitionId, excludedInstanceId) +
           compatibleWildcards,
+        tripleCopiesRequiredForDefinition(player, definitionId),
       );
+      if (progress > best) {
+        best = progress;
+      }
     }
-    return Math.min(2, best);
+    return best;
   }
 
   let progress = ownedNormalCount(
@@ -17770,7 +17813,10 @@ function tripleProgressForCandidate(
       progress += 1;
     }
   }
-  return Math.min(2, progress);
+  return tripleProgressFromCompatibleCount(
+    progress,
+    tripleCopiesRequiredForDefinition(player, candidate.definitionId),
+  );
 }
 
 function tribeCount(player: PlayerState, tribe: Tribe): number {
