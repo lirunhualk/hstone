@@ -13,6 +13,7 @@ import {
   getHeroPowerActivationQuote,
   getHeroPowerDefinition,
   getMinionPurchaseCost,
+  getMinionPurchaseQuote,
   getMaximumTavernTier,
   getRefreshCost,
   getSpellcraftDefinition,
@@ -1340,6 +1341,58 @@ test("Titan Grip resets the free purchase each turn", () => {
   state = gameReducer(state, { type: "BUY_MINION", shopIndex: 0 });
   player = humanPlayer(state);
   assert.equal(player.gold, 10);
+});
+
+test("Titan Grip first minion purchase is free even with no gold", () => {
+  let state = chooseHero(lobbyGameForEvent("system-event-titan-grip"));
+  let player = humanPlayer(state);
+  player.gold = 0;
+  player.heroPowerId = null;
+  assert.ok(player.shop[0]);
+
+  assert.deepEqual(getMinionPurchaseQuote(state, player.id, 0), {
+    currency: "gold",
+    cost: 0,
+    affordable: true,
+  });
+
+  state = gameReducer(state, { type: "BUY_MINION", shopIndex: 0 });
+  player = humanPlayer(state);
+  assert.equal(player.gold, 0);
+  assert.equal(player.hand.length, 1);
+
+  // The free purchase is consumed: further offers need gold again.
+  assert.ok(player.shop[0]);
+  const secondQuote = getMinionPurchaseQuote(state, player.id, 0);
+  assert.equal(secondQuote?.affordable, false);
+  assert.ok((secondQuote?.cost ?? 0) > 0);
+  const handAfterFirst = player.hand.length;
+  state = gameReducer(state, { type: "BUY_MINION", shopIndex: 0 });
+  player = humanPlayer(state);
+  assert.equal(player.hand.length, handAfterFirst);
+});
+
+test("Titan Grip free purchase returns next turn even with no gold", () => {
+  let state = chooseHero(lobbyGameForEvent("system-event-titan-grip"));
+  let player = humanPlayer(state);
+  player.gold = 0;
+  player.heroPowerId = null;
+
+  state = gameReducer(state, { type: "BUY_MINION", shopIndex: 0 });
+  player = humanPlayer(state);
+  assert.equal(player.gold, 0);
+  assert.equal(player.hand.length, 1);
+
+  state = continueThroughCombat(state);
+  player = humanPlayer(state);
+  player.gold = 0;
+  player.hand = [];
+
+  assert.equal(getMinionPurchaseQuote(state, player.id, 0)?.affordable, true);
+  state = gameReducer(state, { type: "BUY_MINION", shopIndex: 0 });
+  player = humanPlayer(state);
+  assert.equal(player.gold, 0);
+  assert.equal(player.hand.length, 1);
 });
 
 test("registry-only Buy One Get One remains loadable for legacy lobbies", () => {

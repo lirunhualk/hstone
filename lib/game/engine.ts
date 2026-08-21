@@ -8613,6 +8613,29 @@ export interface MinionPurchaseQuote {
   affordable: boolean;
 }
 
+/**
+ * Titan Grip anomaly and Aranna's unlocked Hero Power each make the first
+ * minion bought each turn free, regardless of the player's current gold.
+ * Quotes must reflect that so a player with no gold can still take the
+ * free minion; health-priced offers still cost health.
+ */
+function firstMinionPurchaseIsFree(
+  state: GameState,
+  player: PlayerState,
+): boolean {
+  return (
+    (state.lobbySystemsEnabled &&
+      state.systemEventId !== null &&
+      getSystemEventDefinition(state.systemEventId).effect === "titanGrip" &&
+      (player.systemEventCounters.titanGripFreeUsedRound ?? 0) !==
+        state.round) ||
+    // attacksForFirstFreeBuy - Aranna: first buy free each turn after unlock
+    (playerHasHeroPower(player, "attacksForFirstFreeBuy") &&
+      heroPowerCounter(player, "arannaAttacks") <= 0 &&
+      heroPowerCounter(player, "arannaFreeBuyUsed") === 0)
+  );
+}
+
 export function getMinionPurchaseQuote(
   state: GameState,
   playerId: PlayerId,
@@ -8626,7 +8649,7 @@ export function getMinionPurchaseQuote(
   const usesFreePiratePurchase =
     minionHasTribe(offered, "pirate") &&
     unusedFirstPirateFreeTrinket(player) !== null;
-  const cost = usesFreePiratePurchase
+  const baseCost = usesFreePiratePurchase
     ? 0
     : state.lobbySystemsEnabled &&
         state.systemEventId &&
@@ -8645,6 +8668,10 @@ export function getMinionPurchaseQuote(
       eyeOfSargerasIsDue(player))
       ? "health"
       : "gold";
+  const cost =
+    currency === "gold" && firstMinionPurchaseIsFree(state, player)
+      ? 0
+      : baseCost;
   return {
     currency,
     cost,
@@ -12178,17 +12205,7 @@ function buyMinion(
   if (quote.currency === "health") {
     damageRecruitPlayer(player, quote.cost);
   } else {
-    const freeFirst =
-      (state.lobbySystemsEnabled &&
-      state.systemEventId &&
-      getSystemEventDefinition(state.systemEventId).effect ===
-        "titanGrip" &&
-      (player.systemEventCounters.titanGripFreeUsedRound ?? 0) !==
-        state.round) ||
-      // NEW: attacksForFirstFreeBuy - Aranna: first buy free each turn after unlock
-      (playerHasHeroPower(player, "attacksForFirstFreeBuy") &&
-        heroPowerCounter(player, "arannaAttacks") <= 0 &&
-        heroPowerCounter(player, "arannaFreeBuyUsed") === 0);
+    const freeFirst = firstMinionPurchaseIsFree(state, player);
     if (!freeFirst) {
       spendGold(state, player, quote.cost);
     } else {
