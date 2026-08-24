@@ -230,7 +230,7 @@ test("hero offers and Identity exclude explicitly unsupported powers", () => {
       (hero) =>
         getHeroPowerDefinition(hero.heroPowerId).activation === "active",
     ).length,
-    5,
+    6,
   );
 
   const identityIneligibleEffects = new Set([
@@ -280,18 +280,76 @@ test("Identity excludes Hero Powers whose minion types are unavailable", () => {
   );
 });
 
-test("triggered Blackthorn and Gallywix powers are passive", () => {
-  for (const effect of [
-    "getBloodGemsPerTurn",
-    "goldAfterSellNextTurn",
-  ] as const) {
-    const power = HERO_POWER_DEFINITIONS.find(
-      (candidate) => candidate.effect === effect,
-    );
-    assert.ok(power);
-    assert.equal(power.activation, "passive");
-    assert.equal(heroPowerCanBeManuallyActivated(power.id), false);
-  }
+test("Gallywix power is passive", () => {
+  const power = HERO_POWER_DEFINITIONS.find(
+    (candidate) => candidate.effect === "goldAfterSellNextTurn",
+  );
+  assert.ok(power);
+  assert.equal(power.activation, "passive");
+  assert.equal(heroPowerCanBeManuallyActivated(power.id), false);
+});
+
+test("Blackthorn power is active with twice-per-turn", () => {
+  const power = HERO_POWER_DEFINITIONS.find(
+    (candidate) => candidate.effect === "getBloodGemsPerTurn",
+  );
+  assert.ok(power);
+  assert.equal(power.activation, "active");
+  assert.equal(heroPowerCanBeManuallyActivated(power.id), true);
+});
+
+function prepareBlackthornState(seed = 0x1b3c): GameState {
+  const state = createGame(seed);
+  const player = humanPlayer(state);
+  state.activeTribes = [...ALL_TRIBES];
+  state.pendingInteraction = null;
+  player.heroId = "hero-bg20-103";
+  player.heroPowerId = "hero-power-bg20_hero_103p";
+  player.heroPowerCounters = {};
+  player.heroPowerActiveThisTurn = false;
+  player.gold = 10;
+  player.goldSpentThisTurn = 0;
+  player.hand = [];
+  player.board = [];
+  player.spellShop = null;
+  player.additionalSpellShop = [];
+  return state;
+}
+
+test("Blackthorn hero power grants 2 Blood Gems and allows twice per turn", () => {
+  const state = prepareBlackthornState();
+  const player = humanPlayer(state);
+
+  const quote1 = getHeroPowerActivationQuote(state, player.id);
+  assert.ok(quote1);
+  assert.equal(quote1.cost, 1);
+  assert.equal(quote1.affordable, true);
+  assert.equal(quote1.usable, true);
+  assert.equal(quote1.targetKind, null);
+
+  const after1 = gameReducer(state, { type: "ACTIVATE_HERO_POWER" });
+  const p1 = humanPlayer(after1);
+  assert.equal(p1.hand.length, 2);
+  assert.equal(p1.heroPowerActiveThisTurn, false);
+  assert.equal(p1.gold, 9);
+
+  const quote2 = getHeroPowerActivationQuote(after1, p1.id);
+  assert.ok(quote2);
+  assert.equal(quote2.usable, true);
+
+  const after2 = gameReducer(after1, { type: "ACTIVATE_HERO_POWER" });
+  const p2 = humanPlayer(after2);
+  assert.equal(p2.hand.length, 4);
+  assert.equal(p2.heroPowerActiveThisTurn, true);
+  assert.equal(p2.gold, 8);
+
+  const quote3 = getHeroPowerActivationQuote(after2, p2.id);
+  assert.ok(quote3);
+  assert.equal(quote3.usable, false);
+
+  const after3 = gameReducer(after2, { type: "ACTIVATE_HERO_POWER" });
+  const p3 = humanPlayer(after3);
+  assert.equal(p3.hand.length, 4);
 });
 
 test("George is playable and Boon of Light targets the Tavern or friendly warband", () => {

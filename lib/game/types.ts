@@ -983,7 +983,7 @@ export type StartOfCombatEffect =
   | StartOfCombatStitchedSalvagerEffect;
 
 export interface CombatEnchantmentRetentionEffect {
-  target: "self" | "adjacentFriendlyTribe";
+  target: "self" | "adjacentFriendlyTribe" | "allFriendlyTribe";
   tribe?: Tribe;
   goldenMode?: "doubleStats";
 }

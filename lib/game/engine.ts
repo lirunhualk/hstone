@@ -18584,6 +18584,14 @@ function minionScore(
       ).length;
       score +=
         Math.min(2, eligibleNeighbors) * (minion.golden ? 4 : 2);
+    } else if (retention?.target === "allFriendlyTribe") {
+      const eligibleAllies = player.board.filter(
+        (target) =>
+          target.instanceId !== minion.instanceId &&
+          (!retention.tribe ||
+            minionHasTribe(target, retention.tribe)),
+      ).length;
+      score += eligibleAllies * (minion.golden ? 4 : 2);
     }
     const growingStartOfCombat = definition.startOfCombat?.find(
       (effect) => effect.kind === "growingTribeBuff",
@@ -22282,7 +22290,9 @@ function arrangeAiBoard(
         definition.afterFriendlyAttacks !== undefined ||
         (definition.combatTavernSpellExtraCasts ?? 0) > 0 ||
         definition.combatEnchantmentRetention?.target ===
-          "adjacentFriendlyTribe"
+          "adjacentFriendlyTribe" ||
+        definition.combatEnchantmentRetention?.target ===
+          "allFriendlyTribe"
       );
     });
 
@@ -22391,7 +22401,10 @@ function arrangeAiBoard(
       (minion) =>
         getMinionDefinition(minion.definitionId)
           .combatEnchantmentRetention?.target ===
-        "adjacentFriendlyTribe",
+        "adjacentFriendlyTribe" ||
+        getMinionDefinition(minion.definitionId)
+          .combatEnchantmentRetention?.target ===
+        "allFriendlyTribe",
     )
     .sort((left, right) => {
       if (left.golden !== right.golden) {
@@ -24673,6 +24686,34 @@ function combatRetentionMultiplier(
         : 1;
     multiplier = Math.max(multiplier, sourceMultiplier) as 1 | 2;
   }
+
+  if (multiplier < 2) {
+    for (const source of board) {
+      if (source.health <= 0 || source.instanceId === target.instanceId) {
+        continue;
+      }
+      const globalEffect =
+        getMinionDefinition(source.definitionId)
+          .combatEnchantmentRetention;
+      if (
+        globalEffect?.target !== "allFriendlyTribe" ||
+        (globalEffect.tribe &&
+          !minionHasTribe(target, globalEffect.tribe))
+      ) {
+        continue;
+      }
+      const sourceMultiplier: 1 | 2 =
+        source.golden &&
+        globalEffect.goldenMode === "doubleStats"
+          ? 2
+          : 1;
+      multiplier = Math.max(multiplier, sourceMultiplier) as 1 | 2;
+      if (multiplier >= 2) {
+        break;
+      }
+    }
+  }
+
   return multiplier;
 }
 

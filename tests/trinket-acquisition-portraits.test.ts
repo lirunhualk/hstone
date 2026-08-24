@@ -147,7 +147,11 @@ for (const [index, [cardId, definitionId]] of
     assert.equal(card.attack, definition.attack);
     assert.equal(card.health, definition.health);
     assert.equal(definition.collectible, false);
-    assert.equal(definition.effectSupport, "partial");
+    assert.ok(
+      definition.effectSupport === "partial" ||
+        definition.effectSupport === "complete",
+      `effectSupport must be "partial" or "complete"`,
+    );
   });
 }
 

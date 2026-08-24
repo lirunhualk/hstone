@@ -214,7 +214,7 @@ export const HERO_POWER_DEFINITIONS = [
     name: "血脉连接",
     description: "获取2张鲜血宝石。（每回合两次。）",
     effect: "getBloodGemsPerTurn",
-    activation: "passive"
+    activation: "active"
   },
   {
     id: "hero-power-bg20_hero_201p",

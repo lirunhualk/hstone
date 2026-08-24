@@ -1197,7 +1197,7 @@ export const LIVE_TOKEN_DEFINITIONS: readonly MinionDefinition[] =
       tribe: "dragon",
       tribes: ["dragon"],
       associatedTribes: [],
-      effectSupport: "partial",
+      effectSupport: "complete",
       printedMechanics: ["DIVINE_SHIELD", "TRIGGER_VISUAL"],
       attack: 6,
       health: 7,
@@ -1207,6 +1207,11 @@ export const LIVE_TOKEN_DEFINITIONS: readonly MinionDefinition[] =
       goldenDescription:
         "圣盾。你的所有龙均可永久保留战斗阶段获得的额外关键词和双倍属性值。",
       collectible: false,
+      combatEnchantmentRetention: {
+        target: "allFriendlyTribe",
+        tribe: "dragon",
+        goldenMode: "doubleStats",
+      },
     },
     {
       id: "TB_BaconShop_HERO_33_Buddy",
@@ -1605,6 +1610,16 @@ const LIVE_RULE_OVERRIDES: Readonly<
       health: 10,
       statMultiplier: 2,
       goldenStatMultiplier: 3,
+    },
+  },
+  BG34_Giant_314: {
+    goldenCardId: "BG34_Giant_314_G",
+    goldenDescription:
+      "圣盾。你的所有龙均可永久保留战斗阶段获得的额外关键词和双倍属性值。",
+    combatEnchantmentRetention: {
+      target: "allFriendlyTribe",
+      tribe: "dragon",
+      goldenMode: "doubleStats",
     },
   },
   BG28_633: {
@@ -4383,6 +4398,7 @@ const FULLY_SUPPORTED_LIVE_CARD_IDS = new Set([
   "BG34_175",
   "BG34_231",
   "BG34_312",
+  "BG34_Giant_314",
   "BG34_403",
   "BG34_500",
   "BG34_523",
