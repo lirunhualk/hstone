@@ -9325,6 +9325,8 @@ interface RecruitEffectContext {
   deathAdjacentInstanceIds?: readonly string[];
   /** Exact Magnetic/base component whose rule produced these effects. */
   effectSourceDefinitionId?: string;
+  /** The minion that was just sold, passed through afterFriendlySold. */
+  soldMinion?: BoardMinionInstance;
 }
 
 function recruitElementalStatGrantBonus(
@@ -10163,6 +10165,28 @@ function applyRecruitEffects(
         effect,
         effectSourceIsGolden,
       );
+    } else if (effect.kind === "gainStatsFromSold") {
+      if (
+        source.kind !== "minion" ||
+        !context.soldMinion ||
+        source.instanceId === context.soldMinion.instanceId
+      ) {
+        continue;
+      }
+      if (
+        effect.tribe &&
+        !minionHasTribe(context.soldMinion, effect.tribe)
+      ) {
+        continue;
+      }
+      const multiplier = effect.multiplier ?? 1;
+      buffMinions(
+        [source as BoardMinionInstance],
+        context.soldMinion.attack * scale * multiplier,
+        context.soldMinion.health * scale * multiplier,
+        player.board,
+        player,
+      );
     }
   }
 }
@@ -10307,13 +10331,7 @@ function applyAfterFriendlyPlayed(
       }
     }
   }
-  if (minionHasTribe(played, "quilboar") && playerHasHeroPower(player, "getBloodGemsPerTurn")) {
-    const plays = heroPowerCounter(player, "blackthornPlays");
-    if (plays < 2) {
-      setHeroPowerCounter(player, "blackthornPlays", plays + 1);
-      addBloodGems(state, player, 2);
-    }
-  }
+  // Blackthorn "getBloodGemsPerTurn" moved to active hero power activation
   for (const watcher of player.board) {
     if (watcher.instanceId === played.instanceId) {
       continue;
@@ -12455,7 +12473,7 @@ function sellMinionTransaction(
         watcher,
         getMinionDefinition(component.definitionId).afterFriendlySold,
         component.golden ? 2 : 1,
-        { effectSourceDefinitionId: component.definitionId },
+        { effectSourceDefinitionId: component.definitionId, soldMinion: minion },
       );
     }
   }
@@ -38065,6 +38083,7 @@ export function heroPowerActiveCost(effect: HeroPowerDefinition["effect"]): numb
     case "activeUnlockZergTier": return 6;
     case "activeBuildCustomUndead": return 3;
     case "chooseSecret": return 0;
+    case "getBloodGemsPerTurn": return 1;
     default: return 99;
   }
 }
@@ -38163,6 +38182,21 @@ function activateHeroPowerMutating(
   player.heroPowerActiveThisTurn = true;
 
   switch (effect) {
+    case "getBloodGemsPerTurn": {
+      if (player.hand.length >= MAX_HAND_SIZE) {
+        return false;
+      }
+      const uses = heroPowerCounter(player, "blackthornPlays");
+      if (uses >= 2) {
+        return false;
+      }
+      addBloodGems(state, player, 2);
+      setHeroPowerCounter(player, "blackthornPlays", uses + 1);
+      if (uses + 1 < 2) {
+        player.heroPowerActiveThisTurn = false;
+      }
+      break;
+    }
     case "activeRandomTavernSpell": {
       if (player.hand.length >= MAX_HAND_SIZE) {
         return false;

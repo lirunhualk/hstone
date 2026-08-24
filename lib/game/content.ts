@@ -1283,6 +1283,12 @@ export const LIVE_TOKEN_DEFINITIONS: readonly MinionDefinition[] =
       description: "嘲讽。在你出售一个元素后，获得其属性值。",
       goldenDescription:
         "嘲讽。在你出售一个元素后，获得其双倍属性值。",
+      afterFriendlySold: [
+        {
+          kind: "gainStatsFromSold",
+          tribe: "elemental",
+        },
+      ],
       collectible: false,
     },
     {
