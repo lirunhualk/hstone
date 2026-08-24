@@ -6799,6 +6799,7 @@ function desiredWhereverBonuses(
   eternalKnightsDied: number,
   tavernSpellsCast: number,
   deathrattlesTriggered: number,
+  magnetizationsThisGame: number,
 ): { attack: number; health: number } {
   if (minion.definitionId === ASTRAL_AUTOMATON_DEFINITION_ID) {
     const otherSummons = Math.max(
@@ -6826,6 +6827,17 @@ function desiredWhereverBonuses(
           health: deathrattlesTriggered * 2,
         };
   }
+  if (minion.definitionId === BOOMS_MONSTER_DEFINITION_ID) {
+    return minion.golden
+      ? {
+          attack: magnetizationsThisGame * 4,
+          health: magnetizationsThisGame * 4,
+        }
+      : {
+          attack: magnetizationsThisGame * 2,
+          health: magnetizationsThisGame * 2,
+        };
+  }
   const tavernSpellHistoryBuff = getMinionDefinition(
     minion.definitionId,
   ).tavernSpellHistoryBuff;
@@ -6845,15 +6857,15 @@ function reconcileWhereverMinion(
   eternalKnightsDied: number,
   tavernSpellsCast = 0,
   deathrattlesTriggered = 0,
-  _magnetizationsThisGame = 0,
+  magnetizationsThisGame = 0,
 ): { attack: number; health: number } {
-  void _magnetizationsThisGame;
   const desired = desiredWhereverBonuses(
     minion,
     astralAutomatonsSummoned,
     eternalKnightsDied,
     tavernSpellsCast,
     deathrattlesTriggered,
+    magnetizationsThisGame,
   );
   if (
     desired.attack === 0 &&
