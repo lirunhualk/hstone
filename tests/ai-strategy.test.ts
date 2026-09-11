@@ -2744,6 +2744,17 @@ test("AI values Elemental of Surprise wildcard triples and Golden retriples", ()
     );
     const surpriseRetripleScore = scoreMinionForAi(player, surprise);
     assert.equal(surpriseRetripleScore - surprisePairScore, 15);
+
+    player.systemEventCounters.falseIdolsActive = 1;
+    player.board = [definitionMinion(template, "BGS_126", "false-idols-pair")];
+    const falseIdolsTripleScore = scoreMinionForAi(player, surprise);
+    player.systemEventCounters.falseIdolsActive = 0;
+    const normalPairScore = scoreMinionForAi(player, surprise);
+    assert.equal(
+      falseIdolsTripleScore - normalPairScore,
+      profile.tripleBonus - profile.pairBonus,
+      "False Idols should upgrade Surprise from pair progress to immediate triple progress",
+    );
   });
 });
 

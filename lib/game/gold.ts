@@ -16,5 +16,6 @@ export function recruitGoldCapacity(
   state: GameState,
   player: PlayerState,
 ): number {
-  return Math.min(player.maxGold, baseRecruitGoldForRound(state));
+  const maxGoldBonus = Math.max(0, player.maxGold - 10);
+  return Math.min(player.maxGold, baseRecruitGoldForRound(state) + maxGoldBonus);
 }

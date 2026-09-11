@@ -6799,6 +6799,7 @@ function desiredWhereverBonuses(
   eternalKnightsDied: number,
   tavernSpellsCast: number,
   deathrattlesTriggered: number,
+  magnetizationsThisGame: number,
 ): { attack: number; health: number } {
   if (minion.definitionId === ASTRAL_AUTOMATON_DEFINITION_ID) {
     const otherSummons = Math.max(
@@ -6826,6 +6827,17 @@ function desiredWhereverBonuses(
           health: deathrattlesTriggered * 2,
         };
   }
+  if (minion.definitionId === BOOMS_MONSTER_DEFINITION_ID) {
+    return minion.golden
+      ? {
+          attack: magnetizationsThisGame * 4,
+          health: magnetizationsThisGame * 4,
+        }
+      : {
+          attack: magnetizationsThisGame * 2,
+          health: magnetizationsThisGame * 2,
+        };
+  }
   const tavernSpellHistoryBuff = getMinionDefinition(
     minion.definitionId,
   ).tavernSpellHistoryBuff;
@@ -6845,15 +6857,15 @@ function reconcileWhereverMinion(
   eternalKnightsDied: number,
   tavernSpellsCast = 0,
   deathrattlesTriggered = 0,
-  _magnetizationsThisGame = 0,
+  magnetizationsThisGame = 0,
 ): { attack: number; health: number } {
-  void _magnetizationsThisGame;
   const desired = desiredWhereverBonuses(
     minion,
     astralAutomatonsSummoned,
     eternalKnightsDied,
     tavernSpellsCast,
     deathrattlesTriggered,
+    magnetizationsThisGame,
   );
   if (
     desired.attack === 0 &&
@@ -8613,6 +8625,29 @@ export interface MinionPurchaseQuote {
   affordable: boolean;
 }
 
+/**
+ * Titan Grip anomaly and Aranna's unlocked Hero Power each make the first
+ * minion bought each turn free, regardless of the player's current gold.
+ * Quotes must reflect that so a player with no gold can still take the
+ * free minion; health-priced offers still cost health.
+ */
+function firstMinionPurchaseIsFree(
+  state: GameState,
+  player: PlayerState,
+): boolean {
+  return (
+    (state.lobbySystemsEnabled &&
+      state.systemEventId !== null &&
+      getSystemEventDefinition(state.systemEventId).effect === "titanGrip" &&
+      (player.systemEventCounters.titanGripFreeUsedRound ?? 0) !==
+        state.round) ||
+    // attacksForFirstFreeBuy - Aranna: first buy free each turn after unlock
+    (playerHasHeroPower(player, "attacksForFirstFreeBuy") &&
+      heroPowerCounter(player, "arannaAttacks") <= 0 &&
+      heroPowerCounter(player, "arannaFreeBuyUsed") === 0)
+  );
+}
+
 export function getMinionPurchaseQuote(
   state: GameState,
   playerId: PlayerId,
@@ -8626,7 +8661,7 @@ export function getMinionPurchaseQuote(
   const usesFreePiratePurchase =
     minionHasTribe(offered, "pirate") &&
     unusedFirstPirateFreeTrinket(player) !== null;
-  const cost = usesFreePiratePurchase
+  const baseCost = usesFreePiratePurchase
     ? 0
     : state.lobbySystemsEnabled &&
         state.systemEventId &&
@@ -8645,6 +8680,10 @@ export function getMinionPurchaseQuote(
       eyeOfSargerasIsDue(player))
       ? "health"
       : "gold";
+  const cost =
+    currency === "gold" && firstMinionPurchaseIsFree(state, player)
+      ? 0
+      : baseCost;
   return {
     currency,
     cost,
@@ -9298,6 +9337,8 @@ interface RecruitEffectContext {
   deathAdjacentInstanceIds?: readonly string[];
   /** Exact Magnetic/base component whose rule produced these effects. */
   effectSourceDefinitionId?: string;
+  /** The minion that was just sold, passed through afterFriendlySold. */
+  soldMinion?: BoardMinionInstance;
 }
 
 function recruitElementalStatGrantBonus(
@@ -10136,6 +10177,28 @@ function applyRecruitEffects(
         effect,
         effectSourceIsGolden,
       );
+    } else if (effect.kind === "gainStatsFromSold") {
+      if (
+        source.kind !== "minion" ||
+        !context.soldMinion ||
+        source.instanceId === context.soldMinion.instanceId
+      ) {
+        continue;
+      }
+      if (
+        effect.tribe &&
+        !minionHasTribe(context.soldMinion, effect.tribe)
+      ) {
+        continue;
+      }
+      const multiplier = effect.multiplier ?? 1;
+      buffMinions(
+        [source as BoardMinionInstance],
+        context.soldMinion.attack * scale * multiplier,
+        context.soldMinion.health * scale * multiplier,
+        player.board,
+        player,
+      );
     }
   }
 }
@@ -10280,13 +10343,7 @@ function applyAfterFriendlyPlayed(
       }
     }
   }
-  if (minionHasTribe(played, "quilboar") && playerHasHeroPower(player, "getBloodGemsPerTurn")) {
-    const plays = heroPowerCounter(player, "blackthornPlays");
-    if (plays < 2) {
-      setHeroPowerCounter(player, "blackthornPlays", plays + 1);
-      addBloodGems(state, player, 2);
-    }
-  }
+  // Blackthorn "getBloodGemsPerTurn" moved to active hero power activation
   for (const watcher of player.board) {
     if (watcher.instanceId === played.instanceId) {
       continue;
@@ -11172,6 +11229,39 @@ function ownedTripleMinions(player: PlayerState): BoardMinionInstance[] {
   ];
 }
 
+function tripleCopiesRequiredForDefinition(
+  player: PlayerState,
+  definitionId: string,
+): number {
+  const definition = getMinionDefinition(definitionId);
+  if (
+    playerHasTrinketCardId(player, GOLDEN_PIRATE_STICKER_CARD_ID) &&
+    definitionHasTribe(definition, "pirate")
+  ) {
+    return 2;
+  }
+  if (
+    player.systemEventCounters.falseIdolsActive ||
+    playerHasHeroPower(player, "easyTripleCoin")
+  ) {
+    return 2;
+  }
+  return 3;
+}
+
+function tripleProgressFromCompatibleCount(
+  compatibleCount: number,
+  copiesRequired: number,
+): 0 | 1 | 2 {
+  if (compatibleCount >= copiesRequired - 1) {
+    return 2;
+  }
+  if (copiesRequired > 2 && compatibleCount === copiesRequired - 2) {
+    return 1;
+  }
+  return 0;
+}
+
 function findTripleCombination(
   state: GameState,
   player: PlayerState,
@@ -11191,14 +11281,10 @@ function findTripleCombination(
       (minion) =>
         minion.definitionId === definitionId && minion.golden === false,
     );
-    const copiesRequired =
-      playerHasTrinketCardId(player, GOLDEN_PIRATE_STICKER_CARD_ID) &&
-      definitionHasTribe(definition, "pirate")
-        ? 2
-        : player.systemEventCounters.falseIdolsActive ||
-            playerHasHeroPower(player, "easyTripleCoin")
-          ? 2
-          : 3;
+    const copiesRequired = tripleCopiesRequiredForDefinition(
+      player,
+      definitionId,
+    );
     if (matches.length >= copiesRequired) {
       return {
         definitionId,
@@ -11229,10 +11315,14 @@ function findTripleCombination(
     const matches = wildcardMinions.filter(
       (minion) => minion.definitionId === definitionId,
     );
-    if (matches.length >= 3) {
+    const copiesRequired = tripleCopiesRequiredForDefinition(
+      player,
+      definitionId,
+    );
+    if (matches.length >= copiesRequired) {
       return {
         definitionId,
-        consumed: matches.slice(0, 3),
+        consumed: matches.slice(0, copiesRequired),
         mixed: false,
       };
     }
@@ -11248,7 +11338,11 @@ function findTripleCombination(
       (minion) =>
         minion.definitionId === definitionId && minion.golden === false,
     );
-    if (targets.length === 0 || targets.length >= 3) {
+    const copiesRequired = tripleCopiesRequiredForDefinition(
+      player,
+      definitionId,
+    );
+    if (targets.length === 0 || targets.length >= copiesRequired) {
       continue;
     }
     const compatibleWildcards = wildcardMinions.filter((wildcard) => {
@@ -11257,8 +11351,8 @@ function findTripleCombination(
       ).tripleWildcardFor;
       return tribe !== undefined && definitionHasTribe(definition, tribe);
     });
-    const targetCount = Math.min(2, targets.length);
-    const wildcardCount = 3 - targetCount;
+    const targetCount = Math.min(copiesRequired - 1, targets.length);
+    const wildcardCount = copiesRequired - targetCount;
     if (compatibleWildcards.length < wildcardCount) {
       continue;
     }
@@ -12141,17 +12235,7 @@ function buyMinion(
   if (quote.currency === "health") {
     damageRecruitPlayer(player, quote.cost);
   } else {
-    const freeFirst =
-      (state.lobbySystemsEnabled &&
-      state.systemEventId &&
-      getSystemEventDefinition(state.systemEventId).effect ===
-        "titanGrip" &&
-      (player.systemEventCounters.titanGripFreeUsedRound ?? 0) !==
-        state.round) ||
-      // NEW: attacksForFirstFreeBuy - Aranna: first buy free each turn after unlock
-      (playerHasHeroPower(player, "attacksForFirstFreeBuy") &&
-        heroPowerCounter(player, "arannaAttacks") <= 0 &&
-        heroPowerCounter(player, "arannaFreeBuyUsed") === 0);
+    const freeFirst = firstMinionPurchaseIsFree(state, player);
     if (!freeFirst) {
       spendGold(state, player, quote.cost);
     } else {
@@ -12401,7 +12485,7 @@ function sellMinionTransaction(
         watcher,
         getMinionDefinition(component.definitionId).afterFriendlySold,
         component.golden ? 2 : 1,
-        { effectSourceDefinitionId: component.definitionId },
+        { effectSourceDefinitionId: component.definitionId, soldMinion: minion },
       );
     }
   }
@@ -13726,6 +13810,7 @@ function fuseMinionIntoHost(
   );
   player.magnetizationsThisGame =
     (player.magnetizationsThisGame ?? 0) + 1;
+  reconcilePlayerWhereverMinions(player);
 }
 
 function castTripleReward(
@@ -17726,10 +17811,13 @@ function tripleProgressForCandidate(
   }
   if (wildcardTribe !== undefined) {
     // Golden wildcards still count as one physical wildcard card and can be
-    // retripled with two more wildcard entities.
-    let best = owned.filter(
-      (minion) => minion.definitionId === candidate.definitionId,
-    ).length;
+    // retripled as long as the current lobby still has enough wildcard copies
+    // to satisfy the active triple rule.
+    let best = tripleProgressFromCompatibleCount(
+      owned.filter((minion) => minion.definitionId === candidate.definitionId)
+        .length,
+      tripleCopiesRequiredForDefinition(player, candidate.definitionId),
+    );
     const compatibleWildcards = owned.filter(
       (minion) =>
         getMinionDefinition(minion.definitionId).tripleWildcardFor ===
@@ -17748,13 +17836,16 @@ function tripleProgressForCandidate(
         .map((minion) => minion.definitionId),
     );
     for (const definitionId of targetDefinitionIds) {
-      best = Math.max(
-        best,
+      const progress = tripleProgressFromCompatibleCount(
         ownedNormalCount(player, definitionId, excludedInstanceId) +
           compatibleWildcards,
+        tripleCopiesRequiredForDefinition(player, definitionId),
       );
+      if (progress > best) {
+        best = progress;
+      }
     }
-    return Math.min(2, best);
+    return best;
   }
 
   let progress = ownedNormalCount(
@@ -17770,7 +17861,10 @@ function tripleProgressForCandidate(
       progress += 1;
     }
   }
-  return Math.min(2, progress);
+  return tripleProgressFromCompatibleCount(
+    progress,
+    tripleCopiesRequiredForDefinition(player, candidate.definitionId),
+  );
 }
 
 function tribeCount(player: PlayerState, tribe: Tribe): number {
@@ -18503,6 +18597,14 @@ function minionScore(
       ).length;
       score +=
         Math.min(2, eligibleNeighbors) * (minion.golden ? 4 : 2);
+    } else if (retention?.target === "allFriendlyTribe") {
+      const eligibleAllies = player.board.filter(
+        (target) =>
+          target.instanceId !== minion.instanceId &&
+          (!retention.tribe ||
+            minionHasTribe(target, retention.tribe)),
+      ).length;
+      score += eligibleAllies * (minion.golden ? 4 : 2);
     }
     const growingStartOfCombat = definition.startOfCombat?.find(
       (effect) => effect.kind === "growingTribeBuff",
@@ -22201,7 +22303,9 @@ function arrangeAiBoard(
         definition.afterFriendlyAttacks !== undefined ||
         (definition.combatTavernSpellExtraCasts ?? 0) > 0 ||
         definition.combatEnchantmentRetention?.target ===
-          "adjacentFriendlyTribe"
+          "adjacentFriendlyTribe" ||
+        definition.combatEnchantmentRetention?.target ===
+          "allFriendlyTribe"
       );
     });
 
@@ -22310,7 +22414,10 @@ function arrangeAiBoard(
       (minion) =>
         getMinionDefinition(minion.definitionId)
           .combatEnchantmentRetention?.target ===
-        "adjacentFriendlyTribe",
+        "adjacentFriendlyTribe" ||
+        getMinionDefinition(minion.definitionId)
+          .combatEnchantmentRetention?.target ===
+        "allFriendlyTribe",
     )
     .sort((left, right) => {
       if (left.golden !== right.golden) {
@@ -22898,6 +23005,13 @@ function tryActivateAiHeroPower(
   }
   const definition = getHeroPowerDefinition(player.heroPowerId);
   const targetMode = heroPowerNeedsTarget(definition.effect);
+
+  // Spend Blackthorn's spare Gold only after normal purchases and upgrades.
+  // The generic opening activation can otherwise leave an empty warband
+  // unable to spend its Blood Gems or afford its first minion.
+  if (definition.effect === "getBloodGemsPerTurn") {
+    return null;
+  }
 
   if (!targetMode) {
     if (getHeroPowerActivationQuote(state, player.id)?.usable) {
@@ -23713,6 +23827,18 @@ function runAiRecruit(state: GameState, player: PlayerState): void {
         capitalSaleCommitted = true;
         continue;
       }
+    }
+
+    if (
+      playerHasHeroPower(player, "getBloodGemsPerTurn") &&
+      player.board.length > 0 &&
+      getHeroPowerActivationQuote(state, player.id)?.usable &&
+      activateHeroPower(state, player)
+    ) {
+      actions += 1;
+      // Play the generated Gems through the shared hand planner before
+      // deciding whether to use the second charge or refresh the Tavern.
+      continue;
     }
 
     const refreshQuote = getTavernRefreshQuote(state, player.id);
@@ -24592,6 +24718,34 @@ function combatRetentionMultiplier(
         : 1;
     multiplier = Math.max(multiplier, sourceMultiplier) as 1 | 2;
   }
+
+  if (multiplier < 2) {
+    for (const source of board) {
+      if (source.health <= 0) {
+        continue;
+      }
+      const globalEffect =
+        getMinionDefinition(source.definitionId)
+          .combatEnchantmentRetention;
+      if (
+        globalEffect?.target !== "allFriendlyTribe" ||
+        (globalEffect.tribe &&
+          !minionHasTribe(target, globalEffect.tribe))
+      ) {
+        continue;
+      }
+      const sourceMultiplier: 1 | 2 =
+        source.golden &&
+        globalEffect.goldenMode === "doubleStats"
+          ? 2
+          : 1;
+      multiplier = Math.max(multiplier, sourceMultiplier) as 1 | 2;
+      if (multiplier >= 2) {
+        break;
+      }
+    }
+  }
+
   return multiplier;
 }
 
@@ -30800,6 +30954,7 @@ function resolveTriggeredCombatInteractiveBattlecry(
       const persistentOwner = persistentCombatOwner(context, ownerId);
       if (persistentOwner) {
         persistentOwner.magnetizationsThisGame += 1;
+        reconcilePlayerWhereverMinions(persistentOwner);
       }
       pushBattleEvent(context.events, {
         type: "buff",
@@ -30823,6 +30978,12 @@ function resolveTriggeredCombatInteractiveBattlecry(
         magnetic,
         target,
         elementalBonus,
+      );
+      reconcileCombatWhereverMinions(
+        context,
+        ownerId,
+        source.instanceId,
+        `${magnetic.name}的磁力吸附使砰砰博士的怪物获得本局永久成长。`,
       );
     }
     return;
@@ -38002,6 +38163,7 @@ export function heroPowerActiveCost(effect: HeroPowerDefinition["effect"]): numb
     case "activeUnlockZergTier": return 6;
     case "activeBuildCustomUndead": return 3;
     case "chooseSecret": return 0;
+    case "getBloodGemsPerTurn": return 1;
     default: return 99;
   }
 }
@@ -38100,6 +38262,21 @@ function activateHeroPowerMutating(
   player.heroPowerActiveThisTurn = true;
 
   switch (effect) {
+    case "getBloodGemsPerTurn": {
+      if (player.hand.length >= MAX_HAND_SIZE) {
+        return false;
+      }
+      const uses = heroPowerCounter(player, "blackthornPlays");
+      if (uses >= 2) {
+        return false;
+      }
+      addBloodGems(state, player, 2);
+      setHeroPowerCounter(player, "blackthornPlays", uses + 1);
+      if (uses + 1 < 2) {
+        player.heroPowerActiveThisTurn = false;
+      }
+      break;
+    }
     case "activeRandomTavernSpell": {
       if (player.hand.length >= MAX_HAND_SIZE) {
         return false;

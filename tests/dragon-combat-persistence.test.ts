@@ -1133,3 +1133,152 @@ test("v28 saves migrate through v31 while preserving Fire-forged counters and ex
     false,
   );
 });
+
+test("BG34_Giant_314 maps correct allFriendlyTribe retention rules", () => {
+  const poet = getMinionDefinition("BG34_Giant_314");
+  assert.equal(poet.effectSupport, "complete");
+  assert.deepEqual(
+    [poet.name, poet.tier, poet.attack, poet.health, poet.divineShield],
+    ["时空扭曲诗心龙", 5, 6, 7, true],
+  );
+  assert.equal(
+    poet.description,
+    "圣盾。你的所有龙均可永久保留战斗阶段获得的额外关键词和属性值。",
+  );
+  assert.equal(
+    poet.goldenDescription,
+    "圣盾。你的所有龙均可永久保留战斗阶段获得的额外关键词和双倍属性值。",
+  );
+  assert.deepEqual(poet.combatEnchantmentRetention, {
+    target: "allFriendlyTribe",
+    tribe: "dragon",
+    goldenMode: "doubleStats",
+  });
+});
+
+test("allFriendlyPoet protects all Dragons on the board regardless of position", () => {
+  for (const [caseIndex, golden] of [false, true].entries()) {
+    const state = createGame(0x8300 + caseIndex);
+    const human = humanPlayer(state);
+    const evoker = definitionMinion(
+      "BG32_822",
+      `all-poet-evoker-${caseIndex}`,
+    );
+    const dragon1 = definitionMinion(
+      "BG34_636t",
+      `all-poet-dragon1-${caseIndex}`,
+    );
+    const dragon2 = definitionMinion(
+      "BG34_638t",
+      `all-poet-dragon2-${caseIndex}`,
+    );
+    const nonDragon = definitionMinion(
+      "BG29_611",
+      `all-poet-nondragon-${caseIndex}`,
+      { divineShield: false },
+    );
+    const poet = golden
+      ? goldenMinion("BG34_Giant_314", `all-poet-${caseIndex}`)
+      : definitionMinion("BG34_Giant_314", `all-poet-${caseIndex}`);
+    human.board = [poet, evoker, dragon1, dragon2, nonDragon];
+    keepOnlyOneOpponent(state, [
+      enemyWall(`all-poet-wall-${caseIndex}`),
+    ]);
+    human.board = [poet, evoker, dragon1, dragon2, nonDragon];
+
+    const combat = gameReducer(state, { type: "END_TURN" });
+    const multiplier = golden ? 2 : 1;
+    const permanentPoet = permanentMinion(combat, poet.instanceId);
+    assert.deepEqual(
+      [permanentPoet.attack, permanentPoet.health],
+      [poet.attack + 2 * multiplier, poet.health + multiplier],
+      "all friendly Dragons includes the Poet itself",
+    );
+    const permanentDragon1 = permanentMinion(
+      combat,
+      dragon1.instanceId,
+    );
+    const permanentDragon2 = permanentMinion(
+      combat,
+      dragon2.instanceId,
+    );
+    const permanentNonDragon = permanentMinion(
+      combat,
+      nonDragon.instanceId,
+    );
+    assert.deepEqual(
+      [permanentDragon1.attack, permanentDragon1.health],
+      [dragon1.attack + 2 * multiplier, dragon1.health + multiplier],
+    );
+    assert.deepEqual(
+      [permanentDragon2.attack, permanentDragon2.health],
+      [dragon2.attack + 2 * multiplier, dragon2.health + multiplier],
+    );
+    assert.deepEqual(
+      [permanentNonDragon.attack, permanentNonDragon.health],
+      [nonDragon.attack, nonDragon.health],
+    );
+  }
+});
+
+test("allFriendlyPoet stacks with adjacent Poet on the same Dragon", () => {
+  const state = createGame(0x8302);
+  const human = humanPlayer(state);
+  const allPoet = goldenMinion("BG34_Giant_314", "stack-all-poet");
+  const adjPoet = definitionMinion(
+    "BG29_813",
+    "stack-adj-poet",
+  );
+  const evoker = definitionMinion(
+    "BG32_822",
+    "stack-evoker",
+  );
+  const target = definitionMinion(
+    "BG34_636t",
+    "stack-target",
+  );
+  human.board = [allPoet, evoker, target, adjPoet];
+  keepOnlyOneOpponent(state, [enemyWall("stack-wall")]);
+  human.board = [allPoet, evoker, target, adjPoet];
+
+  const combat = gameReducer(state, { type: "END_TURN" });
+  const permanent = permanentMinion(combat, target.instanceId);
+  assert.deepEqual(
+    [permanent.attack, permanent.health],
+    [target.attack + 4, target.health + 2],
+  );
+});
+
+test("AI values allFriendlyPoet based on all eligible Dragons", () => {
+  const state = createGame(0x8303);
+  const player = state.players[1];
+  const poet = definitionMinion("BG34_Giant_314", "ai-all-poet");
+  const dragon1 = definitionMinion(
+    "BG34_636t",
+    "ai-all-poet-dragon1",
+    { attack: 30, health: 30 },
+  );
+  const dragon2 = definitionMinion(
+    "BG34_638t",
+    "ai-all-poet-dragon2",
+    { attack: 20, health: 20 },
+  );
+  const nonDragon = definitionMinion(
+    "BG29_611",
+    "ai-all-poet-nondragon",
+    { attack: 25, health: 25 },
+  );
+  player.board = [poet, nonDragon, dragon1, dragon2];
+  const score = scoreMinionForAi(player, poet);
+  const singleDragonBoard = createGame(0x8304);
+  const player2 = singleDragonBoard.players[1];
+  const poet2 = definitionMinion("BG34_Giant_314", "ai-all-poet-2");
+  const dragon3 = definitionMinion(
+    "BG34_636t",
+    "ai-all-poet-dragon3",
+    { attack: 30, health: 30 },
+  );
+  player2.board = [poet2, dragon3];
+  const score2 = scoreMinionForAi(player2, poet2);
+  assert.ok(score > score2, "more Dragons should give higher score");
+});

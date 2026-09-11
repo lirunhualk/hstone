@@ -13,6 +13,7 @@ import {
   getHeroPowerActivationQuote,
   getHeroPowerDefinition,
   getMinionPurchaseCost,
+  getMinionPurchaseQuote,
   getMaximumTavernTier,
   getRefreshCost,
   getSpellcraftDefinition,
@@ -149,7 +150,7 @@ function resolveTrinketOfferWithoutFollowup(
     NonNullable<GameState["pendingInteraction"]>,
     { kind: "trinketChoice" }
   >,
-  beforeRound?: number,
+  nextScheduledOffer?: { round: number; tier: TrinketTier },
 ): { state: GameState; selectedId: string } {
   for (const selectedId of offer.optionIds) {
     const resolved = gameReducer(state, {
@@ -161,8 +162,8 @@ function resolveTrinketOfferWithoutFollowup(
     let hasEarlyFollowup = probe.pendingInteraction !== null;
     while (
       !hasEarlyFollowup &&
-      beforeRound !== undefined &&
-      probe.round < beforeRound
+      nextScheduledOffer !== undefined &&
+      probe.round < nextScheduledOffer.round
     ) {
       const combat = gameReducer(probe, { type: "END_TURN" });
       hasEarlyFollowup = combat.phase !== "combat";
@@ -171,7 +172,17 @@ function resolveTrinketOfferWithoutFollowup(
       }
       probe = gameReducer(combat, { type: "CONTINUE" });
       hasEarlyFollowup =
-        probe.round < beforeRound && probe.pendingInteraction !== null;
+        probe.round < nextScheduledOffer.round && probe.pendingInteraction !== null;
+    }
+    if (nextScheduledOffer && !hasEarlyFollowup) {
+      // Mysterious Orb can replace the turn-9 Greater offer with a Lesser
+      // offer without opening an earlier interaction. Keep that behavior
+      // out of the ordinary scheduled-offer test, which asserts both tiers.
+      const pending = probe.pendingInteraction;
+      hasEarlyFollowup =
+        pending?.kind !== "trinketChoice" ||
+        pending.trinketTier !== nextScheduledOffer.tier ||
+        pending.additionalTrinketSourceId !== undefined;
     }
     if (!hasEarlyFollowup) {
       return { state: resolved, selectedId };
@@ -1067,7 +1078,7 @@ test("turns 6 and 9 pause Recruit for Lesser and Greater Trinket choices", () =>
   const lesserResolution = resolveTrinketOfferWithoutFollowup(
     state,
     lesserOffer,
-    GREATER_TRINKET_ROUND,
+    { round: GREATER_TRINKET_ROUND, tier: "greater" },
   );
   state = lesserResolution.state;
   const lesserId = lesserResolution.selectedId;
@@ -1340,6 +1351,58 @@ test("Titan Grip resets the free purchase each turn", () => {
   state = gameReducer(state, { type: "BUY_MINION", shopIndex: 0 });
   player = humanPlayer(state);
   assert.equal(player.gold, 10);
+});
+
+test("Titan Grip first minion purchase is free even with no gold", () => {
+  let state = chooseHero(lobbyGameForEvent("system-event-titan-grip"));
+  let player = humanPlayer(state);
+  player.gold = 0;
+  player.heroPowerId = null;
+  assert.ok(player.shop[0]);
+
+  assert.deepEqual(getMinionPurchaseQuote(state, player.id, 0), {
+    currency: "gold",
+    cost: 0,
+    affordable: true,
+  });
+
+  state = gameReducer(state, { type: "BUY_MINION", shopIndex: 0 });
+  player = humanPlayer(state);
+  assert.equal(player.gold, 0);
+  assert.equal(player.hand.length, 1);
+
+  // The free purchase is consumed: further offers need gold again.
+  assert.ok(player.shop[0]);
+  const secondQuote = getMinionPurchaseQuote(state, player.id, 0);
+  assert.equal(secondQuote?.affordable, false);
+  assert.ok((secondQuote?.cost ?? 0) > 0);
+  const handAfterFirst = player.hand.length;
+  state = gameReducer(state, { type: "BUY_MINION", shopIndex: 0 });
+  player = humanPlayer(state);
+  assert.equal(player.hand.length, handAfterFirst);
+});
+
+test("Titan Grip free purchase returns next turn even with no gold", () => {
+  let state = chooseHero(lobbyGameForEvent("system-event-titan-grip"));
+  let player = humanPlayer(state);
+  player.gold = 0;
+  player.heroPowerId = null;
+
+  state = gameReducer(state, { type: "BUY_MINION", shopIndex: 0 });
+  player = humanPlayer(state);
+  assert.equal(player.gold, 0);
+  assert.equal(player.hand.length, 1);
+
+  state = continueThroughCombat(state);
+  player = humanPlayer(state);
+  player.gold = 0;
+  player.hand = [];
+
+  assert.equal(getMinionPurchaseQuote(state, player.id, 0)?.affordable, true);
+  state = gameReducer(state, { type: "BUY_MINION", shopIndex: 0 });
+  player = humanPlayer(state);
+  assert.equal(player.gold, 0);
+  assert.equal(player.hand.length, 1);
 });
 
 test("registry-only Buy One Get One remains loadable for legacy lobbies", () => {
@@ -1897,6 +1960,39 @@ test("False Idols turns a played golden minion triple reward into 1 gold", () =>
     false,
   );
   assert.equal(nextPlayer.board[0]?.grantsTripleReward, false);
+});
+
+test("False Idols grants 1 gold when two matching minions combine into a golden minion", () => {
+  let state = chooseHero(lobbyGameForEvent("system-event-false-idols"));
+  const player = humanPlayer(state);
+  const template = player.shop[0];
+  assert.ok(template);
+  const firstCopy = definitionMinion(
+    template,
+    template.definitionId,
+    "false-idols-pair-a",
+  );
+  const secondCopy = definitionMinion(
+    template,
+    template.definitionId,
+    "false-idols-pair-b",
+  );
+  player.hand = [firstCopy];
+  player.shop = [secondCopy];
+  player.gold = getMinionPurchaseCost(state, player.id, 0);
+
+  state = gameReducer(state, { type: "BUY_MINION", shopIndex: 0 });
+
+  const nextPlayer = humanPlayer(state);
+  assert.equal(nextPlayer.gold, 1);
+  assert.equal(nextPlayer.hand.length, 1);
+  assert.equal(nextPlayer.hand[0]?.kind, "minion");
+  assert.equal(nextPlayer.hand[0]?.golden, true);
+  assert.equal(nextPlayer.hand[0]?.grantsTripleReward, false);
+  assert.equal(
+    nextPlayer.hand.some((card) => card.kind === "tripleReward"),
+    false,
+  );
 });
 
 test("Hero Power quotes are pure, dynamic, and target-aware", () => {

@@ -517,6 +517,14 @@ export interface ImproveTavernSpellAuraThisTurnEffect {
   health: number;
 }
 
+export interface GainStatsFromSoldEffect {
+  kind: "gainStatsFromSold";
+  /** Only trigger when the sold minion belongs to this tribe. */
+  tribe?: Tribe;
+  /** Multiply the gained stats by this factor. */
+  multiplier?: number;
+}
+
 export type MinionEffect =
   | BuffEffect
   | SummonEffect
@@ -566,7 +574,8 @@ export type MinionEffect =
   | DiscountNextTavernSpellEffect
   | MakeSelfGoldenEffect
   | BuffSelfByPlayerSpellHistoryEffect
-  | ImproveTavernSpellAuraThisTurnEffect;
+  | ImproveTavernSpellAuraThisTurnEffect
+  | GainStatsFromSoldEffect;
 
 export interface TargetedBuffBattlecry {
   kind: "targetedBuff";
@@ -974,7 +983,7 @@ export type StartOfCombatEffect =
   | StartOfCombatStitchedSalvagerEffect;
 
 export interface CombatEnchantmentRetentionEffect {
-  target: "self" | "adjacentFriendlyTribe";
+  target: "self" | "adjacentFriendlyTribe" | "allFriendlyTribe";
   tribe?: Tribe;
   goldenMode?: "doubleStats";
 }

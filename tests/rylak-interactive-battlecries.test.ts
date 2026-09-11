@@ -659,6 +659,63 @@ test("Rylak automatically discovers and Magnetizes a shared-pool Mech in Recruit
   assert.equal(combat.pool.BG_BOT_911, 1);
 });
 
+test("combat Magnetization grows normal and Golden Monsters, emits playback, and isolates ghosts", () => {
+  for (const golden of [false, true]) {
+    for (const ghost of [false, true]) {
+      const state = createGame(0xfb82);
+      const monster = (golden ? goldenMinion : minion)("BG31_176", "combat-growth-monster", {
+        attack: 0,
+        health: 100_000,
+      });
+      const clunker = minion("BG29_503", "combat-growth-clunker", {
+        attack: 0,
+        health: 100_000,
+      });
+      const rylak = minion("BG26_801", "combat-growth-rylak", { attack: 1, health: 1 });
+      const board = [monster, clunker, rylak];
+      const owner = ghost ? prepareGhostMatch(state, board) : humanPlayer(state);
+      if (!ghost) {
+        owner.board = board;
+        prepareDuel(state, [lethalWall("combat-growth-wall")]);
+      }
+      owner.tavernTier = 6;
+      owner.hand = [minion("BG31_176", "combat-growth-hand")];
+      restrictMinionPool(state, { BG_BOT_911: 1 });
+      const before = structuredClone(owner);
+
+      const combat = gameReducer(state, { type: "END_TURN" });
+      const saved = combat.players.find((player) => player.id === owner.id);
+      assert.ok(saved);
+      const battle = ghost
+        ? combat.lastRoundBattles.find((entry) => entry.isGhost &&
+          (entry.playerAId === owner.id || entry.playerBId === owner.id))
+        : combat.lastBattle;
+      assert.ok(battle);
+      const delta = golden ? 4 : 2;
+      const growth = battle.events.filter((event) => event.type === "buff" &&
+        event.actorInstanceId === clunker.instanceId &&
+        event.targetInstanceId === monster.instanceId &&
+        event.attackDelta === delta && event.healthDelta === delta);
+      assert.equal(growth.length, 1);
+      assert.ok(growth.every(isCombatPlaybackEvent));
+      assert.equal(combat.pool.BG_BOT_911, 1);
+      if (ghost) {
+        assert.equal(saved.magnetizationsThisGame, before.magnetizationsThisGame);
+        assert.deepEqual(saved.board, before.board);
+        assert.deepEqual(saved.hand, before.hand);
+      } else {
+        assert.equal(saved.magnetizationsThisGame, 1);
+        const persisted = saved.board.find((card) => card.instanceId === monster.instanceId);
+        assert.ok(persisted);
+        assert.deepEqual([persisted.attack, persisted.health], [monster.attack + delta, monster.health + delta]);
+        const hand = saved.hand.find((card) => card.instanceId === "combat-growth-hand");
+        assert.ok(hand?.kind === "minion");
+        assert.deepEqual([hand.attack, hand.health], [4, 4]);
+      }
+    }
+  }
+});
+
 test("combat-triggered Graverobber emits a structured destroy-and-copy event without deleting the persistent Undead", () => {
   const state = createGame(0xfb90);
   const player = humanPlayer(state);

@@ -143,6 +143,26 @@ test("Gold slot totals follow the turn allowance while accommodating extra Gold"
   assert.equal(presentation.maxGold, 12);
 });
 
+test("Gold slot totals include increased max Gold on the next Recruit turn", () => {
+  const { before, after } = syntheticCombatToRecruit(0x7e04);
+  const previousHuman = humanPlayer(before);
+  const human = humanPlayer(after);
+  previousHuman.gold = 3;
+  previousHuman.maxGold = 10;
+  human.gold = 5;
+  human.maxGold = 11;
+
+  const presentation = createRecruitEntryPresentation({
+    before,
+    after,
+    accepted: true,
+    token: 2,
+  });
+  assert.ok(presentation);
+  assert.equal(presentation.previousMaxGold, 3);
+  assert.equal(presentation.maxGold, 5);
+});
+
 test("fresh and retained offers include minions and every Tavern Spell slot", () => {
   const { before, after } = syntheticCombatToRecruit(0x7e03);
   const previousHuman = humanPlayer(before);
