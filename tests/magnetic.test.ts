@@ -10,6 +10,7 @@ import {
   type PlayerState,
 } from "../lib/game/engine.ts";
 import { getMinionDefinition } from "../lib/game/content.ts";
+import { normalizePersistedGameState } from "../lib/game/save.ts";
 
 function humanPlayer(state: GameState): PlayerState {
   const player = state.players.find(
@@ -160,6 +161,45 @@ test("validates standard, dual-type, special, and all-type Magnetic targets", ()
   assert.equal(canMagnetize(prostheticHand, mech), true);
   assert.equal(canMagnetize(prostheticHand, undead), true);
   assert.equal(canMagnetize(prostheticHand, elemental), false);
+});
+
+test("Boom's Monster grows immediately in the warband and hand after each Magnetization", () => {
+  let state = createGame(0xb00);
+  const human = humanPlayer(state);
+  const monster = definitionMinion("BG31_176", "growing-monster");
+  const goldenMonster = definitionMinion("BG31_176", "growing-golden-monster", {
+    golden: true, attack: 4, health: 4,
+  });
+  const host = definitionMinion("BG29_611", "growing-host");
+  const first = definitionMinion("BG_BOT_911", "growing-first");
+  const second = definitionMinion("BG_BOT_911", "growing-second");
+  human.board = [monster, host];
+  human.hand = [first, second, goldenMonster];
+
+  for (const [index, source] of [first, second].entries()) {
+    state = gameReducer(state, magneticAction(source, host));
+    const player = humanPlayer(state);
+    assert.equal(player.magnetizationsThisGame, index + 1);
+    const normal = player.board.find((minion) => minion.instanceId === monster.instanceId);
+    const golden = player.hand.find((card) => card.instanceId === goldenMonster.instanceId);
+    assert.ok(normal);
+    assert.ok(golden?.kind === "minion");
+    assert.deepEqual([normal.attack, normal.health], [4 + index * 2, 4 + index * 2]);
+    assert.deepEqual([golden.attack, golden.health], [8 + index * 4, 8 + index * 4]);
+  }
+  const settled = humanPlayer(state).board[0];
+  state = gameReducer(state, { type: "TOGGLE_FREEZE" });
+  assert.deepEqual(humanPlayer(state).board[0], settled, "unrelated actions cannot apply growth twice");
+  const restored = normalizePersistedGameState(JSON.parse(JSON.stringify(state))) as GameState | null;
+  assert.ok(restored);
+  const restoredPlayer = humanPlayer(restored);
+  const restoredMonster = restoredPlayer.board[0];
+  assert.equal(restoredPlayer.magnetizationsThisGame, 2);
+  assert.deepEqual(
+    [restoredMonster.attack, restoredMonster.health, restoredMonster.whereverAttackBonus, restoredMonster.whereverHealthBonus],
+    [6, 6, 4, 4],
+    "save restoration preserves the growth exactly once",
+  );
 });
 
 test("Magnetizes on a full board while invalid targets leave state unchanged", () => {

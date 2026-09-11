@@ -13810,6 +13810,7 @@ function fuseMinionIntoHost(
   );
   player.magnetizationsThisGame =
     (player.magnetizationsThisGame ?? 0) + 1;
+  reconcilePlayerWhereverMinions(player);
 }
 
 function castTripleReward(
@@ -23005,6 +23006,13 @@ function tryActivateAiHeroPower(
   const definition = getHeroPowerDefinition(player.heroPowerId);
   const targetMode = heroPowerNeedsTarget(definition.effect);
 
+  // Spend Blackthorn's spare Gold only after normal purchases and upgrades.
+  // The generic opening activation can otherwise leave an empty warband
+  // unable to spend its Blood Gems or afford its first minion.
+  if (definition.effect === "getBloodGemsPerTurn") {
+    return null;
+  }
+
   if (!targetMode) {
     if (getHeroPowerActivationQuote(state, player.id)?.usable) {
       activateHeroPower(state, player);
@@ -23819,6 +23827,18 @@ function runAiRecruit(state: GameState, player: PlayerState): void {
         capitalSaleCommitted = true;
         continue;
       }
+    }
+
+    if (
+      playerHasHeroPower(player, "getBloodGemsPerTurn") &&
+      player.board.length > 0 &&
+      getHeroPowerActivationQuote(state, player.id)?.usable &&
+      activateHeroPower(state, player)
+    ) {
+      actions += 1;
+      // Play the generated Gems through the shared hand planner before
+      // deciding whether to use the second charge or refresh the Tavern.
+      continue;
     }
 
     const refreshQuote = getTavernRefreshQuote(state, player.id);
@@ -24701,7 +24721,7 @@ function combatRetentionMultiplier(
 
   if (multiplier < 2) {
     for (const source of board) {
-      if (source.health <= 0 || source.instanceId === target.instanceId) {
+      if (source.health <= 0) {
         continue;
       }
       const globalEffect =
@@ -30934,6 +30954,7 @@ function resolveTriggeredCombatInteractiveBattlecry(
       const persistentOwner = persistentCombatOwner(context, ownerId);
       if (persistentOwner) {
         persistentOwner.magnetizationsThisGame += 1;
+        reconcilePlayerWhereverMinions(persistentOwner);
       }
       pushBattleEvent(context.events, {
         type: "buff",
@@ -30957,6 +30978,12 @@ function resolveTriggeredCombatInteractiveBattlecry(
         magnetic,
         target,
         elementalBonus,
+      );
+      reconcileCombatWhereverMinions(
+        context,
+        ownerId,
+        source.instanceId,
+        `${magnetic.name}的磁力吸附使砰砰博士的怪物获得本局永久成长。`,
       );
     }
     return;

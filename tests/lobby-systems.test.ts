@@ -150,7 +150,7 @@ function resolveTrinketOfferWithoutFollowup(
     NonNullable<GameState["pendingInteraction"]>,
     { kind: "trinketChoice" }
   >,
-  beforeRound?: number,
+  nextScheduledOffer?: { round: number; tier: TrinketTier },
 ): { state: GameState; selectedId: string } {
   for (const selectedId of offer.optionIds) {
     const resolved = gameReducer(state, {
@@ -162,8 +162,8 @@ function resolveTrinketOfferWithoutFollowup(
     let hasEarlyFollowup = probe.pendingInteraction !== null;
     while (
       !hasEarlyFollowup &&
-      beforeRound !== undefined &&
-      probe.round < beforeRound
+      nextScheduledOffer !== undefined &&
+      probe.round < nextScheduledOffer.round
     ) {
       const combat = gameReducer(probe, { type: "END_TURN" });
       hasEarlyFollowup = combat.phase !== "combat";
@@ -172,7 +172,17 @@ function resolveTrinketOfferWithoutFollowup(
       }
       probe = gameReducer(combat, { type: "CONTINUE" });
       hasEarlyFollowup =
-        probe.round < beforeRound && probe.pendingInteraction !== null;
+        probe.round < nextScheduledOffer.round && probe.pendingInteraction !== null;
+    }
+    if (nextScheduledOffer && !hasEarlyFollowup) {
+      // Mysterious Orb can replace the turn-9 Greater offer with a Lesser
+      // offer without opening an earlier interaction. Keep that behavior
+      // out of the ordinary scheduled-offer test, which asserts both tiers.
+      const pending = probe.pendingInteraction;
+      hasEarlyFollowup =
+        pending?.kind !== "trinketChoice" ||
+        pending.trinketTier !== nextScheduledOffer.tier ||
+        pending.additionalTrinketSourceId !== undefined;
     }
     if (!hasEarlyFollowup) {
       return { state: resolved, selectedId };
@@ -1068,7 +1078,7 @@ test("turns 6 and 9 pause Recruit for Lesser and Greater Trinket choices", () =>
   const lesserResolution = resolveTrinketOfferWithoutFollowup(
     state,
     lesserOffer,
-    GREATER_TRINKET_ROUND,
+    { round: GREATER_TRINKET_ROUND, tier: "greater" },
   );
   state = lesserResolution.state;
   const lesserId = lesserResolution.selectedId;

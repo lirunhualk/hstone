@@ -352,6 +352,63 @@ test("Blackthorn hero power grants 2 Blood Gems and allows twice per turn", () =
   assert.equal(p3.hand.length, 4);
 });
 
+test("Blackthorn AI buys its opening minion before spending spare Gold on Blood Gems", () => {
+  for (const gold of [3, 4, 5]) {
+    let state = createHeadlessGame(0xb1ac);
+    const player = state.players[0];
+    player.heroId = "hero-bg20-103";
+    player.heroPowerId = "hero-power-bg20_hero_103p";
+    player.heroPowerCounters = {};
+    player.heroPowerActiveThisTurn = false;
+    player.gold = gold;
+    player.board = [];
+    player.hand = [];
+    player.spellShop = null;
+    player.additionalSpellShop = [];
+    const template = player.shop[0];
+    assert.ok(template);
+    const recruit = minionFromDefinition(template, "BG29_611", "blackthorn-opening");
+    player.shop = [recruit];
+
+    state = advanceHeadlessGame(state);
+    const advanced = state.players[0];
+    const owned = advanced.board.find((minion) => minion.instanceId === recruit.instanceId);
+    assert.ok(owned, "reserve the three Gold needed to establish a warband");
+    const expectedUses = gold - 3;
+    assert.equal(advanced.heroPowerCounters.blackthornPlays ?? 0, expectedUses);
+    assert.equal(owned.bloodGemAttack, expectedUses * 2);
+    assert.equal(owned.bloodGemHealth, expectedUses * 2);
+    assert.equal(advanced.hand.filter((card) => card.kind === "bloodGem").length, 0);
+  }
+});
+
+test("Blackthorn AI preserves an opening upgrade and never buys unusable Blood Gems", () => {
+  for (const hasBoard of [false, true]) {
+    let state = createHeadlessGame(0xb1ad);
+    state.round = 2;
+    const player = state.players[0];
+    player.heroId = "hero-bg20-103";
+    player.heroPowerId = "hero-power-bg20_hero_103p";
+    player.heroPowerCounters = {};
+    player.heroPowerActiveThisTurn = false;
+    player.gold = 4;
+    player.upgradeDiscount = 1;
+    const template = player.shop[0];
+    assert.ok(template);
+    player.board = hasBoard ? [minionFromDefinition(template, "BG29_611", "blackthorn-existing")] : [];
+    player.hand = [];
+    player.shop = [];
+    player.spellShop = null;
+    player.additionalSpellShop = [];
+
+    state = advanceHeadlessGame(state);
+    const advanced = state.players[0];
+    if (hasBoard) assert.equal(advanced.tavernTier, 2);
+    assert.equal(advanced.heroPowerCounters.blackthornPlays ?? 0, 0);
+    assert.equal(advanced.hand.filter((card) => card.kind === "bloodGem").length, 0);
+  }
+});
+
 test("George is playable and Boon of Light targets the Tavern or friendly warband", () => {
   const hero = heroesAvailableForTribes(ALL_TRIBES).find(
     (candidate) => candidate.id === "hero-tb-15",

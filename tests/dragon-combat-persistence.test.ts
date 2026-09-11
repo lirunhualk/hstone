@@ -1188,6 +1188,12 @@ test("allFriendlyPoet protects all Dragons on the board regardless of position",
 
     const combat = gameReducer(state, { type: "END_TURN" });
     const multiplier = golden ? 2 : 1;
+    const permanentPoet = permanentMinion(combat, poet.instanceId);
+    assert.deepEqual(
+      [permanentPoet.attack, permanentPoet.health],
+      [poet.attack + 2 * multiplier, poet.health + multiplier],
+      "all friendly Dragons includes the Poet itself",
+    );
     const permanentDragon1 = permanentMinion(
       combat,
       dragon1.instanceId,
