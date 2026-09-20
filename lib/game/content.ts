@@ -1119,7 +1119,7 @@ export const LIVE_TOKEN_DEFINITIONS: readonly MinionDefinition[] =
       tribe: "pirate",
       tribes: ["pirate"],
       associatedTribes: [],
-      effectSupport: "partial",
+      effectSupport: "complete",
       printedMechanics: ["TRIGGER_VISUAL"],
       attack: 6,
       health: 6,
@@ -1127,6 +1127,13 @@ export const LIVE_TOKEN_DEFINITIONS: readonly MinionDefinition[] =
         "每当你获取4张海盗牌，你的铸币上限提高1枚。（还剩4张！）",
       goldenDescription:
         "每当你获取4张海盗牌，你的铸币上限提高2枚。（还剩4张！）",
+      afterCardAddedToHand: {
+        kind: "increaseMaxGold",
+        tribe: "pirate",
+        count: 4,
+        amount: 1,
+        goldenMode: "doubleAmount",
+      },
       collectible: false,
     },
     {

@@ -132,6 +132,7 @@ import type {
   ImproveElementalStatGrantsEffect,
   ImproveStartOfCombatBuffEffect,
   ImproveUndeadArmyEffect,
+  IncreaseMaxGoldAfterTribeCardsAddedTrigger,
   MagneticAttachment,
   MinionTier,
   MinionEffect,
@@ -376,6 +377,7 @@ const MRRGLTON_DEFINITION_IDS = new Set(["BG35_140", "BG35_141"]);
 const DEMON_FODDER_DEFINITION_ID = "live-demon-fodder-token" as const;
 const PERIODIC_TURN_COUNTER = "periodicEndOfTurn";
 const PURCHASE_PROGRESS_COUNTER = "cardPurchases";
+const PIRATE_ACQUISITION_PROGRESS_COUNTER = "pirateCardsAcquired";
 const STONE_AGE_SLAB_PURCHASE_USED_COUNTER =
   "stoneAgeSlabPurchaseUsedThisTurn";
 const CONDITIONAL_KEYWORD_TRIGGERED_COUNTER =
@@ -4887,6 +4889,16 @@ function refreshDynamicMinionDescription(
   const printedDescription = minion.golden
     ? goldenMinionDescription(minion.definitionId)
     : definition.description;
+  if (definition.afterCardAddedToHand?.kind === "increaseMaxGold") {
+    const remaining =
+      definition.afterCardAddedToHand.count -
+      effectCounter(minion, PIRATE_ACQUISITION_PROGRESS_COUNTER, 0);
+    minion.description = printedDescription.replace(
+      /（还剩\d+张！）/u,
+      `（还剩${remaining}张！）`,
+    );
+    return;
+  }
   if (minion.definitionId === FISH_DEFINITION_ID) {
     const learnedNames = minionDeathrattleSources(minion)
       .filter(
@@ -5538,6 +5550,22 @@ function createTavernSpell(
   return instance;
 }
 
+function advanceMaxGoldAcquisitionProgress(
+  source: MinionInstance,
+  golden: boolean,
+  trigger: IncreaseMaxGoldAfterTribeCardsAddedTrigger,
+): number {
+  const progress =
+    effectCounter(source, PIRATE_ACQUISITION_PROGRESS_COUNTER, 0) + 1;
+  setEffectCounter(
+    source,
+    PIRATE_ACQUISITION_PROGRESS_COUNTER,
+    progress % trigger.count,
+  );
+  refreshDynamicMinionDescription(source);
+  return Math.floor(progress / trigger.count) * trigger.amount * (golden ? 2 : 1);
+}
+
 function observeRecruitCardAddedToHand(
   state: GameState,
   player: PlayerState,
@@ -5583,6 +5611,14 @@ function observeRecruitCardAddedToHand(
         card.kind !== "minion" ||
         !minionHasTribe(card, trigger.tribe)
       ) {
+        continue;
+      }
+      if (trigger.kind === "increaseMaxGold") {
+        player.maxGold += advanceMaxGoldAcquisitionProgress(
+          watcher,
+          component.golden,
+          trigger,
+        );
         continue;
       }
       const sourceScale =
@@ -11595,6 +11631,17 @@ function resolveTriples(
                 GOLD_SPEND_PROGRESS_COUNTER,
                 0,
               ),
+            ),
+          ),
+        );
+      }
+      if (definition.afterCardAddedToHand?.kind === "increaseMaxGold") {
+        setEffectCounter(
+          golden,
+          PIRATE_ACQUISITION_PROGRESS_COUNTER,
+          Math.max(
+            ...consumed.map((minion) =>
+              effectCounter(minion, PIRATE_ACQUISITION_PROGRESS_COUNTER, 0),
             ),
           ),
         );
@@ -25256,6 +25303,39 @@ function observeCombatCardAddedToHand(
       ) {
         continue;
       }
+      if (trigger.kind === "increaseMaxGold") {
+        const amount = advanceMaxGoldAcquisitionProgress(
+          boardWatcher,
+          component.golden,
+          trigger,
+        );
+        const owner = persistentCombatOwner(context, ownerId);
+        if (owner) {
+          owner.maxGold += amount;
+          const persistent = owner.board.find(
+            (minion) => minion.instanceId === boardWatcher.instanceId,
+          );
+          if (persistent) {
+            setEffectCounter(
+              persistent,
+              PIRATE_ACQUISITION_PROGRESS_COUNTER,
+              effectCounter(boardWatcher, PIRATE_ACQUISITION_PROGRESS_COUNTER, 0),
+            );
+            refreshDynamicMinionDescription(persistent, owner);
+          }
+        }
+        pushBattleEvent(context.events, {
+          type: "trigger",
+          actorPlayerId: ownerId,
+          actorInstanceId: boardWatcher.instanceId,
+          minion: cloneMinion(boardWatcher),
+          message:
+            amount > 0
+              ? `${boardWatcher.name}使铸币上限提高${amount}枚。`
+              : `${boardWatcher.name}记录了获取的海盗牌。`,
+        });
+        continue;
+      }
       const sourceScale =
         component.golden && trigger.goldenMode === "doubleStats" ? 2 : 1;
       for (const target of board) {
@@ -37033,7 +37113,7 @@ function beginNextRecruit(state: GameState): void {
         );
         if (minion) {
           minion.sellValue = 1;
-          player.hand.push(minion);
+          addCardToHand(state, player, minion);
         }
       }
     }

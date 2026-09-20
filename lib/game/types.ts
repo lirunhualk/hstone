@@ -744,9 +744,18 @@ export interface BuffWarbandAfterTribeCardAddedTrigger {
   goldenMode?: "doubleStats";
 }
 
+export interface IncreaseMaxGoldAfterTribeCardsAddedTrigger {
+  kind: "increaseMaxGold";
+  tribe: Tribe;
+  count: number;
+  amount: number;
+  goldenMode: "doubleAmount";
+}
+
 export type CardAddedToHandTrigger =
   | BuffRandomOtherPirateAfterCardAddedTrigger
-  | BuffWarbandAfterTribeCardAddedTrigger;
+  | BuffWarbandAfterTribeCardAddedTrigger
+  | IncreaseMaxGoldAfterTribeCardsAddedTrigger;
 
 export interface MinionConsumedTrigger {
   tavernAttackThisTurn: number;

@@ -978,6 +978,18 @@ function repairMinionEffectCounters(value: unknown): void {
     );
   } else if (value.definitionId === "BG34_950") {
     repairInteger("stoneAgeSlabPurchaseUsedThisTurn", 0, 0, 1);
+  } else if (value.definitionId === "BG31_826") {
+    repairInteger("pirateCardsAcquired", 0, 0, 3);
+    const definition = getMinionDefinition(value.definitionId);
+    value.effectSupport = definition.effectSupport;
+    const description =
+      value.golden === true
+        ? definition.goldenDescription ?? definition.description
+        : definition.description;
+    value.description = description.replace(
+      /（还剩\d+张！）/u,
+      `（还剩${4 - (counters.pirateCardsAcquired as number)}张！）`,
+    );
   }
 }
 
