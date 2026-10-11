@@ -127,6 +127,8 @@ v50 收口了普通池最后 9 张特殊效果随从、全部 12 张当前七星
 
 ## 常用命令
 
+可选的 Jev 单席位对照实验已经提供异步决策、正式策略回退和离线夹具验证。它比较现有 AI、逐次决策和关键检查点三种方案；浏览器里的七名 AI 继续使用当前正式策略，实验结果不会自动部署。凭据、预算、独立种子、报告和验收边界见 [`docs/ai-jev-experiment.md`](docs/ai-jev-experiment.md)。
+
 ```powershell
 npm run dev              # 启动本地游戏
 npm run assets:sync      # 下载或补齐随从、法术、英雄、饰品与事件原画
@@ -139,6 +141,9 @@ npm run lint             # 检查代码
 npm run typecheck        # 检查 TypeScript 类型
 npm run build            # 生成生产构建
 npm run check            # 依次执行全部检查
+npm run test:ai-jev      # 验证 Jev 客户端、决策、引擎接入与评测边界
+npm run benchmark:ai-jev -- --help # 查看显式 fixture/jev 对照实验参数
+npm run diagnose:ai-jev  # 按现有代理配置只读检查 Jev API 访问
 ```
 
 数据生成器固定使用：

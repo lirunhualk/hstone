@@ -1,5 +1,7 @@
 import {
+  advanceHeadlessGame,
   canMagnetize,
+  completeHeadlessControlledRecruit,
   createGame,
   gameTransition,
   getHeroPowerActivationQuote,
@@ -10,8 +12,11 @@ import {
   getTavernRefreshQuote,
   getTavernSpellPurchaseQuote,
   getUpgradeCost,
+  headlessRecruitActionIsSafe,
   MAX_BOARD_SIZE,
   MAX_HAND_SIZE,
+  prepareHeadlessControlledRecruit,
+  type HeadlessRecruitContinuation,
 } from "./engine.ts";
 import {
   createAiTrainingObservation,
@@ -144,6 +149,8 @@ interface InternalForkSnapshot {
   state: GameState;
   stateRevision: number;
   actionMasks: ReadonlyMap<ActionMaskScope, CachedActionMask>;
+  benchmarkAnchorPlayerId?: string;
+  recruitContinuation?: HeadlessRecruitContinuation | null;
 }
 
 function validateControlledSeat(
@@ -752,6 +759,8 @@ export class AiTrainingEnvironment {
   #configuration: AiTrainingEnvironmentConfiguration;
   #stateRevision: number;
   #actionMasks: Map<ActionMaskScope, CachedActionMask>;
+  #benchmarkAnchorPlayerId: string | undefined;
+  #recruitContinuation: HeadlessRecruitContinuation | null = null;
 
   constructor(
     seed: number,
@@ -767,6 +776,8 @@ export class AiTrainingEnvironment {
       this.#configuration = { ...configuration };
       this.#stateRevision = internalFork.stateRevision;
       this.#actionMasks = new Map(internalFork.actionMasks);
+      this.#benchmarkAnchorPlayerId = internalFork.benchmarkAnchorPlayerId;
+      this.#recruitContinuation = internalFork.recruitContinuation ?? null;
       return;
     }
     this.#state = createGame(seed, initialHealth);
@@ -778,12 +789,90 @@ export class AiTrainingEnvironment {
     this.#actionMasks = new Map();
   }
 
+  /**
+   * Adapt a canonical all-bot scenario without rebuilding its lobby, Heroes,
+   * profile IDs, pools, or random stream. Only observe()/legalActions() belong
+   * in an external model request; the benchmark snapshot stays local.
+   */
+  static fromHeadlessState(
+    state: GameState,
+    controlledSeat: number,
+  ): AiTrainingEnvironment {
+    validateControlledSeat(state, controlledSeat);
+    if (state.players.some((player) => player.isHuman) || state.pendingInteraction) {
+      throw new Error("benchmark environment requires an unpaused all-bot state");
+    }
+    const environment = new AiTrainingEnvironment(
+      0,
+      controlledSeat,
+      state.initialHealth,
+      {},
+      {
+        token: INTERNAL_FORK_TOKEN,
+        state: structuredClone(state),
+        stateRevision: 0,
+        actionMasks: new Map(),
+        benchmarkAnchorPlayerId: state.humanPlayerId,
+      },
+    );
+    environment.#stageBenchmarkRecruit();
+    return environment;
+  }
+
+  /** Local-only canonical snapshot for outcome measurement and parity tests. */
+  snapshotForBenchmark(): GameState {
+    if (this.#benchmarkAnchorPlayerId === undefined) {
+      throw new Error("not a headless benchmark environment");
+    }
+    const state = structuredClone(this.#state);
+    state.humanPlayerId = this.#benchmarkAnchorPlayerId;
+    for (const player of state.players) player.isHuman = false;
+    return state;
+  }
+
+  /** Execute the exact current production policy for the controlled remainder. */
+  completeLegacyRecruitTurn(): AiTrainingStepResult {
+    const before = structuredClone(controlledPlayer(this.#state));
+    const rngStateBefore = this.#state.rngState;
+    this.#completeBenchmarkRecruit(true);
+    this.#stateRevision += 1;
+    this.#actionMasks.clear();
+    const after = controlledPlayer(this.#state);
+    const ownBattle = this.#benchmarkOwnBattle();
+    return {
+      environmentVersion: AI_TRAINING_ENVIRONMENT_VERSION,
+      observation: this.observe(),
+      legalActions: this.legalActions(),
+      action: null,
+      accepted: true,
+      randomnessConsumed: this.#state.rngState !== rngStateBefore,
+      done: after.placement !== undefined || this.#state.phase === "gameOver",
+      ownBattle,
+      rewardSignals: rewardSignals(before, after, ownBattle),
+    };
+  }
+
+  /** Continue the canonical full lobby, including after controlled elimination. */
+  advanceBenchmarkPhase(): DeepReadonly<AiTrainingObservation> {
+    if (this.#recruitContinuation !== null) {
+      throw new Error("complete the controlled recruit before advancing");
+    }
+    this.#state = advanceHeadlessGame(this.snapshotForBenchmark());
+    this.#stageBenchmarkRecruit();
+    this.#stateRevision += 1;
+    this.#actionMasks.clear();
+    return this.observe();
+  }
+
   reset(
     seed: number,
     controlledSeat = this.#controlledSeat,
     initialHealth = this.#initialHealth,
     configuration = this.#configuration,
   ): DeepReadonly<AiTrainingObservation> {
+    if (this.#benchmarkAnchorPlayerId !== undefined) {
+      throw new Error("reset benchmark scenarios with fromHeadlessState");
+    }
     const state = createGame(seed, initialHealth);
     configureControlledSeat(state, controlledSeat, configuration);
     this.#state = state;
@@ -796,7 +885,12 @@ export class AiTrainingEnvironment {
   }
 
   observe(): DeepReadonly<AiTrainingObservation> {
-    return createAiTrainingObservation(this.#state, this.#controlledSeat);
+    return createAiTrainingObservation(
+      this.#benchmarkAnchorPlayerId === undefined
+        ? this.#state
+        : this.snapshotForBenchmark(),
+      this.#controlledSeat,
+    );
   }
 
   /** Independent deterministic branch for offline search or counterfactuals. */
@@ -811,12 +905,19 @@ export class AiTrainingEnvironment {
         state: structuredClone(this.#state),
         stateRevision: this.#stateRevision,
         actionMasks: this.#actionMasks,
+        benchmarkAnchorPlayerId: this.#benchmarkAnchorPlayerId,
+        recruitContinuation: this.#recruitContinuation,
       },
     );
   }
 
   legalActions(): readonly Readonly<AiTrainingLegalAction>[] {
     return this.#actionMask("all").actions;
+  }
+
+  /** Staged benchmark masks already apply the existing production health guard. */
+  safeRecruitLegalActions(): readonly Readonly<AiTrainingLegalAction>[] {
+    return this.legalActions();
   }
 
   /** Correctness-preserving fast mask for visible Recruit search. */
@@ -890,10 +991,25 @@ export class AiTrainingEnvironment {
     let actionType: GameAction["type"] | null = null;
     if (chosen) {
       actionType = chosen.action.type;
-      const transition = gameTransition(this.#state, chosen.action);
-      accepted = transition.accepted;
+      if (
+        this.#benchmarkAnchorPlayerId !== undefined &&
+        chosen.action.type === "END_TURN"
+      ) {
+        this.#completeBenchmarkRecruit(false);
+        accepted = true;
+      } else if (
+        this.#benchmarkAnchorPlayerId !== undefined &&
+        chosen.action.type === "CONTINUE"
+      ) {
+        this.#state = advanceHeadlessGame(this.snapshotForBenchmark());
+        this.#stageBenchmarkRecruit();
+        accepted = true;
+      } else {
+        const transition = gameTransition(this.#state, chosen.action);
+        accepted = transition.accepted;
+        if (accepted) this.#state = transition.state;
+      }
       if (accepted) {
-        this.#state = transition.state;
         this.#stateRevision += 1;
         this.#actionMasks.clear();
       }
@@ -901,7 +1017,9 @@ export class AiTrainingEnvironment {
     const after = controlledPlayer(this.#state);
     const ownBattle =
       accepted && actionType === "END_TURN"
-        ? observeOwnBattle(this.#state, this.#state.lastBattle)
+        ? this.#benchmarkAnchorPlayerId !== undefined
+          ? this.#benchmarkOwnBattle()
+          : observeOwnBattle(this.#state, this.#state.lastBattle)
         : null;
     const done =
       after.placement !== undefined || this.#state.phase === "gameOver";
@@ -926,7 +1044,14 @@ export class AiTrainingEnvironment {
     const cached = this.#actionMasks.get(scope);
     if (cached?.revision === this.#stateRevision) return cached;
     const candidates = Object.freeze(
-      acceptedCandidates(this.#state, scope),
+      acceptedCandidates(this.#state, scope).filter(
+        ({ action }) => this.#benchmarkAnchorPlayerId === undefined ||
+          headlessRecruitActionIsSafe(
+            this.#state,
+            this.#state.players[this.#controlledSeat].id,
+            action,
+          ),
+      ),
     );
     const actions = publicLegalActions(
       candidates,
@@ -940,5 +1065,44 @@ export class AiTrainingEnvironment {
     });
     this.#actionMasks.set(scope, mask);
     return mask;
+  }
+
+  #stageBenchmarkRecruit(): void {
+    const state = this.snapshotForBenchmark();
+    const player = state.players[this.#controlledSeat];
+    if (state.phase === "recruit" && player.alive) {
+      const prepared = prepareHeadlessControlledRecruit(state, player.id);
+      this.#state = prepared.state;
+      this.#recruitContinuation = prepared.continuation;
+    } else {
+      this.#state = state;
+      this.#recruitContinuation = null;
+    }
+    configureControlledSeat(this.#state, this.#controlledSeat);
+  }
+
+  #completeBenchmarkRecruit(runLegacyRemainder: boolean): void {
+    if (this.#recruitContinuation === null) {
+      throw new Error("no staged controlled recruit to complete");
+    }
+    if (this.#state.pendingInteraction !== null) {
+      throw new Error("resolve the pending candidate choice before legacy completion");
+    }
+    this.#state = completeHeadlessControlledRecruit(
+      this.snapshotForBenchmark(),
+      this.#recruitContinuation,
+      runLegacyRemainder,
+    );
+    this.#recruitContinuation = null;
+    configureControlledSeat(this.#state, this.#controlledSeat);
+  }
+
+  #benchmarkOwnBattle(): Readonly<AiTrainingOwnBattleObservation> | null {
+    const playerId = this.#state.players[this.#controlledSeat].id;
+    const battle = this.#state.lastRoundBattles.find(
+      (candidate) => candidate.playerAId === playerId ||
+        (!candidate.isGhost && candidate.playerBId === playerId),
+    ) ?? null;
+    return observeOwnBattle(this.#state, battle);
   }
 }

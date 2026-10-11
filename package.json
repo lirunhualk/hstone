@@ -16,7 +16,8 @@
     "data:bg:check": "node --test tests/battlegrounds-pool.test.mjs",
     "data:trinkets:generate": "node scripts/generate-battlegrounds-trinkets.mjs",
     "data:trinkets:check": "node --test tests/battlegrounds-trinkets-data.test.mjs",
-    "pretest": "npm run test:damage-cap && npm run test:hero-choice-presentation && npm run test:hero-power-presentation && npm run test:discover-choice-presentation && npm run test:trinket-choice-presentation && npm run test:triple-forge-presentation && npm run test:spell-cast-presentation",
+    "pretest": "npm run test:ai-jev && npm run test:damage-cap && npm run test:hero-choice-presentation && npm run test:hero-power-presentation && npm run test:discover-choice-presentation && npm run test:trinket-choice-presentation && npm run test:triple-forge-presentation && npm run test:spell-cast-presentation",
+    "test:ai-jev": "node --experimental-strip-types --test tests/ai-jev-client.test.ts tests/ai-jev-environment.test.ts tests/ai-jev-policy.test.ts tests/ai-jev-benchmark.test.ts tests/ai-jev-access.test.ts tests/ai-jev-network.test.mjs",
     "test:damage-cap": "node --experimental-strip-types --test tests/damage-cap.test.ts",
     "test:hero-choice-presentation": "node --experimental-strip-types --test tests/hero-choice-presentation.test.ts",
     "test:hero-power-presentation": "node --experimental-strip-types --test tests/hero-power-presentation.test.ts",
@@ -40,7 +41,9 @@
     "benchmark:ai-recruit-safety": "node --experimental-strip-types scripts/benchmark-ai-recruit-safety.ts",
     "benchmark:ai-capital-sale": "node --experimental-strip-types scripts/benchmark-ai-capital-sale.ts",
     "benchmark:ai-cooperative-cem": "node --experimental-strip-types scripts/run-ai-cooperative-cem.ts",
-    "benchmark:ai-cooperative-cem-selection": "node --experimental-strip-types scripts/run-ai-cooperative-cem-selection.ts"
+    "benchmark:ai-cooperative-cem-selection": "node --experimental-strip-types scripts/run-ai-cooperative-cem-selection.ts",
+    "benchmark:ai-jev": "node scripts/run-ai-jev.mjs",
+    "diagnose:ai-jev": "node scripts/run-ai-jev.mjs --diagnose"
   },
   "dependencies": {
     "next": "16.2.6",

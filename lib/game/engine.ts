@@ -36879,22 +36879,23 @@ function deferTriplesUntilNextRecruit(
   }
 }
 
+function finishPlayerRecruit(state: GameState, player: PlayerState): void {
+  deferTriplesUntilNextRecruit(state, player);
+  applyEndOfTurnEffects(state, player);
+  applyEndOfTurnTrinkets(state, player);
+  applyEndOfTurnHeroPower(state, player);
+  reconcileConditionalMinions(player);
+  player.hand = player.hand.filter(
+    (card) => card.kind !== "spellcraft" || card.spellFamily !== "spellcraft",
+  );
+  player.pendingSpellcraft = [];
+  flushPendingSystemSpells(state, player);
+}
+
 function endTurn(state: GameState): void {
-  const previousRoundBattles = state.lastRoundBattles;
   const human = humanPlayer(state);
   if (human.isHuman && human.alive) {
-    deferTriplesUntilNextRecruit(state, human);
-    applyEndOfTurnEffects(state, human);
-    applyEndOfTurnTrinkets(state, human);
-    applyEndOfTurnHeroPower(state, human);
-    reconcileConditionalMinions(human);
-    human.hand = human.hand.filter(
-      (card) =>
-        card.kind !== "spellcraft" ||
-        card.spellFamily !== "spellcraft",
-    );
-    human.pendingSpellcraft = [];
-    flushPendingSystemSpells(state, human);
+    finishPlayerRecruit(state, human);
   }
   const aiPlayers = state.players.filter(
     (player) => player.alive && !player.isHuman,
@@ -36902,20 +36903,17 @@ function endTurn(state: GameState): void {
   shuffleInPlace(state, aiPlayers);
   for (const player of aiPlayers) {
     runAiRecruit(state, player);
-    deferTriplesUntilNextRecruit(state, player);
-    applyEndOfTurnEffects(state, player);
-    applyEndOfTurnTrinkets(state, player);
-    applyEndOfTurnHeroPower(state, player);
-    reconcileConditionalMinions(player);
-    player.hand = player.hand.filter(
-      (card) =>
-        card.kind !== "spellcraft" ||
-        card.spellFamily !== "spellcraft",
-    );
-    player.pendingSpellcraft = [];
-    flushPendingSystemSpells(state, player);
+    finishPlayerRecruit(state, player);
   }
+  finishRecruitCombat(state);
+}
 
+function finishRecruitCombat(
+  state: GameState,
+  preserveBoardOrderPlayerId?: PlayerId,
+): void {
+  const previousRoundBattles = state.lastRoundBattles;
+  const human = humanPlayer(state);
   const pairings = buildPairings(state);
   const battles: BattleSummary[] = [];
   for (const pairing of pairings) {
@@ -36931,10 +36929,17 @@ function endTurn(state: GameState): void {
           pairing.playerB,
           pairing.playerA,
         );
-    if (!pairing.playerA.isHuman) {
+    if (
+      !pairing.playerA.isHuman &&
+      pairing.playerA.id !== preserveBoardOrderPlayerId
+    ) {
       arrangeAiBoard(pairing.playerA, playerAObservation);
     }
-    if (!pairing.isGhost && !pairing.playerB.isHuman) {
+    if (
+      !pairing.isGhost &&
+      !pairing.playerB.isHuman &&
+      pairing.playerB.id !== preserveBoardOrderPlayerId
+    ) {
       arrangeAiBoard(pairing.playerB, playerBObservation);
     }
     pairing.playerA.lastOpponentId = pairing.playerB.id;
@@ -37897,6 +37902,125 @@ export function advanceHeadlessGame(state: GameState): GameState {
   assertHeadlessInvariant(state, "input");
   const next = cloneState(state);
   advanceMutableHeadlessGame(next);
+  assertHeadlessInvariant(next, "output");
+  return next;
+}
+
+/** Private-to-the-harness continuation, never part of a model observation. */
+export interface HeadlessRecruitContinuation {
+  readonly round: number;
+  readonly remainingPlayerIds: readonly PlayerId[];
+}
+
+/** Apply the existing bot health guard to externally selected legal actions. */
+export function headlessRecruitActionIsSafe(
+  state: GameState,
+  playerId: PlayerId,
+  action: GameAction,
+): boolean {
+  const player = state.players.find((candidate) => candidate.id === playerId);
+  if (!player) return false;
+  switch (action.type) {
+    case "PLAY_HAND_CARD":
+    case "MAGNETIZE_MINION": {
+      const card = player.hand.find(
+        (candidate) => candidate.instanceId === action.cardInstanceId,
+      );
+      return card?.kind !== "minion" || canAiSafelyPlayMinion(state, player, card);
+    }
+    case "ACTIVATE_HERO_POWER":
+      return player.heroPowerId !== null &&
+        canAiSafelyActivateDamageHeroPower(
+          state,
+          player,
+          getHeroPowerDefinition(player.heroPowerId),
+        );
+    case "BUY_MINION":
+      return canAiPurchaseMinion(state, player, action.shopIndex);
+    case "BUY_TAVERN_SPELL": {
+      const spell = tavernSpellShopOffers(player).find(
+        (offer) => offer.instanceId === action.spellInstanceId,
+      );
+      return spell !== undefined && canAiPurchaseTavernSpell(state, player, spell);
+    }
+    case "REFRESH_SHOP": {
+      const quote = getTavernRefreshQuote(state, playerId);
+      return quote !== null && quote.affordable &&
+        (quote.currency !== "health" || quote.cost === 0 ||
+          aiRecruitDamageWillBeRewound(player) ||
+          player.health + player.armor - quote.cost >=
+            getAiStrategyProfile(playerId).healthSpendFloor);
+    }
+    default:
+      return true;
+  }
+}
+
+/**
+ * Pause at one bot's authentic turn in the already-shuffled recruit order.
+ * Earlier bots complete their recruit and end-of-turn effects exactly once.
+ */
+export function prepareHeadlessControlledRecruit(
+  state: GameState,
+  playerId: PlayerId,
+): { state: GameState; continuation: HeadlessRecruitContinuation } {
+  assertHeadlessInvariant(state, "input");
+  if (state.phase !== "recruit") {
+    throw new Error("controlled headless recruit requires the recruit phase");
+  }
+  const next = cloneState(state);
+  const aiPlayers = next.players.filter((player) => player.alive);
+  if (!aiPlayers.some((player) => player.id === playerId)) {
+    throw new Error("controlled headless recruit requires a living player");
+  }
+  shuffleInPlace(next, aiPlayers);
+  const controlledIndex = aiPlayers.findIndex((player) => player.id === playerId);
+  for (const player of aiPlayers.slice(0, controlledIndex)) {
+    runAiRecruit(next, player);
+    finishPlayerRecruit(next, player);
+  }
+  assertHeadlessInvariant(next, "output");
+  return {
+    state: next,
+    continuation: Object.freeze({
+      round: next.round,
+      remainingPlayerIds: Object.freeze(
+        aiPlayers.slice(controlledIndex).map((player) => player.id),
+      ),
+    }),
+  };
+}
+
+/**
+ * Resume the staged recruit without reshuffling or repeating earlier bots.
+ * With legacy remainder enabled, an untouched checkpoint is exactly the
+ * production baseline. Candidate tokens have already changed the real state.
+ */
+export function completeHeadlessControlledRecruit(
+  state: GameState,
+  continuation: HeadlessRecruitContinuation,
+  runLegacyRemainder: boolean,
+): GameState {
+  assertHeadlessInvariant(state, "input");
+  const ids = continuation.remainingPlayerIds;
+  if (
+    state.phase !== "recruit" ||
+    state.round !== continuation.round ||
+    ids.length === 0 ||
+    new Set(ids).size !== ids.length ||
+    ids.some((id) => !state.players.some((player) => player.id === id))
+  ) {
+    throw new Error("invalid controlled headless recruit continuation");
+  }
+  const next = cloneState(state);
+  for (const [index, id] of ids.entries()) {
+    const player = next.players.find((candidate) => candidate.id === id)!;
+    if (index > 0 || runLegacyRemainder) {
+      runAiRecruit(next, player);
+    }
+    finishPlayerRecruit(next, player);
+  }
+  finishRecruitCombat(next, runLegacyRemainder ? undefined : ids[0]);
   assertHeadlessInvariant(next, "output");
   return next;
 }
