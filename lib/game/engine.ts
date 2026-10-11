@@ -477,6 +477,7 @@ const BLOODBOUND_EARRINGS_BY_CARD_ID: Readonly<
   BG32_MagicItem_808t: { threshold: 5, bloodGemsPerMinion: 2 },
 };
 const BEWITCHED_RIBBON_CARD_ID = "BG35_MagicItem_923" as const;
+const SOUS_CHEF_LABEL_CARD_ID = "BG35_MagicItem_801" as const;
 const MAMA_BEAR_STICKER_CARD_ID = "BG35_MagicItem_871" as const;
 const RIVENDARE_PORTRAIT_CARD_ID = "BG30_MagicItem_310" as const;
 const WICKED_TOME_CARD_ID = "BG32_MagicItem_270t" as const;
@@ -1647,7 +1648,8 @@ function battlecriesTriggeredThisGame(player: PlayerState): number {
 function activateThornedPauldrons(player: PlayerState): void {
   for (const definition of playerTrinkets(player)) {
     if (definition.cardId === THORNED_PAULDRONS_CARD_ID) {
-      player.trinketCounters[definition.id] = 1;
+      player.trinketCounters[definition.id] =
+        (player.trinketCounters[definition.id] ?? 0) + 1;
     }
   }
 }
@@ -1669,7 +1671,7 @@ function thornedPauldronsBloodGemBonus(
       definition.cardId === THORNED_PAULDRONS_CARD_ID &&
       (player.trinketCounters[definition.id] ?? 0) > 0
     ) {
-      activeCopies += 1;
+      activeCopies += player.trinketCounters[definition.id] ?? 0;
     }
   }
   return { attack: activeCopies * 2, health: activeCopies };
@@ -1698,20 +1700,18 @@ function ancientWishbone(player: PlayerState): TrinketDefinition | null {
 
 function improveFangAnklet(
   player: PlayerState,
-): { trinket: TrinketDefinition; nextCombatBuff: number } | null {
-  const trinket = playerTrinkets(player).find(
+): { trinket: TrinketDefinition; nextCombatBuff: number }[] {
+  return playerTrinkets(player).filter(
     (definition) => definition.cardId === FANG_ANKLET_CARD_ID,
-  );
-  if (!trinket) {
-    return null;
-  }
+  ).map((trinket) => {
   const improvements =
     Math.max(
       0,
       Math.floor(player.trinketCounters[trinket.id] ?? 0),
     ) + 1;
   player.trinketCounters[trinket.id] = improvements;
-  return { trinket, nextCombatBuff: improvements + 1 };
+    return { trinket, nextCombatBuff: improvements + 1 };
+  });
 }
 
 function unusedPerTurnHealthPurchaseTrinket(
@@ -3739,6 +3739,7 @@ function triggerRecruitBattlecryFromTrinket(
         component.golden ? 2 : 1,
         { effectSourceDefinitionId: component.definitionId },
       );
+      resolveTriggeredRecruitInteractiveBattlecry(state, player, target, component);
     }
     observeRecruitBattlecryTriggered(player);
   }
@@ -3910,6 +3911,10 @@ function transformSouvenirStandAfterGreaterPurchase(
   player.trinketIds[souvenirIndex] = copyId;
   delete player.trinketCounters[souvenirId];
   player.trinketCounters[copyId] = 0;
+  // These are ongoing Tavern auras rather than one-shot purchase rewards.
+  if (purchased.cardId === NETHER_PENDANT_CARD_ID || purchased.cardId === MUTATING_CHEESE_WHEEL_CARD_ID) {
+    buffTavernMinionsPermanently(player, 2, 2);
+  }
 }
 
 function applyTrinketDefinition(
@@ -6502,7 +6507,8 @@ function applyExtraTavernMinionTrinkets(
       );
     }
   }
-  if (playerHasTrinketCardId(player, MAGNETIC_PRICE_TAG_CARD_ID)) {
+  for (const trinket of playerTrinkets(player)) {
+    if (trinket.cardId !== MAGNETIC_PRICE_TAG_CARD_ID) continue;
     addExtraTavernMinion(
       state,
       player,
@@ -7049,15 +7055,22 @@ function extraSpellcraftCasts(
 function applyAfterDiscoverTrinkets(
   state: GameState,
   player: PlayerState,
-  selectedDefinitionId: string,
+  selected: HandCardInstance,
 ): void {
-  for (const definitionId of player.trinketIds) {
-    const definition = getTrinketDefinition(definitionId);
+  for (const definition of playerTrinkets(player)) {
     if (
       definition.cardId === SINSTONE_STICKER_CARD_ID &&
       consumePerRoundTrinketTrigger(player, definition, state.round, 2)
     ) {
-      addGeneratedMinionCopyToHand(state, player, selectedDefinitionId);
+      const copy = selected.kind === "minion"
+        ? cloneMinionAsGeneratedCopy(state, selected)
+        : { ...structuredClone(selected), instanceId: `trinket-copy-${state.nextInstanceId++}` };
+      if (copy.kind === "minion") {
+        copy.poolCopies = 0;
+        copy.sellValue = 1;
+      }
+      addCardToHand(state, player, copy);
+      resolveTriples(state, player);
     }
   }
 }
@@ -7222,11 +7235,10 @@ function applyAfterMinionPlayedTrinkets(
 
   const playedDemon =
     event.tribes.includes("demon") || event.tribes.includes("all");
-  if (
-    playedDemon &&
-    playerHasTrinketCardId(player, URZUL_STICKER_CARD_ID) &&
-    player.shop.length > 0
-  ) {
+  for (const trinket of playerTrinkets(player)) {
+    if (!playedDemon || trinket.cardId !== URZUL_STICKER_CARD_ID || player.shop.length === 0) {
+      continue;
+    }
     const otherDemons = player.board.filter(
       (candidate) =>
         minionHasTribe(candidate, "demon") &&
@@ -7450,12 +7462,10 @@ function applyAfterRecruitSpellCastTrinkets(
       player.tavernSpellHealthBonus += 4;
     }
   }
-  if (
-    playerTrinkets(player).some(
-      (trinket) => trinket.cardId === BEWITCHED_RIBBON_CARD_ID,
-    )
-  ) {
-    buffMinions(player.board, 1, 1, player.board, player);
+  for (const trinket of playerTrinkets(player)) {
+    if (trinket.cardId === BEWITCHED_RIBBON_CARD_ID) {
+      buffMinions(player.board, 1, 1, player.board, player);
+    }
   }
   for (const definition of playerTrinkets(player)) {
     if (definition.cardId === PANPIPES_CARD_ID) {
@@ -8073,6 +8083,7 @@ function reconcilePlayerWhereverMinions(player: PlayerState): void {
 function observeRecruitDeathrattleTriggered(player: PlayerState): void {
   player.deathrattlesTriggered =
     (player.deathrattlesTriggered ?? 0) + 1;
+  activateThornedPauldrons(player);
   reconcilePlayerWhereverMinions(player);
 }
 
@@ -10449,7 +10460,9 @@ function battlecryTriggerCount(player: PlayerState): number {
 function endOfTurnTriggerCount(player: PlayerState): number {
   return (
     1 +
-    (playerHasTrinketCardId(player, DRAKKARI_PORTRAIT_CARD_ID) ? 1 : 0) +
+    playerTrinkets(player).filter(
+      (trinket) => trinket.cardId === DRAKKARI_PORTRAIT_CARD_ID,
+    ).length +
     player.board.reduce((largestExtra, minion) => {
       return minionEffectSources(minion).reduce(
         (componentLargest, component) => {
@@ -13487,9 +13500,6 @@ function destroyRecruitMinion(
   }
 
   const repetitions = 1 + extraDeathrattles(player.board);
-  if (minionHasTriggerableDeathrattle(source)) {
-    activateThornedPauldrons(player);
-  }
   for (const component of minionDeathrattleSources(source)) {
     const deathrattle =
       getMinionDefinition(component.definitionId).deathrattle;
@@ -13952,12 +13962,9 @@ function castBloodGem(
     return false;
   }
   player.hand.splice(handIndex, 1);
-  const surveyorPortraitBonus = playerOwnsTrinketCardId(
-    player,
-    SURVEYOR_PORTRAIT_CARD_ID,
-  )
-    ? 6
-    : 0;
+  const surveyorPortraitBonus = 6 * playerTrinkets(player).filter(
+    (trinket) => trinket.cardId === SURVEYOR_PORTRAIT_CARD_ID,
+  ).length;
   beginCardPlayed(player, {
     sourceInstanceId: card.instanceId,
     cardKind: "other",
@@ -15304,6 +15311,7 @@ function addDrawnMinionToHand(
   state: GameState,
   player: PlayerState,
   minion: BoardMinionInstance | null,
+  options: AddCardToHandOptions = {},
 ): void {
   if (!minion) {
     return;
@@ -15324,8 +15332,18 @@ function addDrawnMinionToHand(
       player.magnetizationsThisGame ?? 0,
     );
   refreshDynamicMinionDescription(minion, player);
-  addCardToHand(state, player, minion);
-  resolveTriples(state, player);
+  addCardToHand(state, player, minion, {
+    ...options,
+    ...(options.combatEvent
+      ? {
+          combatEvent: {
+            ...options.combatEvent,
+            minion: player.isHuman ? cloneMinion(minion) : undefined,
+          },
+        }
+      : {}),
+  });
+  resolveTriples(state, player, options.combatContext);
 }
 
 function addGeneratedMinionCopyToHand(
@@ -19287,6 +19305,9 @@ function beginDarkmoonPrizeDiscoverInteraction(
     if (selected && player.hand.length < MAX_HAND_SIZE) {
       addCardToHand(state, player, selected);
     }
+    if (selected) {
+      applyAfterDiscoverTrinkets(state, player, selected);
+    }
     beginDarkmoonPrizeDiscoverInteraction(
       state,
       player,
@@ -19400,7 +19421,7 @@ function beginTimewarpCandlestickDiscover(
       addCardToHand(state, player, selected);
       resolveTriples(state, player);
     }
-    applyAfterDiscoverTrinkets(state, player, selected.definitionId);
+    applyAfterDiscoverTrinkets(state, player, selected);
     return true;
   }
   state.pendingInteraction = {
@@ -19581,7 +19602,7 @@ function beginDiscoverInteraction(
     }
     applyDiscoverSelectionAfterResolution(player, selected, selectionEffect);
     if (destination.kind !== "transform") {
-      applyAfterDiscoverTrinkets(state, player, selected.definitionId);
+      applyAfterDiscoverTrinkets(state, player, selected);
     }
     if (
       battlecry &&
@@ -19686,6 +19707,7 @@ function beginTavernSpellDiscoverInteraction(
     if (player.hand.length < MAX_HAND_SIZE) {
       addCardToHand(state, player, selected);
     }
+    applyAfterDiscoverTrinkets(state, player, selected);
     if (
       battlecry &&
       (discoveries - 1) %
@@ -20442,6 +20464,7 @@ function resolvePendingInteraction(
     if (nextPlayer.hand.length < MAX_HAND_SIZE) {
       addCardToHand(next, nextPlayer, nextSelected);
     }
+    applyAfterDiscoverTrinkets(next, nextPlayer, nextSelected);
     if (nextPending.completionSource === "generatedSpellCast") {
       triggerRecruitAfterSpellCast(next, nextPlayer);
     }
@@ -20492,6 +20515,7 @@ function resolvePendingInteraction(
     if (nextPlayer.hand.length < MAX_HAND_SIZE) {
       addCardToHand(next, nextPlayer, nextSelected);
     }
+    applyAfterDiscoverTrinkets(next, nextPlayer, nextSelected);
     if (
       nextPending.battlecry &&
       (nextPending.remainingDiscoveries - 1) %
@@ -21070,7 +21094,7 @@ function resolvePendingInteraction(
     applyAfterDiscoverTrinkets(
       next,
       nextPlayer,
-      nextSelected.definitionId,
+      nextSelected,
     );
   }
   if (
@@ -23065,7 +23089,14 @@ function tryActivateAiHeroPower(
   ) {
     return null;
   }
-  if (player.heroPowerActiveThisTurn) {
+  const sousChefLabels = playerTrinkets(player).filter(
+    (trinket) => trinket.cardId === SOUS_CHEF_LABEL_CARD_ID,
+  );
+  const extraUseLabel = sousChefLabels.find(
+    (trinket) => player.trinketCounters[trinket.id] !== state.round,
+  );
+  const usingExtraHeroPower = player.heroPowerActiveThisTurn;
+  if (usingExtraHeroPower && !extraUseLabel) {
     return null;
   }
   const definition = getHeroPowerDefinition(player.heroPowerId);
@@ -24347,11 +24378,11 @@ interface CombatContext {
   /** Minions granted Falling Flying Golem Portrait's temporary Deathrattle. */
   flyingGolemDeathrattles: Record<PlayerId, Set<string>>;
   /** Pirates granted Powder Keg's temporary Sky Pirate Deathrattle. */
-  powderKegDeathrattles: Record<PlayerId, Set<string>>;
+  powderKegDeathrattles: Record<PlayerId, Map<string, Set<string>>>;
   /** Exact combat copies destroyed by Soul Fermenter and waiting to return. */
-  soulFermenterDestroyed: Record<PlayerId, BoardMinionInstance[]>;
+  soulFermenterDestroyed: Record<PlayerId, Record<string, BoardMinionInstance[]>>;
   /** Prevents the stored Soul Fermenter band from returning more than once. */
-  soulFermenterArmed: Record<PlayerId, boolean>;
+  soulFermenterArmed: Record<PlayerId, Record<string, boolean>>;
   /** Exact combat snapshots stored by each Stitched Salvager component. */
   stitchedSalvagerDestroyed: Record<
     PlayerId,
@@ -24685,6 +24716,15 @@ function combatTrinketByCardId(
   return owner
     ? playerTrinkets(owner).find((trinket) => trinket.cardId === cardId)
     : undefined;
+}
+
+function combatTrinketsByCardId(
+  context: CombatContext,
+  ownerId: PlayerId,
+  cardId: string,
+): TrinketDefinition[] {
+  const owner = findPlayer(context.state, ownerId);
+  return owner ? playerTrinkets(owner).filter((trinket) => trinket.cardId === cardId) : [];
 }
 
 function trinketCombatCounter(
@@ -25851,62 +25891,60 @@ function applyFangAnkletAtStartOfCombat(
   context: CombatContext,
   ownerId: PlayerId,
 ): void {
-  const trinket = combatTrinketByCardId(
+  for (const trinket of combatTrinketsByCardId(
     context,
     ownerId,
     COMBAT_TRINKET_CARD_IDS.fangAnklet,
-  );
-  if (!trinket) {
-    return;
-  }
-  const owner = findPlayer(context.state, ownerId);
-  const amount =
-    1 +
-    Math.max(
-      0,
-      Math.floor(owner?.trinketCounters[trinket.id] ?? 0),
-    );
-  const current = context.tribeBuffs[ownerId].beast ?? {
-    attack: 0,
-    health: 0,
-  };
-  context.tribeBuffs[ownerId].beast = {
-    attack: current.attack + amount,
-    health: current.health + amount,
-  };
-  pushBattleEvent(context.events, {
-    type: "startOfCombat",
-    actorPlayerId: ownerId,
-    actorInstanceId: trinket.id,
-    targetPlayerId: ownerId,
-    attackDelta: amount,
-    healthDelta: amount,
-    message: `${trinket.name}使你的野兽在本场战斗中获得+${amount}/+${amount}。`,
-  });
-  for (const target of context.boards[ownerId].filter(
-    (minion) => minion.health > 0 && minionHasTribe(minion, "beast"),
   )) {
-    const gain = applyCombatEnchantingGain(
-      context,
-      ownerId,
-      target,
-      { attack: amount, health: amount },
-    );
+    const owner = findPlayer(context.state, ownerId);
+    const amount =
+      1 +
+      Math.max(
+        0,
+        Math.floor(owner?.trinketCounters[trinket.id] ?? 0),
+      );
+    const current = context.tribeBuffs[ownerId].beast ?? {
+      attack: 0,
+      health: 0,
+    };
+    context.tribeBuffs[ownerId].beast = {
+      attack: current.attack + amount,
+      health: current.health + amount,
+    };
     pushBattleEvent(context.events, {
-      type: "buff",
+      type: "startOfCombat",
       actorPlayerId: ownerId,
       actorInstanceId: trinket.id,
       targetPlayerId: ownerId,
-      targetInstanceId: target.instanceId,
       attackDelta: amount,
-      healthDelta: amount + gain.attackGainHealth,
-      minion: cloneMinion(target),
-      retained: gain.retentionMultiplier > 0,
-      ...(gain.retentionMultiplier > 0
-        ? { retentionMultiplier: gain.retentionMultiplier }
-        : {}),
-      message: `${trinket.name}使${target.name}获得+${amount}/+${amount}。`,
+      healthDelta: amount,
+      message: `${trinket.name}使你的野兽在本场战斗中获得+${amount}/+${amount}。`,
     });
+    for (const target of context.boards[ownerId].filter(
+      (minion) => minion.health > 0 && minionHasTribe(minion, "beast"),
+    )) {
+      const gain = applyCombatEnchantingGain(
+        context,
+        ownerId,
+        target,
+        { attack: amount, health: amount },
+      );
+      pushBattleEvent(context.events, {
+        type: "buff",
+        actorPlayerId: ownerId,
+        actorInstanceId: trinket.id,
+        targetPlayerId: ownerId,
+        targetInstanceId: target.instanceId,
+        attackDelta: amount,
+        healthDelta: amount + gain.attackGainHealth,
+        minion: cloneMinion(target),
+        retained: gain.retentionMultiplier > 0,
+        ...(gain.retentionMultiplier > 0
+          ? { retentionMultiplier: gain.retentionMultiplier }
+          : {}),
+        message: `${trinket.name}使${target.name}获得+${amount}/+${amount}。`,
+      });
+    }
   }
 }
 
@@ -25914,58 +25952,56 @@ function triggerHeraldStickerAtStartOfCombat(
   context: CombatContext,
   ownerId: PlayerId,
 ): void {
-  const trinket = combatTrinketByCardId(
+  trinketCopiestrinket: for (const trinket of combatTrinketsByCardId(
     context,
     ownerId,
     COMBAT_TRINKET_CARD_IDS.heraldSticker,
-  );
-  if (!trinket) {
-    return;
-  }
-  const board = context.boards[ownerId];
-  const candidates = [...board].filter(
-    (minion) =>
-      minionHasDeathrattle(minion) ||
-      hasTrinketGrantedDeathrattle(context, ownerId, minion),
-  );
-  if (candidates.length === 0) {
-    return;
-  }
-  pushBattleEvent(context.events, {
-    type: "startOfCombat",
-    actorPlayerId: ownerId,
-    actorInstanceId: trinket.id,
-    targetPlayerId: ownerId,
-    message: `${trinket.name}触发所有友方亡语。`,
-  });
-  for (const [originalIndex, source] of candidates.entries()) {
-    const currentIndex = board.findIndex(
-      (minion) => minion.instanceId === source.instanceId,
+  )) {
+    const board = context.boards[ownerId];
+    const candidates = [...board].filter(
+      (minion) =>
+        minionHasDeathrattle(minion) ||
+        hasTrinketGrantedDeathrattle(context, ownerId, minion),
     );
-    const index = currentIndex >= 0 ? currentIndex : originalIndex;
-    const adjacentInstanceIds = [board[index - 1], board[index + 1]]
-      .filter(
-        (minion): minion is MinionInstance =>
-          minion !== undefined && minion.health > 0,
-      )
-      .map((minion) => minion.instanceId);
+    if (candidates.length === 0) {
+      continue trinketCopiestrinket;
+    }
     pushBattleEvent(context.events, {
-      type: "trigger",
+      type: "startOfCombat",
       actorPlayerId: ownerId,
       actorInstanceId: trinket.id,
       targetPlayerId: ownerId,
-      targetInstanceId: source.instanceId,
-      minion: cloneMinion(source),
-      message: `${trinket.name}触发了${source.name}的亡语。`,
+      message: `${trinket.name}触发所有友方亡语。`,
     });
-    resolveOneDeathrattle(context, {
-      minion: source,
-      index,
-      ownerId,
-      adjacentInstanceIds,
-    });
+    for (const [originalIndex, source] of candidates.entries()) {
+      const currentIndex = board.findIndex(
+        (minion) => minion.instanceId === source.instanceId,
+      );
+      const index = currentIndex >= 0 ? currentIndex : originalIndex;
+      const adjacentInstanceIds = [board[index - 1], board[index + 1]]
+        .filter(
+          (minion): minion is MinionInstance =>
+            minion !== undefined && minion.health > 0,
+        )
+        .map((minion) => minion.instanceId);
+      pushBattleEvent(context.events, {
+        type: "trigger",
+        actorPlayerId: ownerId,
+        actorInstanceId: trinket.id,
+        targetPlayerId: ownerId,
+        targetInstanceId: source.instanceId,
+        minion: cloneMinion(source),
+        message: `${trinket.name}触发了${source.name}的亡语。`,
+      });
+      resolveOneDeathrattle(context, {
+        minion: source,
+        index,
+        ownerId,
+        adjacentInstanceIds,
+      });
+    }
+    resolveCombatDeaths(context);
   }
-  resolveCombatDeaths(context);
 }
 
 /**
@@ -25979,16 +26015,15 @@ function applyStartOfCombatTrinkets(
 ): void {
   const board = context.boards[ownerId];
 
-  const soulFermenter = combatTrinketByCardId(
+  for (const soulFermenter of combatTrinketsByCardId(
     context,
     ownerId,
     COMBAT_TRINKET_CARD_IDS.soulFermenter,
-  );
-  if (soulFermenter) {
+  )) {
     const destroyed = board.slice(0, 3);
     if (destroyed.length > 0) {
-      context.soulFermenterDestroyed[ownerId] = destroyed.map(cloneMinion);
-      context.soulFermenterArmed[ownerId] = true;
+      context.soulFermenterDestroyed[ownerId][soulFermenter.id] = destroyed.map(cloneMinion);
+      context.soulFermenterArmed[ownerId][soulFermenter.id] = true;
       pushBattleEvent(context.events, {
         type: "startOfCombat",
         actorPlayerId: ownerId,
@@ -26003,12 +26038,11 @@ function applyStartOfCombatTrinkets(
     }
   }
 
-  const eternalPortrait = combatTrinketByCardId(
+  for (const eternalPortrait of combatTrinketsByCardId(
     context,
     ownerId,
     COMBAT_TRINKET_CARD_IDS.eternalPortrait,
-  );
-  if (eternalPortrait) {
+  )) {
     const knights = board.filter(
       (minion) =>
         minion.health > 0 &&
@@ -26049,12 +26083,11 @@ function applyStartOfCombatTrinkets(
     }
   }
 
-  const automatonPortrait = combatTrinketByCardId(
+  for (const automatonPortrait of combatTrinketsByCardId(
     context,
     ownerId,
     COMBAT_TRINKET_CARD_IDS.automatonPortrait,
-  );
-  if (automatonPortrait) {
+  )) {
     setTrinketCombatCounter(
       context,
       ownerId,
@@ -26072,12 +26105,11 @@ function applyStartOfCombatTrinkets(
     summonAutomatonPortraitWhenSpace(context, ownerId);
   }
 
-  const hoggyBank = combatTrinketByCardId(
+  for (const hoggyBank of combatTrinketsByCardId(
     context,
     ownerId,
     COMBAT_TRINKET_CARD_IDS.hoggyBank,
-  );
-  if (hoggyBank) {
+  )) {
     const quilboars = board.filter(
       (minion) => minion.health > 0 && minionHasTribe(minion, "quilboar"),
     );
@@ -26106,56 +26138,56 @@ function applyStartOfCombatTrinkets(
     }
   }
 
-  const holyMallet = combatTrinketByCardId(
+  for (const holyMallet of combatTrinketsByCardId(
     context,
     ownerId,
     COMBAT_TRINKET_CARD_IDS.holyMallet,
-  );
-  if (holyMallet && board.length > 0) {
-    const targets = [...new Map(
-      [board[0], board[board.length - 1]].map((minion) => [
-        minion.instanceId,
-        minion,
-      ]),
-    ).values()];
-    pushBattleEvent(context.events, {
-      type: "startOfCombat",
-      actorPlayerId: ownerId,
-      actorInstanceId: holyMallet.id,
-      targetPlayerId: ownerId,
-      message: `${holyMallet.name}触发。`,
-    });
-    for (const target of targets) {
-      const gain = applyCombatEnchantingGain(
-        context,
-        ownerId,
-        target,
-        { keywords: ["divineShield"] },
-      );
+  )) {
+    if (holyMallet && board.length > 0) {
+      const targets = [...new Map(
+        [board[0], board[board.length - 1]].map((minion) => [
+          minion.instanceId,
+          minion,
+        ]),
+      ).values()];
       pushBattleEvent(context.events, {
-        type: "buff",
+        type: "startOfCombat",
         actorPlayerId: ownerId,
         actorInstanceId: holyMallet.id,
         targetPlayerId: ownerId,
-        targetInstanceId: target.instanceId,
-        attackDelta: 0,
-        healthDelta: 0,
-        minion: cloneMinion(target),
-        retained: gain.retentionMultiplier > 0,
-        ...(gain.retentionMultiplier > 0
-          ? { retentionMultiplier: gain.retentionMultiplier }
-          : {}),
-        message: `${holyMallet.name}使${target.name}获得圣盾。`,
+        message: `${holyMallet.name}触发。`,
       });
+      for (const target of targets) {
+        const gain = applyCombatEnchantingGain(
+          context,
+          ownerId,
+          target,
+          { keywords: ["divineShield"] },
+        );
+        pushBattleEvent(context.events, {
+          type: "buff",
+          actorPlayerId: ownerId,
+          actorInstanceId: holyMallet.id,
+          targetPlayerId: ownerId,
+          targetInstanceId: target.instanceId,
+          attackDelta: 0,
+          healthDelta: 0,
+          minion: cloneMinion(target),
+          retained: gain.retentionMultiplier > 0,
+          ...(gain.retentionMultiplier > 0
+            ? { retentionMultiplier: gain.retentionMultiplier }
+            : {}),
+          message: `${holyMallet.name}使${target.name}获得圣盾。`,
+        });
+      }
     }
   }
 
-  const rustyTrident = combatTrinketByCardId(
+  for (const rustyTrident of combatTrinketsByCardId(
     context,
     ownerId,
     COMBAT_TRINKET_CARD_IDS.rustyTrident,
-  );
-  if (rustyTrident) {
+  )) {
     const naga = board.filter(
       (minion) => minion.health > 0 && minionHasTribe(minion, "naga"),
     );
@@ -26184,41 +26216,41 @@ function applyStartOfCombatTrinkets(
     }
   }
 
-  const flyingGolemPortrait = combatTrinketByCardId(
+  for (const flyingGolemPortrait of combatTrinketsByCardId(
     context,
     ownerId,
     COMBAT_TRINKET_CARD_IDS.flyingGolemPortrait,
-  );
-  if (flyingGolemPortrait && board.length > 0) {
-    pushBattleEvent(context.events, {
-      type: "startOfCombat",
-      actorPlayerId: ownerId,
-      actorInstanceId: flyingGolemPortrait.id,
-      targetPlayerId: ownerId,
-      message: `${flyingGolemPortrait.name}使你的随从获得永久强化战队的亡语。`,
-    });
-    for (const target of board) {
-      context.flyingGolemDeathrattles[ownerId].add(target.instanceId);
+  )) {
+    if (flyingGolemPortrait && board.length > 0) {
       pushBattleEvent(context.events, {
-        type: "buff",
+        type: "startOfCombat",
         actorPlayerId: ownerId,
         actorInstanceId: flyingGolemPortrait.id,
         targetPlayerId: ownerId,
-        targetInstanceId: target.instanceId,
-        attackDelta: 0,
-        healthDelta: 0,
-        minion: cloneMinion(target),
-        message: `${flyingGolemPortrait.name}使${target.name}获得“亡语：使你的随从永久获得+2/+2”。`,
+        message: `${flyingGolemPortrait.name}使你的随从获得永久强化战队的亡语。`,
       });
+      for (const target of board) {
+        context.flyingGolemDeathrattles[ownerId].add(target.instanceId);
+        pushBattleEvent(context.events, {
+          type: "buff",
+          actorPlayerId: ownerId,
+          actorInstanceId: flyingGolemPortrait.id,
+          targetPlayerId: ownerId,
+          targetInstanceId: target.instanceId,
+          attackDelta: 0,
+          healthDelta: 0,
+          minion: cloneMinion(target),
+          message: `${flyingGolemPortrait.name}使${target.name}获得“亡语：使你的随从永久获得+2/+2”。`,
+        });
+      }
     }
   }
 
-  const powderKeg = combatTrinketByCardId(
+  for (const powderKeg of combatTrinketsByCardId(
     context,
     ownerId,
     COMBAT_TRINKET_CARD_IDS.powderKeg,
-  );
-  if (powderKeg) {
+  )) {
     const targets = randomBoardSubset(
       context.state,
       board.filter(
@@ -26236,7 +26268,9 @@ function applyStartOfCombatTrinkets(
       });
     }
     for (const target of targets) {
-      context.powderKegDeathrattles[ownerId].add(target.instanceId);
+      const grants = context.powderKegDeathrattles[ownerId].get(target.instanceId) ?? new Set<string>();
+      grants.add(powderKeg.id);
+      context.powderKegDeathrattles[ownerId].set(target.instanceId, grants);
       pushBattleEvent(context.events, {
         type: "buff",
         actorPlayerId: ownerId,
@@ -26251,12 +26285,11 @@ function applyStartOfCombatTrinkets(
     }
   }
 
-  const balefulIncense = combatTrinketByCardId(
+  for (const balefulIncense of combatTrinketsByCardId(
     context,
     ownerId,
     COMBAT_TRINKET_CARD_IDS.balefulIncense,
-  );
-  if (balefulIncense) {
+  )) {
     const undead = board.filter(
       (minion) => minion.health > 0 && minionHasTribe(minion, "undead"),
     );
@@ -26302,12 +26335,11 @@ function applyStartOfCombatTrinkets(
     }
   }
 
-  const anvil = combatTrinketByCardId(
+  for (const anvil of combatTrinketsByCardId(
     context,
     ownerId,
     COMBAT_TRINKET_CARD_IDS.ironforgeAnvil,
-  );
-  if (anvil) {
+  )) {
     const targets = board.filter(
       (minion) => minion.health > 0 && minion.tribes.length === 0,
     );
@@ -26343,54 +26375,54 @@ function applyStartOfCombatTrinkets(
     }
   }
 
-  const timepiece = combatTrinketByCardId(
+  for (const timepiece of combatTrinketsByCardId(
     context,
     ownerId,
     COMBAT_TRINKET_CARD_IDS.bronzeTimepiece,
-  );
-  if (timepiece && board.length > 0) {
-    pushBattleEvent(context.events, {
-      type: "startOfCombat",
-      actorPlayerId: ownerId,
-      actorInstanceId: timepiece.id,
-      targetPlayerId: ownerId,
-      message: `${timepiece.name}触发。`,
-    });
-    for (const target of board.filter((minion) => minion.health > 0)) {
-      const healthDelta = Math.ceil(target.attack / 2);
-      if (healthDelta <= 0) {
-        continue;
-      }
-      const gain = applyCombatEnchantingGain(
-        context,
-        ownerId,
-        target,
-        { health: healthDelta },
-      );
+  )) {
+    if (timepiece && board.length > 0) {
       pushBattleEvent(context.events, {
-        type: "buff",
+        type: "startOfCombat",
         actorPlayerId: ownerId,
         actorInstanceId: timepiece.id,
         targetPlayerId: ownerId,
-        targetInstanceId: target.instanceId,
-        attackDelta: 0,
-        healthDelta,
-        minion: cloneMinion(target),
-        retained: gain.retentionMultiplier > 0,
-        ...(gain.retentionMultiplier > 0
-          ? { retentionMultiplier: gain.retentionMultiplier }
-          : {}),
-        message: `${timepiece.name}使${target.name}获得+${healthDelta}生命值。`,
+        message: `${timepiece.name}触发。`,
       });
+      for (const target of board.filter((minion) => minion.health > 0)) {
+        const healthDelta = Math.ceil(target.attack / 2);
+        if (healthDelta <= 0) {
+          continue;
+        }
+        const gain = applyCombatEnchantingGain(
+          context,
+          ownerId,
+          target,
+          { health: healthDelta },
+        );
+        pushBattleEvent(context.events, {
+          type: "buff",
+          actorPlayerId: ownerId,
+          actorInstanceId: timepiece.id,
+          targetPlayerId: ownerId,
+          targetInstanceId: target.instanceId,
+          attackDelta: 0,
+          healthDelta,
+          minion: cloneMinion(target),
+          retained: gain.retentionMultiplier > 0,
+          ...(gain.retentionMultiplier > 0
+            ? { retentionMultiplier: gain.retentionMultiplier }
+            : {}),
+          message: `${timepiece.name}使${target.name}获得+${healthDelta}生命值。`,
+        });
+      }
     }
   }
 
-  const rivendarePortrait = combatTrinketByCardId(
+  for (const rivendarePortrait of combatTrinketsByCardId(
     context,
     ownerId,
     COMBAT_TRINKET_CARD_IDS.rivendarePortrait,
-  );
-  if (rivendarePortrait) {
+  )) {
     const tituses = board.filter(
       (minion) =>
         minion.health > 0 &&
@@ -26431,12 +26463,11 @@ function applyStartOfCombatTrinkets(
     }
   }
 
-  const protectiveRing = combatTrinketByCardId(
+  for (const protectiveRing of combatTrinketsByCardId(
     context,
     ownerId,
     COMBAT_TRINKET_CARD_IDS.protectiveRing,
-  );
-  if (protectiveRing) {
+  )) {
     const targets = randomBoardSubset(
       context.state,
       board.filter(
@@ -26479,12 +26510,11 @@ function applyStartOfCombatTrinkets(
     }
   }
 
-  const dramalocSticker = combatTrinketByCardId(
+  for (const dramalocSticker of combatTrinketsByCardId(
     context,
     ownerId,
     COMBAT_TRINKET_CARD_IDS.dramalocSticker,
-  );
-  if (dramalocSticker) {
+  )) {
     const highestHandAttack = combatHandMinions(context, ownerId).reduce(
       (highest, minion) => Math.max(highest, minion.attack),
       0,
@@ -26528,12 +26558,11 @@ function applyStartOfCombatTrinkets(
     }
   }
 
-  const rylakPortrait = combatTrinketByCardId(
+  for (const rylakPortrait of combatTrinketsByCardId(
     context,
     ownerId,
     COMBAT_TRINKET_CARD_IDS.rylakPortrait,
-  );
-  if (rylakPortrait) {
+  )) {
     const rylaks = [...board].filter(
       (minion) =>
         minion.health > 0 &&
@@ -26620,12 +26649,11 @@ function triggerCombatAttackTrinkets(
   ownerId: PlayerId,
   attacker: MinionInstance,
 ): void {
-  const kibble = combatTrinketByCardId(
+  for (const kibble of combatTrinketsByCardId(
     context,
     ownerId,
     COMBAT_TRINKET_CARD_IDS.allPurposeKibble,
-  );
-  if (kibble && minionHasTribe(attacker, "beast")) {
+  ).filter(() => minionHasTribe(attacker, "beast"))) {
     const counterKey = `${kibble.id}:persistentAttackGrowth`;
     const owner = findPlayer(context.state, ownerId);
     const growth =
@@ -26663,90 +26691,89 @@ function triggerCombatAttackTrinkets(
     });
   }
 
-  const dragonScale = combatTrinketByCardId(
+  for (const dragonScale of combatTrinketsByCardId(
     context,
     ownerId,
     COMBAT_TRINKET_CARD_IDS.faerieDragonScale,
-  );
-  if (
-    dragonScale &&
-    minionHasTribe(attacker, "dragon") &&
-    !attacker.divineShield
-  ) {
-    const uses = trinketCombatCounter(
-      context,
-      ownerId,
-      dragonScale,
-      "uses",
-    );
-    if (uses < 3) {
-      const gain = applyCombatEnchantingGain(
-        context,
-        ownerId,
-        attacker,
-        { keywords: ["divineShield"] },
-      );
-      setTrinketCombatCounter(
+  )) {
+    if (
+      dragonScale &&
+      minionHasTribe(attacker, "dragon") &&
+      !attacker.divineShield
+    ) {
+      const uses = trinketCombatCounter(
         context,
         ownerId,
         dragonScale,
         "uses",
-        uses + 1,
       );
-      pushBattleEvent(context.events, {
-        type: "buff",
-        actorPlayerId: ownerId,
-        actorInstanceId: dragonScale.id,
-        targetPlayerId: ownerId,
-        targetInstanceId: attacker.instanceId,
-        attackDelta: 0,
-        healthDelta: 0,
-        minion: cloneMinion(attacker),
-        retained: gain.retentionMultiplier > 0,
-        ...(gain.retentionMultiplier > 0
-          ? { retentionMultiplier: gain.retentionMultiplier }
-          : {}),
-        message: `${dragonScale.name}使正在攻击的${attacker.name}获得圣盾（本场第${uses + 1}次）。`,
-      });
+      if (uses < 3) {
+        const gain = applyCombatEnchantingGain(
+          context,
+          ownerId,
+          attacker,
+          { keywords: ["divineShield"] },
+        );
+        setTrinketCombatCounter(
+          context,
+          ownerId,
+          dragonScale,
+          "uses",
+          uses + 1,
+        );
+        pushBattleEvent(context.events, {
+          type: "buff",
+          actorPlayerId: ownerId,
+          actorInstanceId: dragonScale.id,
+          targetPlayerId: ownerId,
+          targetInstanceId: attacker.instanceId,
+          attackDelta: 0,
+          healthDelta: 0,
+          minion: cloneMinion(attacker),
+          retained: gain.retentionMultiplier > 0,
+          ...(gain.retentionMultiplier > 0
+            ? { retentionMultiplier: gain.retentionMultiplier }
+            : {}),
+          message: `${dragonScale.name}使正在攻击的${attacker.name}获得圣盾（本场第${uses + 1}次）。`,
+        });
+      }
     }
   }
 
-  const jar = combatTrinketByCardId(
+  trinketCopiesjar: for (const jar of combatTrinketsByCardId(
     context,
     ownerId,
     COMBAT_TRINKET_CARD_IDS.jarOfGems,
-  );
-  if (!jar) {
-    return;
-  }
-  const attacks =
-    trinketCombatCounter(context, ownerId, jar, "attacks") + 1;
-  if (attacks < 2) {
-    setTrinketCombatCounter(
-      context,
-      ownerId,
-      jar,
-      "attacks",
-      attacks,
+  )) {
+    const attacks =
+      trinketCombatCounter(context, ownerId, jar, "attacks") + 1;
+    if (attacks < 2) {
+      setTrinketCombatCounter(
+        context,
+        ownerId,
+        jar,
+        "attacks",
+        attacks,
+      );
+      continue trinketCopiesjar;
+    }
+    setTrinketCombatCounter(context, ownerId, jar, "attacks", 0);
+    const targets = context.boards[ownerId].filter(
+      (minion) => minion.health > 0 && minionHasTribe(minion, "quilboar"),
     );
-    return;
-  }
-  setTrinketCombatCounter(context, ownerId, jar, "attacks", 0);
-  const targets = context.boards[ownerId].filter(
-    (minion) => minion.health > 0 && minionHasTribe(minion, "quilboar"),
-  );
-  pushBattleEvent(context.events, {
-    type: "trigger",
-    actorPlayerId: ownerId,
-    actorInstanceId: jar.id,
-    targetPlayerId: ownerId,
-    message: `${jar.name}在两次友方攻击后对所有友方野猪人使用鲜血宝石。`,
-  });
-  for (const target of targets) {
-    applyCombatBloodGemPulse(context, ownerId, target, {
+    pushBattleEvent(context.events, {
+      type: "trigger",
+      actorPlayerId: ownerId,
       actorInstanceId: jar.id,
-      sourceLabel: jar.name,
+      targetPlayerId: ownerId,
+      message: `${jar.name}在两次友方攻击后对所有友方野猪人使用鲜血宝石。`,
     });
+    for (const target of targets) {
+      applyCombatBloodGemPulse(context, ownerId, target, {
+        actorInstanceId: jar.id,
+        sourceLabel: jar.name,
+      });
+    }
   }
 }
 
@@ -26798,34 +26825,34 @@ function triggerCombatSummonTrinkets(
     return;
   }
 
-  const slamma = combatTrinketByCardId(
+  for (const slamma of combatTrinketsByCardId(
     context,
     ownerId,
     COMBAT_TRINKET_CARD_IDS.slammaSticker,
-  );
-  if (slamma && minionHasTribe(summoned, "beast")) {
-    const attackDelta = summoned.attack;
-    summoned.attack *= 2;
-    reconcileConditionalMinion(summoned);
-    pushBattleEvent(context.events, {
-      type: "buff",
-      actorPlayerId: ownerId,
-      actorInstanceId: slamma.id,
-      targetPlayerId: ownerId,
-      targetInstanceId: summoned.instanceId,
-      attackDelta,
-      healthDelta: 0,
-      minion: cloneMinion(summoned),
-      message: `${slamma.name}使新召唤的${summoned.name}攻击力翻倍。`,
-    });
+  )) {
+    if (slamma && minionHasTribe(summoned, "beast")) {
+      const attackDelta = summoned.attack;
+      summoned.attack *= 2;
+      reconcileConditionalMinion(summoned);
+      pushBattleEvent(context.events, {
+        type: "buff",
+        actorPlayerId: ownerId,
+        actorInstanceId: slamma.id,
+        targetPlayerId: ownerId,
+        targetInstanceId: summoned.instanceId,
+        attackDelta,
+        healthDelta: 0,
+        minion: cloneMinion(summoned),
+        message: `${slamma.name}使新召唤的${summoned.name}攻击力翻倍。`,
+      });
+    }
   }
 
-  const reinforcedShield = combatTrinketByCardId(
+  for (const reinforcedShield of combatTrinketsByCardId(
     context,
     ownerId,
     COMBAT_TRINKET_CARD_IDS.reinforcedShield,
-  );
-  if (reinforcedShield) {
+  )) {
     const uses = trinketCombatCounter(
       context,
       ownerId,
@@ -26852,93 +26879,96 @@ function triggerCombatSummonTrinkets(
     }
   }
 
-  const bassgill = combatTrinketByCardId(
+  for (const bassgill of combatTrinketsByCardId(
     context,
     ownerId,
     COMBAT_TRINKET_CARD_IDS.bassgillPortrait,
-  );
-  if (bassgill && minionHasTribe(summoned, "murloc")) {
-    grantSummonedMinionShieldFromTrinket(
-      context,
-      ownerId,
-      bassgill,
-      summoned,
-      "",
-    );
+  )) {
+    if (bassgill && minionHasTribe(summoned, "murloc")) {
+      grantSummonedMinionShieldFromTrinket(
+        context,
+        ownerId,
+        bassgill,
+        summoned,
+        "",
+      );
+    }
   }
 
-  const mamaBearSticker = combatTrinketByCardId(
+  for (const mamaBearSticker of combatTrinketsByCardId(
     context,
     ownerId,
     COMBAT_TRINKET_CARD_IDS.mamaBearSticker,
-  );
-  if (mamaBearSticker && minionHasTribe(summoned, "beast")) {
-    const gain = applyCombatEnchantingGain(
-      context,
-      ownerId,
-      summoned,
-      { attack: 5, health: 5 },
-    );
-    pushBattleEvent(context.events, {
-      type: "buff",
-      actorPlayerId: ownerId,
-      actorInstanceId: mamaBearSticker.id,
-      targetPlayerId: ownerId,
-      targetInstanceId: summoned.instanceId,
-      attackDelta: 5,
-      healthDelta: 5 + gain.attackGainHealth,
-      minion: cloneMinion(summoned),
-      retained: gain.retentionMultiplier > 0,
-      ...(gain.retentionMultiplier > 0
-        ? { retentionMultiplier: gain.retentionMultiplier }
-        : {}),
-      message: `${mamaBearSticker.name}使新召唤的${summoned.name}获得+5/+5。`,
-    });
+  )) {
+    if (mamaBearSticker && minionHasTribe(summoned, "beast")) {
+      const gain = applyCombatEnchantingGain(
+        context,
+        ownerId,
+        summoned,
+        { attack: 5, health: 5 },
+      );
+      pushBattleEvent(context.events, {
+        type: "buff",
+        actorPlayerId: ownerId,
+        actorInstanceId: mamaBearSticker.id,
+        targetPlayerId: ownerId,
+        targetInstanceId: summoned.instanceId,
+        attackDelta: 5,
+        healthDelta: 5 + gain.attackGainHealth,
+        minion: cloneMinion(summoned),
+        retained: gain.retentionMultiplier > 0,
+        ...(gain.retentionMultiplier > 0
+          ? { retentionMultiplier: gain.retentionMultiplier }
+          : {}),
+        message: `${mamaBearSticker.name}使新召唤的${summoned.name}获得+5/+5。`,
+      });
+    }
   }
 
-  const wildfeatherDuster = combatTrinketByCardId(
+  for (const wildfeatherDuster of combatTrinketsByCardId(
     context,
     ownerId,
     COMBAT_TRINKET_CARD_IDS.wildfeatherDuster,
-  );
-  if (wildfeatherDuster && minionHasTribe(summoned, "beast")) {
-    const owner = findPlayer(context.state, ownerId);
-    const counterKey = `${wildfeatherDuster.id}:beastSummons`;
-    const priorProgress =
-      context.trinketCombatCounters[ownerId][counterKey] ??
-      owner?.trinketCounters[wildfeatherDuster.id] ??
-      0;
-    const total = priorProgress + 1;
-    const nextProgress = total % 6;
-    context.trinketCombatCounters[ownerId][counterKey] = nextProgress;
-    const persistentOwner = persistentCombatOwner(context, ownerId);
-    if (persistentOwner) {
-      persistentOwner.trinketCounters[wildfeatherDuster.id] = nextProgress;
-    }
-    if (total >= 6) {
-      pushBattleEvent(context.events, {
-        type: "trigger",
-        actorPlayerId: ownerId,
-        actorInstanceId: wildfeatherDuster.id,
-        targetPlayerId: ownerId,
-        message: `${wildfeatherDuster.name}在召唤6只野兽后触发。`,
-      });
-      gainRandomGeneratedMinionFromTrinket(
-        context,
-        ownerId,
-        wildfeatherDuster,
-        (definition, currentOwner) =>
-          definition.tier <= currentOwner.tavernTier &&
-          definitionHasTribe(definition, "beast"),
-        "野兽牌",
-      );
+  )) {
+    if (wildfeatherDuster && minionHasTribe(summoned, "beast")) {
+      const owner = findPlayer(context.state, ownerId);
+      const counterKey = `${wildfeatherDuster.id}:beastSummons`;
+      const priorProgress =
+        context.trinketCombatCounters[ownerId][counterKey] ??
+        owner?.trinketCounters[wildfeatherDuster.id] ??
+        0;
+      const total = priorProgress + 1;
+      const nextProgress = total % 6;
+      context.trinketCombatCounters[ownerId][counterKey] = nextProgress;
+      const persistentOwner = persistentCombatOwner(context, ownerId);
+      if (persistentOwner) {
+        persistentOwner.trinketCounters[wildfeatherDuster.id] = nextProgress;
+      }
+      if (total >= 6) {
+        pushBattleEvent(context.events, {
+          type: "trigger",
+          actorPlayerId: ownerId,
+          actorInstanceId: wildfeatherDuster.id,
+          targetPlayerId: ownerId,
+          message: `${wildfeatherDuster.name}在召唤6只野兽后触发。`,
+        });
+        gainRandomGeneratedMinionFromTrinket(
+          context,
+          ownerId,
+          wildfeatherDuster,
+          (definition, currentOwner) =>
+            definition.tier <= currentOwner.tavernTier &&
+            definitionHasTribe(definition, "beast"),
+          "野兽牌",
+        );
+      }
     }
   }
 
   if (minionHasTribe(summoned, "beast")) {
     const owner = persistentCombatOwner(context, ownerId);
-    const improvement = owner ? improveFangAnklet(owner) : null;
-    if (improvement) {
+    const improvements = owner ? improveFangAnklet(owner) : [];
+    for (const improvement of improvements) {
       pushBattleEvent(context.events, {
         type: "trigger",
         actorPlayerId: ownerId,
@@ -27117,6 +27147,7 @@ function observeCombatDeathrattleTriggered(
   if (persistentOwner) {
     persistentOwner.deathrattlesTriggered =
       context.deathrattlesTriggered[ownerId];
+    activateThornedPauldrons(persistentOwner);
     reconcilePlayerWhereverMinions(persistentOwner);
   }
   reconcileCombatWhereverMinions(
@@ -31457,6 +31488,86 @@ function triggerCombatAfterSpellCast(
   ownerId: PlayerId,
 ): void {
   const board = context.boards[ownerId];
+  const owner = persistentCombatOwner(context, ownerId);
+  if (owner) {
+    for (const { definition, value } of configuredOwnedTrinkets(owner, BLOODBOUND_EARRINGS_BY_CARD_ID)) {
+      if (!advanceTrinketCounter(owner, definition, value.threshold)) continue;
+      for (let application = 0; application < value.bloodGemsPerMinion; application += 1) {
+        for (const target of [...board]) {
+          if (target.health <= 0 || !board.includes(target)) continue;
+          applyCombatBloodGemPulse(context, ownerId, target, {
+            actorInstanceId: definition.id,
+            sourceLabel: definition.name,
+          });
+        }
+      }
+    }
+    for (const { definition, value: threshold } of configuredOwnedTrinkets(owner, ARCHAIC_SCROLL_THRESHOLD_BY_CARD_ID)) {
+      if (advanceTrinketCounter(owner, definition, threshold)) {
+        if (owner.hand.length >= MAX_HAND_SIZE) {
+          pushBattleEvent(context.events, {
+            type: "cardGain",
+            actorPlayerId: ownerId,
+            actorInstanceId: definition.id,
+            targetPlayerId: ownerId,
+            amount: 0,
+            cardKind: "minion",
+            cardGainResult: "handFull",
+            message: `${definition.name}未能使${owner.name}获得纳迦牌：手牌已满。`,
+          });
+          continue;
+        }
+        const gained = drawMatchingFromPool(
+          context.state,
+          owner.tavernTier,
+          (candidate) => definitionHasTribe(candidate, "naga"),
+        );
+        if (!gained) {
+          pushBattleEvent(context.events, {
+            type: "cardGain",
+            actorPlayerId: ownerId,
+            actorInstanceId: definition.id,
+            targetPlayerId: ownerId,
+            amount: 0,
+            cardKind: "minion",
+            cardGainResult: "noCandidate",
+            message: `${definition.name}没有找到可获取的纳迦牌。`,
+          });
+          continue;
+        }
+        addDrawnMinionToHand(context.state, owner, gained, {
+          combatContext: context,
+          combatOwnerId: ownerId,
+          combatEvent: {
+            type: "cardGain",
+            actorPlayerId: ownerId,
+            actorInstanceId: definition.id,
+            targetPlayerId: ownerId,
+            targetInstanceId: owner.isHuman ? gained.instanceId : undefined,
+            amount: 1,
+            cardKind: "minion",
+            cardGainResult: "added",
+            message: owner.isHuman
+              ? `${definition.name}使你获得了「${gained.name}」。`
+              : `${definition.name}使${owner.name}获得了一张纳迦牌。`,
+          },
+        });
+      }
+    }
+    for (const trinket of playerTrinkets(owner)) {
+      const progress = owner.trinketCounters[trinket.id] ?? 0;
+      if (trinket.cardId === BUBBLE_CROWN_CARD_ID && progress < 12) {
+        owner.trinketCounters[trinket.id] = progress + 1;
+        if (progress + 1 === 12) {
+          owner.tavernSpellAttackBonus += 4;
+          owner.tavernSpellHealthBonus += 4;
+        }
+      }
+      if (trinket.cardId === PANPIPES_CARD_ID) {
+        owner.trinketCounters[trinket.id] = progress + 1;
+      }
+    }
+  }
   for (const source of [...board]) {
     if (source.health <= 0) {
       continue;
@@ -31483,34 +31594,32 @@ function triggerCombatAfterSpellCast(
     }
   }
 
-  const ribbon = combatTrinketByCardId(
+  for (const ribbon of combatTrinketsByCardId(
     context,
     ownerId,
     COMBAT_TRINKET_CARD_IDS.bewitchedRibbon,
-  );
-  if (!ribbon) {
-    return;
-  }
-  for (const target of board.filter((candidate) => candidate.health > 0)) {
-    const gain = applyExplicitPermanentCombatStatGain(
-      context,
-      ownerId,
-      target,
-      { attack: 2, health: 2 },
-    );
-    pushBattleEvent(context.events, {
-      type: "buff",
-      actorPlayerId: ownerId,
-      actorInstanceId: ribbon.id,
-      targetPlayerId: ownerId,
-      targetInstanceId: target.instanceId,
-      attackDelta: 2,
-      healthDelta: 2 + gain.attackGainHealth,
-      minion: cloneMinion(target),
-      retained: gain.persisted,
-      ...(gain.persisted ? { retentionMultiplier: 1 } : {}),
-      message: `${ribbon.name}响应施法，使${target.name}永久获得+2/+2。`,
-    });
+  )) {
+    for (const target of board.filter((candidate) => candidate.health > 0)) {
+      const gain = applyExplicitPermanentCombatStatGain(
+        context,
+        ownerId,
+        target,
+        { attack: 2, health: 2 },
+      );
+      pushBattleEvent(context.events, {
+        type: "buff",
+        actorPlayerId: ownerId,
+        actorInstanceId: ribbon.id,
+        targetPlayerId: ownerId,
+        targetInstanceId: target.instanceId,
+        attackDelta: 2,
+        healthDelta: 2 + gain.attackGainHealth,
+        minion: cloneMinion(target),
+        retained: gain.persisted,
+        ...(gain.persisted ? { retentionMultiplier: 1 } : {}),
+        message: `${ribbon.name}响应施法，使${target.name}永久获得+2/+2。`,
+      });
+    }
   }
 }
 
@@ -32762,71 +32871,69 @@ function advanceStaffOfTheScourge(
   context: CombatContext,
   ownerId: PlayerId,
 ): void {
-  const staff = combatTrinketByCardId(
+  trinketCopiesstaff: for (const staff of combatTrinketsByCardId(
     context,
     ownerId,
     COMBAT_TRINKET_CARD_IDS.staffOfTheScourge,
-  );
-  if (!staff) {
-    return;
-  }
-  const progress =
-    trinketCombatCounter(context, ownerId, staff, "avenge") + 1;
-  if (progress < 5) {
+  )) {
+    const progress =
+      trinketCombatCounter(context, ownerId, staff, "avenge") + 1;
+    if (progress < 5) {
+      setTrinketCombatCounter(
+        context,
+        ownerId,
+        staff,
+        "avenge",
+        progress,
+      );
+      continue trinketCopiesstaff;
+    }
     setTrinketCombatCounter(
       context,
       ownerId,
       staff,
       "avenge",
-      progress,
+      progress - 5,
     );
-    return;
+    pushBattleEvent(context.events, {
+      type: "avenge",
+      actorPlayerId: ownerId,
+      actorInstanceId: staff.id,
+      targetPlayerId: ownerId,
+      message: `${staff.name}触发了复仇（5）。`,
+    });
+    const candidates = context.boards[ownerId].filter(
+      (minion) =>
+        minion.health > 0 &&
+        minionHasTribe(minion, "undead") &&
+        !minion.reborn,
+    );
+    if (candidates.length === 0) {
+      continue trinketCopiesstaff;
+    }
+    const target = candidates[randomIndex(context.state, candidates.length)];
+    const gain = applyCombatEnchantingGain(
+      context,
+      ownerId,
+      target,
+      { keywords: ["reborn"] },
+    );
+    pushBattleEvent(context.events, {
+      type: "buff",
+      actorPlayerId: ownerId,
+      actorInstanceId: staff.id,
+      targetPlayerId: ownerId,
+      targetInstanceId: target.instanceId,
+      attackDelta: 0,
+      healthDelta: 0,
+      minion: cloneMinion(target),
+      retained: gain.retentionMultiplier > 0,
+      ...(gain.retentionMultiplier > 0
+        ? { retentionMultiplier: gain.retentionMultiplier }
+        : {}),
+      message: `${staff.name}随机使${target.name}获得复生。`,
+    });
   }
-  setTrinketCombatCounter(
-    context,
-    ownerId,
-    staff,
-    "avenge",
-    progress - 5,
-  );
-  pushBattleEvent(context.events, {
-    type: "avenge",
-    actorPlayerId: ownerId,
-    actorInstanceId: staff.id,
-    targetPlayerId: ownerId,
-    message: `${staff.name}触发了复仇（5）。`,
-  });
-  const candidates = context.boards[ownerId].filter(
-    (minion) =>
-      minion.health > 0 &&
-      minionHasTribe(minion, "undead") &&
-      !minion.reborn,
-  );
-  if (candidates.length === 0) {
-    return;
-  }
-  const target = candidates[randomIndex(context.state, candidates.length)];
-  const gain = applyCombatEnchantingGain(
-    context,
-    ownerId,
-    target,
-    { keywords: ["reborn"] },
-  );
-  pushBattleEvent(context.events, {
-    type: "buff",
-    actorPlayerId: ownerId,
-    actorInstanceId: staff.id,
-    targetPlayerId: ownerId,
-    targetInstanceId: target.instanceId,
-    attackDelta: 0,
-    healthDelta: 0,
-    minion: cloneMinion(target),
-    retained: gain.retentionMultiplier > 0,
-    ...(gain.retentionMultiplier > 0
-      ? { retentionMultiplier: gain.retentionMultiplier }
-      : {}),
-    message: `${staff.name}随机使${target.name}获得复生。`,
-  });
 }
 
 function advanceTrinketDeathThreshold(
@@ -33238,322 +33345,335 @@ function advanceCombatDeathTrinkets(
   death: DeadMinion,
 ): void {
   const ownerId = death.ownerId;
-  const bloodGolemSticker = combatTrinketByCardId(
+  for (const bloodGolemSticker of combatTrinketsByCardId(
     context,
     ownerId,
     COMBAT_TRINKET_CARD_IDS.bloodGolemSticker,
-  );
-  if (
-    bloodGolemSticker &&
-    minionHasTribe(death.minion, "quilboar")
-  ) {
-    pushBattleEvent(context.events, {
-      type: "trigger",
-      actorPlayerId: ownerId,
-      actorInstanceId: bloodGolemSticker.id,
-      targetPlayerId: ownerId,
-      targetInstanceId: death.minion.instanceId,
-      minion: cloneMinion(death.minion),
-      message: `${bloodGolemSticker.name}响应了${death.minion.name}的死亡。`,
-    });
-    summonBloodGolemFromTrinket(context, death, bloodGolemSticker);
-  }
-  const wickedTome = combatTrinketByCardId(
-    context,
-    ownerId,
-    COMBAT_TRINKET_CARD_IDS.wickedTome,
-  );
-  if (
-    wickedTome &&
-    advanceTrinketDeathThreshold(
-      context,
-      ownerId,
-      wickedTome,
-      "avenge",
-      4,
-      "avenge",
-    )
-  ) {
-    const owner = persistentCombatOwner(context, ownerId);
-    if (owner) {
-      owner.tavernSpellAttackBonus += 1;
-      owner.tavernSpellHealthBonus += 1;
-    }
-    pushBattleEvent(context.events, {
-      type: "trigger",
-      actorPlayerId: ownerId,
-      actorInstanceId: wickedTome.id,
-      targetPlayerId: ownerId,
-      attackDelta: 1,
-      healthDelta: 1,
-      permanentEffectImprovement: owner !== undefined,
-      message: `${wickedTome.name}使你的酒馆法术在本局对战中额外提供+1/+1。`,
-    });
-  }
-
-  const scrapsmithPortrait = combatTrinketByCardId(
-    context,
-    ownerId,
-    COMBAT_TRINKET_CARD_IDS.scrapsmithPortrait,
-  );
-  if (scrapsmithPortrait && death.minion.taunt) {
-    const scrapsmiths = context.boards[ownerId].filter(
-      (minion) =>
-        minion.health > 0 && minionHasEffectSource(minion, "BG24_707"),
-    );
-    if (scrapsmiths.length > 0) {
+  )) {
+    if (
+      bloodGolemSticker &&
+      minionHasTribe(death.minion, "quilboar")
+    ) {
       pushBattleEvent(context.events, {
         type: "trigger",
         actorPlayerId: ownerId,
-        actorInstanceId: scrapsmithPortrait.id,
+        actorInstanceId: bloodGolemSticker.id,
         targetPlayerId: ownerId,
         targetInstanceId: death.minion.instanceId,
         minion: cloneMinion(death.minion),
-        message: `${scrapsmithPortrait.name}在友方嘲讽随从死亡后触发。`,
+        message: `${bloodGolemSticker.name}响应了${death.minion.name}的死亡。`,
       });
-      for (const target of scrapsmiths) {
-        applyPermanentCombatBloodGemFromTrinket(
-          context,
-          ownerId,
-          scrapsmithPortrait,
-          target,
-        );
+      summonBloodGolemFromTrinket(context, death, bloodGolemSticker);
+    }
+  }
+  for (const wickedTome of combatTrinketsByCardId(
+    context,
+    ownerId,
+    COMBAT_TRINKET_CARD_IDS.wickedTome,
+  )) {
+    if (
+      wickedTome &&
+      advanceTrinketDeathThreshold(
+        context,
+        ownerId,
+        wickedTome,
+        "avenge",
+        4,
+        "avenge",
+      )
+    ) {
+      const owner = persistentCombatOwner(context, ownerId);
+      if (owner) {
+        owner.tavernSpellAttackBonus += 1;
+        owner.tavernSpellHealthBonus += 1;
+      }
+      pushBattleEvent(context.events, {
+        type: "trigger",
+        actorPlayerId: ownerId,
+        actorInstanceId: wickedTome.id,
+        targetPlayerId: ownerId,
+        attackDelta: 1,
+        healthDelta: 1,
+        permanentEffectImprovement: owner !== undefined,
+        message: `${wickedTome.name}使你的酒馆法术在本局对战中额外提供+1/+1。`,
+      });
+    }
+  }
+
+  for (const scrapsmithPortrait of combatTrinketsByCardId(
+    context,
+    ownerId,
+    COMBAT_TRINKET_CARD_IDS.scrapsmithPortrait,
+  )) {
+    if (scrapsmithPortrait && death.minion.taunt) {
+      const scrapsmiths = context.boards[ownerId].filter(
+        (minion) =>
+          minion.health > 0 && minionHasEffectSource(minion, "BG24_707"),
+      );
+      if (scrapsmiths.length > 0) {
+        pushBattleEvent(context.events, {
+          type: "trigger",
+          actorPlayerId: ownerId,
+          actorInstanceId: scrapsmithPortrait.id,
+          targetPlayerId: ownerId,
+          targetInstanceId: death.minion.instanceId,
+          minion: cloneMinion(death.minion),
+          message: `${scrapsmithPortrait.name}在友方嘲讽随从死亡后触发。`,
+        });
+        for (const target of scrapsmiths) {
+          applyPermanentCombatBloodGemFromTrinket(
+            context,
+            ownerId,
+            scrapsmithPortrait,
+            target,
+          );
+        }
       }
     }
   }
 
-  const eye = combatTrinketByCardId(
+  for (const eye of combatTrinketsByCardId(
     context,
     ownerId,
     COMBAT_TRINKET_CARD_IDS.eyeOfDalaran,
-  );
-  if (eye && death.minion.tribes.length === 0) {
-    pushBattleEvent(context.events, {
-      type: "trigger",
-      actorPlayerId: ownerId,
-      actorInstanceId: eye.id,
-      targetPlayerId: ownerId,
-      targetInstanceId: death.minion.instanceId,
-      minion: cloneMinion(death.minion),
-      message: `${eye.name}响应了没有类型的${death.minion.name}死亡。`,
-    });
-    gainRandomTavernSpellFromTrinket(context, ownerId, eye);
+  )) {
+    if (eye && death.minion.tribes.length === 0) {
+      pushBattleEvent(context.events, {
+        type: "trigger",
+        actorPlayerId: ownerId,
+        actorInstanceId: eye.id,
+        targetPlayerId: ownerId,
+        targetInstanceId: death.minion.instanceId,
+        minion: cloneMinion(death.minion),
+        message: `${eye.name}响应了没有类型的${death.minion.name}死亡。`,
+      });
+      gainRandomTavernSpellFromTrinket(context, ownerId, eye);
+    }
   }
 
-  const lesserQuilligraphy = combatTrinketByCardId(
+  for (const lesserQuilligraphy of combatTrinketsByCardId(
     context,
     ownerId,
     COMBAT_TRINKET_CARD_IDS.lesserQuilligraphySet,
-  );
-  if (
-    lesserQuilligraphy &&
-    advanceTrinketDeathThreshold(
-      context,
-      ownerId,
-      lesserQuilligraphy,
-      "avenge",
-      3,
-      "avenge",
-    )
-  ) {
-    improveBloodGemsFromTrinket(
-      context,
-      ownerId,
-      lesserQuilligraphy,
-      0,
-      1,
-    );
+  )) {
+    if (
+      lesserQuilligraphy &&
+      advanceTrinketDeathThreshold(
+        context,
+        ownerId,
+        lesserQuilligraphy,
+        "avenge",
+        3,
+        "avenge",
+      )
+    ) {
+      improveBloodGemsFromTrinket(
+        context,
+        ownerId,
+        lesserQuilligraphy,
+        0,
+        1,
+      );
+    }
   }
 
-  const greaterQuilligraphy = combatTrinketByCardId(
+  for (const greaterQuilligraphy of combatTrinketsByCardId(
     context,
     ownerId,
     COMBAT_TRINKET_CARD_IDS.greaterQuilligraphySet,
-  );
-  if (
-    greaterQuilligraphy &&
-    advanceTrinketDeathThreshold(
-      context,
-      ownerId,
-      greaterQuilligraphy,
-      "avenge",
-      4,
-      "avenge",
-    )
-  ) {
-    improveBloodGemsFromTrinket(
-      context,
-      ownerId,
-      greaterQuilligraphy,
-      1,
-      1,
-    );
+  )) {
+    if (
+      greaterQuilligraphy &&
+      advanceTrinketDeathThreshold(
+        context,
+        ownerId,
+        greaterQuilligraphy,
+        "avenge",
+        4,
+        "avenge",
+      )
+    ) {
+      improveBloodGemsFromTrinket(
+        context,
+        ownerId,
+        greaterQuilligraphy,
+        1,
+        1,
+      );
+    }
   }
 
-  const fridgeMagnet = combatTrinketByCardId(
+  for (const fridgeMagnet of combatTrinketsByCardId(
     context,
     ownerId,
     COMBAT_TRINKET_CARD_IDS.fridgeMagnet,
-  );
-  if (
-    fridgeMagnet &&
-    advanceTrinketDeathThreshold(
-      context,
-      ownerId,
-      fridgeMagnet,
-      "avenge",
-      3,
-      "avenge",
-    )
-  ) {
-    gainRandomGeneratedMinionFromTrinket(
-      context,
-      ownerId,
-      fridgeMagnet,
-      (definition, owner) =>
-        definition.tier <= owner.tavernTier &&
-        definition.magnetic !== undefined,
-      "磁力随从牌",
-    );
+  )) {
+    if (
+      fridgeMagnet &&
+      advanceTrinketDeathThreshold(
+        context,
+        ownerId,
+        fridgeMagnet,
+        "avenge",
+        3,
+        "avenge",
+      )
+    ) {
+      gainRandomGeneratedMinionFromTrinket(
+        context,
+        ownerId,
+        fridgeMagnet,
+        (definition, owner) =>
+          definition.tier <= owner.tavernTier &&
+          definition.magnetic !== undefined,
+        "磁力随从牌",
+      );
+    }
   }
 
-  const bleedingHeart = combatTrinketByCardId(
+  for (const bleedingHeart of combatTrinketsByCardId(
     context,
     ownerId,
     COMBAT_TRINKET_CARD_IDS.bleedingHeart,
-  );
-  if (
-    bleedingHeart &&
-    advanceTrinketDeathThreshold(
-      context,
-      ownerId,
-      bleedingHeart,
-      "deaths",
-      8,
-      "trigger",
-    )
-  ) {
-    gainRandomGeneratedMinionFromTrinket(
-      context,
-      ownerId,
-      bleedingHeart,
-      (definition, owner) =>
-        definition.tier <= owner.tavernTier &&
-        definitionHasTribe(definition, "undead"),
-      "亡灵牌",
-    );
+  )) {
+    if (
+      bleedingHeart &&
+      advanceTrinketDeathThreshold(
+        context,
+        ownerId,
+        bleedingHeart,
+        "deaths",
+        8,
+        "trigger",
+      )
+    ) {
+      gainRandomGeneratedMinionFromTrinket(
+        context,
+        ownerId,
+        bleedingHeart,
+        (definition, owner) =>
+          definition.tier <= owner.tavernTier &&
+          definitionHasTribe(definition, "undead"),
+        "亡灵牌",
+      );
+    }
   }
 
   // Lesser Trinkets resolve before the Greater slot. This matters when the
   // Band and Thorned Rose complete on the same death: the summoned Beetle is
   // already present for the later Greater-Trinket board buff.
-  const lesserBeetleBand = combatTrinketByCardId(
+  for (const lesserBeetleBand of combatTrinketsByCardId(
     context,
     ownerId,
     COMBAT_TRINKET_CARD_IDS.lesserBeetleBand,
-  );
-  if (
-    lesserBeetleBand &&
-    advanceTrinketDeathThreshold(
-      context,
-      ownerId,
-      lesserBeetleBand,
-      "avenge",
-      5,
-      "avenge",
-    )
-  ) {
-    summonBeetlesFromTrinket(context, ownerId, lesserBeetleBand, 1);
+  )) {
+    if (
+      lesserBeetleBand &&
+      advanceTrinketDeathThreshold(
+        context,
+        ownerId,
+        lesserBeetleBand,
+        "avenge",
+        5,
+        "avenge",
+      )
+    ) {
+      summonBeetlesFromTrinket(context, ownerId, lesserBeetleBand, 1);
+    }
   }
 
-  const thornedRose = combatTrinketByCardId(
+  for (const thornedRose of combatTrinketsByCardId(
     context,
     ownerId,
     COMBAT_TRINKET_CARD_IDS.gilneanThornedRose,
-  );
-  if (
-    thornedRose &&
-    advanceTrinketDeathThreshold(
-      context,
-      ownerId,
-      thornedRose,
-      "avenge",
-      3,
-      "avenge",
-    )
-  ) {
-    resolveGilneanThornedRose(context, ownerId, thornedRose);
+  )) {
+    if (
+      thornedRose &&
+      advanceTrinketDeathThreshold(
+        context,
+        ownerId,
+        thornedRose,
+        "avenge",
+        3,
+        "avenge",
+      )
+    ) {
+      resolveGilneanThornedRose(context, ownerId, thornedRose);
+    }
   }
 
-  const luckyTabby = combatTrinketByCardId(
+  for (const luckyTabby of combatTrinketsByCardId(
     context,
     ownerId,
     COMBAT_TRINKET_CARD_IDS.luckyTabby,
-  );
-  if (
-    luckyTabby &&
-    advanceTrinketDeathThreshold(
-      context,
-      ownerId,
-      luckyTabby,
-      "deaths",
-      7,
-      "trigger",
-    )
-  ) {
-    gainRandomGeneratedMinionFromTrinket(
-      context,
-      ownerId,
-      luckyTabby,
-      (definition) => definitionHasTribe(definition, "beast"),
-      "野兽牌",
-    );
+  )) {
+    if (
+      luckyTabby &&
+      advanceTrinketDeathThreshold(
+        context,
+        ownerId,
+        luckyTabby,
+        "deaths",
+        7,
+        "trigger",
+      )
+    ) {
+      gainRandomGeneratedMinionFromTrinket(
+        context,
+        ownerId,
+        luckyTabby,
+        (definition) => definitionHasTribe(definition, "beast"),
+        "野兽牌",
+      );
+    }
   }
 
-  const greaterBeetleBand = combatTrinketByCardId(
+  for (const greaterBeetleBand of combatTrinketsByCardId(
     context,
     ownerId,
     COMBAT_TRINKET_CARD_IDS.greaterBeetleBand,
-  );
-  if (
-    greaterBeetleBand &&
-    advanceTrinketDeathThreshold(
-      context,
-      ownerId,
-      greaterBeetleBand,
-      "avenge",
-      7,
-      "avenge",
-    )
-  ) {
-    summonBeetlesFromTrinket(context, ownerId, greaterBeetleBand, 2);
+  )) {
+    if (
+      greaterBeetleBand &&
+      advanceTrinketDeathThreshold(
+        context,
+        ownerId,
+        greaterBeetleBand,
+        "avenge",
+        7,
+        "avenge",
+      )
+    ) {
+      summonBeetlesFromTrinket(context, ownerId, greaterBeetleBand, 2);
+    }
   }
 
-  const stormcoilSticker = combatTrinketByCardId(
+  for (const stormcoilSticker of combatTrinketsByCardId(
     context,
     ownerId,
     COMBAT_TRINKET_CARD_IDS.stormcoilSticker,
-  );
-  if (
-    stormcoilSticker &&
-    advanceTrinketDeathThreshold(
-      context,
-      ownerId,
-      stormcoilSticker,
-      "deaths",
-      8,
-      "trigger",
-    )
-  ) {
-    gainRandomGeneratedMinionFromTrinket(
-      context,
-      ownerId,
-      stormcoilSticker,
-      (definition, owner) =>
-        definition.tier <= owner.tavernTier &&
-        definitionHasTribe(definition, "mech"),
-      "机械牌",
-    );
+  )) {
+    if (
+      stormcoilSticker &&
+      advanceTrinketDeathThreshold(
+        context,
+        ownerId,
+        stormcoilSticker,
+        "deaths",
+        8,
+        "trigger",
+      )
+    ) {
+      gainRandomGeneratedMinionFromTrinket(
+        context,
+        ownerId,
+        stormcoilSticker,
+        (definition, owner) =>
+          definition.tier <= owner.tavernTier &&
+          definitionHasTribe(definition, "mech"),
+        "机械牌",
+      );
+    }
   }
 }
 
@@ -34132,44 +34252,44 @@ function resolveFlyingGolemPortraitDeathrattle(
   if (!context.flyingGolemDeathrattles[ownerId].has(source.instanceId)) {
     return;
   }
-  const trinket = combatTrinketByCardId(
+  for (const trinket of combatTrinketsByCardId(
     context,
     ownerId,
     COMBAT_TRINKET_CARD_IDS.flyingGolemPortrait,
-  );
-  if (!trinket) {
-    return;
-  }
-  pushBattleEvent(context.events, {
-    type: "trigger",
-    actorPlayerId: ownerId,
-    actorInstanceId: source.instanceId,
-    targetPlayerId: ownerId,
-    actorMinion: cloneMinion(source),
-    message: `${source.name}获得的亡语使你的随从永久获得+2/+2。`,
-  });
-  for (const target of context.boards[ownerId].filter(
-    (minion) => minion.health > 0,
   )) {
-    const gain = applyExplicitPermanentCombatStatGain(
-      context,
-      ownerId,
-      target,
-      { attack: 2, health: 2 },
-    );
+    observeCombatDeathrattleTriggered(context, ownerId, source);
     pushBattleEvent(context.events, {
-      type: "buff",
+      type: "trigger",
       actorPlayerId: ownerId,
       actorInstanceId: source.instanceId,
       targetPlayerId: ownerId,
-      targetInstanceId: target.instanceId,
-      attackDelta: 2,
-      healthDelta: 2 + gain.attackGainHealth,
-      minion: cloneMinion(target),
-      retained: gain.persisted,
-      ...(gain.persisted ? { retentionMultiplier: 1 } : {}),
-      message: `${source.name}的亡语使${target.name}永久获得+2/+2。`,
+      actorMinion: cloneMinion(source),
+      message: `${source.name}从${trinket.name}获得的亡语使你的随从永久获得+2/+2。`,
     });
+    for (const target of context.boards[ownerId].filter(
+      (minion) => minion.health > 0,
+    )) {
+      const gain = applyExplicitPermanentCombatStatGain(
+        context,
+        ownerId,
+        target,
+        { attack: 2, health: 2 },
+      );
+      pushBattleEvent(context.events, {
+        type: "buff",
+        actorPlayerId: ownerId,
+        actorInstanceId: source.instanceId,
+        targetPlayerId: ownerId,
+        targetInstanceId: target.instanceId,
+        attackDelta: 2,
+        healthDelta: 2 + gain.attackGainHealth,
+        minion: cloneMinion(target),
+        retained: gain.persisted,
+        ...(gain.persisted ? { retentionMultiplier: 1 } : {}),
+        message: `${source.name}的亡语使${target.name}永久获得+2/+2。`,
+      });
+    }
+    triggerBloodAmuletAfterDeathrattle(context, ownerId, source);
   }
 }
 
@@ -34182,33 +34302,33 @@ function resolvePowderKegDeathrattle(
   if (!context.powderKegDeathrattles[ownerId].has(source.instanceId)) {
     return;
   }
-  const powderKeg = combatTrinketByCardId(
+  for (const powderKeg of combatTrinketsByCardId(
     context,
     ownerId,
     COMBAT_TRINKET_CARD_IDS.powderKeg,
-  );
-  if (!powderKeg) {
-    return;
-  }
-  if (rejectCombatSummonForFullBoard(context, ownerId)) {
-    return;
-  }
-  const skyPirate = createMinionInstance(
-    context.state,
-    "sky-pirate-token",
-    0,
-  );
-  skyPirate.attack += Math.max(0, source.attack);
-  const summoned = insertCombatMinion(
-    context,
-    ownerId,
-    skyPirate,
-    insertAt,
-    source,
-    `${powderKeg.name}召唤了${skyPirate.attack}/1的空中海盗。`,
-  );
-  if (summoned) {
-    performImmediateAttack(context, ownerId, summoned);
+  )) {
+    if (!context.powderKegDeathrattles[ownerId].get(source.instanceId)?.has(powderKeg.id)) continue;
+    observeCombatDeathrattleTriggered(context, ownerId, source);
+    if (!rejectCombatSummonForFullBoard(context, ownerId)) {
+      const skyPirate = createMinionInstance(
+        context.state,
+        "sky-pirate-token",
+        0,
+      );
+      skyPirate.attack += Math.max(0, source.attack);
+      const summoned = insertCombatMinion(
+        context,
+        ownerId,
+        skyPirate,
+        insertAt,
+        source,
+        `${powderKeg.name}召唤了${skyPirate.attack}/1的空中海盗。`,
+      );
+      if (summoned) {
+        performImmediateAttack(context, ownerId, summoned);
+      }
+    }
+    triggerBloodAmuletAfterDeathrattle(context, ownerId, source);
   }
 }
 
@@ -34286,35 +34406,33 @@ function triggerBloodAmuletAfterDeathrattle(
   ownerId: PlayerId,
   source: MinionInstance,
 ): void {
-  const bloodAmulet = combatTrinketByCardId(
+  for (const bloodAmulet of combatTrinketsByCardId(
     context,
     ownerId,
     COMBAT_TRINKET_CARD_IDS.bloodAmulet,
-  );
-  if (!bloodAmulet) {
-    return;
-  }
-  const targets = randomBoardSubset(
-    context.state,
-    context.boards[ownerId].filter((minion) => minion.health > 0),
-    3,
-  );
-  pushBattleEvent(context.events, {
-    type: "trigger",
-    actorPlayerId: ownerId,
-    actorInstanceId: bloodAmulet.id,
-    targetPlayerId: ownerId,
-    targetInstanceId: source.instanceId,
-    minion: cloneMinion(source),
-    message: `${bloodAmulet.name}在${source.name}的亡语触发后，随机对至多3个友方随从永久使用鲜血宝石。`,
-  });
-  for (const target of targets) {
-    applyPermanentCombatBloodGemFromTrinket(
-      context,
-      ownerId,
-      bloodAmulet,
-      target,
+  )) {
+    const targets = randomBoardSubset(
+      context.state,
+      context.boards[ownerId].filter((minion) => minion.health > 0),
+      3,
     );
+    pushBattleEvent(context.events, {
+      type: "trigger",
+      actorPlayerId: ownerId,
+      actorInstanceId: bloodAmulet.id,
+      targetPlayerId: ownerId,
+      targetInstanceId: source.instanceId,
+      minion: cloneMinion(source),
+      message: `${bloodAmulet.name}在${source.name}的亡语触发后，随机对至多3个友方随从永久使用鲜血宝石。`,
+    });
+    for (const target of targets) {
+      applyPermanentCombatBloodGemFromTrinket(
+        context,
+        ownerId,
+        bloodAmulet,
+        target,
+      );
+    }
   }
 }
 
@@ -34324,18 +34442,6 @@ function resolveOneDeathrattle(
 ): void {
   const source = death.minion;
   const ownerId = death.ownerId;
-  const triggeredDeathrattle =
-    minionHasTriggerableDeathrattle(source) ||
-    context.hoggyBankDeathrattles[ownerId].has(source.instanceId) ||
-    context.rustyTridentDeathrattles[ownerId].has(source.instanceId) ||
-    context.flyingGolemDeathrattles[ownerId].has(source.instanceId) ||
-    context.powderKegDeathrattles[ownerId].has(source.instanceId);
-  if (triggeredDeathrattle) {
-    const persistentOwner = persistentCombatOwner(context, ownerId);
-    if (persistentOwner) {
-      activateThornedPauldrons(persistentOwner);
-    }
-  }
   const enemyId = opponentId(context, ownerId);
   const board = context.boards[ownerId];
   const repetitions =
@@ -34894,16 +35000,12 @@ function resolveOneDeathrattle(
     const hasFlyingGolemDeathrattle =
       context.flyingGolemDeathrattles[ownerId].has(source.instanceId);
     if (hasFlyingGolemDeathrattle) {
-      observeCombatDeathrattleTriggered(context, ownerId, source);
       resolveFlyingGolemPortraitDeathrattle(context, ownerId, source);
-      triggerBloodAmuletAfterDeathrattle(context, ownerId, source);
     }
     const hasPowderKegDeathrattle =
       context.powderKegDeathrattles[ownerId].has(source.instanceId);
     if (hasPowderKegDeathrattle) {
-      observeCombatDeathrattleTriggered(context, ownerId, source);
       resolvePowderKegDeathrattle(context, ownerId, source, death.index);
-      triggerBloodAmuletAfterDeathrattle(context, ownerId, source);
     }
     const crabDeathrattles =
       (source.crabDeathrattles ?? 0) +
@@ -34945,13 +35047,12 @@ function restoreRebornWithDeathtouchApple(
   ownerId: PlayerId,
   reborn: MinionInstance,
 ): void {
-  const trinket = combatTrinketByCardId(
+  for (const trinket of combatTrinketsByCardId(
     context,
     ownerId,
     COMBAT_TRINKET_CARD_IDS.deathtouchApple,
-  );
+  )) {
   if (
-    !trinket ||
     reborn.health <= 0 ||
     reborn.reborn ||
     !minionHasTribe(reborn, "undead")
@@ -34965,7 +35066,7 @@ function restoreRebornWithDeathtouchApple(
     "uses",
   );
   if (uses >= 3) {
-    return;
+    continue;
   }
   reborn.reborn = true;
   setTrinketCombatCounter(
@@ -34986,50 +35087,46 @@ function restoreRebornWithDeathtouchApple(
     minion: cloneMinion(reborn),
     message: `${trinket.name}使复生的${reborn.name}再次获得复生（本场第${uses + 1}次）。`,
   });
+  }
 }
 
 function resummonSoulFermenterBandIfReady(
   context: CombatContext,
   ownerId: PlayerId,
 ): void {
-  const stored = context.soulFermenterDestroyed[ownerId];
-  if (
-    !context.soulFermenterArmed[ownerId] ||
-    stored.length === 0 ||
-    context.boards[ownerId].some((minion) => minion.health > 0)
-  ) {
+  if (context.boards[ownerId].some((minion) => minion.health > 0)) {
     return;
   }
-  const trinket = combatTrinketByCardId(
+  for (const trinket of combatTrinketsByCardId(
     context,
     ownerId,
     COMBAT_TRINKET_CARD_IDS.soulFermenter,
-  );
-  if (!trinket) {
-    return;
-  }
-  context.soulFermenterArmed[ownerId] = false;
-  context.soulFermenterDestroyed[ownerId] = [];
-  pushBattleEvent(context.events, {
-    type: "trigger",
-    actorPlayerId: ownerId,
-    actorInstanceId: trinket.id,
-    targetPlayerId: ownerId,
-    message: `${trinket.name}在你的最后一个随从死亡后重新召唤了被消灭的随从。`,
-  });
-  for (const original of stored) {
-    if (rejectCombatSummonForFullBoard(context, ownerId)) {
-      continue;
+  )) {
+    const stored = context.soulFermenterDestroyed[ownerId][trinket.id] ?? [];
+    if (!context.soulFermenterArmed[ownerId][trinket.id] || stored.length === 0) continue;
+    context.soulFermenterArmed[ownerId][trinket.id] = false;
+    context.soulFermenterDestroyed[ownerId][trinket.id] = [];
+    pushBattleEvent(context.events, {
+      type: "trigger",
+      actorPlayerId: ownerId,
+      actorInstanceId: trinket.id,
+      targetPlayerId: ownerId,
+      message: `${trinket.name}在你的最后一个随从死亡后重新召唤了被消灭的随从。`,
+    });
+    for (const original of stored) {
+      if (rejectCombatSummonForFullBoard(context, ownerId)) {
+        continue;
+      }
+      const returned = cloneOwnedMinionForCombat(context.state, original);
+      insertCombatMinion(
+        context,
+        ownerId,
+        returned,
+        context.boards[ownerId].length,
+        original,
+        `${trinket.name}重新召唤了${returned.name}。`,
+      );
     }
-    const returned = cloneOwnedMinionForCombat(context.state, original);
-    insertCombatMinion(
-      context,
-      ownerId,
-      returned,
-      context.boards[ownerId].length,
-      original,
-      `${trinket.name}重新召唤了${returned.name}。`,
-    );
   }
 }
 
@@ -36360,16 +36457,16 @@ function simulateBattle(
       [playerB.id]: new Set(),
     },
     powderKegDeathrattles: {
-      [playerA.id]: new Set(),
-      [playerB.id]: new Set(),
+      [playerA.id]: new Map(),
+      [playerB.id]: new Map(),
     },
     soulFermenterDestroyed: {
-      [playerA.id]: [],
-      [playerB.id]: [],
+      [playerA.id]: {},
+      [playerB.id]: {},
     },
     soulFermenterArmed: {
-      [playerA.id]: false,
-      [playerB.id]: false,
+      [playerA.id]: {},
+      [playerB.id]: {},
     },
     stitchedSalvagerDestroyed: {
       [playerA.id]: {},
@@ -38461,7 +38558,15 @@ function activateHeroPowerMutating(
   ) {
     return false;
   }
-  if (player.heroPowerActiveThisTurn) {
+  const sousChefLabels = playerTrinkets(player).filter(
+    (trinket) => trinket.cardId === SOUS_CHEF_LABEL_CARD_ID,
+  );
+  const extraUseLabel = sousChefLabels.find(
+    (trinket) =>
+      player.trinketCounters[trinket.id] !== state.round,
+  );
+  const usingExtraHeroPower = player.heroPowerActiveThisTurn;
+  if (usingExtraHeroPower && !extraUseLabel) {
     return false;
   }
   const definition = getHeroPowerDefinition(player.heroPowerId);
@@ -38489,10 +38594,10 @@ function activateHeroPowerMutating(
         return false;
       }
       const uses = heroPowerCounter(player, "blackthornPlays");
-      if (uses >= 2) {
+      if (uses >= 2 && !usingExtraHeroPower) {
         return false;
       }
-      addBloodGems(state, player, 2);
+      addBloodGems(state, player, 2 * heroPowerTriggerMultiplier(player));
       setHeroPowerCounter(player, "blackthornPlays", uses + 1);
       if (uses + 1 < 2) {
         player.heroPowerActiveThisTurn = false;
@@ -38684,7 +38789,7 @@ function activateHeroPowerMutating(
           state,
           player.tavernTier,
         ),
-        1,
+        heroPowerTriggerMultiplier(player),
         { kind: "hand" },
         undefined,
         undefined,
@@ -38707,7 +38812,7 @@ function activateHeroPowerMutating(
           tribe: "mech",
           magnetic: true,
         } as DiscoverFilter,
-        1,
+        heroPowerTriggerMultiplier(player),
         { kind: "hand" },
         undefined,
         undefined,
@@ -38729,7 +38834,7 @@ function activateHeroPowerMutating(
           maximumTier: player.tavernTier,
           tribe: "dragon",
         } as DiscoverFilter,
-        1,
+        heroPowerTriggerMultiplier(player),
         { kind: "hand" },
         undefined,
         undefined,
@@ -38799,7 +38904,7 @@ function activateHeroPowerMutating(
         const selected = bestMinionByScore(player, candidates);
         addCardToHand(state, player, selected);
         resolveTriples(state, player);
-        applyAfterDiscoverTrinkets(state, player, selected.definitionId);
+        applyAfterDiscoverTrinkets(state, player, selected);
       } else {
         state.pendingInteraction = {
           kind: "discover",
@@ -38854,7 +38959,7 @@ function activateHeroPowerMutating(
           const selected = bestMinionByScore(player, options);
           addCardToHand(state, player, selected);
           resolveTriples(state, player);
-          applyAfterDiscoverTrinkets(state, player, selected.definitionId);
+          applyAfterDiscoverTrinkets(state, player, selected);
         } else {
           state.pendingInteraction = {
             kind: "discover",
@@ -39164,6 +39269,10 @@ function activateHeroPowerMutating(
       return false;
   }
 
+  if (usingExtraHeroPower && extraUseLabel) {
+    player.trinketCounters[extraUseLabel.id] = state.round;
+  }
+  player.gold += sousChefLabels.length;
   applyGoldThresholdTrinket(state, player);
   return true;
 }
@@ -39178,6 +39287,17 @@ function canActivateHeroPowerOnClone(
   return probePlayer
     ? activateHeroPowerMutating(probe, probePlayer, targetInstanceId)
     : false;
+}
+
+export function heroPowerHasAvailableUse(
+  state: GameState,
+  playerId: PlayerId,
+): boolean {
+  const player = findPlayer(state, playerId);
+  return !!player && (!player.heroPowerActiveThisTurn || playerTrinkets(player).some(
+    (trinket) => trinket.cardId === SOUS_CHEF_LABEL_CARD_ID &&
+      player.trinketCounters[trinket.id] !== state.round,
+  ));
 }
 
 export function getHeroPowerActivationQuote(

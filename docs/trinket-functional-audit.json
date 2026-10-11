@@ -1,0 +1,4249 @@
+{
+  "schemaVersion": 1,
+  "scope": {
+    "auditDate": "2026-10-11",
+    "patch": "36.0.3",
+    "build": 247416,
+    "locale": "zhCN",
+    "snapshot": "lib/game/generated/battlegrounds-trinkets-36.0.3-247416.zhCN.json",
+    "basis": "逐张卡面、源码映射和实际功能测试证据；固定快照审计，不是最新正式服验证。",
+    "reviewedMeaning": "reviewed仅表示已核对所列实现和证据，不代表穷尽所有英雄、牌、触发顺序、复制、存档或AI组合，也不保证无未知缺陷。",
+    "initialStatusMeaning": "保留组记录中的initialStatus；缺字段时仅根据本轮明确先失败后修复的专项回归重建bug历史，否则回填当前状态并标注来源。",
+    "partialMeaning": "partial通过limitationKind区分源码未覆盖分支、赠送或随机取得内容仍未完整实现、以及缺专项验证。"
+  },
+  "source": {
+    "patch": "36.0.3",
+    "build": 247416,
+    "locale": "zhCN",
+    "cutoffDate": "2026-08-02",
+    "officialCardLibrary": {
+      "url": "https://hearthstone.blizzard.com/en-us/api/cards?gameMode=battlegrounds&bgCardType=trinket&pageSize=450",
+      "sha256": "F5BCBCCFA352F9A6568E05D4DBC4C919F586279BFBCE2305227BB9CCF0A9C565"
+    },
+    "hearthstoneJson": {
+      "url": "https://api.hearthstonejson.com/v1/247416/zhCN/cards.json",
+      "sha256": "5E48186C2E1702B474088958978D560026A6CDC3990F181CAB790D42A7727013"
+    }
+  },
+  "summary": {
+    "total": 204,
+    "lesser": 98,
+    "greater": 106,
+    "reviewed": 182,
+    "bug": 1,
+    "partial": 21,
+    "initialBug": 29,
+    "resolvedInitialBug": 28,
+    "partialByLimitation": {
+      "implementation-gap": 2,
+      "indirect-unimplemented": 12,
+      "verification-gap": 7
+    }
+  },
+  "trinkets": [
+    {
+      "index": 1,
+      "id": "lesser-trinket-bg30-magicitem-301",
+      "cardId": "BG30_MagicItem_301",
+      "name": "永恒肖像",
+      "tier": "lesser",
+      "description": "获取一张永恒骑士。战斗开始时：使你的永恒骑士获得嘲讽和复生。",
+      "status": "reviewed",
+      "initialStatus": "reviewed",
+      "initialStatusSource": "current-status-fallback",
+      "limitationKind": "none",
+      "implementation": [
+        "applyOfficialTrinketOnAcquire",
+        "applyStartOfCombatTrinkets"
+      ],
+      "tests": [
+        "tests/trinket-combat-effects.test.ts"
+      ],
+      "notes": "获取真实永恒骑士；开战只为既有骑士赋予嘲讽/复生，战斗副本不永久写回。已有获取及战斗事件测试。"
+    },
+    {
+      "index": 2,
+      "id": "lesser-trinket-bg30-magicitem-303",
+      "cardId": "BG30_MagicItem_303",
+      "name": "自动机肖像",
+      "tier": "lesser",
+      "description": "战斗开始时：当你有空位时，召唤一个星元自动机。",
+      "status": "reviewed",
+      "initialStatus": "reviewed",
+      "initialStatusSource": "group-record",
+      "limitationKind": "none",
+      "implementation": [
+        "summonAutomatonPortraitWhenSpace",
+        "applyStartOfCombatTrinkets"
+      ],
+      "tests": [
+        "tests/trinket-combat-effects.test.ts"
+      ],
+      "notes": "One summon per combat; a full warband waits for the first opening. Summon and wherever-stat paths are shared with AI; combat-only entity does not enter the shared pool."
+    },
+    {
+      "index": 3,
+      "id": "lesser-trinket-bg30-magicitem-410",
+      "cardId": "BG30_MagicItem_410",
+      "name": "鬃尖笔墨套装",
+      "tier": "lesser",
+      "description": "复仇（3）：在本局对战中，你的鲜血宝石使随从额外获得+1生命值。",
+      "status": "reviewed",
+      "initialStatus": "reviewed",
+      "initialStatusSource": "current-status-fallback",
+      "limitationKind": "none",
+      "implementation": [
+        "applyStartOfCombatTrinkets",
+        "advanceCombatDeathTrinkets",
+        "advanceTrinketDeathThreshold",
+        "improveBloodGemsFromTrinket"
+      ],
+      "tests": [
+        "tests/trinket-combat-effects.test.ts"
+      ],
+      "notes": "复仇3逐次提高宝石生命；进度仅当前战斗，成长写回拥有者，幽灵隔离且提图斯不倍增复仇计数。"
+    },
+    {
+      "index": 4,
+      "id": "lesser-trinket-bg30-magicitem-411",
+      "cardId": "BG30_MagicItem_411",
+      "name": "猪猪储蓄罐",
+      "tier": "lesser",
+      "description": "战斗开始时：\n使你的野猪人获得“亡语：获取2张鲜血宝石。”",
+      "status": "reviewed",
+      "initialStatus": "reviewed",
+      "initialStatusSource": "current-status-fallback",
+      "limitationKind": "none",
+      "implementation": [
+        "applyStartOfCombatTrinkets",
+        "hoggyBankDeathrattles",
+        "resolveHoggyBankDeathrattle"
+      ],
+      "tests": [
+        "tests/trinket-combat-effects.test.ts"
+      ],
+      "notes": "开战为野猪人记录额外亡语；实际触发各给2宝石，满手烧牌，提图斯倍率走亡语链。"
+    },
+    {
+      "index": 5,
+      "id": "lesser-trinket-bg30-magicitem-416",
+      "cardId": "BG30_MagicItem_416",
+      "name": "古神信物",
+      "tier": "lesser",
+      "description": "塑造法术：选择一个随从，将其变形成为你另选的高一级的随从。",
+      "status": "reviewed",
+      "initialStatus": "reviewed",
+      "initialStatusSource": "group-record",
+      "limitationKind": "none",
+      "implementation": [
+        "TRINKET_SPELLCRAFT_DEFINITION_ID_BY_CARD_ID",
+        "queueTrinketSpellcraft",
+        "beginDiscoverInteraction"
+      ],
+      "tests": [
+        "tests/trinket-putricide-old-gods.test.ts"
+      ],
+      "notes": "Exact higher-tier shared-pool choice, target replacement, player/AI synchronous choice, full-hand Spellcraft queue, both saved choice stages reviewed."
+    },
+    {
+      "index": 6,
+      "id": "lesser-trinket-bg30-magicitem-420",
+      "cardId": "BG30_MagicItem_420",
+      "name": "麦迪文之书",
+      "tier": "lesser",
+      "description": "发现一张\n酒馆法术牌。在每个回合开始时，再发现一张。",
+      "status": "reviewed",
+      "initialStatus": "reviewed",
+      "initialStatusSource": "current-status-fallback",
+      "limitationKind": "none",
+      "implementation": [
+        "queueBookOfMedivhDiscoveries",
+        "flushPendingBookOfMedivhDiscoveries",
+        "beginTavernSpellDiscoverInteraction"
+      ],
+      "tests": [
+        "tests/trinket-book-of-medivh.test.ts"
+      ],
+      "notes": "获取时和每回合开始各发现1张不高于酒馆等级的法术；排队选择与JSON恢复覆盖，AI同步选择，发现不占法术共享池。"
+    },
+    {
+      "index": 7,
+      "id": "lesser-trinket-bg30-magicitem-422",
+      "cardId": "BG30_MagicItem_422",
+      "name": "游学者卷轴",
+      "tier": "lesser",
+      "description": "每当你对一个随从施放法术时，使其获得+4/+4。",
+      "status": "partial",
+      "initialStatus": "partial",
+      "initialStatusSource": "current-status-fallback",
+      "limitationKind": "verification-gap",
+      "implementation": [
+        "applyAfterTargetedSpellCastTrinkets",
+        "triggerRecruitTargetedSpellCast"
+      ],
+      "tests": [
+        "tests/trinket-recruit-trigger-effects.test.ts"
+      ],
+      "notes": "招募阶段随从定向酒馆法术/塑造法术/宝石均+4/+4有测试；战斗阶段自动对随从施法未见此饰品对应路径，需要补战斗覆盖，不能据招募测试宣称全部施法场景完整。 此处仅确认招募/战斗实现入口不同；尚未用合法行为复现，也未确认自动施法是否归属于卡面的玩家施法触发，因此列为待验证边界，不能断言为已复现缺陷。"
+    },
+    {
+      "index": 8,
+      "id": "lesser-trinket-bg30-magicitem-423",
+      "cardId": "BG30_MagicItem_423",
+      "name": "旅店老板的酒杯",
+      "tier": "lesser",
+      "description": "每当酒馆刷新时，会额外提供一个更高等级的随从。",
+      "status": "reviewed",
+      "initialStatus": "reviewed",
+      "initialStatusSource": "group-record",
+      "limitationKind": "none",
+      "implementation": [
+        "applyExtraTavernMinionTrinkets",
+        "addExtraTavernMinion"
+      ],
+      "tests": [
+        "tests/trinket-recruit-economy-effects-batch4.test.ts"
+      ],
+      "notes": "Extra exact next-tier offer on a real refresh; normal maximum Tavern Tier is respected. Adds a shared-pool entity. Acquisition alone does not refresh."
+    },
+    {
+      "index": 9,
+      "id": "lesser-trinket-bg30-magicitem-425",
+      "cardId": "BG30_MagicItem_425",
+      "name": "艾泽拉斯星球仪",
+      "tier": "lesser",
+      "description": "每两个回合，在回合开始时获得2枚铸币并发现一个等级6的随从。（还剩2回合！）",
+      "status": "reviewed",
+      "initialStatus": "reviewed",
+      "initialStatusSource": "current-status-fallback",
+      "limitationKind": "none",
+      "implementation": [
+        "applyOfficialTrinketAtStartOfTurn",
+        "beginDiscoverInteraction"
+      ],
+      "tests": [
+        "tests/trinket-simple-effects.test.ts"
+      ],
+      "notes": "获取时不立即奖励；每两个招募回合开始+2金币并发现6级随从，重置计数并循环；发现候选按共享池预留。"
+    },
+    {
+      "index": 10,
+      "id": "lesser-trinket-bg30-magicitem-426",
+      "cardId": "BG30_MagicItem_426",
+      "name": "多彩罗盘",
+      "tier": "lesser",
+      "description": "随机获取一张与你战队相符类型的随从牌。在每个回合开始时，再获取一张。",
+      "status": "reviewed",
+      "initialStatus": "reviewed",
+      "initialStatusSource": "current-status-fallback",
+      "limitationKind": "none",
+      "implementation": [
+        "addRandomWarbandTypeMinionToHand",
+        "applyOfficialTrinketAtStartOfTurn"
+      ],
+      "tests": [
+        "tests/trinket-recruit-trigger-effects-batch4.test.ts"
+      ],
+      "notes": "初始/每回合获取1匹配主流类型随从，读取当前战隊；共享池抽取，空池/满手处理走统一获取路径。"
+    },
+    {
+      "index": 11,
+      "id": "lesser-trinket-bg30-magicitem-430",
+      "cardId": "BG30_MagicItem_430",
+      "name": "摇滚音乐盒",
+      "tier": "lesser",
+      "description": "随机获取一张\n战吼随从牌。在每个回合开始时，再获取一张。",
+      "status": "reviewed",
+      "initialStatus": "reviewed",
+      "initialStatusSource": "group-record",
+      "limitationKind": "none",
+      "implementation": [
+        "applyRepeatableOfficialTrinketReward",
+        "addRandomSharedPoolMinionToHand"
+      ],
+      "tests": [
+        "tests/trinket-simple-effects.test.ts"
+      ],
+      "notes": "Immediate and each turn-start Battlecry card, tier and active-tribe filtering, pool debit, full hand guarded."
+    },
+    {
+      "index": 12,
+      "id": "lesser-trinket-bg30-magicitem-434",
+      "cardId": "BG30_MagicItem_434",
+      "name": "大教堂模型",
+      "tier": "lesser",
+      "description": "每个回合你的第一个法术会额外施放一次。",
+      "status": "reviewed",
+      "initialStatus": "reviewed",
+      "initialStatusSource": "current-status-fallback",
+      "limitationKind": "none",
+      "implementation": [
+        "extraFirstSpellCasts",
+        "extraSpellcraftCasts",
+        "consumePerRoundTrinketTrigger"
+      ],
+      "tests": [
+        "tests/trinket-recruit-trigger-effects-batch3.test.ts"
+      ],
+      "notes": "每回合第一个法术额外施放1次，覆盖宝石、塑造抉择、酒馆法术和发现续链；轮次编码计数避免跨回合错误保留。"
+    },
+    {
+      "index": 13,
+      "id": "lesser-trinket-goldenizer-supply",
+      "cardId": "BG30_MagicItem_435",
+      "name": "点金补给",
+      "tier": "lesser",
+      "description": "每3个回合，在回合结束时，获取一张点金术。（还剩3回合！）",
+      "status": "reviewed",
+      "initialStatus": "reviewed",
+      "initialStatusSource": "current-status-fallback",
+      "limitationKind": "none",
+      "implementation": [
+        "applyEndOfTurnTrinkets",
+        "goldenizerSupply"
+      ],
+      "tests": [
+        "tests/lobby-systems.test.ts"
+      ],
+      "notes": "获取当回合算第1个结束回合，每3个回合给1张点金术；计数在玩家饰品字典跨回合保留。"
+    },
+    {
+      "index": 14,
+      "id": "lesser-trinket-bg30-magicitem-437",
+      "cardId": "BG30_MagicItem_437",
+      "name": "天灾之杖",
+      "tier": "lesser",
+      "description": "复仇（5）：\n随机使一个友方亡灵获得复生。",
+      "status": "reviewed",
+      "initialStatus": "reviewed",
+      "initialStatusSource": "group-record",
+      "limitationKind": "none",
+      "implementation": [
+        "COMBAT_TRINKET_CARD_IDS.staffOfTheScourge",
+        "trinketCombatCounter"
+      ],
+      "tests": [
+        "tests/trinket-combat-effects.test.ts"
+      ],
+      "notes": "Exactly five friendly deaths; eligible living Undead without Reborn selected. Deathrattle multipliers do not multiply death progress."
+    },
+    {
+      "index": 15,
+      "id": "lesser-trinket-bg30-magicitem-544",
+      "cardId": "BG30_MagicItem_544",
+      "name": "诺米标签",
+      "tier": "lesser",
+      "description": "在你使用一张元素牌后，使酒馆中的元素在本局对战中获得+2/+2。",
+      "status": "reviewed",
+      "initialStatus": "reviewed",
+      "initialStatusSource": "current-status-fallback",
+      "limitationKind": "none",
+      "implementation": [
+        "NOMI_TAG_BUFF_BY_CARD_ID",
+        "applyAfterMinionPlayedTrinkets",
+        "applyPersistentTavernTypeBuff"
+      ],
+      "tests": [
+        "tests/trinket-recruit-trigger-effects.test.ts"
+      ],
+      "notes": "每次真实使用元素或全部类型随从，使当前及未来酒馆元素永久+2/+2；不是购买触发，永久类型增益进入状态。"
+    },
+    {
+      "index": 16,
+      "id": "lesser-trinket-bg30-magicitem-547",
+      "cardId": "BG30_MagicItem_547",
+      "name": "舒适的棺椁",
+      "tier": "lesser",
+      "description": "在你施放一个酒馆\n法术后，你的亡灵在本局对战中拥有+1攻击力\n（无论它们在哪）。",
+      "status": "partial",
+      "initialStatus": "partial",
+      "initialStatusSource": "current-status-fallback",
+      "limitationKind": "verification-gap",
+      "implementation": [
+        "applyAfterTavernSpellCastTrinkets",
+        "recordRecruitTavernSpellCast",
+        "undeadArmyAttackBonus"
+      ],
+      "tests": [
+        "tests/trinket-recruit-trigger-effects.test.ts"
+      ],
+      "notes": "招募施放酒馆法术对已有/未来亡灵全局+1攻击有测试；战斗内酒馆法术后的饰品成长未见调用此函数，需明确覆盖自动施法边界。 此处仅确认招募/战斗实现入口不同；尚未用合法行为复现，也未确认自动施法是否归属于卡面的玩家施法触发，因此列为待验证边界，不能断言为已复现缺陷。"
+    },
+    {
+      "index": 17,
+      "id": "lesser-trinket-bg30-magicitem-700",
+      "cardId": "BG30_MagicItem_700",
+      "name": "死亡护命匣",
+      "tier": "lesser",
+      "description": "发现一个亡语随从。每场战斗中你的第一个亡语额外触发一次。",
+      "status": "reviewed",
+      "initialStatus": "reviewed",
+      "initialStatusSource": "group-record",
+      "limitationKind": "none",
+      "implementation": [
+        "applyOfficialTrinketOnAcquire",
+        "COMBAT_TRINKET_CARD_IDS.deathlyPhylactery"
+      ],
+      "tests": [
+        "tests/trinket-combat-effects.test.ts"
+      ],
+      "notes": "Deathrattle Discover and first triggered friendly Deathrattle extra execution; per-combat budget resets, generated-granted Deathrattle path is included."
+    },
+    {
+      "index": 18,
+      "id": "lesser-trinket-bg30-magicitem-703",
+      "cardId": "BG30_MagicItem_703",
+      "name": "神秘魔方",
+      "tier": "lesser",
+      "description": "免费从2个新的小型饰品中选择一个以替换本饰品。在每个回合开始时，重复此效果。",
+      "status": "reviewed",
+      "initialStatus": "reviewed",
+      "initialStatusSource": "current-status-fallback",
+      "limitationKind": "none",
+      "implementation": [
+        "queueMysteryCubeReplacement",
+        "flushPendingMysteryCubeReplacements",
+        "replaceMysteryCubeWithLesserTrinket",
+        "applyStartOfTurnTrinkets"
+      ],
+      "tests": [
+        "tests/trinket-mystery-cube-kaleidoscope.test.ts"
+      ],
+      "notes": "获取后免费二选一替换；之后先结算当前饰品回合开始效果，再重复替换；alias独立持久化，AI同步选择。"
+    },
+    {
+      "index": 19,
+      "id": "lesser-trinket-oilcan",
+      "cardId": "BG30_MagicItem_705",
+      "name": "调酒机器人的油壶",
+      "tier": "lesser",
+      "description": "升级酒馆所需的铸币减少（3）枚。在每个回合开始时，重复此效果。",
+      "status": "reviewed",
+      "initialStatus": "reviewed",
+      "initialStatusSource": "current-status-fallback",
+      "limitationKind": "none",
+      "implementation": [
+        "applyTrinketDefinitionEffects",
+        "applyStartOfTurnTrinkets"
+      ],
+      "tests": [
+        "tests/lobby-systems.test.ts"
+      ],
+      "notes": "购买即降低升本费用3，以后每回合再降低3；到最高等级不累积；共享玩家/AI升本费用函数。"
+    },
+    {
+      "index": 20,
+      "id": "lesser-trinket-bg30-magicitem-706",
+      "cardId": "BG30_MagicItem_706",
+      "name": "映像吊坠",
+      "tier": "lesser",
+      "description": "获取一个随机友方随从的一张原始版复制。在每个回合开始时，重复此效果。",
+      "status": "reviewed",
+      "initialStatus": "reviewed",
+      "initialStatusSource": "group-record",
+      "limitationKind": "none",
+      "implementation": [
+        "addRandomFriendlyPlainCopy",
+        "addGeneratedMinionCopyToHand"
+      ],
+      "tests": [
+        "tests/trinket-simple-effects.test.ts"
+      ],
+      "notes": "Random board source produces non-golden plain identity, no enchantment/attachment copy. Acquisition plus every start; generated zero pool copies and full-hand guard."
+    },
+    {
+      "index": 21,
+      "id": "lesser-trinket-bg30-magicitem-707",
+      "cardId": "BG30_MagicItem_707",
+      "name": "提克特斯标签",
+      "tier": "lesser",
+      "description": "发现一个等级3的暗月奖品。每三个回合，在回合开始时，重复此效果。（还剩3回合！）",
+      "status": "reviewed",
+      "initialStatus": "reviewed",
+      "initialStatusSource": "current-status-fallback",
+      "limitationKind": "none",
+      "implementation": [
+        "queueTickatusTagPrize",
+        "flushPendingTickatusTagPrizes",
+        "beginDarkmoonPrizeDiscoverInteraction"
+      ],
+      "tests": [
+        "tests/trinket-darkmoon-prizes.test.ts"
+      ],
+      "notes": "获取时发现3级暗月奖品，之后每3回合开始重复；候选与排队计数可恢复，AI自动选择施放，满手有烧牌边界。"
+    },
+    {
+      "index": 22,
+      "id": "lesser-trinket-bg30-magicitem-713",
+      "cardId": "BG30_MagicItem_713",
+      "name": "泣血之心",
+      "tier": "lesser",
+      "description": "在8个友方随从\n死亡后，随机获取一张亡灵牌。（还剩8个！）",
+      "status": "reviewed",
+      "initialStatus": "reviewed",
+      "initialStatusSource": "current-status-fallback",
+      "limitationKind": "none",
+      "implementation": [
+        "advanceCombatDeathTrinkets",
+        "advanceTrinketDeathThreshold"
+      ],
+      "tests": [
+        "tests/trinket-combat-effects.test.ts",
+        "tests/trinket-audit-group1.test.ts"
+      ],
+      "notes": "8友方死获取亡灵；已独立验证4死+下次4死跨战斗累计，满手触发消耗进度，生成牌受等级/开放种族限制。"
+    },
+    {
+      "index": 23,
+      "id": "lesser-trinket-bg30-magicitem-804",
+      "cardId": "BG30_MagicItem_804",
+      "name": "古老的许愿叉骨",
+      "tier": "lesser",
+      "description": "你的英雄技能会触发两次。",
+      "status": "bug",
+      "initialStatus": "bug",
+      "initialStatusSource": "group-record",
+      "limitationKind": "known-bug",
+      "implementation": [
+        "heroPowerTriggerMultiplier",
+        "activateHeroPowerMutating"
+      ],
+      "tests": [
+        "tests/trinket-high-coupling-effects.test.ts",
+        "tests/trinket-audit-group2.test.ts"
+      ],
+      "notes": "明确剩余缺陷：古老的许愿叉骨未使迦拉克隆按第一次替换后的新实体及新等级再执行一次升级发现。黑荆棘的双倍宝石已修；伊莉斯、米尔菲丝、阿莱克丝塔萨的主动发现次数已接入英雄技能倍率，伊莉斯真实两次发现回归通过，且只扣一次费用与使用次数。旧组报告中“伊莉斯仍失败”的结论已由后续修复取代；不能把当前饰品整体宣称无缺陷。",
+      "previousNotes": "PARTIALLY FIXED: Blackthorn active reward now correctly grants 4 Gems for one cost/use and existing passive triggers double. A new actual Elise test fails: first Discover resolves but no second choice appears. Other current playable active effects are activeGiveDivineShield (George; same-target shield idempotent), activeReplaceHigherTier (Galakrond; needs sequential higher-tier choices), activeDiscoverMagneticMech (Millificent), activeDiscoverCurrentTierCostIncreases (Elise), activeDiscoverDragonTier4 (Alexstrasza). The three reward Discovers should use heroPowerTriggerMultiplier without repeated cost/use consumption. Galakrond needs updated target identity/tier after its first replacement; static two picks from the same filter would be incorrect. Unsupported random-Tavern-spell hero is excluded from current lobbies."
+    },
+    {
+      "index": 24,
+      "id": "lesser-trinket-bg30-magicitem-821",
+      "cardId": "BG30_MagicItem_821",
+      "name": "鱼的肖像",
+      "tier": "lesser",
+      "description": "获取一张恩佐斯的鱼。",
+      "status": "partial",
+      "initialStatus": "partial",
+      "initialStatusSource": "current-status-fallback",
+      "limitationKind": "indirect-unimplemented",
+      "implementation": [
+        "applyOfficialTrinketOnAcquire",
+        "addGeneratedMinionCopyToHand",
+        "getMinionDefinition(TB_BaconShop_HP_105t)"
+      ],
+      "tests": [
+        "tests/trinket-acquisition-portraits.test.ts"
+      ],
+      "notes": "能获取固定恩佐斯的鱼，零共享池所有权；赠送牌effectSupport=partial，复制不同友方亡语的完整行为仍不应宣称已实现。"
+    },
+    {
+      "index": 25,
+      "id": "lesser-trinket-bg30-magicitem-841",
+      "cardId": "BG30_MagicItem_841",
+      "name": "辐光护手",
+      "tier": "lesser",
+      "description": "酒馆中的随从拥有+3/+3。酒馆中始终会有7张牌。",
+      "status": "reviewed",
+      "initialStatus": "reviewed",
+      "initialStatusSource": "current-status-fallback",
+      "limitationKind": "none",
+      "implementation": [
+        "refillShopMinionSlotIfNeeded",
+        "applyOfficialTrinketOnAcquire",
+        "TAVERN_FAN_CARD_ID"
+      ],
+      "tests": [
+        "tests/trinket-recruit-economy-effects-batch4.test.ts"
+      ],
+      "notes": "已在本轮之前修补购买随从/法术、吞食、偷取后补至7总报价；保留原报价/冻结/属性；满手失败及空共享池原子处理有6新增测试。"
+    },
+    {
+      "index": 26,
+      "id": "lesser-trinket-goblin-wallet",
+      "cardId": "BG30_MagicItem_847",
+      "name": "地精钱包",
+      "tier": "lesser",
+      "description": "在每个回合\n结束时，你的铸币上限提高1枚。",
+      "status": "reviewed",
+      "initialStatus": "reviewed",
+      "initialStatusSource": "group-record",
+      "limitationKind": "none",
+      "implementation": [
+        "CURRENT_RULE_OVERRIDES",
+        "applyEndOfTurnTrinkets"
+      ],
+      "tests": [
+        "tests/lobby-systems.test.ts"
+      ],
+      "notes": "growMaxGold count 1 occurs at end, multiplied by end-of-turn repetition; maxGold persists independently from the next turn's refill."
+    },
+    {
+      "index": 27,
+      "id": "lesser-trinket-bg30-magicitem-868",
+      "cardId": "BG30_MagicItem_868",
+      "name": "回溯者肖像",
+      "tier": "lesser",
+      "description": "获取一张灵魂回溯者和一张愤怒编织者。你的灵魂回溯者还会获得攻击力。",
+      "status": "reviewed",
+      "initialStatus": "reviewed",
+      "initialStatusSource": "current-status-fallback",
+      "limitationKind": "none",
+      "implementation": [
+        "applyOfficialTrinketOnAcquire",
+        "damageRecruitPlayer",
+        "REWINDER_PORTRAIT_CARD_ID"
+      ],
+      "tests": [
+        "tests/trinket-recruit-trigger-effects-batch4.test.ts"
+      ],
+      "notes": "获取灵魂回溯者与愤怒编织者；每个灵魂回溯者按对应生命成长额同时获得攻击，金色倍率逐源结算。"
+    },
+    {
+      "index": 28,
+      "id": "lesser-trinket-bg30-magicitem-888",
+      "cardId": "BG30_MagicItem_888",
+      "name": "纪念品货架",
+      "tier": "lesser",
+      "description": "当你购买大型饰品时，本饰品变形成为它的复制。",
+      "status": "reviewed",
+      "initialStatus": "bug",
+      "initialStatusSource": "confirmed-regression",
+      "limitationKind": "none",
+      "implementation": [
+        "transformSouvenirStandAfterGreaterPurchase",
+        "createTrinketAliasDefinitionId",
+        "combatTrinketByCardId"
+      ],
+      "tests": [
+        "tests/trinket-high-coupling-effects.test.ts",
+        "tests/trinket-audit-group1.test.ts"
+      ],
+      "notes": "已修复纪念品复制乌祖尔/铁炉堡/猛猿持续效果，专项通过；复审发现的灵魂酵罐与火药桶共享状态也已改为按副本保存/按真实授予者执行，两项真实Souvenir购买回归通过。尚非穷尽所有大饰品复制组合，未完整间接牌在各自partial项列出。"
+    },
+    {
+      "index": 29,
+      "id": "lesser-trinket-bg30-magicitem-891",
+      "cardId": "BG30_MagicItem_891",
+      "name": "旅途兑换券",
+      "tier": "lesser",
+      "description": "2回合后，选择一个大型饰品并购买以替换本饰品。（还剩2回合！）",
+      "status": "reviewed",
+      "initialStatus": "reviewed",
+      "initialStatusSource": "group-record",
+      "limitationKind": "none",
+      "implementation": [
+        "applyOfficialTrinketAtStartOfTurn",
+        "replaceTripVouchersWithGreaterTrinket"
+      ],
+      "tests": [
+        "tests/trinket-high-coupling-effects.test.ts"
+      ],
+      "notes": "Two starts after acquisition produce four greater choices, payment replaces vouchers, normal greater slot remains separate; saved replacement interaction verified."
+    },
+    {
+      "index": 30,
+      "id": "lesser-trinket-bg30-magicitem-900",
+      "cardId": "BG30_MagicItem_900",
+      "name": "滑翔龙翼",
+      "tier": "lesser",
+      "description": "每当你使用一张牌时，使一条友方的龙获得+4/+4。",
+      "status": "reviewed",
+      "initialStatus": "reviewed",
+      "initialStatusSource": "current-status-fallback",
+      "limitationKind": "none",
+      "implementation": [
+        "DRAGONWING_GLIDER_BUFF_BY_CARD_ID",
+        "applyAfterMinionPlayedTrinkets",
+        "finishCardPlayed"
+      ],
+      "tests": [
+        "tests/trinket-recruit-trigger-effects.test.ts"
+      ],
+      "notes": "每次真实使用任意牌随机强化友方龙+4/+4，包括法术；没有龙时不造目标，全部类型识别，失败使用不推进。"
+    },
+    {
+      "index": 31,
+      "id": "lesser-trinket-bg30-magicitem-902",
+      "cardId": "BG30_MagicItem_902",
+      "name": "神圣重槌",
+      "tier": "lesser",
+      "description": "战斗开始时：使你最左边和最右边的随从获得圣盾。",
+      "status": "reviewed",
+      "initialStatus": "reviewed",
+      "initialStatusSource": "current-status-fallback",
+      "limitationKind": "none",
+      "implementation": [
+        "applyStartOfCombatTrinkets"
+      ],
+      "tests": [
+        "tests/trinket-combat-effects.test.ts"
+      ],
+      "notes": "准确物理最左/最右各圣盾；单随从去重，同一实体已有盾保持，战斗临时副本。"
+    },
+    {
+      "index": 32,
+      "id": "lesser-trinket-bg30-magicitem-914",
+      "cardId": "BG30_MagicItem_914",
+      "name": "鱼人语实用手册",
+      "tier": "lesser",
+      "description": "在你使用一张随从牌后，使你手牌中最左边的随从牌获得+3/+3。",
+      "status": "reviewed",
+      "initialStatus": "reviewed",
+      "initialStatusSource": "group-record",
+      "limitationKind": "none",
+      "implementation": [
+        "MURLOC_MANUAL_BUFF_BY_CARD_ID",
+        "applyAfterMinionPlayedTrinkets"
+      ],
+      "tests": [
+        "tests/trinket-recruit-trigger-effects.test.ts"
+      ],
+      "notes": "After an actual minion play and its Battlecry, only the leftmost remaining hand minion receives +3/+3. Spell cards are skipped and no random hand target chosen."
+    },
+    {
+      "index": 33,
+      "id": "lesser-trinket-bg30-magicitem-917",
+      "cardId": "BG30_MagicItem_917",
+      "name": "锈蚀的三叉戟",
+      "tier": "lesser",
+      "description": "战斗开始时：使你的纳迦获得“亡语：随机获取一张塑造法术的法术牌。”",
+      "status": "reviewed",
+      "initialStatus": "reviewed",
+      "initialStatusSource": "current-status-fallback",
+      "limitationKind": "none",
+      "implementation": [
+        "applyStartOfCombatTrinkets",
+        "resolveRustyTridentDeathrattle"
+      ],
+      "tests": [
+        "tests/trinket-combat-effects.test.ts"
+      ],
+      "notes": "开战时只给当时纳迦临时附加获取塑造法术亡语；死亡真实生成牌入持久手牌，提图斯逐次结算，幽灵不写原玩家。"
+    },
+    {
+      "index": 34,
+      "id": "lesser-trinket-bg30-magicitem-924",
+      "cardId": "BG30_MagicItem_924",
+      "name": "藏宝海湾美酒",
+      "tier": "lesser",
+      "description": "每当你花费铸币时，使一个友方海盗获得+4/+3。",
+      "status": "reviewed",
+      "initialStatus": "reviewed",
+      "initialStatusSource": "current-status-fallback",
+      "limitationKind": "none",
+      "implementation": [
+        "applyAfterGoldSpentTrinkets",
+        "spendGold"
+      ],
+      "tests": [
+        "tests/trinket-recruit-trigger-effects.test.ts"
+      ],
+      "notes": "每真实花费金币的交易只触发1次，随机友方海盗+4/+3；零费用/失败交易不触发，所有费用共享spendGold。"
+    },
+    {
+      "index": 35,
+      "id": "lesser-trinket-bg30-magicitem-931",
+      "cardId": "BG30_MagicItem_931",
+      "name": "幸运猫咪",
+      "tier": "lesser",
+      "description": "在7个友方随从死亡后，\n随机获取一张野兽牌。（还剩7个！）",
+      "status": "reviewed",
+      "initialStatus": "reviewed",
+      "initialStatusSource": "group-record",
+      "limitationKind": "none",
+      "implementation": [
+        "COMBAT_TRINKET_CARD_IDS.luckyTabby",
+        "advanceTrinketDeathThreshold"
+      ],
+      "tests": [
+        "tests/trinket-combat-effects.test.ts"
+      ],
+      "notes": "Seven-death threshold repeats, fourteen-death chain yields two real Beast rewards; generated reward tier and active tribe filter/full hand reviewed."
+    },
+    {
+      "index": 36,
+      "id": "lesser-trinket-bg30-magicitem-973",
+      "cardId": "BG30_MagicItem_973",
+      "name": "随从诱饵",
+      "tier": "lesser",
+      "description": "每当酒馆刷新时，总会额外提供2个\n与你战队相符类型的随从。",
+      "status": "reviewed",
+      "initialStatus": "reviewed",
+      "initialStatusSource": "current-status-fallback",
+      "limitationKind": "none",
+      "implementation": [
+        "applyExtraTavernMinionTrinkets",
+        "addExtraTavernMinion",
+        "drawMatchingFromPool"
+      ],
+      "tests": [
+        "tests/trinket-recruit-economy-effects-batch4.test.ts"
+      ],
+      "notes": "每次真实酒馆刷新按战队代表类型追加2个池内随从；空战队不造类型，活跃种族和池余量限制，补位不误算手动刷新。"
+    },
+    {
+      "index": 37,
+      "id": "lesser-trinket-bg30-magicitem-981",
+      "cardId": "BG30_MagicItem_981",
+      "name": "达拉然之眼",
+      "tier": "lesser",
+      "description": "每当一个没有类型的友方随从死亡时，随机获取一张酒馆法术牌。",
+      "status": "reviewed",
+      "initialStatus": "reviewed",
+      "initialStatusSource": "current-status-fallback",
+      "limitationKind": "none",
+      "implementation": [
+        "advanceCombatDeathTrinkets",
+        "gainRandomTavernSpellFromTrinket"
+      ],
+      "tests": [
+        "tests/trinket-combat-effects.test.ts"
+      ],
+      "notes": "无类型死亡触发随机酒馆法术；typed被排除，满手报告失败，幽灵隔离使用persistentCombatOwner。"
+    },
+    {
+      "index": 38,
+      "id": "lesser-trinket-bg30-magicitem-988",
+      "cardId": "BG30_MagicItem_988",
+      "name": "野猪之神标签",
+      "tier": "lesser",
+      "description": "获取3张鲜血宝石。你的鲜血宝石使随从额外获得+2/+1。",
+      "status": "reviewed",
+      "initialStatus": "reviewed",
+      "initialStatusSource": "group-record",
+      "limitationKind": "none",
+      "implementation": [
+        "applyOfficialTrinketOnAcquire",
+        "addBloodGems"
+      ],
+      "tests": [
+        "tests/trinket-simple-effects.test.ts"
+      ],
+      "notes": "Three acquisition gems and global +2/+1 Blood Gem scaling; future/held gems read player counters. Normal hand cap and saved player scaling retained."
+    },
+    {
+      "index": 39,
+      "id": "lesser-trinket-bg30-magicitem-994",
+      "cardId": "BG30_MagicItem_994",
+      "name": "尤格糕点",
+      "tier": "lesser",
+      "description": "转动尤格-萨隆\n的命运之轮。在每个回合开始时，再次转动。",
+      "status": "reviewed",
+      "initialStatus": "reviewed",
+      "initialStatusSource": "current-status-fallback",
+      "limitationKind": "none",
+      "implementation": [
+        "spinYoggWheel",
+        "YOGG_WHEEL_OUTCOMES",
+        "applyOfficialTrinketAtStartOfTurn"
+      ],
+      "tests": [
+        "tests/trinket-yogg-tags-pauldrons.test.ts"
+      ],
+      "notes": "获取与每回合开始使用同一7项固定转盘；结果的英雄技能倍率、奖品、吞噬、金色报价与属性重分配均有实际状态测试。"
+    },
+    {
+      "index": 40,
+      "id": "lesser-trinket-bg30-magicitem-998",
+      "cardId": "BG30_MagicItem_998",
+      "name": "鲍勃摇头玩偶",
+      "tier": "lesser",
+      "description": "获得2枚铸币。酒馆中不会再提供等级1和等级2的牌。",
+      "status": "reviewed",
+      "initialStatus": "reviewed",
+      "initialStatusSource": "current-status-fallback",
+      "limitationKind": "none",
+      "implementation": [
+        "applyOfficialTrinketOnAcquire",
+        "GOBLIN_WALLET_CARD_ID",
+        "refreshShop"
+      ],
+      "tests": [
+        "tests/trinket-recruit-economy-effects-batch4.test.ts"
+      ],
+      "notes": "初始金币+2、酒馆后续报价排除1/2星（含随从/法术）；普通刷新专项验证。"
+    },
+    {
+      "index": 41,
+      "id": "lesser-trinket-bg32-magicitem-170",
+      "cardId": "BG32_MagicItem_170",
+      "name": "法术扳手",
+      "tier": "lesser",
+      "description": "在你使用一张磁力随从牌后，随机获取一张酒馆法术牌。",
+      "status": "reviewed",
+      "initialStatus": "reviewed",
+      "initialStatusSource": "group-record",
+      "limitationKind": "none",
+      "implementation": [
+        "SPELL_POWERED_WRENCH_BY_CARD_ID",
+        "applyAfterMinionPlayedTrinkets"
+      ],
+      "tests": [
+        "tests/trinket-recruit-trigger-effects.test.ts"
+      ],
+      "notes": "A played Magnetic minion grants a random Tavern Spell whether merged or independently played; source components resolve played identity. Failed plays do not trigger."
+    },
+    {
+      "index": 42,
+      "id": "lesser-trinket-bg32-magicitem-271",
+      "cardId": "BG32_MagicItem_271",
+      "name": "华丽的时钟",
+      "tier": "lesser",
+      "description": "获得2枚铸币。在下个回合购买你的大型饰品，而非第9回合。",
+      "status": "reviewed",
+      "initialStatus": "reviewed",
+      "initialStatusSource": "current-status-fallback",
+      "limitationKind": "none",
+      "implementation": [
+        "applyOfficialTrinketOnAcquire",
+        "ornateClockIsDue",
+        "flushPendingTrinketOffers"
+      ],
+      "tests": [
+        "tests/trinket-high-coupling-effects.test.ts"
+      ],
+      "notes": "立即+2金币，下一回合给大饰品选择；已有大饰品后第9回合不会重复购买，获取轮次counter与待选择可恢复。"
+    },
+    {
+      "index": 43,
+      "id": "lesser-trinket-bg32-magicitem-276",
+      "cardId": "BG32_MagicItem_276",
+      "name": "神秘墓碑",
+      "tier": "lesser",
+      "description": "在每个回合结束时，你的亡灵在本局对战中拥有+2攻击力（无论它们在哪）。",
+      "status": "reviewed",
+      "initialStatus": "reviewed",
+      "initialStatusSource": "current-status-fallback",
+      "limitationKind": "none",
+      "implementation": [
+        "applyOfficialTrinketAtEndOfTurn",
+        "improveUndeadArmyFromTrinket"
+      ],
+      "tests": [
+        "tests/trinket-simple-effects.test.ts"
+      ],
+      "notes": "每结束回合全局亡灵攻击+2，达卡莱重复计入；当前手牌/场上及以后生成/购买共享全局增益。"
+    },
+    {
+      "index": 44,
+      "id": "lesser-trinket-bg32-magicitem-300",
+      "cardId": "BG32_MagicItem_300",
+      "name": "普崔塞德标签",
+      "tier": "lesser",
+      "description": "制造一个自定义的亡灵。每2个回合，在回合开始时，重复此效果。（还剩2个回合！）",
+      "status": "reviewed",
+      "initialStatus": "reviewed",
+      "initialStatusSource": "group-record",
+      "limitationKind": "none",
+      "implementation": [
+        "beginPutricideCustomUndeadCraft",
+        "applyOfficialTrinketAtStartOfTurn"
+      ],
+      "tests": [
+        "tests/trinket-putricide-old-gods.test.ts"
+      ],
+      "notes": "Two three-option combat/utility component selections produce an exact non-tripling custom Undead; choices save, AI is synchronous, full hand burns safely, every two starts repeat."
+    },
+    {
+      "index": 45,
+      "id": "lesser-trinket-bg32-magicitem-350",
+      "cardId": "BG32_MagicItem_350",
+      "name": "黄金残片",
+      "tier": "lesser",
+      "description": "当你拥有15枚铸币时，随机获取一张等级5的金色随从牌。（每局对战限一次）",
+      "status": "reviewed",
+      "initialStatus": "reviewed",
+      "initialStatusSource": "current-status-fallback",
+      "limitationKind": "none",
+      "implementation": [
+        "applyGoldThresholdTrinket",
+        "addRandomGoldenGeneratedMinionAtTier"
+      ],
+      "tests": [
+        "tests/trinket-recruit-economy-effects-batch4.test.ts"
+      ],
+      "notes": "金币到15时一次性生成5级金色牌；触发标记先消费，满手不会重复刷奖励，生成牌无共享池所有权。"
+    },
+    {
+      "index": 46,
+      "id": "lesser-trinket-bg32-magicitem-360",
+      "cardId": "BG32_MagicItem_360",
+      "name": "怨毒熏香",
+      "tier": "lesser",
+      "description": "战斗开始时：使你最左边和最右边的亡灵获得复生。",
+      "status": "reviewed",
+      "initialStatus": "reviewed",
+      "initialStatusSource": "current-status-fallback",
+      "limitationKind": "none",
+      "implementation": [
+        "applyStartOfCombatTrinkets"
+      ],
+      "tests": [
+        "tests/trinket-combat-effects.test.ts"
+      ],
+      "notes": "按亡灵序列取最左/最右而非战队物理边缘；已具有复生者占据对应边缘，单亡灵去重。"
+    },
+    {
+      "index": 47,
+      "id": "lesser-trinket-bg32-magicitem-361",
+      "cardId": "BG32_MagicItem_361",
+      "name": "口袋工厂",
+      "tier": "lesser",
+      "description": "发现一张等级4的具有类型的随从牌。在每个回合开始时，再获取一张它的复制。",
+      "status": "reviewed",
+      "initialStatus": "reviewed",
+      "initialStatusSource": "group-record",
+      "limitationKind": "none",
+      "implementation": [
+        "POCKET_FACTORY_TIER_BY_CARD_ID",
+        "applyOfficialTrinketOnAcquire",
+        "applyOfficialTrinketAtStartOfTurn"
+      ],
+      "tests": [
+        "tests/trinket-discover-rewards.test.ts"
+      ],
+      "notes": "Exact typed Tier 4 Discover, remembers chosen definition for plain copies each start; saved selection map repaired and AI selects without pending human interaction."
+    },
+    {
+      "index": 48,
+      "id": "lesser-trinket-bg32-magicitem-400",
+      "cardId": "BG32_MagicItem_400",
+      "name": "异变神龛",
+      "tier": "lesser",
+      "description": "随机将你的\n所有随从变形成为等级4的随从。",
+      "status": "reviewed",
+      "initialStatus": "reviewed",
+      "initialStatusSource": "current-status-fallback",
+      "limitationKind": "none",
+      "implementation": [
+        "transformWarbandIntoRandomTierFourMinions",
+        "returnMinionToPool",
+        "drawMatchingFromPool"
+      ],
+      "tests": [
+        "tests/trinket-simple-effects.test.ts"
+      ],
+      "notes": "逐个将整队替换为准确4级池内随从；旧副本归池、保持实体位置，重算拥有者成长及三连；不是出售触发。"
+    },
+    {
+      "index": 49,
+      "id": "lesser-trinket-bg32-magicitem-416",
+      "cardId": "BG32_MagicItem_416",
+      "name": "战鼓",
+      "tier": "lesser",
+      "description": "每回合中，有一个战吼会额外触发两次。（还剩1个！）",
+      "status": "reviewed",
+      "initialStatus": "reviewed",
+      "initialStatusSource": "current-status-fallback",
+      "limitationKind": "none",
+      "implementation": [
+        "battlecryTriggerCountForPlay",
+        "consumePerRoundTrinketTrigger"
+      ],
+      "tests": [
+        "tests/trinket-recruit-trigger-effects-batch3.test.ts"
+      ],
+      "notes": "每回合首个战吼额外2次，独立每回合计数；普通/金色及铜须倍率同一触发入口。"
+    },
+    {
+      "index": 50,
+      "id": "lesser-trinket-bg32-magicitem-428",
+      "cardId": "BG32_MagicItem_428",
+      "name": "磨损的藏宝图",
+      "tier": "lesser",
+      "description": "两回合后，获得10枚铸币。（每局对战限一次）",
+      "status": "reviewed",
+      "initialStatus": "reviewed",
+      "initialStatusSource": "group-record",
+      "limitationKind": "none",
+      "implementation": [
+        "applyOfficialTrinketAtStartOfTurn"
+      ],
+      "tests": [
+        "tests/trinket-simple-effects.test.ts"
+      ],
+      "notes": "Pays +10 only on second subsequent start; counter saturates at 2, preventing repeated rewards after save/round transitions."
+    },
+    {
+      "index": 51,
+      "id": "lesser-trinket-bg32-magicitem-803",
+      "cardId": "BG32_MagicItem_803",
+      "name": "金刚鹦鹉肖像",
+      "tier": "lesser",
+      "description": "获取一张巨大的金刚鹦鹉。你的巨大的金刚鹦鹉还会触发你的最左边的战吼。",
+      "status": "reviewed",
+      "initialStatus": "reviewed",
+      "initialStatusSource": "current-status-fallback",
+      "limitationKind": "none",
+      "implementation": [
+        "applyOfficialTrinketOnAcquire",
+        "resolveRallyTriggerLeftmostDeathrattle"
+      ],
+      "tests": [
+        "tests/trinket-monstrous-macaw-portrait.test.ts"
+      ],
+      "notes": "获取完整金刚鹦鹉；进击同时触发其他随从最左亡语与最左战吼，金色进击次数及战吼/亡语倍率走共享战斗路径。"
+    },
+    {
+      "index": 52,
+      "id": "lesser-trinket-bg32-magicitem-808",
+      "cardId": "BG32_MagicItem_808",
+      "name": "血缚耳环",
+      "tier": "lesser",
+      "description": "在你施放4个法术后，本饰品对你的所有随从各使用一张鲜血宝石。（还剩4个！）",
+      "status": "reviewed",
+      "initialStatus": "reviewed",
+      "initialStatusSource": "current-status-fallback",
+      "limitationKind": "none",
+      "implementation": [
+        "applyAfterRecruitSpellCastTrinkets",
+        "applyRecruitBloodGemPulse"
+      ],
+      "tests": [
+        "tests/trinket-recruit-trigger-effects.test.ts"
+      ],
+      "notes": "已新增战斗施法监听；招募与战斗均按副本累计4法术后对全部存活战队各施放1宝石，代码路径复核；招募阈值既有专项通过。未穷尽全部自动法术组合。"
+    },
+    {
+      "index": 53,
+      "id": "lesser-trinket-bg32-magicitem-817",
+      "cardId": "BG32_MagicItem_817",
+      "name": "伦德尔标签",
+      "tier": "lesser",
+      "description": "偷取酒馆中\n等级最高的牌。在每个回合结束时，重复此效果。",
+      "status": "reviewed",
+      "initialStatus": "reviewed",
+      "initialStatusSource": "group-record",
+      "limitationKind": "none",
+      "implementation": [
+        "stealHighestTierTavernCard",
+        "applyOfficialTrinketAtEndOfTurn"
+      ],
+      "tests": [
+        "tests/trinket-simple-effects.test.ts",
+        "tests/trinket-recruit-economy-effects-batch4.test.ts"
+      ],
+      "notes": "Includes Tavern minions and spells in highest-tier comparison; exact acquired entity preserved, pool/spell pool reconciled, full hand preserves offer, Radiant refill and repeated end triggers verified."
+    },
+    {
+      "index": 54,
+      "id": "lesser-trinket-bg32-magicitem-821",
+      "cardId": "BG32_MagicItem_821",
+      "name": "朝圣小鬼标签",
+      "tier": "lesser",
+      "description": "每回合中，有一张恶魔牌可用生命值购买，而非铸币。（还剩1张！）",
+      "status": "reviewed",
+      "initialStatus": "reviewed",
+      "initialStatusSource": "current-status-fallback",
+      "limitationKind": "none",
+      "implementation": [
+        "unusedPerTurnHealthPurchaseTrinket",
+        "getMinionPurchaseQuote",
+        "recordHealthPurchaseTrinketProgress"
+      ],
+      "tests": [
+        "tests/trinket-health-purchases.test.ts"
+      ],
+      "notes": "每回合第一张符合条件恶魔可支付生命，付款不能致死并可先消耗护甲；成功才消费额度，下回合重置。"
+    },
+    {
+      "index": 55,
+      "id": "lesser-trinket-bg32-magicitem-822",
+      "cardId": "BG32_MagicItem_822",
+      "name": "集市标签",
+      "tier": "lesser",
+      "description": "每回合中，有一张酒馆法术牌可用生命值购买，而非铸币。（还剩1张！）",
+      "status": "reviewed",
+      "initialStatus": "reviewed",
+      "initialStatusSource": "current-status-fallback",
+      "limitationKind": "none",
+      "implementation": [
+        "unusedPerTurnHealthPurchaseTrinket",
+        "getTavernSpellPurchaseQuote",
+        "recordHealthPurchaseTrinketProgress"
+      ],
+      "tests": [
+        "tests/trinket-health-purchases.test.ts"
+      ],
+      "notes": "每回合1次生命购买，按实际折后法术报价；护甲优先、不可致死、满手失败不耗计数，读档/AI同规则。"
+    },
+    {
+      "index": 56,
+      "id": "lesser-trinket-bg32-magicitem-830",
+      "cardId": "BG32_MagicItem_830",
+      "name": "邪能元素肖像",
+      "tier": "lesser",
+      "description": "获取一张邪能元素。你的邪能元素使随从额外获得+2/+2。",
+      "status": "reviewed",
+      "initialStatus": "reviewed",
+      "initialStatusSource": "group-record",
+      "limitationKind": "none",
+      "implementation": [
+        "FELLEMENTAL_PORTRAIT_CARD_ID",
+        "applyRecruitEffects"
+      ],
+      "tests": [
+        "tests/trinket-recruit-trigger-effects-batch4.test.ts"
+      ],
+      "notes": "Exact Felemental acquisition and +2/+2 on every pulse, including golden repetition and shared persistent Tavern buff path. Combat Battlecry and inherited effect-source paths reviewed."
+    },
+    {
+      "index": 57,
+      "id": "lesser-trinket-bg32-magicitem-831",
+      "cardId": "BG32_MagicItem_831",
+      "name": "商贩元素肖像",
+      "tier": "lesser",
+      "description": "获取一张商贩元素。在每个回合开始时，再获取一张。",
+      "status": "reviewed",
+      "initialStatus": "reviewed",
+      "initialStatusSource": "current-status-fallback",
+      "limitationKind": "none",
+      "implementation": [
+        "applyRepeatableOfficialTrinketReward",
+        "applyOfficialTrinketAtStartOfTurn",
+        "addGeneratedMinionCopyToHand"
+      ],
+      "tests": [
+        "tests/trinket-simple-effects.test.ts"
+      ],
+      "notes": "获取时及每回合开始生成商贩元素；实体使用完整出售生成水滴规则，零共享池所有权，10手牌上限统一处理。"
+    },
+    {
+      "index": 58,
+      "id": "lesser-trinket-bg32-magicitem-844",
+      "cardId": "BG32_MagicItem_844",
+      "name": "牺牲祭坛",
+      "tier": "lesser",
+      "description": "移除你的所有随从。每移除一个随从，获得3枚铸币。",
+      "status": "reviewed",
+      "initialStatus": "reviewed",
+      "initialStatusSource": "current-status-fallback",
+      "limitationKind": "none",
+      "implementation": [
+        "applyOfficialTrinketOnAcquire",
+        "returnMinionToPool"
+      ],
+      "tests": [
+        "tests/trinket-simple-effects.test.ts"
+      ],
+      "notes": "移除场上每个随从+3金币，归还真实共享池所有权；属于移除不是出售，不触发出售/亡语。"
+    },
+    {
+      "index": 59,
+      "id": "lesser-trinket-bg32-magicitem-858",
+      "cardId": "BG32_MagicItem_858",
+      "name": "探险者的望远镜",
+      "tier": "lesser",
+      "description": "随机获取三张等级4的随从牌。",
+      "status": "reviewed",
+      "initialStatus": "reviewed",
+      "initialStatusSource": "group-record",
+      "limitationKind": "none",
+      "implementation": [
+        "applyOfficialTrinketOnAcquire",
+        "addRandomGeneratedMinionAtTier"
+      ],
+      "tests": [
+        "tests/trinket-simple-effects.test.ts"
+      ],
+      "notes": "Generates three exact Tier 4 active-type cards independently from normal refresh capacity; full hand limits additions, zero pool copies distinguish generated cards."
+    },
+    {
+      "index": 60,
+      "id": "lesser-trinket-bg32-magicitem-860",
+      "cardId": "BG32_MagicItem_860",
+      "name": "甲虫之戒",
+      "tier": "lesser",
+      "description": "复仇（5）：召唤一只2/2的甲虫，使其获得嘲讽。",
+      "status": "reviewed",
+      "initialStatus": "reviewed",
+      "initialStatusSource": "current-status-fallback",
+      "limitationKind": "none",
+      "implementation": [
+        "advanceCombatDeathTrinkets",
+        "advanceTrinketDeathThreshold",
+        "summonBeetlesFromTrinket"
+      ],
+      "tests": [
+        "tests/trinket-combat-effects.test.ts"
+      ],
+      "notes": "复仇5召唤1只2/2嘲讽甲虫，读取本局甲虫成长；复仇计数不被亡语倍率放大，召唤受7场地容量限制。"
+    },
+    {
+      "index": 61,
+      "id": "lesser-trinket-bg32-magicitem-893",
+      "cardId": "BG32_MagicItem_893",
+      "name": "蓝鳃脚蹼",
+      "tier": "lesser",
+      "description": "在你施放一个酒馆法术后，使你手牌和战队中最左边的随从获得+3/+3。",
+      "status": "partial",
+      "initialStatus": "partial",
+      "initialStatusSource": "current-status-fallback",
+      "limitationKind": "verification-gap",
+      "implementation": [
+        "applyAfterTavernSpellCastTrinkets"
+      ],
+      "tests": [
+        "tests/trinket-recruit-trigger-effects.test.ts"
+      ],
+      "notes": "招募每次酒馆法术 buff最左场上与手牌随从各+3/+3；手牌中法术不占最左随从。战斗内施放酒馆法术缺相应额外buff路径。 此处仅确认招募/战斗实现入口不同；尚未用合法行为复现，也未确认自动施法是否归属于卡面的玩家施法触发，因此列为待验证边界，不能断言为已复现缺陷。"
+    },
+    {
+      "index": 62,
+      "id": "lesser-trinket-bg32-magicitem-894",
+      "cardId": "BG32_MagicItem_894",
+      "name": "祝福肖像",
+      "tier": "lesser",
+      "description": "获取一张自然祝福。在每个回合开始时，再获取一张。你的自然祝福还会影响手牌中的随从牌。",
+      "status": "partial",
+      "initialStatus": "partial",
+      "initialStatusSource": "group-record",
+      "limitationKind": "verification-gap",
+      "implementation": [
+        "BLESSING_PORTRAIT_CARD_ID",
+        "applyOfficialTrinketAtStartOfTurn",
+        "applyTavernSpellEffect"
+      ],
+      "tests": [
+        "tests/tavern-spells.test.ts"
+      ],
+      "notes": "Acquisition/start supply and Natural Blessing hand expansion exist. No dedicated portrait test found for hand targets, All/dual type, repeated casts and save/AI boundary; implementation looks present but complete functional verification remains outstanding."
+    },
+    {
+      "index": 63,
+      "id": "lesser-trinket-bg32-magicitem-930",
+      "cardId": "BG32_MagicItem_930",
+      "name": "古风卷轴",
+      "tier": "lesser",
+      "description": "在你施放7个法术后，随机获取一张纳迦牌。（还剩7个！）",
+      "status": "reviewed",
+      "initialStatus": "reviewed",
+      "initialStatusSource": "current-status-fallback",
+      "limitationKind": "none",
+      "implementation": [
+        "ARCHAIC_SCROLL_THRESHOLD_BY_CARD_ID",
+        "applyAfterRecruitSpellCastTrinkets",
+        "advanceTrinketCounter"
+      ],
+      "tests": [
+        "tests/trinket-recruit-trigger-effects.test.ts",
+        "tests/trinket-audit-group2.test.ts"
+      ],
+      "notes": "累计每7次施法从共享池取得等级允许的纳迦；酒馆/宝石/塑造共有施法观察，触发后计数归零，满手统一处理。"
+    },
+    {
+      "index": 64,
+      "id": "lesser-trinket-bg32-magicitem-931",
+      "cardId": "BG32_MagicItem_931",
+      "name": "艾萨拉的雕像",
+      "tier": "lesser",
+      "description": "随机获取3张塑造法术的法术牌。在每个回合开始时，再获取3张。",
+      "status": "reviewed",
+      "initialStatus": "reviewed",
+      "initialStatusSource": "current-status-fallback",
+      "limitationKind": "none",
+      "implementation": [
+        "applyRepeatableOfficialTrinketReward",
+        "addRandomSpellcraftSpells"
+      ],
+      "tests": [
+        "tests/trinket-simple-effects.test.ts"
+      ],
+      "notes": "初始和每回合3随机塑造法术，来自固定可支持合法集合，临时法术到期/满手限制遵循共用手牌入口。"
+    },
+    {
+      "index": 65,
+      "id": "lesser-trinket-bg32-magicitem-951",
+      "cardId": "BG32_MagicItem_951",
+      "name": "黄金吊坠",
+      "tier": "lesser",
+      "description": "随机使一个等级4或以下的友方随从变为金色。在每个回合开始时，重复此效果。",
+      "status": "reviewed",
+      "initialStatus": "reviewed",
+      "initialStatusSource": "group-record",
+      "limitationKind": "none",
+      "implementation": [
+        "makeRandomLowTierFriendlyGolden"
+      ],
+      "tests": [
+        "tests/trinket-simple-effects.test.ts"
+      ],
+      "notes": "Random non-golden board minion Tier <=4, both acquisition and start. Preserves enchantments, reconciles golden wherever scaling; no target means no action."
+    },
+    {
+      "index": 66,
+      "id": "lesser-trinket-bg32-magicitem-957",
+      "cardId": "BG32_MagicItem_957",
+      "name": "诈骗犯肖像",
+      "tier": "lesser",
+      "description": "获取一张\n金币诈骗犯。每回合你购买的第一个海盗免费。",
+      "status": "reviewed",
+      "initialStatus": "reviewed",
+      "initialStatusSource": "current-status-fallback",
+      "limitationKind": "none",
+      "implementation": [
+        "applyOfficialTrinketOnAcquire",
+        "unusedFirstPirateFreeTrinket",
+        "recordFirstPirateFreeTrinketProgress"
+      ],
+      "tests": [
+        "tests/trinket-acquisition-portraits.test.ts",
+        "tests/gold-grifter.test.ts"
+      ],
+      "notes": "获取完整金币诈骗犯，每回合仅第一次成功购买海盗免金币；回合重置及保存覆盖，获取4张海盗提升金币上限由随从规则处理。"
+    },
+    {
+      "index": 67,
+      "id": "lesser-trinket-bg35-magicitem-150",
+      "cardId": "BG35_MagicItem_150",
+      "name": "被诅咒的水晶",
+      "tier": "lesser",
+      "description": "在酒馆刷新后，在本回合中使酒馆中的随从获得+3/+3。",
+      "status": "reviewed",
+      "initialStatus": "reviewed",
+      "initialStatusSource": "current-status-fallback",
+      "limitationKind": "none",
+      "implementation": [
+        "applyAfterTavernRefreshedTrinkets",
+        "applyTemporarySpellcraftBuff"
+      ],
+      "tests": [
+        "tests/trinket-recruit-trigger-effects.test.ts"
+      ],
+      "notes": "每真实刷新堆叠本回合酒馆+3/+3，旧报价/后续新报价共享累计量；购买后本回合临时增益与回合结束清理测试。"
+    },
+    {
+      "index": 68,
+      "id": "lesser-trinket-bg35-magicitem-151",
+      "cardId": "BG35_MagicItem_151",
+      "name": "亵渎者肖像",
+      "tier": "lesser",
+      "description": "获取一张林地亵渎者。酒馆中的恶魔饲料拥有+4/+4。",
+      "status": "reviewed",
+      "initialStatus": "reviewed",
+      "initialStatusSource": "group-record",
+      "limitationKind": "none",
+      "implementation": [
+        "LESSER_DEFILER_PORTRAIT_CARD_ID",
+        "GREATER_DEFILER_PORTRAIT_CARD_ID"
+      ],
+      "tests": [
+        "tests/trinket-recruit-trigger-effects-batch4.test.ts"
+      ],
+      "notes": "Exact Woodland Defiler reward plus lesser +4/+4 Demon Fodder bonus; queued Fodder special slot remains distinct from ordinary minions. Lesser/greater pinned values checked."
+    },
+    {
+      "index": 69,
+      "id": "lesser-trinket-bg35-magicitem-152",
+      "cardId": "BG35_MagicItem_152",
+      "name": "恶魔挂毯",
+      "tier": "lesser",
+      "description": "在你刷新4次后，酒馆中等级最高的随从改为消耗生命值，而非铸币。（还剩4次！）",
+      "status": "reviewed",
+      "initialStatus": "reviewed",
+      "initialStatusSource": "current-status-fallback",
+      "limitationKind": "none",
+      "implementation": [
+        "applyAfterManualRefreshTrinkets",
+        "DEMONIC_TAPESTRY_HEALTH_PRICE_COUNTER",
+        "getMinionPurchaseQuote"
+      ],
+      "tests": [
+        "tests/trinket-health-purchases.test.ts"
+      ],
+      "notes": "每4次成功手动刷新标记最高等级报价支付生命；标记绑定真实实体并过存档，失败刷新/购买不消费进度或额度。"
+    },
+    {
+      "index": 70,
+      "id": "lesser-trinket-bg35-magicitem-300",
+      "cardId": "BG35_MagicItem_300",
+      "name": "铜制线圈",
+      "tier": "lesser",
+      "description": "每当你磁力吸附一个随从时，使其获得+1/+1并提升此效果。",
+      "status": "reviewed",
+      "initialStatus": "reviewed",
+      "initialStatusSource": "current-status-fallback",
+      "limitationKind": "none",
+      "implementation": [
+        "applyCopperCoilBeforeMagnetize",
+        "fuseMinionIntoHost"
+      ],
+      "tests": [
+        "tests/trinket-combat-effects-batch4.test.ts"
+      ],
+      "notes": "每磁力源+1/+1、+2/+2依次增长，增益在吸附前进入附件；真实次数玩家级保留，不把普通打出当吸附。"
+    },
+    {
+      "index": 71,
+      "id": "lesser-trinket-bg35-magicitem-301",
+      "cardId": "BG35_MagicItem_301",
+      "name": "废铁回收机标签",
+      "tier": "lesser",
+      "description": "随机获取一张磁力机械牌。在每个回合开始时，再获取\n一张。",
+      "status": "reviewed",
+      "initialStatus": "reviewed",
+      "initialStatusSource": "group-record",
+      "limitationKind": "none",
+      "implementation": [
+        "applyRepeatableOfficialTrinketReward",
+        "addRandomSharedPoolMinionToHand"
+      ],
+      "tests": [
+        "tests/trinket-simple-effects.test.ts"
+      ],
+      "notes": "Immediate and each start random Magnetic Mech from eligible shared pool, including dual-type Mechs. Pool debit/full hand guards inspected."
+    },
+    {
+      "index": 72,
+      "id": "lesser-trinket-bg35-magicitem-302",
+      "cardId": "BG35_MagicItem_302",
+      "name": "积雷标签",
+      "tier": "lesser",
+      "description": "在8个友方随从\n死亡后，随机获取一张机械牌。（还剩8个！）",
+      "status": "reviewed",
+      "initialStatus": "reviewed",
+      "initialStatusSource": "current-status-fallback",
+      "limitationKind": "none",
+      "implementation": [
+        "advanceCombatDeathTrinkets",
+        "advanceTrinketDeathThreshold",
+        "gainRandomGeneratedMinionFromTrinket"
+      ],
+      "tests": [
+        "tests/trinket-combat-effects.test.ts"
+      ],
+      "notes": "每8友方死亡生成当前酒馆等级允许的机械；跨战斗持久进度，满手烧掉仍重置阈值，幽灵不写回原玩家。"
+    },
+    {
+      "index": 73,
+      "id": "lesser-trinket-bg35-magicitem-305",
+      "cardId": "BG35_MagicItem_305",
+      "name": "螺号肖像",
+      "tier": "lesser",
+      "description": "获取一张克隆螺号。每2个回合，在回合开始时，重复此效果。（还剩2回合！）",
+      "status": "reviewed",
+      "initialStatus": "reviewed",
+      "initialStatusSource": "current-status-fallback",
+      "limitationKind": "none",
+      "implementation": [
+        "applyRepeatableOfficialTrinketReward",
+        "applyOfficialTrinketAtStartOfTurn"
+      ],
+      "tests": [
+        "tests/trinket-simple-effects.test.ts"
+      ],
+      "notes": "初始1克隆螺号，每2回合开始再给1，计数0→1→0，满手烧牌不无限补发。"
+    },
+    {
+      "index": 74,
+      "id": "lesser-trinket-bg35-magicitem-306",
+      "cardId": "BG35_MagicItem_306",
+      "name": "典狱长标签",
+      "tier": "lesser",
+      "description": "塑造法术：消灭一个友方亡灵以随机获取一张亡灵牌。",
+      "status": "reviewed",
+      "initialStatus": "reviewed",
+      "initialStatusSource": "group-record",
+      "limitationKind": "none",
+      "implementation": [
+        "TRINKET_SPELLCRAFT_DEFINITION_ID_BY_CARD_ID",
+        "queueTrinketSpellcraft",
+        "destroyRecruitMinion"
+      ],
+      "tests": [
+        "tests/trinket-spellcraft-effects.test.ts"
+      ],
+      "notes": "Only friendly Undead legal, actual destroy rather than sale, pooled random Undead reward, hand/Spellcraft queue expiry, AI weakest-target selection and save checked."
+    },
+    {
+      "index": 75,
+      "id": "lesser-trinket-bg35-magicitem-309",
+      "cardId": "BG35_MagicItem_309",
+      "name": "厄戈尔标签",
+      "tier": "lesser",
+      "description": "获取一张莫格顿大妈或莫格顿老爹。在每个回合开始时，重复此效果。",
+      "status": "reviewed",
+      "initialStatus": "reviewed",
+      "initialStatusSource": "current-status-fallback",
+      "limitationKind": "none",
+      "implementation": [
+        "addRandomMrrgltonToHand",
+        "applyOfficialTrinketAtStartOfTurn"
+      ],
+      "tests": [
+        "tests/trinket-recruit-trigger-effects-batch4.test.ts"
+      ],
+      "notes": "获取及每回合开始从固定两种莫格顿父母中随机生成1张；不是把relatedCardId唯一项直接当完整候选，满手遵循统一上限。"
+    },
+    {
+      "index": 76,
+      "id": "lesser-trinket-bg35-magicitem-430",
+      "cardId": "BG35_MagicItem_430",
+      "name": "废料铁匠肖像",
+      "tier": "lesser",
+      "description": "获取一张刺鬃废料铁匠。在一个友方嘲讽随从死亡后，对你的废料铁匠使用一张永久的鲜血宝石。",
+      "status": "reviewed",
+      "initialStatus": "reviewed",
+      "initialStatusSource": "current-status-fallback",
+      "limitationKind": "none",
+      "implementation": [
+        "applyOfficialTrinketOnAcquire",
+        "advanceCombatDeathTrinkets",
+        "applyPermanentCombatBloodGemFromTrinket"
+      ],
+      "tests": [
+        "tests/trinket-combat-effects-batch4.test.ts"
+      ],
+      "notes": "获取刺鬃废料铁匠；嘲讽死亡给仍存活废料铁匠永久宝石，战斗与持续board写回，幽灵不写回。"
+    },
+    {
+      "index": 77,
+      "id": "lesser-trinket-bg35-magicitem-434",
+      "cardId": "BG35_MagicItem_434",
+      "name": "珠宝盒",
+      "tier": "lesser",
+      "description": "获取一张能使野猪人获得嘲讽，圣盾或复生的鲜血宝石。在每个回合开始时，重复此效果。",
+      "status": "reviewed",
+      "initialStatus": "reviewed",
+      "initialStatusSource": "group-record",
+      "limitationKind": "none",
+      "implementation": [
+        "addJewelryBoxBloodGem",
+        "JEWELRY_BOX_BLOOD_GEM_KEYWORDS"
+      ],
+      "tests": [
+        "tests/trinket-simple-effects.test.ts"
+      ],
+      "notes": "Immediate and each start one gem with rolled Taunt/Divine Shield/Reborn for Quilboar. Keyword survives save and is applied only to compatible targets."
+    },
+    {
+      "index": 78,
+      "id": "lesser-trinket-bg35-magicitem-801",
+      "cardId": "BG35_MagicItem_801",
+      "name": "副厨师长标签",
+      "tier": "lesser",
+      "description": "每个回合你可以额外使用一次英雄技能。在你使用英雄技能后，获得（1）枚铸币。",
+      "status": "reviewed",
+      "initialStatus": "bug",
+      "initialStatusSource": "confirmed-regression",
+      "limitationKind": "none",
+      "implementation": [
+        "activateHeroPowerMutating",
+        "getHeroPowerActivationQuote",
+        "tryActivateAiHeroPower",
+        "SOUS_CHEF_LABEL_CARD_ID"
+      ],
+      "tests": [
+        "tests/trinket-audit-group3.test.ts"
+      ],
+      "notes": "本次发现并已修复原本无主动技能额外使用及返金币实现；额外使用轮次写入原饰品counter，避免新增非法key使存档被拒。返金币、黑荆棘原生两次再加一次、JSON恢复3项先失败后通过；人类和AI共享主动技能执行路径。"
+    },
+    {
+      "index": 79,
+      "id": "lesser-trinket-bg35-magicitem-803",
+      "cardId": "BG35_MagicItem_803",
+      "name": "麦克斯韦标签",
+      "tier": "lesser",
+      "description": "获取一张你的英雄技能对应的伙伴。",
+      "status": "partial",
+      "initialStatus": "partial",
+      "initialStatusSource": "current-status-fallback",
+      "limitationKind": "indirect-unimplemented",
+      "implementation": [
+        "applyOfficialTrinketOnAcquire",
+        "getBuddyDefinitionIdForHeroPower",
+        "FIXED_BUILD_BUDDY_RECORDS"
+      ],
+      "tests": [
+        "tests/trinket-maxwell-sticker.test.ts"
+      ],
+      "notes": "英雄技能→伙伴身份获取及更换技能映射正确；15伙伴均effectSupport partial且没有各自卡面特效，例如克罗米有用刷新、常青绿植回合结束随机牌、游荡树人嘲讽受攻击全队buff均缺失。"
+    },
+    {
+      "index": 80,
+      "id": "lesser-trinket-bg35-magicitem-814",
+      "cardId": "BG35_MagicItem_814",
+      "name": "满当当的钱包",
+      "tier": "lesser",
+      "description": "当你升至等级6时，获得12枚铸币。",
+      "status": "reviewed",
+      "initialStatus": "reviewed",
+      "initialStatusSource": "group-record",
+      "limitationKind": "none",
+      "implementation": [
+        "upgradeTavern"
+      ],
+      "tests": [
+        "tests/trinket-simple-effects.test.ts"
+      ],
+      "notes": "Exact +12 on the successful transition to Tier 6; does not trigger merely by acquiring while already Tier 6. Unsuccessful upgrade preserves state."
+    },
+    {
+      "index": 81,
+      "id": "lesser-trinket-bg35-magicitem-815",
+      "cardId": "BG35_MagicItem_815",
+      "name": "魔术师的高帽",
+      "tier": "lesser",
+      "description": "获取等级1，2和3的随从牌各两张。",
+      "status": "reviewed",
+      "initialStatus": "reviewed",
+      "initialStatusSource": "current-status-fallback",
+      "limitationKind": "none",
+      "implementation": [
+        "applyOfficialTrinketOnAcquire",
+        "addRandomGeneratedMinionAtTier"
+      ],
+      "tests": [
+        "tests/trinket-simple-effects.test.ts"
+      ],
+      "notes": "获取时各生成2张准确1/2/3级、兼容本局种族的普通随从；不会擅自升到当前酒馆等级，遵循手牌容量。"
+    },
+    {
+      "index": 82,
+      "id": "lesser-trinket-bg35-magicitem-816",
+      "cardId": "BG35_MagicItem_816",
+      "name": "未知宝珠",
+      "tier": "lesser",
+      "description": "随机获取一项小型\n饰品。",
+      "status": "partial",
+      "initialStatus": "partial",
+      "initialStatusSource": "current-status-fallback",
+      "limitationKind": "indirect-unimplemented",
+      "implementation": [
+        "grantRandomAdditionalTrinket",
+        "grantTrinketDefinitionWithoutCost"
+      ],
+      "tests": [
+        "tests/trinket-recruit-trigger-effects-batch5.test.ts"
+      ],
+      "notes": "额外随机小饰品/去重/零费用获取实现；候选仍可包含伙伴与跳蛙等间接能力partial饰品，不能把随机获取入口通了等同最终功能完整。"
+    },
+    {
+      "index": 83,
+      "id": "lesser-trinket-bg35-magicitem-817",
+      "cardId": "BG35_MagicItem_817",
+      "name": "镜匣",
+      "tier": "lesser",
+      "description": "获取一张复映透镜。每2个回合，在回合开始时，重复此效果。（还剩2回合！）",
+      "status": "reviewed",
+      "initialStatus": "reviewed",
+      "initialStatusSource": "group-record",
+      "limitationKind": "none",
+      "implementation": [
+        "MIRROR_BOX_CARD_ID",
+        "applyOfficialTrinketAtStartOfTurn"
+      ],
+      "tests": [
+        "tests/trinket-mirror-timewarp.test.ts"
+      ],
+      "notes": "Exact Mirror Lens supply now and each two starts; plain <=Tier 3 copy, full hand casting, counter save and spell identity tested."
+    },
+    {
+      "index": 84,
+      "id": "lesser-trinket-bg35-magicitem-818",
+      "cardId": "BG35_MagicItem_818",
+      "name": "神秘宝珠",
+      "tier": "lesser",
+      "description": "获得8枚铸币。\n你的下一件饰品为小型饰品。",
+      "status": "reviewed",
+      "initialStatus": "reviewed",
+      "initialStatusSource": "current-status-fallback",
+      "limitationKind": "none",
+      "implementation": [
+        "applyOfficialTrinketOnAcquire",
+        "dueMysteriousOrbId",
+        "grantAdditionalLesserFromMysteriousOrb",
+        "flushPendingTrinketOffers"
+      ],
+      "tests": [
+        "tests/trinket-high-coupling-effects.test.ts"
+      ],
+      "notes": "立即+8金币，第9回合以新的小饰品选购替代普通大饰品报价；保留宝珠与附加小饰品，合法所有权和保存alias约束。"
+    },
+    {
+      "index": 85,
+      "id": "lesser-trinket-bg35-magicitem-821",
+      "cardId": "BG35_MagicItem_821",
+      "name": "万花筒",
+      "tier": "lesser",
+      "description": "发现一张等级7的随从牌。将其锁入你的手牌2回合。",
+      "status": "reviewed",
+      "initialStatus": "reviewed",
+      "initialStatusSource": "current-status-fallback",
+      "limitationKind": "none",
+      "implementation": [
+        "applyOfficialTrinketOnAcquire",
+        "beginDiscoverInteraction"
+      ],
+      "tests": [
+        "tests/trinket-mystery-cube-kaleidoscope.test.ts"
+      ],
+      "notes": "真实7星池3选1，选中牌锁到获取回合+2；人类交互可保存，AI同步选，满手可选择但烧毁，零普通池所有权。"
+    },
+    {
+      "index": 86,
+      "id": "lesser-trinket-bg35-magicitem-823",
+      "cardId": "BG35_MagicItem_823",
+      "name": "老旧的烛台",
+      "tier": "lesser",
+      "description": "发现一张来自小型时空扭曲的消耗为2的随从牌。",
+      "status": "partial",
+      "initialStatus": "partial",
+      "initialStatusSource": "group-record",
+      "limitationKind": "indirect-unimplemented",
+      "implementation": [
+        "beginTimewarpCandlestickDiscover",
+        "TIMEWARP_COST_TWO_MINION_DEFINITIONS",
+        "createTimewarpMinionDefinition"
+      ],
+      "tests": [
+        "tests/trinket-mirror-timewarp.test.ts"
+      ],
+      "notes": "Discover correctly selects three options from all 25 fixed-build lesser cost-2 Timewarp cards and burns overflow safely; generated cards retain only base stats/basic keywords. Their bespoke Timewarp abilities are explicitly partial and not represented by DSL."
+    },
+    {
+      "index": 87,
+      "id": "lesser-trinket-bg35-magicitem-834",
+      "cardId": "BG35_MagicItem_834",
+      "name": "双头飞龙肖像",
+      "tier": "lesser",
+      "description": "获取一张重金属双头飞龙。战斗开始时：触发你的重金属双头飞龙的亡语。",
+      "status": "reviewed",
+      "initialStatus": "reviewed",
+      "initialStatusSource": "current-status-fallback",
+      "limitationKind": "none",
+      "implementation": [
+        "applyOfficialTrinketOnAcquire",
+        "applyStartOfCombatTrinkets",
+        "resolveOneDeathrattle"
+      ],
+      "tests": [
+        "tests/trinket-portrait-high-coupling.test.ts"
+      ],
+      "notes": "获取重金属双头飞龙；开战逐只触发仍存活双头飞龙亡语，读取当时邻接、金色、提图斯与布莱恩倍率，走真实战吼路径。"
+    },
+    {
+      "index": 88,
+      "id": "lesser-trinket-bg35-magicitem-840",
+      "cardId": "BG35_MagicItem_840",
+      "name": "多彩之泪",
+      "tier": "lesser",
+      "description": "随机获取一张\n多彩幼龙。在每个回合开始时，重复此效果。",
+      "status": "reviewed",
+      "initialStatus": "reviewed",
+      "initialStatusSource": "current-status-fallback",
+      "limitationKind": "none",
+      "implementation": [
+        "applyRepeatableOfficialTrinketReward",
+        "addRandomChromaticWhelps"
+      ],
+      "tests": [
+        "tests/trinket-simple-effects.test.ts"
+      ],
+      "notes": "初始/每回合1真实随机多彩幼龙；生成牌不消耗共享池，循环取随机合法定义，满手停止。"
+    },
+    {
+      "index": 89,
+      "id": "lesser-trinket-bg35-magicitem-850",
+      "cardId": "BG35_MagicItem_850",
+      "name": "袋中旋风",
+      "tier": "lesser",
+      "description": "施放乘借东风。在每个回合开始时，再施放一次。",
+      "status": "reviewed",
+      "initialStatus": "reviewed",
+      "initialStatusSource": "group-record",
+      "limitationKind": "none",
+      "implementation": [
+        "castRideTheWindFromTrinket",
+        "applyRepeatableOfficialTrinketReward"
+      ],
+      "tests": [
+        "tests/trinket-simple-effects.test.ts"
+      ],
+      "notes": "Casts Ride the Wind immediately and each start; effect pulse count versus actual spell cast count is distinguished. Uses normal Tavern Spell buff/cast triggers."
+    },
+    {
+      "index": 90,
+      "id": "lesser-trinket-bg35-magicitem-851",
+      "cardId": "BG35_MagicItem_851",
+      "name": "水车",
+      "tier": "lesser",
+      "description": "在你使用一张元素牌后，随机获取一张酒馆法术牌。（每回合两次。）",
+      "status": "reviewed",
+      "initialStatus": "reviewed",
+      "initialStatusSource": "current-status-fallback",
+      "limitationKind": "none",
+      "implementation": [
+        "WATER_WHEEL_LIMIT_BY_CARD_ID",
+        "applyAfterMinionPlayedTrinkets",
+        "consumePerRoundTrinketTrigger"
+      ],
+      "tests": [
+        "tests/trinket-recruit-trigger-effects.test.ts"
+      ],
+      "notes": "元素真实使用后生成随机法术，每回合最多2次；轮次编码持久化且跨回合恢复额度，满手仍消耗本次触发。"
+    },
+    {
+      "index": 91,
+      "id": "lesser-trinket-bg35-magicitem-870",
+      "cardId": "BG35_MagicItem_870",
+      "name": "跳蛙骑士肖像",
+      "tier": "lesser",
+      "description": "获取一张时空扭曲跳蛙骑士。",
+      "status": "partial",
+      "initialStatus": "partial",
+      "initialStatusSource": "current-status-fallback",
+      "limitationKind": "indirect-unimplemented",
+      "implementation": [
+        "applyOfficialTrinketOnAcquire",
+        "LEAPFROGGER_DEFINITION_ID"
+      ],
+      "tests": [
+        "tests/trinket-acquisition-portraits.test.ts"
+      ],
+      "notes": "获取真实BG34_Giant_031身份；该随从只有嘲讽/复生，未实现亡语为友方野兽+1/+1且传播亡语（金色+2/+2）。"
+    },
+    {
+      "index": 92,
+      "id": "lesser-trinket-bg35-magicitem-871",
+      "cardId": "BG35_MagicItem_871",
+      "name": "熊妈妈标签",
+      "tier": "lesser",
+      "description": "每当你召唤一只野兽，使其获得+5/+5。",
+      "status": "reviewed",
+      "initialStatus": "reviewed",
+      "initialStatusSource": "group-record",
+      "limitationKind": "none",
+      "implementation": [
+        "MAMA_BEAR_STICKER_CARD_ID",
+        "applyAfterSummonEffects"
+      ],
+      "tests": [
+        "tests/trinket-combat-effects-batch4.test.ts"
+      ],
+      "notes": "Beast summons in both Recruit and combat gain +5/+5. Dual/All tribes use shared tribe check, combat-only grants and retained stats use normal combat retention."
+    },
+    {
+      "index": 93,
+      "id": "lesser-trinket-bg35-magicitem-872",
+      "cardId": "BG35_MagicItem_872",
+      "name": "蛇首之杖",
+      "tier": "lesser",
+      "description": "塑造法术：使一只野兽获得+2/+2和\n复生。",
+      "status": "reviewed",
+      "initialStatus": "reviewed",
+      "initialStatusSource": "current-status-fallback",
+      "limitationKind": "none",
+      "implementation": [
+        "queueTrinketSpellcraft",
+        "getLegalSpellcraftTargetIds",
+        "applySpellcraftCastPulse"
+      ],
+      "tests": [
+        "tests/trinket-spellcraft-effects.test.ts"
+      ],
+      "notes": "每回合提供固定蛇首之杖法术，只能选友方野兽；token文本未写直到下回合，当前实现永久+2/+2和复生，与既有专项一致；满手延后发牌及过期边界覆盖。"
+    },
+    {
+      "index": 94,
+      "id": "lesser-trinket-bg35-magicitem-890",
+      "cardId": "BG35_MagicItem_890",
+      "name": "沉没的船锚",
+      "tier": "lesser",
+      "description": "随机获取2张悬赏令。在每个回合开始时，重复此\n效果。",
+      "status": "reviewed",
+      "initialStatus": "reviewed",
+      "initialStatusSource": "current-status-fallback",
+      "limitationKind": "none",
+      "implementation": [
+        "applyRepeatableOfficialTrinketReward",
+        "addRandomBountyToHand"
+      ],
+      "tests": [
+        "tests/trinket-simple-effects.test.ts"
+      ],
+      "notes": "初始/每回合2真实悬赏令，随机奖励定义及次数正确；满手/法术卡期行为统一处理。"
+    },
+    {
+      "index": 95,
+      "id": "lesser-trinket-bg35-magicitem-920",
+      "cardId": "BG35_MagicItem_920",
+      "name": "泡泡王冠",
+      "tier": "lesser",
+      "description": "一旦你施放了12个法术，你的酒馆法术使随从额外获得+4/+4。（还剩12个！）",
+      "status": "reviewed",
+      "initialStatus": "bug",
+      "initialStatusSource": "group-record",
+      "limitationKind": "none",
+      "implementation": [
+        "BUBBLE_CROWN_CARD_ID",
+        "applyAfterRecruitSpellCastTrinkets",
+        "triggerCombatAfterSpellCast"
+      ],
+      "tests": [
+        "tests/trinket-recruit-trigger-effects-batch3.test.ts",
+        "tests/trinket-audit-group2.test.ts"
+      ],
+      "notes": "FIXED AND VERIFIED: 18/18 group-2 regression tests, TypeScript check and focused ESLint pass after root integration. Original audit finding: Confirmed: 11 Recruit spells then one combat Tavern Spell leaves progress 11 instead of unlocking at 12. Existing single Recruit path grants +4/+4 once but combat casts are omitted."
+    },
+    {
+      "index": 96,
+      "id": "lesser-trinket-bg35-magicitem-921",
+      "cardId": "BG35_MagicItem_921",
+      "name": "贝壳项链",
+      "tier": "lesser",
+      "description": "使随从获得属性值的酒馆法术消耗的铸币减少（2）枚。",
+      "status": "reviewed",
+      "initialStatus": "reviewed",
+      "initialStatusSource": "current-status-fallback",
+      "limitationKind": "none",
+      "implementation": [
+        "STAT_SPELL_DISCOUNT_CARD_ID",
+        "STAT_GRANTING_TAVERN_SPELL_CARD_IDS",
+        "tavernSpellPurchaseCost"
+      ],
+      "tests": [
+        "tests/trinket-recruit-economy-effects-batch4.test.ts"
+      ],
+      "notes": "仅使属性授予类别酒馆法术少2金币，费用不低于0；法术牌面/目标/花费仍用真实报价，生命支付法术不套金币折扣。"
+    },
+    {
+      "index": 97,
+      "id": "lesser-trinket-bg35-magicitem-922",
+      "cardId": "BG35_MagicItem_922",
+      "name": "赶潮纳迦肖像",
+      "tier": "lesser",
+      "description": "获取一张赶潮纳迦。在战斗中，在你施放一个法术后，获取一张该法术的复制。（每场战斗3次。）",
+      "status": "partial",
+      "initialStatus": "partial",
+      "initialStatusSource": "current-status-fallback",
+      "limitationKind": "implementation-gap",
+      "implementation": [
+        "applyOfficialTrinketOnAcquire",
+        "triggerCombatAfterTavernSpellCast"
+      ],
+      "tests": [
+        "tests/trinket-portrait-high-coupling.test.ts"
+      ],
+      "notes": "真实赶潮纳迦获取和每场最多3张酒馆法术复制有证据；卡面写任何法术，而代码仅对战斗酒馆法术监听，战斗宝石等未见复制路径，需补不同法术家族。"
+    },
+    {
+      "index": 98,
+      "id": "lesser-trinket-bg35-magicitem-931",
+      "cardId": "BG35_MagicItem_931",
+      "name": "转录打字机",
+      "tier": "lesser",
+      "description": "获取你购买的下2个随从的各一张额外复制。（还剩2个！）",
+      "status": "reviewed",
+      "initialStatus": "reviewed",
+      "initialStatusSource": "group-record",
+      "limitationKind": "none",
+      "implementation": [
+        "TRANSCRIPTION_MACHINE_LIMIT_BY_CARD_ID",
+        "applyAfterMinionPurchasedTrinkets"
+      ],
+      "tests": [
+        "tests/trinket-recruit-trigger-effects.test.ts"
+      ],
+      "notes": "Next two successful minion purchases grant one generated plain copy each; spells/failed purchases do not count. Lifetime counter caps at 2; full hand, triples, generated pool accounting inspected."
+    },
+    {
+      "index": 99,
+      "id": "greater-trinket-bg30-magicitem-310",
+      "cardId": "BG30_MagicItem_310",
+      "name": "瑞文戴尔肖像",
+      "tier": "greater",
+      "description": "获取一张提图斯·瑞文戴尔。战斗开始时：使你的提图斯·瑞文戴尔的生命值翻倍。",
+      "status": "reviewed",
+      "initialStatus": "reviewed",
+      "initialStatusSource": "current-status-fallback",
+      "limitationKind": "none",
+      "implementation": [
+        "applyOfficialTrinketOnAcquire",
+        "applyStartOfCombatTrinkets"
+      ],
+      "tests": [
+        "tests/trinket-combat-effects-batch4.test.ts"
+      ],
+      "notes": "获取真实提图斯；开战使所有存活提图斯当前生命翻倍，复制后的提图斯效果源也识别，战斗临时增益仅按保留规则写回。"
+    },
+    {
+      "index": 100,
+      "id": "greater-trinket-bg30-magicitem-403",
+      "cardId": "BG30_MagicItem_403",
+      "name": "铁炉堡锻砧",
+      "tier": "greater",
+      "description": "战斗开始时：使你没有类型的随从的属性值变为三倍。",
+      "status": "reviewed",
+      "initialStatus": "bug",
+      "initialStatusSource": "confirmed-regression",
+      "limitationKind": "none",
+      "implementation": [
+        "applyStartOfCombatTrinkets",
+        "combatTrinketByCardId"
+      ],
+      "tests": [
+        "tests/trinket-combat-effects.test.ts",
+        "tests/trinket-audit-group1.test.ts"
+      ],
+      "notes": "已修复；逐饰品副本循环使无类型2/3目标正确两次三倍成18/27，独立专项通过。单件类型过滤与战斗临时状态保留。"
+    },
+    {
+      "index": 101,
+      "id": "greater-trinket-bg30-magicitem-406",
+      "cardId": "BG30_MagicItem_406",
+      "name": "屠夫钩镰",
+      "tier": "greater",
+      "description": "获取一张宰割。在每个回合开始时，再获取一张。",
+      "status": "reviewed",
+      "initialStatus": "reviewed",
+      "initialStatusSource": "group-record",
+      "limitationKind": "none",
+      "implementation": [
+        "applyRepeatableOfficialTrinketReward",
+        "applyOfficialTrinketAtStartOfTurn"
+      ],
+      "tests": [
+        "tests/trinket-simple-effects.test.ts"
+      ],
+      "notes": "Exact Slaughter acquisition and every-start supply; real Tavern Spell identity, normal full-hand behavior and cast path."
+    },
+    {
+      "index": 102,
+      "id": "greater-trinket-bg30-magicitem-410t2",
+      "cardId": "BG30_MagicItem_410t2",
+      "name": "鬃尖笔墨套装",
+      "tier": "greater",
+      "description": "复仇（4）：在本局对战中，你的鲜血宝石使随从额外获得+1/+1。",
+      "status": "reviewed",
+      "initialStatus": "reviewed",
+      "initialStatusSource": "current-status-fallback",
+      "limitationKind": "none",
+      "implementation": [
+        "advanceCombatDeathTrinkets",
+        "advanceTrinketDeathThreshold",
+        "improveBloodGemsFromTrinket"
+      ],
+      "tests": [
+        "tests/trinket-combat-effects.test.ts"
+      ],
+      "notes": "复仇4永久增加宝石+1/+1；每场复仇进度独立且金色/提图斯不重复死亡计数，幽灵侧只视觉结算。"
+    },
+    {
+      "index": 103,
+      "id": "greater-trinket-bg30-magicitem-418",
+      "cardId": "BG30_MagicItem_418",
+      "name": "铜须肖像",
+      "tier": "greater",
+      "description": "获取一张布莱恩·铜须和一张随机战吼随从牌。你的布莱恩·铜须视为鱼人和龙。",
+      "status": "reviewed",
+      "initialStatus": "reviewed",
+      "initialStatusSource": "current-status-fallback",
+      "limitationKind": "none",
+      "implementation": [
+        "applyOfficialTrinketOnAcquire",
+        "applyOwnedTrinketMinionOverrides"
+      ],
+      "tests": [
+        "tests/trinket-recruit-trigger-effects-batch4.test.ts"
+      ],
+      "notes": "生成铜须+共享池随机战吼各1；已有/以后铜须视为龙/鱼人（tribes更新），类型规则及存档统一。"
+    },
+    {
+      "index": 104,
+      "id": "greater-trinket-bg30-magicitem-420t",
+      "cardId": "BG30_MagicItem_420t",
+      "name": "麦迪文之书",
+      "tier": "greater",
+      "description": "发现2张\n酒馆法术牌。在每个回合开始时，再发现2张。",
+      "status": "reviewed",
+      "initialStatus": "reviewed",
+      "initialStatusSource": "group-record",
+      "limitationKind": "none",
+      "implementation": [
+        "queueBookOfMedivhDiscoveries",
+        "flushPendingBookOfMedivhDiscoveries"
+      ],
+      "tests": [
+        "tests/trinket-book-of-medivh.test.ts"
+      ],
+      "notes": "Two queued Tavern Spell Discovers both on acquisition and every start; each pending choice saves, queue flushes once and shared spell accounting respected. Human/AI choose through shared implementation."
+    },
+    {
+      "index": 105,
+      "id": "greater-trinket-bg30-magicitem-422t",
+      "cardId": "BG30_MagicItem_422t",
+      "name": "游学者卷轴",
+      "tier": "greater",
+      "description": "每当你对一个随从施放法术时，使其获得+10/+10。",
+      "status": "reviewed",
+      "initialStatus": "reviewed",
+      "initialStatusSource": "current-status-fallback",
+      "limitationKind": "none",
+      "implementation": [
+        "LOREWALKER_SCROLL_BUFF_BY_CARD_ID",
+        "applyAfterTargetedSpellCastTrinkets"
+      ],
+      "tests": [
+        "tests/trinket-recruit-trigger-effects.test.ts"
+      ],
+      "notes": "每个实际定向到随从的法术使目标+10/+10，覆盖宝石和酒馆/塑造目标；效果源施法与非法目标走共享合法性检查。"
+    },
+    {
+      "index": 106,
+      "id": "greater-trinket-bg30-magicitem-426t",
+      "cardId": "BG30_MagicItem_426t",
+      "name": "多彩罗盘",
+      "tier": "greater",
+      "description": "随机获取2张与你战队相符类型的随从牌。在每个回合开始时，再获取2张。",
+      "status": "reviewed",
+      "initialStatus": "reviewed",
+      "initialStatusSource": "current-status-fallback",
+      "limitationKind": "none",
+      "implementation": [
+        "addRandomWarbandTypeMinionsToHand",
+        "applyOfficialTrinketAtStartOfTurn"
+      ],
+      "tests": [
+        "tests/trinket-recruit-trigger-effects-batch5.test.ts"
+      ],
+      "notes": "初始/每回合2真实匹配战队类型的共享池牌，各次抽池、满手安全；读取当前主流战队类型。"
+    },
+    {
+      "index": 107,
+      "id": "greater-trinket-bg30-magicitem-439",
+      "cardId": "BG30_MagicItem_439",
+      "name": "新潮眼罩",
+      "tier": "greater",
+      "description": "你只需2个复制即可将海盗变为金色。",
+      "status": "reviewed",
+      "initialStatus": "reviewed",
+      "initialStatusSource": "group-record",
+      "limitationKind": "none",
+      "implementation": [
+        "GOLDEN_PIRATE_STICKER_CARD_ID",
+        "resolveTriples"
+      ],
+      "tests": [
+        "tests/trinket-recruit-economy-effects-batch4.test.ts"
+      ],
+      "notes": "Exactly two non-golden Pirate copies form golden; dual-type Pirates qualify, other tribes still require three. This rule is idempotent across copies."
+    },
+    {
+      "index": 108,
+      "id": "greater-trinket-bg30-magicitem-442",
+      "cardId": "BG30_MagicItem_442",
+      "name": "鲜血魔像标签",
+      "tier": "greater",
+      "description": "每当一个友方野猪人死亡，召唤一个属性值等同于其鲜血宝石加成的魔像。",
+      "status": "reviewed",
+      "initialStatus": "reviewed",
+      "initialStatusSource": "current-status-fallback",
+      "limitationKind": "none",
+      "implementation": [
+        "advanceCombatDeathTrinkets",
+        "summonBloodGolemFromTrinket"
+      ],
+      "tests": [
+        "tests/trinket-blood-golem-sticker.test.ts"
+      ],
+      "notes": "只响应友方野猪人死亡，魔像属性来自死亡实体鲜血宝石账本而非总属性；最少1/1、空场地限制及临时战斗召唤可回放。"
+    },
+    {
+      "index": 109,
+      "id": "greater-trinket-bg30-magicitem-540",
+      "cardId": "BG30_MagicItem_540",
+      "name": "猛猿标签",
+      "tier": "greater",
+      "description": "在战斗中，在你召唤一只野兽后，使其攻击力翻倍。",
+      "status": "reviewed",
+      "initialStatus": "bug",
+      "initialStatusSource": "confirmed-regression",
+      "limitationKind": "none",
+      "implementation": [
+        "triggerCombatSummonTrinkets",
+        "combatTrinketByCardId"
+      ],
+      "tests": [
+        "tests/trinket-combat-effects.test.ts",
+        "tests/trinket-audit-group1.test.ts"
+      ],
+      "notes": "已修复；逐饰品副本循环使战斗召唤1/1野兽攻击正确为4；独立专项通过。单件仅战斗召唤翻倍行为保留。"
+    },
+    {
+      "index": 110,
+      "id": "greater-trinket-bg30-magicitem-541",
+      "cardId": "BG30_MagicItem_541",
+      "name": "虚空坠饰",
+      "tier": "greater",
+      "description": "酒馆中的随从拥有+2/+2。你的英雄在战斗之外每受到3次伤害后提升。（还剩3次！）",
+      "status": "reviewed",
+      "initialStatus": "bug",
+      "initialStatusSource": "group-record",
+      "limitationKind": "none",
+      "implementation": [
+        "NETHER_PENDANT_CARD_ID",
+        "applyOfficialTrinketOnAcquire",
+        "damageRecruitPlayer"
+      ],
+      "tests": [
+        "tests/trinket-recruit-economy-effects-batch4.test.ts",
+        "tests/trinket-audit-group2.test.ts"
+      ],
+      "notes": "FIXED AND VERIFIED: 18/18 group-2 regression tests, TypeScript check and focused ESLint pass after root integration. Original audit finding: Confirmed: Souvenir copied ongoing +2/+2 aura is not installed, retained Tavern only +2/+2 total instead of +4/+4. Every three Recruit damage events correctly advances per-copy counters; copy initialization is missing."
+    },
+    {
+      "index": 111,
+      "id": "greater-trinket-bg30-magicitem-544t",
+      "cardId": "BG30_MagicItem_544t",
+      "name": "诺米标签",
+      "tier": "greater",
+      "description": "在你使用一张元素牌后，使酒馆中的元素在本局对战中获得+5/+5。",
+      "status": "reviewed",
+      "initialStatus": "reviewed",
+      "initialStatusSource": "current-status-fallback",
+      "limitationKind": "none",
+      "implementation": [
+        "NOMI_TAG_BUFF_BY_CARD_ID",
+        "applyAfterMinionPlayedTrinkets",
+        "applyPersistentTavernTypeBuff"
+      ],
+      "tests": [
+        "tests/trinket-recruit-trigger-effects.test.ts"
+      ],
+      "notes": "大饰品版本每次元素真实使用提供永久酒馆类型+5/+5；当前/未来报价共有一个类型增益账本，全部类型正确触发。"
+    },
+    {
+      "index": 112,
+      "id": "greater-trinket-bg30-magicitem-545",
+      "cardId": "BG30_MagicItem_545",
+      "name": "冰箱磁贴",
+      "tier": "greater",
+      "description": "复仇（3）：随机获取一张磁力随从牌。",
+      "status": "reviewed",
+      "initialStatus": "reviewed",
+      "initialStatusSource": "current-status-fallback",
+      "limitationKind": "none",
+      "implementation": [
+        "advanceCombatDeathTrinkets",
+        "advanceTrinketDeathThreshold",
+        "gainRandomGeneratedMinionFromTrinket"
+      ],
+      "tests": [
+        "tests/trinket-combat-effects.test.ts"
+      ],
+      "notes": "已复审AST转换：复仇3按副本独立counter，各副本随机生成1磁力随从；单件战斗、满手、重置既有专项通过。尚非穷尽组合测试。"
+    },
+    {
+      "index": 113,
+      "id": "greater-trinket-bg30-magicitem-546",
+      "cardId": "BG30_MagicItem_546",
+      "name": "罐装宝石",
+      "tier": "greater",
+      "description": "每场战斗中，在2个友方随从攻击后，本饰品对你的所有野猪人各使用一张鲜血宝石。（还剩2个！）",
+      "status": "reviewed",
+      "initialStatus": "bug",
+      "initialStatusSource": "group-record",
+      "limitationKind": "none",
+      "implementation": [
+        "triggerCombatAttackTrinkets",
+        "COMBAT_TRINKET_CARD_IDS.jarOfGems"
+      ],
+      "tests": [
+        "tests/trinket-combat-effects.test.ts",
+        "tests/trinket-audit-group2.test.ts"
+      ],
+      "notes": "FIXED AND VERIFIED: 18/18 group-2 regression tests, TypeScript check and focused ESLint pass after root integration. Original audit finding: Single-copy every-second friendly attack behavior exists. Confirmed two real Souvenir copies produce only one source trigger; per-copy combat lookup loses original. Printed after-attack timing is not independently proven by existing test."
+    },
+    {
+      "index": 114,
+      "id": "greater-trinket-bg30-magicitem-547t",
+      "cardId": "BG30_MagicItem_547t",
+      "name": "舒适的棺椁",
+      "tier": "greater",
+      "description": "在你施放一个酒馆\n法术后，你的亡灵在本局对战中拥有+2攻击力\n（无论它们在哪）。",
+      "status": "reviewed",
+      "initialStatus": "reviewed",
+      "initialStatusSource": "current-status-fallback",
+      "limitationKind": "none",
+      "implementation": [
+        "COMFORTABLE_COFFIN_ATTACK_BY_CARD_ID",
+        "applyAfterTavernSpellCastTrinkets",
+        "reconcilePlayerWhereverMinions"
+      ],
+      "tests": [
+        "tests/trinket-recruit-trigger-effects.test.ts"
+      ],
+      "notes": "每次酒馆法术施放后永久增加亡灵全局攻击2，并改当前战场/手牌；未来取得亡灵读取账本，自动施法也走相同观察。"
+    },
+    {
+      "index": 115,
+      "id": "greater-trinket-bg30-magicitem-555",
+      "cardId": "BG30_MagicItem_555",
+      "name": "惊喜肖像",
+      "tier": "greater",
+      "description": "获取一张惊喜元素。（在你意想不到的时候会出现更多……）",
+      "status": "partial",
+      "initialStatus": "partial",
+      "initialStatusSource": "current-status-fallback",
+      "limitationKind": "implementation-gap",
+      "implementation": [
+        "applyOfficialTrinketOnAcquire"
+      ],
+      "tests": [
+        "tests/trinket-acquisition-portraits.test.ts"
+      ],
+      "notes": "只获取1惊喜元素；引擎无后续惊喜元素生成或饰品监听，卡面“在意想不到的时候会出现更多”未实现，隐藏实际触发规则需一手来源。"
+    },
+    {
+      "index": 116,
+      "id": "greater-trinket-bg30-magicitem-701",
+      "cardId": "BG30_MagicItem_701",
+      "name": "萨格拉斯之眼",
+      "tier": "greater",
+      "description": "你每购买四张牌，第四张牌会消耗生命值，而非铸币。（还剩3张！）",
+      "status": "reviewed",
+      "initialStatus": "reviewed",
+      "initialStatusSource": "group-record",
+      "limitationKind": "none",
+      "implementation": [
+        "eyeOfSargerasTrinkets",
+        "eyeOfSargerasIsDue",
+        "getMinionPurchaseQuote",
+        "getTavernSpellPurchaseQuote"
+      ],
+      "tests": [
+        "tests/trinket-health-purchases.test.ts"
+      ],
+      "notes": "Successful minion/spell purchases counted together; only fourth purchase spends discounted health price, armor supported, cannot kill, full-hand rejected without consuming progress. AI safety floor/save tested."
+    },
+    {
+      "index": 117,
+      "id": "greater-trinket-bg30-magicitem-801",
+      "cardId": "BG30_MagicItem_801",
+      "name": "罪碑标签",
+      "tier": "greater",
+      "description": "每回合中，在你前2次发现卡牌时，额外获取一张复制。（还剩2次！）",
+      "status": "reviewed",
+      "initialStatus": "bug",
+      "initialStatusSource": "confirmed-regression",
+      "limitationKind": "none",
+      "implementation": [
+        "applyAfterDiscoverTrinkets",
+        "consumePerRoundTrinketTrigger",
+        "cloneMinionAsGeneratedCopy",
+        "beginTavernSpellDiscoverInteraction",
+        "beginDarkmoonPrizeDiscoverInteraction"
+      ],
+      "tests": [
+        "tests/trinket-recruit-trigger-effects-batch3.test.ts",
+        "tests/trinket-audit-group3.test.ts"
+      ],
+      "notes": "本次发现并已修复：原仅复制随从发现，遗漏法术/暗月发现且金色锁手复制丢状态。最新3项失败回归全部通过；每轮共享2次额度，人类/AI都调用实际卡牌复制路径。"
+    },
+    {
+      "index": 118,
+      "id": "greater-trinket-bg30-magicitem-828",
+      "cardId": "BG30_MagicItem_828",
+      "name": "沙锤手肖像",
+      "tier": "greater",
+      "description": "获取一张热情沙锤手。你的热情沙锤手会额外获取一张法术牌的复制。",
+      "status": "partial",
+      "initialStatus": "partial",
+      "initialStatusSource": "current-status-fallback",
+      "limitationKind": "verification-gap",
+      "implementation": [
+        "applyOfficialTrinketOnAcquire",
+        "copySpellcraftHandCardAfterCast"
+      ],
+      "tests": [
+        "tests/trinket-recruit-trigger-effects-batch4.test.ts"
+      ],
+      "notes": "获取沙锤手及单件每次额外1复制实现；纪念品复制使用布尔playerHasTrinketCardId，额外复制仍仅+1而非+2，尚未新增专项复现。"
+    },
+    {
+      "index": 119,
+      "id": "greater-trinket-bg30-magicitem-864",
+      "cardId": "BG30_MagicItem_864",
+      "name": "吉尔尼斯带刺玫瑰",
+      "tier": "greater",
+      "description": "复仇（3）：使你的随从永久获得+4/+5并对其造成1点伤害。",
+      "status": "reviewed",
+      "initialStatus": "bug",
+      "initialStatusSource": "group-record",
+      "limitationKind": "none",
+      "implementation": [
+        "resolveGilneanThornedRose",
+        "COMBAT_TRINKET_CARD_IDS.gilneanThornedRose"
+      ],
+      "tests": [
+        "tests/trinket-combat-effects.test.ts",
+        "tests/trinket-audit-group2.test.ts"
+      ],
+      "notes": "FIXED AND VERIFIED: new actual Souvenir-copy regression passes after root integration. Both Roses permanently grant +8/+10 total and separately deal 1 combat damage. Original audit finding: Single-copy Avenge 3 permanently +4/+5 then combat-only 1 damage verified. Audit found combatTrinketByCardId find discards a Souvenir copy; root converting per-copy combat dispatch. No dedicated two-Rose reproduction."
+    },
+    {
+      "index": 120,
+      "id": "greater-trinket-bg30-magicitem-876",
+      "cardId": "BG30_MagicItem_876",
+      "name": "操纵者肖像",
+      "tier": "greater",
+      "description": "获取一张\n无面操纵者。",
+      "status": "partial",
+      "initialStatus": "partial",
+      "initialStatusSource": "current-status-fallback",
+      "limitationKind": "indirect-unimplemented",
+      "implementation": [
+        "applyOfficialTrinketOnAcquire",
+        "addGeneratedMinionCopyToHand",
+        "getMinionDefinition(BG_EX1_564)"
+      ],
+      "tests": [
+        "tests/trinket-acquisition-portraits.test.ts"
+      ],
+      "notes": "正确获取固定无面操纵者且无共享池所有权；赠送牌effectSupport=partial，战吼选择并成为随从复制仍存在间接功能缺口。"
+    },
+    {
+      "index": 121,
+      "id": "greater-trinket-bg30-magicitem-879t",
+      "cardId": "BG30_MagicItem_879t",
+      "name": "达拉然奶酪轮",
+      "tier": "greater",
+      "description": "酒馆中的随从拥有+2/+2。你每刷新4次后提升。（还剩4次！）",
+      "status": "reviewed",
+      "initialStatus": "reviewed",
+      "initialStatusSource": "current-status-fallback",
+      "limitationKind": "none",
+      "implementation": [
+        "applyOfficialTrinketOnAcquire",
+        "applyAfterTavernRefreshedTrinkets",
+        "advanceTrinketCounter"
+      ],
+      "tests": [
+        "tests/trinket-recruit-economy-effects-batch4.test.ts"
+      ],
+      "notes": "基础酒馆永久+2/+2、每4真实刷新再+1/+1；计数跨回合、冻结/新报价共享累计增益，有主路径测试。"
+    },
+    {
+      "index": 122,
+      "id": "greater-trinket-bg30-magicitem-886",
+      "cardId": "BG30_MagicItem_886",
+      "name": "强固之盾",
+      "tier": "greater",
+      "description": "每当你召唤一个随从时，使其获得圣盾。（每场战斗限5次。）",
+      "status": "reviewed",
+      "initialStatus": "bug",
+      "initialStatusSource": "group-record",
+      "limitationKind": "none",
+      "implementation": [
+        "grantSummonedMinionShieldFromTrinket",
+        "COMBAT_TRINKET_CARD_IDS.reinforcedShield"
+      ],
+      "tests": [
+        "tests/trinket-combat-effects.test.ts",
+        "tests/trinket-audit-group2.test.ts"
+      ],
+      "notes": "FIXED AND VERIFIED: new actual Souvenir-copy regression passes after root integration. Seven Rat summons receive seven shields using independent five/two budgets from the two copies. Original audit finding: Single-copy five successful shield grants per combat verified. Audit found first-match lookup drops second copy's separate five-use budget; requires per-copy dispatch while not charging redundant shield grants."
+    },
+    {
+      "index": 123,
+      "id": "greater-trinket-bg30-magicitem-914t",
+      "cardId": "BG30_MagicItem_914t",
+      "name": "鱼人语实用手册",
+      "tier": "greater",
+      "description": "在你使用一张随从牌后，使你手牌中最左边的随从牌获得+6/+6。",
+      "status": "reviewed",
+      "initialStatus": "reviewed",
+      "initialStatusSource": "current-status-fallback",
+      "limitationKind": "none",
+      "implementation": [
+        "MURLOC_MANUAL_BUFF_BY_CARD_ID",
+        "applyAfterMinionPlayedTrinkets"
+      ],
+      "tests": [
+        "tests/trinket-recruit-trigger-effects.test.ts"
+      ],
+      "notes": "每次使用随从后只强化仍在手牌的最左随从+6/+6，忽略法术与空手；打出的卡先移出，待选择战吼完成后结算。"
+    },
+    {
+      "index": 124,
+      "id": "greater-trinket-bg30-magicitem-919",
+      "cardId": "BG30_MagicItem_919",
+      "name": "纳沙塔尔明信片",
+      "tier": "greater",
+      "description": "在你使用一张纳迦牌后，随机获取一张塑造法术的法术牌。",
+      "status": "reviewed",
+      "initialStatus": "bug",
+      "initialStatusSource": "confirmed-regression",
+      "limitationKind": "none",
+      "implementation": [
+        "applyAfterMinionPlayedTrinkets",
+        "addRandomSpellcraftSpells"
+      ],
+      "tests": [
+        "tests/trinket-recruit-trigger-effects-batch4.test.ts",
+        "tests/trinket-audit-group1.test.ts"
+      ],
+      "notes": "每次使用纳迦给1随机塑造法术；普通打出/融合源身份走卡牌事件；本轮独立复制饰品用例已通过。"
+    },
+    {
+      "index": 125,
+      "id": "greater-trinket-bg30-magicitem-920",
+      "cardId": "BG30_MagicItem_920",
+      "name": "恶鳞寿司卷",
+      "tier": "greater",
+      "description": "获取一张恶鳞套餐。每个回合中，你的前两个塑造法术的法术额外施放一次。（还剩2个！）",
+      "status": "reviewed",
+      "initialStatus": "reviewed",
+      "initialStatusSource": "group-record",
+      "limitationKind": "none",
+      "implementation": [
+        "SPITESCALE_SUSHI_ROLL_CARD_ID",
+        "extraSpellcraftCasts"
+      ],
+      "tests": [
+        "tests/trinket-recruit-trigger-effects-batch3.test.ts"
+      ],
+      "notes": "Exact Slimy Seafood acquisition; first two Spellcraft cards per round get one extra execution, independent per-copy saved round counter. Does not duplicate unrelated Tavern Spell cards."
+    },
+    {
+      "index": 126,
+      "id": "greater-trinket-bg30-magicitem-924t",
+      "cardId": "BG30_MagicItem_924t",
+      "name": "藏宝海湾美酒",
+      "tier": "greater",
+      "description": "每当你花费铸币时，使一个友方海盗获得+6/+7。",
+      "status": "reviewed",
+      "initialStatus": "reviewed",
+      "initialStatusSource": "current-status-fallback",
+      "limitationKind": "none",
+      "implementation": [
+        "BOOTY_BAY_BREW_BUFF_BY_CARD_ID",
+        "applyAfterGoldSpentTrinkets",
+        "spendGold"
+      ],
+      "tests": [
+        "tests/trinket-recruit-trigger-effects.test.ts"
+      ],
+      "notes": "每个实际金币消费交易强化随机友方海盗+6/+7，不按花费枚数重复；免费交易不触发，升级等共同走spendGold。"
+    },
+    {
+      "index": 127,
+      "id": "greater-trinket-bg30-magicitem-942",
+      "cardId": "BG30_MagicItem_942",
+      "name": "机械加拉克苏斯标签",
+      "tier": "greater",
+      "description": "随机获取2张磁力机械-恶魔牌。在每个回合开始时，再获取2张。",
+      "status": "reviewed",
+      "initialStatus": "reviewed",
+      "initialStatusSource": "current-status-fallback",
+      "limitationKind": "none",
+      "implementation": [
+        "addRandomMechaJaraxxusMinionsToHand",
+        "applyOfficialTrinketAtStartOfTurn"
+      ],
+      "tests": [
+        "tests/trinket-mecha-jaraxxus-sticker.test.ts"
+      ],
+      "notes": "初始/每回合2真实磁力机械恶魔，固定3定义及普通/金色身份保持，生成不抽共享池，满手限制。"
+    },
+    {
+      "index": 128,
+      "id": "greater-trinket-bg30-magicitem-943",
+      "cardId": "BG30_MagicItem_943",
+      "name": "测绘员肖像",
+      "tier": "greater",
+      "description": "获取一张热气球测绘员。从你手牌中使用的鲜血宝石使随从额外获得+6/+6。",
+      "status": "reviewed",
+      "initialStatus": "bug",
+      "initialStatusSource": "group-record",
+      "limitationKind": "none",
+      "implementation": [
+        "castBloodGem",
+        "SURVEYOR_PORTRAIT_CARD_ID"
+      ],
+      "tests": [
+        "tests/trinket-recruit-trigger-effects-batch3.test.ts",
+        "tests/trinket-audit-group2.test.ts"
+      ],
+      "notes": "FIXED AND VERIFIED: 18/18 group-2 regression tests, TypeScript check and focused ESLint pass after root integration. Original audit finding: Confirmed two Surveyor Portraits still add only +6/+6 to hand-played gem, yielding +7/+7 instead of +13/+13. Boolean presence must become additive count; automatic gems should not receive this bonus."
+    },
+    {
+      "index": 129,
+      "id": "greater-trinket-bg30-magicitem-944",
+      "cardId": "BG30_MagicItem_944",
+      "name": "救赎者肖像",
+      "tier": "greater",
+      "description": "获取一张救赎者娜拉。你的救赎者娜拉使随从额外获得+4/+4。",
+      "status": "reviewed",
+      "initialStatus": "reviewed",
+      "initialStatusSource": "current-status-fallback",
+      "limitationKind": "none",
+      "implementation": [
+        "applyOfficialTrinketOnAcquire",
+        "triggerRecruitAfterTavernSpellCast",
+        "resolveCombatTavernSpell"
+      ],
+      "tests": [
+        "tests/trinket-recruit-trigger-effects-batch3.test.ts"
+      ],
+      "notes": "获取救赎者娜拉；每个真实娜拉各类型脉冲额外+4/+4，金色乘完整增益，多种族选目标共享辅助函数；招募及战斗施法路径都含portrait分支。"
+    },
+    {
+      "index": 130,
+      "id": "greater-trinket-bg30-magicitem-951",
+      "cardId": "BG30_MagicItem_951",
+      "name": "熔岩提灯",
+      "tier": "greater",
+      "description": "在你出售5个随从后，随机获取\n一张元素牌。（还剩5个！）",
+      "status": "reviewed",
+      "initialStatus": "reviewed",
+      "initialStatusSource": "current-status-fallback",
+      "limitationKind": "none",
+      "implementation": [
+        "applyAfterMinionSoldTrinkets",
+        "advanceTrinketCounter",
+        "drawMatchingFromPool"
+      ],
+      "tests": [
+        "tests/trinket-recruit-trigger-effects.test.ts"
+      ],
+      "notes": "5真实出售循环获取1元素，共享池受剩余/等级约束，满手处理与计数跨回合一致。"
+    },
+    {
+      "index": 131,
+      "id": "greater-trinket-bg30-magicitem-987",
+      "cardId": "BG30_MagicItem_987",
+      "name": "民谣歌手肖像",
+      "tier": "greater",
+      "description": "获取一张苦情民谣歌手。在每个回合开始时，再获取一张。你的苦情民谣歌手还会使随从获得攻击力。",
+      "status": "partial",
+      "initialStatus": "partial",
+      "initialStatusSource": "group-record",
+      "limitationKind": "verification-gap",
+      "implementation": [
+        "BALLADIST_PORTRAIT_CARD_ID",
+        "applyOfficialTrinketAtStartOfTurn"
+      ],
+      "tests": [
+        "tests/trinket-recruit-trigger-effects-batch4.test.ts"
+      ],
+      "notes": "Exact Lovesick Balladist and start-turn supply exist; targeted Battlecry path augments Attack. Existing portrait suite primarily proves acquisition and supply; no dedicated test found for added Attack on ordinary/golden interactive and re-triggered Battlecries."
+    },
+    {
+      "index": 132,
+      "id": "greater-trinket-bg30-magicitem-988t",
+      "cardId": "BG30_MagicItem_988t",
+      "name": "野猪之神标签",
+      "tier": "greater",
+      "description": "获取5张鲜血宝石。你的鲜血宝石使随从额外获得+3/+3。",
+      "status": "reviewed",
+      "initialStatus": "reviewed",
+      "initialStatusSource": "current-status-fallback",
+      "limitationKind": "none",
+      "implementation": [
+        "applyOfficialTrinketOnAcquire",
+        "addBloodGems",
+        "bloodGemAttack",
+        "bloodGemHealth"
+      ],
+      "tests": [
+        "tests/trinket-simple-effects.test.ts"
+      ],
+      "notes": "获取时全局宝石成长+3/+3并提供5张宝石；满手时遵循上限，牌自身数值动态读本局成长，固定提升保存在PlayerState。"
+    },
+    {
+      "index": 133,
+      "id": "greater-trinket-bg30-magicitem-989t",
+      "cardId": "BG30_MagicItem_989t",
+      "name": "艺匠之瓮",
+      "tier": "greater",
+      "description": "你的亡灵拥有+15攻击力。",
+      "status": "reviewed",
+      "initialStatus": "reviewed",
+      "initialStatusSource": "current-status-fallback",
+      "limitationKind": "none",
+      "implementation": [
+        "applyOfficialTrinketOnAcquire",
+        "improveUndeadArmyFromTrinket"
+      ],
+      "tests": [
+        "tests/trinket-simple-effects.test.ts"
+      ],
+      "notes": "已有场上/手牌+15攻击、未来亡灵使用全局bonus；复制获得不额外重触发购买效果属于待一手确认例外。"
+    },
+    {
+      "index": 134,
+      "id": "greater-trinket-bg30-magicitem-993",
+      "cardId": "BG30_MagicItem_993",
+      "name": "帕格的鱼竿",
+      "tier": "greater",
+      "description": "随机获取一张等级7的随从牌。在每个回合开始时，再获取一张。",
+      "status": "reviewed",
+      "initialStatus": "reviewed",
+      "initialStatusSource": "group-record",
+      "limitationKind": "none",
+      "implementation": [
+        "PAGLES_FISHING_ROD_CARD_ID",
+        "addRandomTierSevenMinionToHand"
+      ],
+      "tests": [
+        "tests/trinket-discover-rewards.test.ts"
+      ],
+      "notes": "Immediate and every start exact generated Tier 7 reward from fixed special pool, active tribe filtering, full-hand behavior and zero ordinary pool copies. Does not introduce Tier 7 into ordinary Tavern."
+    },
+    {
+      "index": 135,
+      "id": "greater-trinket-bg30-magicitem-995",
+      "cardId": "BG30_MagicItem_995",
+      "name": "青铜龙时钟",
+      "tier": "greater",
+      "description": "战斗开始时：使你的每个随从获得等同于其攻击力的一半的生命值。",
+      "status": "reviewed",
+      "initialStatus": "reviewed",
+      "initialStatusSource": "current-status-fallback",
+      "limitationKind": "none",
+      "implementation": [
+        "applyStartOfCombatTrinkets",
+        "applyCombatEnchantingGain"
+      ],
+      "tests": [
+        "tests/trinket-combat-effects.test.ts"
+      ],
+      "notes": "开战为每个存活随从加当前攻击一半的生命，奇数向上取整；永久保留类随从按共享战斗增益记账，普通随从下场清理。"
+    },
+    {
+      "index": 136,
+      "id": "greater-trinket-bobs-tip-jar",
+      "cardId": "BG30_MagicItem_996",
+      "name": "鲍勃的小费罐",
+      "tier": "greater",
+      "description": "获得4枚铸币。你的铸币上限提高4枚。",
+      "status": "reviewed",
+      "initialStatus": "reviewed",
+      "initialStatusSource": "current-status-fallback",
+      "limitationKind": "none",
+      "implementation": [
+        "applyTrinketDefinitionEffects"
+      ],
+      "tests": [
+        "tests/lobby-systems.test.ts",
+        "tests/trinket-high-coupling-effects.test.ts"
+      ],
+      "notes": "购买金币与最大金币+4；永久上限读取和读档正确。复制一次性购买是否重触发不擅自判错，既有测试明确仅购买本体+4。"
+    },
+    {
+      "index": 137,
+      "id": "greater-trinket-bg30-magicitem-999",
+      "cardId": "BG30_MagicItem_999",
+      "name": "玄奥的法术书",
+      "tier": "greater",
+      "description": "在你花掉7枚铸币后，施放闪亮的戒指。（还剩7枚！）",
+      "status": "reviewed",
+      "initialStatus": "reviewed",
+      "initialStatusSource": "group-record",
+      "limitationKind": "none",
+      "implementation": [
+        "FANCY_SPELLBOOK_CARD_ID",
+        "applyAfterGoldSpentTrinkets",
+        "resolveTriggeredRecruitTavernSpell"
+      ],
+      "tests": [
+        "tests/trinket-recruit-trigger-effects-batch3.test.ts"
+      ],
+      "notes": "Gold spend accumulates across true payments; each seven casts real Shiny Ring and carries remainder, including multiple thresholds in one transaction. Free/health-priced actions do not spend gold."
+    },
+    {
+      "index": 138,
+      "id": "greater-trinket-bg31-magicitem-903",
+      "cardId": "BG31_MagicItem_903",
+      "name": "智慧之球补给",
+      "tier": "greater",
+      "description": "获取一张冒牌的智慧之球。在每个回合开始时，重复此\n效果。",
+      "status": "reviewed",
+      "initialStatus": "reviewed",
+      "initialStatusSource": "current-status-fallback",
+      "limitationKind": "none",
+      "implementation": [
+        "applyOfficialTrinketOnAcquire",
+        "applyOfficialTrinketAtStartOfTurn",
+        "addGeneratedTavernSpellToHand"
+      ],
+      "tests": [
+        "tests/trinket-recruit-trigger-effects-batch4.test.ts",
+        "tests/tavern-spells.test.ts"
+      ],
+      "notes": "立即及每回合開始生成真实冒牌智慧之球；法术完整规则包含两次付费有用刷新、共享副本与7级生成页面，手牌上限一致。"
+    },
+    {
+      "index": 139,
+      "id": "greater-trinket-bg32-magicitem-172",
+      "cardId": "BG32_MagicItem_172",
+      "name": "砰砰的怪物肖像",
+      "tier": "greater",
+      "description": "获取一张\n砰砰博士的怪物。在每个回合开始时，再获取一张。",
+      "status": "partial",
+      "initialStatus": "partial",
+      "initialStatusSource": "current-status-fallback",
+      "limitationKind": "indirect-unimplemented",
+      "implementation": [
+        "applyOfficialTrinketOnAcquire",
+        "applyOfficialTrinketAtStartOfTurn",
+        "BOOMS_MONSTER_DEFINITION_ID"
+      ],
+      "tests": [
+        "tests/trinket-acquisition-portraits.test.ts"
+      ],
+      "notes": "初始/每回合获取BG31_176；磁力身份已实现，但本局每磁力次数全局+2/+2/金色+4/+4未映射，definition明确partial。"
+    },
+    {
+      "index": 140,
+      "id": "greater-trinket-bg32-magicitem-200",
+      "cardId": "BG32_MagicItem_200",
+      "name": "全能辅食",
+      "tier": "greater",
+      "description": "每当一只友方野兽攻击时，使其获得+2攻击力并永久提升此效果。",
+      "status": "reviewed",
+      "initialStatus": "bug",
+      "initialStatusSource": "group-record",
+      "limitationKind": "none",
+      "implementation": [
+        "triggerCombatAttackTrinkets",
+        "COMBAT_TRINKET_CARD_IDS.allPurposeKibble"
+      ],
+      "tests": [
+        "tests/trinket-combat-effects.test.ts",
+        "tests/trinket-audit-group2.test.ts"
+      ],
+      "notes": "FIXED AND VERIFIED: 18/18 group-2 regression tests, TypeScript check and focused ESLint pass after root integration. Original audit finding: Confirmed two Kibbles give only one initial +2 Attack and grow only one persistent counter. Both copies must independently grant +2 and improve after a Beast attack; ghost writeback stays combat-local."
+    },
+    {
+      "index": 141,
+      "id": "greater-trinket-bg32-magicitem-232",
+      "cardId": "BG32_MagicItem_232",
+      "name": "鲨鱼火炮",
+      "tier": "greater",
+      "description": "在你花掉10枚铸币后，使你的海盗获得+1/+1并提升此效果。（还剩10枚！）",
+      "status": "reviewed",
+      "initialStatus": "reviewed",
+      "initialStatusSource": "current-status-fallback",
+      "limitationKind": "none",
+      "implementation": [
+        "SHARK_CANNON_CARD_ID",
+        "applyAfterGoldSpentTrinkets"
+      ],
+      "tests": [
+        "tests/trinket-recruit-trigger-effects-batch4.test.ts"
+      ],
+      "notes": "累计每10真实金币消费向海盗施加递增+1/+1、+2/+2等脉冲，跨交易余数保留；单次大消费可独立结算多个阈值。"
+    },
+    {
+      "index": 142,
+      "id": "greater-trinket-bg32-magicitem-270t",
+      "cardId": "BG32_MagicItem_270t",
+      "name": "邪恶魔典",
+      "tier": "greater",
+      "description": "复仇（4）：你的酒馆法术在本局对战中使随从额外获得+1/+1。",
+      "status": "reviewed",
+      "initialStatus": "reviewed",
+      "initialStatusSource": "current-status-fallback",
+      "limitationKind": "none",
+      "implementation": [
+        "advanceCombatDeathTrinkets",
+        "advanceTrinketDeathThreshold"
+      ],
+      "tests": [
+        "tests/trinket-combat-effects-batch4.test.ts"
+      ],
+      "notes": "已复审AST转换：复仇4按副本独立counter，各副本永久提升酒馆法术+1/+1；单件既有专项通过，幽灵隔离保留。"
+    },
+    {
+      "index": 143,
+      "id": "greater-trinket-bg32-magicitem-283",
+      "cardId": "BG32_MagicItem_283",
+      "name": "女沙皇肖像",
+      "tier": "greater",
+      "description": "获取一张蓄能女沙皇。你的蓄能女沙皇还会使随从获得生命值。",
+      "status": "reviewed",
+      "initialStatus": "reviewed",
+      "initialStatusSource": "group-record",
+      "limitationKind": "none",
+      "implementation": [
+        "CZARINA_PORTRAIT_CARD_ID",
+        "applyAfterTavernSpellCastTriggers"
+      ],
+      "tests": [
+        "tests/trinket-recruit-trigger-effects-batch4.test.ts"
+      ],
+      "notes": "Exact Charging Czarina reward; every Czarina Tavern Spell pulse gives matching Health to friendly Divine Shield minions, with golden multiplier. Property-extension semantics are idempotent."
+    },
+    {
+      "index": 144,
+      "id": "greater-trinket-bg32-magicitem-284",
+      "cardId": "BG32_MagicItem_284",
+      "name": "阿格姆标签",
+      "tier": "greater",
+      "description": "在你的回合结束时，本饰品对每个类型的各一个友方随从使用7张鲜血宝石。",
+      "status": "reviewed",
+      "initialStatus": "reviewed",
+      "initialStatusSource": "current-status-fallback",
+      "limitationKind": "none",
+      "implementation": [
+        "applyOfficialTrinketAtEndOfTurn",
+        "selectDistinctMinionsByTribe",
+        "applyRecruitBloodGemPulse"
+      ],
+      "tests": [
+        "tests/trinket-recruit-trigger-effects-batch4.test.ts"
+      ],
+      "notes": "回合末向每类型各一个不同实体逐张使用7宝石；双类型/全部类型避免重复占目标，多次回合末倍率重新选择，饰品施宝石不误触发手牌宝石专属效果。"
+    },
+    {
+      "index": 145,
+      "id": "greater-trinket-bg32-magicitem-301",
+      "cardId": "BG32_MagicItem_301",
+      "name": "低音提琴鱼人肖像",
+      "tier": "greater",
+      "description": "获取一张低音提琴鱼人。在战斗中，在你召唤一个鱼人后，使其获得圣盾。",
+      "status": "reviewed",
+      "initialStatus": "reviewed",
+      "initialStatusSource": "current-status-fallback",
+      "limitationKind": "none",
+      "implementation": [
+        "applyOfficialTrinketOnAcquire",
+        "triggerCombatSummonTrinkets"
+      ],
+      "tests": [
+        "tests/trinket-combat-effects.test.ts"
+      ],
+      "notes": "获取低音提琴鱼人；每战斗鱼人召唤圣盾，手牌rally召唤已验证，圣盾幂等。"
+    },
+    {
+      "index": 146,
+      "id": "greater-trinket-bg32-magicitem-306",
+      "cardId": "BG32_MagicItem_306",
+      "name": "先锋标签",
+      "tier": "greater",
+      "description": "战斗开始时：触发所有友方亡语。",
+      "status": "reviewed",
+      "initialStatus": "bug",
+      "initialStatusSource": "group-record",
+      "limitationKind": "none",
+      "implementation": [
+        "triggerHeraldStickerAtStartOfCombat"
+      ],
+      "tests": [
+        "tests/trinket-combat-effects-batch5.test.ts",
+        "tests/trinket-audit-group2.test.ts"
+      ],
+      "notes": "FIXED AND VERIFIED: 18/18 group-2 regression tests, TypeScript check and focused ESLint pass after root integration. Original audit finding: Confirmed two Heralds trigger a pre-existing friendly Deathrattle once, expected twice. Shared per-copy dispatcher must snapshot candidates for each separate activation and keep Titus/Brann/death resolution."
+    },
+    {
+      "index": 147,
+      "id": "greater-trinket-bg32-magicitem-361t",
+      "cardId": "BG32_MagicItem_361t",
+      "name": "口袋工厂",
+      "tier": "greater",
+      "description": "发现一张等级5的具有类型的随从牌。在每个回合开始时，再获取一张它的复制。",
+      "status": "reviewed",
+      "initialStatus": "reviewed",
+      "initialStatusSource": "current-status-fallback",
+      "limitationKind": "none",
+      "implementation": [
+        "POCKET_FACTORY_TIER_BY_CARD_ID",
+        "beginDiscoverInteraction",
+        "prepareDiscoverSelection",
+        "applyOfficialTrinketAtStartOfTurn"
+      ],
+      "tests": [
+        "tests/trinket-discover-rewards.test.ts"
+      ],
+      "notes": "立即发现准确5级有类型随从，记录选择definitionId；每回合开始生成普通复制。候选共享池预留/归还、AI同步选择及trinketSelections存档都有专项。"
+    },
+    {
+      "index": 148,
+      "id": "greater-trinket-bg32-magicitem-362t",
+      "cardId": "BG32_MagicItem_362t",
+      "name": "旅店老板的炉火",
+      "tier": "greater",
+      "description": "发现两张等级6的随从牌。将其属性值变为30/30。",
+      "status": "reviewed",
+      "initialStatus": "reviewed",
+      "initialStatusSource": "current-status-fallback",
+      "limitationKind": "none",
+      "implementation": [
+        "beginDiscoverInteraction",
+        "applyOfficialTrinketOnAcquire"
+      ],
+      "tests": [
+        "tests/trinket-discover-rewards.test.ts"
+      ],
+      "notes": "精确6星两次发现，选牌设为30/30，候选共享池保留/归还/满手安全，两步交互保存与AI同步。"
+    },
+    {
+      "index": 149,
+      "id": "greater-trinket-bg32-magicitem-363",
+      "cardId": "BG32_MagicItem_363",
+      "name": "精灵龙鳞",
+      "tier": "greater",
+      "description": "每当一条友方的龙攻击时，使其获得圣盾。（每场战斗限3次。）",
+      "status": "reviewed",
+      "initialStatus": "bug",
+      "initialStatusSource": "group-record",
+      "limitationKind": "none",
+      "implementation": [
+        "triggerCombatAttackTrinkets",
+        "COMBAT_TRINKET_CARD_IDS.faerieDragonScale"
+      ],
+      "tests": [
+        "tests/trinket-combat-effects.test.ts",
+        "tests/trinket-audit-group2.test.ts"
+      ],
+      "notes": "FIXED AND VERIFIED: new actual Souvenir-copy regression passes after root integration. Six attacking-Dragon shield grants use independent three/three budgets. Original audit finding: Single-copy attacking Dragons obtain at most three new Divine Shields. First-match lookup loses second copy's independent remaining budget; root converting dispatch. No dedicated six-grant reproduction."
+    },
+    {
+      "index": 150,
+      "id": "greater-trinket-bg32-magicitem-364",
+      "cardId": "BG32_MagicItem_364",
+      "name": "诗心龙肖像",
+      "tier": "greater",
+      "description": "获取一张时空扭曲诗心龙。",
+      "status": "reviewed",
+      "initialStatus": "reviewed",
+      "initialStatusSource": "current-status-fallback",
+      "limitationKind": "none",
+      "implementation": [
+        "applyOfficialTrinketOnAcquire",
+        "addGeneratedMinionCopyToHand",
+        "combatRetentionMultiplier"
+      ],
+      "tests": [
+        "tests/trinket-acquisition-portraits.test.ts",
+        "tests/dragon-combat-persistence.test.ts"
+      ],
+      "notes": "赠送完整时空扭曲诗心龙；实体effectSupport=complete，龙战斗属性和关键词永久保留走已实现战斗持久账本；生成牌不占普通共享池。"
+    },
+    {
+      "index": 151,
+      "id": "greater-trinket-bg32-magicitem-366",
+      "cardId": "BG32_MagicItem_366",
+      "name": "引路蜡烛",
+      "tier": "greater",
+      "description": "每个回合中，你的前两次刷新只会包含等级6的牌。（还剩2次！）",
+      "status": "reviewed",
+      "initialStatus": "reviewed",
+      "initialStatusSource": "current-status-fallback",
+      "limitationKind": "none",
+      "implementation": [
+        "availableGuidingCandleRefresh",
+        "applyOfficialTrinketAtStartOfTurn"
+      ],
+      "tests": [
+        "tests/trinket-recruit-trigger-effects-batch5.test.ts"
+      ],
+      "notes": "首2真实刷新所有报价均6星，第三次正常；回合开始重置，不把未付费失败刷新算次数，共享池约束。"
+    },
+    {
+      "index": 152,
+      "id": "greater-trinket-bg32-magicitem-367",
+      "cardId": "BG32_MagicItem_367",
+      "name": "鬼魅标签",
+      "tier": "greater",
+      "description": "你的回合结束效果额外触发一次。",
+      "status": "reviewed",
+      "initialStatus": "bug",
+      "initialStatusSource": "group-record",
+      "limitationKind": "none",
+      "implementation": [
+        "endOfTurnTriggerCount"
+      ],
+      "tests": [
+        "tests/trinket-recruit-trigger-effects-batch4.test.ts",
+        "tests/trinket-audit-group2.test.ts"
+      ],
+      "notes": "FIXED AND VERIFIED: 18/18 group-2 regression tests, TypeScript check and focused ESLint pass after root integration. Original audit finding: Confirmed two Ghastly Stickers add only one extra End of Turn execution: BG32_821 grants +2/+2 instead of +3/+3. Add count of independent trinkets to normal strongest Drakkari multiplier."
+    },
+    {
+      "index": 153,
+      "id": "greater-trinket-bg32-magicitem-801t",
+      "cardId": "BG32_MagicItem_801t",
+      "name": "森林之心",
+      "tier": "greater",
+      "description": "你的酒馆法术使随从额外获得+1/+1。在你从手牌施放6个酒馆法术后，提升此效果。（还剩6个！）",
+      "status": "reviewed",
+      "initialStatus": "reviewed",
+      "initialStatusSource": "current-status-fallback",
+      "limitationKind": "none",
+      "implementation": [
+        "applyOfficialTrinketOnAcquire",
+        "applyAfterTavernSpellCastTrinkets",
+        "HEART_OF_THE_FOREST_CARD_ID"
+      ],
+      "tests": [
+        "tests/trinket-recruit-trigger-effects-batch3.test.ts"
+      ],
+      "notes": "获取即增加酒馆法术属性+1/+1；仅从手牌施放的酒馆法术累计每6次再提高光环，自动随从/饰品施法不推进此门槛。"
+    },
+    {
+      "index": 154,
+      "id": "greater-trinket-bg32-magicitem-807",
+      "cardId": "BG32_MagicItem_807",
+      "name": "馆长标签",
+      "tier": "greater",
+      "description": "获取一张金色混合体和一张10/10并具有烈毒的融合怪。",
+      "status": "partial",
+      "initialStatus": "partial",
+      "initialStatusSource": "current-status-fallback",
+      "limitationKind": "indirect-unimplemented",
+      "implementation": [
+        "addCuratorStickerMinionsToHand",
+        "CURATOR_AMALGAM_DEFINITION_ID"
+      ],
+      "tests": [
+        "tests/trinket-acquisition-portraits.test.ts"
+      ],
+      "notes": "金色混合体与10/10烈毒融合怪获取正确；混合体每当融合怪获属性时跟随（普通1倍/金色2倍）未实现，effectSupport partial。"
+    },
+    {
+      "index": 155,
+      "id": "greater-trinket-bg32-magicitem-808t",
+      "cardId": "BG32_MagicItem_808t",
+      "name": "血缚耳环",
+      "tier": "greater",
+      "description": "在你施放5个法术后，本饰品对你的所有随从各使用两张鲜血宝石。（还剩5个！）",
+      "status": "reviewed",
+      "initialStatus": "bug",
+      "initialStatusSource": "group-record",
+      "limitationKind": "none",
+      "implementation": [
+        "BLOODBOUND_EARRINGS_BY_CARD_ID",
+        "applyAfterRecruitSpellCastTrinkets",
+        "triggerCombatAfterSpellCast"
+      ],
+      "tests": [
+        "tests/trinket-recruit-trigger-effects.test.ts",
+        "tests/trinket-audit-group2.test.ts"
+      ],
+      "notes": "FIXED AND VERIFIED: 18/18 group-2 regression tests, TypeScript check and focused ESLint pass after root integration. Original audit finding: Confirmed four Recruit spell casts followed by a combat Tavern Spell leave counter 4 instead of triggering two combat Blood Gems on every survivor/reset to 0. Combat spell threshold path missing; auto-gem applications must not recursively count as player spells."
+    },
+    {
+      "index": 156,
+      "id": "greater-trinket-bg32-magicitem-860t",
+      "cardId": "BG32_MagicItem_860t",
+      "name": "甲虫之戒",
+      "tier": "greater",
+      "description": "复仇（7）：召唤两只2/2的甲虫，使其获得嘲讽。",
+      "status": "reviewed",
+      "initialStatus": "reviewed",
+      "initialStatusSource": "current-status-fallback",
+      "limitationKind": "none",
+      "implementation": [
+        "advanceCombatDeathTrinkets",
+        "advanceTrinketDeathThreshold",
+        "summonBeetlesFromTrinket"
+      ],
+      "tests": [
+        "tests/trinket-combat-effects.test.ts"
+      ],
+      "notes": "复仇7召唤2只当前甲虫成长的2/2嘲讽甲虫，逐只检查场地容量；计数与亡语倍率分离，招募战队不保留召唤实体。"
+    },
+    {
+      "index": 157,
+      "id": "greater-trinket-bg32-magicitem-888",
+      "cardId": "BG32_MagicItem_888",
+      "name": "回收标签",
+      "tier": "greater",
+      "description": "在你使用一张元素牌后，获得一次免费的刷新。",
+      "status": "reviewed",
+      "initialStatus": "reviewed",
+      "initialStatusSource": "current-status-fallback",
+      "limitationKind": "none",
+      "implementation": [
+        "applyAfterMinionPlayedTrinkets"
+      ],
+      "tests": [
+        "tests/trinket-recruit-trigger-effects.test.ts"
+      ],
+      "notes": "每使用元素1免费刷新，计入玩家级额度，可跨回合保存，刷新共同消费1额度，复制配置表逐件叠加。"
+    },
+    {
+      "index": 158,
+      "id": "greater-trinket-bg32-magicitem-901",
+      "cardId": "BG32_MagicItem_901",
+      "name": "镀金罗盘",
+      "tier": "greater",
+      "description": "使你购买的下一个与你战队相符类型的随从变为金色。获得5次免费的刷新。",
+      "status": "reviewed",
+      "initialStatus": "reviewed",
+      "initialStatusSource": "group-record",
+      "limitationKind": "none",
+      "implementation": [
+        "applyGoldenWarbandPurchaseTrinket",
+        "GOLDEN_WARBAND_PURCHASE_CARD_ID"
+      ],
+      "tests": [
+        "tests/trinket-recruit-economy-effects-batch4.test.ts"
+      ],
+      "notes": "Five acquisition free refreshes; next successfully bought minion matching any current warband type gilded, enchantments/wherever/pool copies preserved. Nonmatching purchase leaves charge; one-shot acquisition reward is not replayed by Souvenir transformation."
+    },
+    {
+      "index": 159,
+      "id": "greater-trinket-bg32-magicitem-922",
+      "cardId": "BG32_MagicItem_922",
+      "name": "魅音排箫",
+      "tier": "greater",
+      "description": "在每个回合结束时，使你最左边的随从获得+3/+3。在你施放一个法术后，提升此效果。",
+      "status": "reviewed",
+      "initialStatus": "reviewed",
+      "initialStatusSource": "current-status-fallback",
+      "limitationKind": "none",
+      "implementation": [
+        "applyAfterRecruitSpellCastTrinkets",
+        "applyOfficialTrinketAtEndOfTurn",
+        "PANPIPES_CARD_ID"
+      ],
+      "tests": [
+        "tests/trinket-recruit-economy-effects-batch4.test.ts"
+      ],
+      "notes": "每次法术施放使永久计数+1，回合末给当前最左随从+3+计数的属性；回合末倍率按同一已提升数值重复，空战队不选目标。"
+    },
+    {
+      "index": 160,
+      "id": "greater-trinket-bg32-magicitem-926",
+      "cardId": "BG32_MagicItem_926",
+      "name": "摩戈尔肖像",
+      "tier": "greater",
+      "description": "获取一张潮汐先知摩戈尔。",
+      "status": "partial",
+      "initialStatus": "partial",
+      "initialStatusSource": "current-status-fallback",
+      "limitationKind": "indirect-unimplemented",
+      "implementation": [
+        "applyOfficialTrinketOnAcquire",
+        "MORGL_DEFINITION_ID"
+      ],
+      "tests": [
+        "tests/trinket-acquisition-portraits.test.ts"
+      ],
+      "notes": "获取真实潮汐先知摩戈尔但仅剧毒关键词；缺攻击并击杀后给随机手牌随从加被击杀者最大属性（黄金双倍），definition明确partial。"
+    },
+    {
+      "index": 161,
+      "id": "greater-trinket-bg32-magicitem-998",
+      "cardId": "BG32_MagicItem_998",
+      "name": "巨怪肖像",
+      "tier": "greater",
+      "description": "获取一张奥术巨怪。",
+      "status": "reviewed",
+      "initialStatus": "reviewed",
+      "initialStatusSource": "group-record",
+      "limitationKind": "none",
+      "implementation": [
+        "applyOfficialTrinketOnAcquire",
+        "BEHEMOTH_DEFINITION_ID",
+        "MinionDefinition.afterFriendlySold"
+      ],
+      "tests": [
+        "tests/trinket-acquisition-portraits.test.ts",
+        "tests/trinket-audit-group2.test.ts"
+      ],
+      "notes": "Exact Arcane Behemoth reward; newly added normal/golden real Elemental-sale tests pass +sold stats / double sold stats. Static effectSupport is conservative partial, but its sole printed sale-stat behavior is implemented and independently exercised."
+    },
+    {
+      "index": 162,
+      "id": "greater-trinket-bg35-magicitem-151t",
+      "cardId": "BG35_MagicItem_151t",
+      "name": "亵渎者肖像",
+      "tier": "greater",
+      "description": "获取一张林地亵渎者。酒馆中的恶魔饲料拥有+15/+15。",
+      "status": "reviewed",
+      "initialStatus": "reviewed",
+      "initialStatusSource": "current-status-fallback",
+      "limitationKind": "none",
+      "implementation": [
+        "applyOfficialTrinketOnAcquire",
+        "applyQueuedDemonFodderToRefresh",
+        "GREATER_DEFILER_PORTRAIT_CARD_ID"
+      ],
+      "tests": [
+        "tests/trinket-recruit-trigger-effects-batch4.test.ts"
+      ],
+      "notes": "赠送完整林地亵渎者；之后生成酒馆恶魔饲料时附加+15/+15，和小饰品版本可叠加；普通共享报价与零池饲料所有权分离。"
+    },
+    {
+      "index": 163,
+      "id": "greater-trinket-bg35-magicitem-154",
+      "cardId": "BG35_MagicItem_154",
+      "name": "乌祖尔标签",
+      "tier": "greater",
+      "description": "在你使用一张恶魔牌后，使另一个友方恶魔吞食酒馆中的一个随从并获得其属性值。",
+      "status": "reviewed",
+      "initialStatus": "bug",
+      "initialStatusSource": "confirmed-regression",
+      "limitationKind": "none",
+      "implementation": [
+        "applyAfterMinionPlayedTrinkets",
+        "consumeShopMinionInto"
+      ],
+      "tests": [
+        "tests/trinket-audit-group1.test.ts"
+      ],
+      "notes": "已修复；逐饰品副本分别选择另一个友方恶魔吞食，2件吞食2张商店牌；独立专项通过，吞食归池/补报价共用入口。"
+    },
+    {
+      "index": 164,
+      "id": "greater-trinket-bg35-magicitem-156",
+      "cardId": "BG35_MagicItem_156",
+      "name": "魔焰肖像",
+      "tier": "greater",
+      "description": "获取一张魔焰执行者。每当你的魔焰执行者触发其效果时，还会使其相邻的随从获得等量的属性值。",
+      "status": "partial",
+      "initialStatus": "partial",
+      "initialStatusSource": "group-record",
+      "limitationKind": "verification-gap",
+      "implementation": [
+        "FLAMING_PORTRAIT_CARD_ID",
+        "consumeHighestHealthShopMinion"
+      ],
+      "tests": [
+        "tests/end-of-turn-minions.test.ts"
+      ],
+      "notes": "Exact Felfire Executor reward and neighbor gains matching consumed stats are present. No dedicated portrait behavior test located; per-copy stacking, golden/doubled EOT, full Tavern depletion and dynamic elemental bonus boundaries remain unverified."
+    },
+    {
+      "index": 165,
+      "id": "greater-trinket-bg35-magicitem-300t",
+      "cardId": "BG35_MagicItem_300t",
+      "name": "铜制线圈",
+      "tier": "greater",
+      "description": "每当你磁力吸附一个随从时，使其获得+3/+2并提升此效果。",
+      "status": "reviewed",
+      "initialStatus": "reviewed",
+      "initialStatusSource": "current-status-fallback",
+      "limitationKind": "none",
+      "implementation": [
+        "COPPER_COIL_BUFF_BY_CARD_ID",
+        "applyCopperCoilBeforeMagnetize",
+        "magnetizeMinion"
+      ],
+      "tests": [
+        "tests/trinket-combat-effects-batch4.test.ts"
+      ],
+      "notes": "每次成功磁力在合并前给源随从递增+3/+2、+6/+4等属性，保留进度；非法/满手等通过统一磁力合法性，拳手继承真实附件结果。"
+    },
+    {
+      "index": 166,
+      "id": "greater-trinket-bg35-magicitem-431t",
+      "cardId": "BG35_MagicItem_431t",
+      "name": "棘刺肩铠",
+      "tier": "greater",
+      "description": "在你触发一个亡语后，直到下一场战斗，你的鲜血宝石使随从额外获得+2/+1。",
+      "status": "reviewed",
+      "initialStatus": "bug",
+      "initialStatusSource": "confirmed-regression",
+      "limitationKind": "none",
+      "implementation": [
+        "activateThornedPauldrons",
+        "thornedPauldronsBloodGemBonus",
+        "resetThornedPauldrons"
+      ],
+      "tests": [
+        "tests/trinket-yogg-tags-pauldrons.test.ts",
+        "tests/trinket-audit-group1.test.ts"
+      ],
+      "notes": "已修复每次亡语累计临时+2/+1；2次亡语后宝石+5/+3独立专项通过，下一战斗清零保留。"
+    },
+    {
+      "index": 167,
+      "id": "greater-trinket-bg35-magicitem-432",
+      "cardId": "BG35_MagicItem_432",
+      "name": "鲜血坠饰",
+      "tier": "greater",
+      "description": "在你触发一个亡语后，本饰品随机对3个友方随从各使用一张永久的鲜血宝石。",
+      "status": "reviewed",
+      "initialStatus": "bug",
+      "initialStatusSource": "group-record",
+      "limitationKind": "none",
+      "implementation": [
+        "triggerBloodAmuletAfterDeathrattle"
+      ],
+      "tests": [
+        "tests/trinket-combat-effects-batch4.test.ts",
+        "tests/trinket-audit-group2.test.ts"
+      ],
+      "notes": "FIXED AND VERIFIED: 18/18 group-2 regression tests, TypeScript check and focused ESLint pass after root integration. Original audit finding: Confirmed two Blood Amulets apply only one permanent gem to sole surviving minion, expected two. Random up-to-three living targets and permanent writeback work for one copy; each trigger must dispatch each copy."
+    },
+    {
+      "index": 168,
+      "id": "greater-trinket-bg35-magicitem-435",
+      "cardId": "BG35_MagicItem_435",
+      "name": "血缚之戒",
+      "tier": "greater",
+      "description": "在你从手牌中使用一张鲜血宝石后，本饰品对你具有圣盾的随从各使用一张鲜血宝石。",
+      "status": "reviewed",
+      "initialStatus": "reviewed",
+      "initialStatusSource": "current-status-fallback",
+      "limitationKind": "none",
+      "implementation": [
+        "triggerBloodboundRingAfterHandBloodGem",
+        "castBloodGem",
+        "applyRecruitBloodGemPulse"
+      ],
+      "tests": [
+        "tests/trinket-combat-effects-batch4.test.ts"
+      ],
+      "notes": "只在从手牌施放宝石后，向当前有圣盾的友方各使用1宝石；饰品额外宝石不递归触发自己，真实目标列表和成长账本共用。"
+    },
+    {
+      "index": 169,
+      "id": "greater-trinket-bg35-magicitem-700",
+      "cardId": "BG35_MagicItem_700",
+      "name": "荒羽尘掸",
+      "tier": "greater",
+      "description": "在你召唤6只野兽后，随机获取一张野兽牌。（还剩6只！）",
+      "status": "reviewed",
+      "initialStatus": "reviewed",
+      "initialStatusSource": "current-status-fallback",
+      "limitationKind": "none",
+      "implementation": [
+        "applyRecruitSummonTriggers",
+        "triggerCombatSummonTrinkets",
+        "advanceTrinketCounter"
+      ],
+      "tests": [
+        "tests/trinket-combat-effects-batch4.test.ts"
+      ],
+      "notes": "已复审AST转换：招募/战斗6兽召唤阈值按副本独立持久counter，满手处理/生成等级保留；单件既有专项通过。"
+    },
+    {
+      "index": 170,
+      "id": "greater-trinket-bg35-magicitem-701",
+      "cardId": "BG35_MagicItem_701",
+      "name": "獠牙脚链",
+      "tier": "greater",
+      "description": "战斗开始时：在本场战斗中，你的野兽拥有+1/+1。在你召唤一只野兽后，永久提升此效果。",
+      "status": "reviewed",
+      "initialStatus": "bug",
+      "initialStatusSource": "group-record",
+      "limitationKind": "none",
+      "implementation": [
+        "improveFangAnklet",
+        "applyFangAnkletAtStartOfCombat"
+      ],
+      "tests": [
+        "tests/trinket-combat-effects-batch5.test.ts",
+        "tests/trinket-audit-group2.test.ts"
+      ],
+      "notes": "FIXED AND VERIFIED: 18/18 group-2 regression tests, TypeScript check and focused ESLint pass after root integration. Original audit finding: Confirmed real Recruit Beast summon grows copied counters [1,0] rather than [1,1]. Both start auras and future per-copy improvements must stack; current combat aura stays fixed and ghosts do not persist."
+    },
+    {
+      "index": 171,
+      "id": "greater-trinket-bg35-magicitem-710",
+      "cardId": "BG35_MagicItem_710",
+      "name": "迷你船模",
+      "tier": "greater",
+      "description": "在你施放一个酒馆法术后，使你的海盗获得+2/+2。",
+      "status": "reviewed",
+      "initialStatus": "reviewed",
+      "initialStatusSource": "current-status-fallback",
+      "limitationKind": "none",
+      "implementation": [
+        "MINIATURE_SHIP_BUFF_BY_CARD_ID",
+        "applyAfterTavernSpellCastTrinkets"
+      ],
+      "tests": [
+        "tests/trinket-recruit-trigger-effects.test.ts"
+      ],
+      "notes": "每次酒馆法术施放后友方全部海盗+2/+2，双类型及全部类型匹配；普通法术、随从替代施法使用共享酒馆施法观察。"
+    },
+    {
+      "index": 172,
+      "id": "greater-trinket-bg35-magicitem-711",
+      "cardId": "BG35_MagicItem_711",
+      "name": "防护戒指",
+      "tier": "greater",
+      "description": "战斗开始时：随机使4个友方海盗获得圣盾。",
+      "status": "reviewed",
+      "initialStatus": "reviewed",
+      "initialStatusSource": "current-status-fallback",
+      "limitationKind": "none",
+      "implementation": [
+        "applyStartOfCombatTrinkets"
+      ],
+      "tests": [
+        "tests/trinket-combat-effects-batch4.test.ts"
+      ],
+      "notes": "已复审AST转换：各副本独立随机4个海盗施加圣盾，第二件不再遗漏；单件既有专项通过，圣盾幂等及随机次数保留。"
+    },
+    {
+      "index": 173,
+      "id": "greater-trinket-bg35-magicitem-712",
+      "cardId": "BG35_MagicItem_712",
+      "name": "私掠者肖像",
+      "tier": "greater",
+      "description": "获取一张骄傲的私掠者和随机2张悬赏令。在每个回合开始时，再获取2张悬赏令。",
+      "status": "reviewed",
+      "initialStatus": "reviewed",
+      "initialStatusSource": "group-record",
+      "limitationKind": "none",
+      "implementation": [
+        "PRIVATEER_PORTRAIT_CARD_ID",
+        "applyOfficialTrinketAtStartOfTurn",
+        "addRandomBountyToHand"
+      ],
+      "tests": [
+        "tests/trinket-recruit-trigger-effects-batch4.test.ts"
+      ],
+      "notes": "Exact Proud Privateer plus two legal Bounties now, two Bounties every start. Full hand/active association filtering and ordinary/golden Privateer bounty repetition share existing spell path."
+    },
+    {
+      "index": 174,
+      "id": "greater-trinket-bg35-magicitem-713",
+      "cardId": "BG35_MagicItem_713",
+      "name": "结实的撬棍",
+      "tier": "greater",
+      "description": "每当你获取一张海盗牌，使你最左边的随从获得+12/+12。",
+      "status": "reviewed",
+      "initialStatus": "reviewed",
+      "initialStatusSource": "current-status-fallback",
+      "limitationKind": "none",
+      "implementation": [
+        "observeRecruitCardAddedToHand",
+        "TRUSTY_CROWBAR_CARD_ID"
+      ],
+      "tests": [
+        "tests/trinket-combat-effects-batch4.test.ts"
+      ],
+      "notes": "海盗随从成功进入手牌后强化最左战队+12/+12，购买与效果生成共享获取路径；满手未获得牌不触发，空战队忽略。"
+    },
+    {
+      "index": 175,
+      "id": "greater-trinket-bg35-magicitem-714",
+      "cardId": "BG35_MagicItem_714",
+      "name": "火药桶",
+      "tier": "greater",
+      "description": "战斗开始时：使3个友方海盗获得“亡语：召唤一个1/1的空中海盗，使其获得本随从的攻击力并使其立即发起攻击。”",
+      "status": "reviewed",
+      "initialStatus": "bug",
+      "initialStatusSource": "confirmed-regression",
+      "limitationKind": "none",
+      "implementation": [
+        "applyStartOfCombatTrinkets",
+        "resolvePowderKegDeathrattle"
+      ],
+      "tests": [
+        "tests/trinket-powder-keg.test.ts",
+        "tests/trinket-audit-group1.test.ts",
+        "tests/trinket-audit-group2.test.ts"
+      ],
+      "notes": "单件3海盗亡语/继承攻击/立即攻击行为保留；已修复复制授予者串扰，Map<minionId,Set<trinketId>>按真正施加该亡语的副本执行。真实购买两件专项种子41216验证6次授予对应6次天空海盗召唤，单命中海盗只有1亡语。"
+    },
+    {
+      "index": 176,
+      "id": "greater-trinket-bg35-magicitem-731",
+      "cardId": "BG35_MagicItem_731",
+      "name": "死亡之触苹果",
+      "tier": "greater",
+      "description": "在一个友方亡灵\n复生后，使其获得复生。（每回合限3次。）",
+      "status": "reviewed",
+      "initialStatus": "bug",
+      "initialStatusSource": "group-record",
+      "limitationKind": "none",
+      "implementation": [
+        "restoreRebornWithDeathtouchApple"
+      ],
+      "tests": [
+        "tests/trinket-combat-effects-batch5.test.ts",
+        "tests/trinket-audit-group2.test.ts"
+      ],
+      "notes": "FIXED AND VERIFIED: 18/18 group-2 regression tests, TypeScript check and focused ESLint pass after root integration. Original audit finding: Confirmed two Apples give 4 total Reborns, expected native 1 plus two independent three-use budgets =7. Avoid spending second copy when first already restored Reborn; reset each combat."
+    },
+    {
+      "index": 177,
+      "id": "greater-trinket-bg35-magicitem-732",
+      "cardId": "BG35_MagicItem_732",
+      "name": "灵魂酵罐",
+      "tier": "greater",
+      "description": "战斗开始时：消灭你最左边的3个随从。在你的最后一个随从死亡后，再次召唤消灭的随从。",
+      "status": "reviewed",
+      "initialStatus": "bug",
+      "initialStatusSource": "confirmed-regression",
+      "limitationKind": "none",
+      "implementation": [
+        "applyStartOfCombatTrinkets",
+        "soulFermenterDestroyed",
+        "resummonSoulFermenterBandIfReady"
+      ],
+      "tests": [
+        "tests/trinket-soul-fermenter.test.ts",
+        "tests/trinket-audit-group1.test.ts",
+        "tests/trinket-audit-group2.test.ts"
+      ],
+      "notes": "开战保存并消灭最左3实体，实际触发死亡/亡语；最后存活随从死亡后一次性召回保存的完整复制，防重复复活并遵循容量，不污染招募实体。 本轮纪念品复制共享保存批次的问题已修复；实际购买两个副本各恢复自己的批次一次，独立回归通过。"
+    },
+    {
+      "index": 178,
+      "id": "greater-trinket-bg35-magicitem-733",
+      "cardId": "BG35_MagicItem_733",
+      "name": "典狱长标签",
+      "tier": "greater",
+      "description": "塑造法术：消灭一个友方亡灵以随机获取2张亡灵牌。",
+      "status": "reviewed",
+      "initialStatus": "reviewed",
+      "initialStatusSource": "current-status-fallback",
+      "limitationKind": "none",
+      "implementation": [
+        "queueTrinketSpellcraft",
+        "applySpellcraftCastPulse",
+        "destroyRecruitMinion"
+      ],
+      "tests": [
+        "tests/trinket-spellcraft-effects.test.ts"
+      ],
+      "notes": "每回合塑造法术销毁友方亡灵并抽共享池2亡灵；正确目标、亡语触发、满手、不算出售，AI挑弱目标已有专项。"
+    },
+    {
+      "index": 179,
+      "id": "greater-trinket-bg35-magicitem-740",
+      "cardId": "BG35_MagicItem_740",
+      "name": "飞天魔像肖像",
+      "tier": "greater",
+      "description": "获取一张坠落的飞天魔像。战斗开始时：使你的随从获得“亡语：使你的随从永久获得+2/+2。”",
+      "status": "reviewed",
+      "initialStatus": "bug",
+      "initialStatusSource": "group-record",
+      "limitationKind": "none",
+      "implementation": [
+        "applyStartOfCombatTrinkets",
+        "resolveFlyingGolemPortraitDeathrattle"
+      ],
+      "tests": [
+        "tests/trinket-flying-golem-portrait.test.ts",
+        "tests/trinket-audit-group2.test.ts"
+      ],
+      "notes": "FIXED AND VERIFIED: 18/18 group-2 regression tests, TypeScript check and focused ESLint pass after root integration. Original audit finding: Confirmed two Flying Golem Portraits still grant only one +2/+2 permanent warband Deathrattle; expected both effects +4/+4. Per-minion Set representation must support count/per-copy execution, including inherited/triggered Deathrattle path."
+    },
+    {
+      "index": 180,
+      "id": "greater-trinket-bg35-magicitem-741",
+      "cardId": "BG35_MagicItem_741",
+      "name": "B-Box拳手肖像",
+      "tier": "greater",
+      "description": "获取一张极性B-Box拳手。",
+      "status": "reviewed",
+      "initialStatus": "reviewed",
+      "initialStatusSource": "current-status-fallback",
+      "limitationKind": "none",
+      "implementation": [
+        "applyOfficialTrinketOnAcquire",
+        "addGeneratedMinionCopyToHand"
+      ],
+      "tests": [
+        "tests/trinket-audit-group3.test.ts",
+        "tests/polarizing-beatboxer.test.ts"
+      ],
+      "notes": "本次新增真实获取断言：获得普通完整BG26_149，属性符合固定卡面，零共享池所有权且池不变；实体的复制其他磁力规则已由拳手专项覆盖。"
+    },
+    {
+      "index": 181,
+      "id": "greater-trinket-bg35-magicitem-742",
+      "cardId": "BG35_MagicItem_742",
+      "name": "手风琴机器人肖像",
+      "tier": "greater",
+      "description": "在每个回合结束时，对你最左边和最右边的机械各磁力吸附一个手风琴机器人。",
+      "status": "reviewed",
+      "initialStatus": "reviewed",
+      "initialStatusSource": "current-status-fallback",
+      "limitationKind": "none",
+      "implementation": [
+        "magnetizeAccordOTronsFromPortrait",
+        "applyOfficialTrinketAtEndOfTurn"
+      ],
+      "tests": [
+        "tests/trinket-recruit-trigger-effects-batch5.test.ts"
+      ],
+      "notes": "按机械序列两端各磁力1手风琴机器人；只有1机械去重；真实附件、后续磁力次数、达卡莱重复均共用吸附入口。"
+    },
+    {
+      "index": 182,
+      "id": "greater-trinket-bg35-magicitem-743",
+      "cardId": "BG35_MagicItem_743",
+      "name": "电极吸附器",
+      "tier": "greater",
+      "description": "磁力机械牌消耗的铸币为（2）枚。每当酒馆刷新时，总会额外提供一个磁力机械。",
+      "status": "reviewed",
+      "initialStatus": "bug",
+      "initialStatusSource": "group-record",
+      "limitationKind": "none",
+      "implementation": [
+        "MAGNETIC_PRICE_TAG_CARD_ID",
+        "applyExtraTavernMinionTrinkets",
+        "getMinionPurchaseQuote"
+      ],
+      "tests": [
+        "tests/trinket-recruit-economy-effects-batch4.test.ts",
+        "tests/trinket-audit-group2.test.ts"
+      ],
+      "notes": "FIXED AND VERIFIED: 18/18 group-2 regression tests, TypeScript check and focused ESLint pass after root integration. Original audit finding: Confirmed two Attractors add one Magnetic offer, expected two. Price remains fixed at 2 rather than additive discount; only additional offers stack. Pool and active-type filtering used."
+    },
+    {
+      "index": 183,
+      "id": "greater-trinket-bg35-magicitem-750",
+      "cardId": "BG35_MagicItem_750",
+      "name": "魔鳍标签",
+      "tier": "greater",
+      "description": "在你购买一个酒馆法术后，获取一张1/1的鱼人并教会它该法术。（每回合2次。）",
+      "status": "reviewed",
+      "initialStatus": "reviewed",
+      "initialStatusSource": "current-status-fallback",
+      "limitationKind": "none",
+      "implementation": [
+        "observeCardPurchase",
+        "consumePerRoundTrinketTrigger",
+        "MAGICFIN_APPRENTICE_DEFINITION_ID"
+      ],
+      "tests": [
+        "tests/trinket-magicfin-tag.test.ts"
+      ],
+      "notes": "每轮前2次成功购买酒馆法术后生成1/1学徒并记住该法术，满手额度照常消费；学徒战吼实际施法与存档恢复有专项。"
+    },
+    {
+      "index": 184,
+      "id": "greater-trinket-bg35-magicitem-752",
+      "cardId": "BG35_MagicItem_752",
+      "name": "小瞎眼标签",
+      "tier": "greater",
+      "description": "在你的回合结束时，触发你最左边和最右边的随从的\n战吼。",
+      "status": "reviewed",
+      "initialStatus": "bug",
+      "initialStatusSource": "confirmed-regression",
+      "limitationKind": "none",
+      "implementation": [
+        "applyOfficialTrinketAtEndOfTurn",
+        "triggerRecruitBattlecryFromTrinket"
+      ],
+      "tests": [
+        "tests/trinket-yogg-tags-pauldrons.test.ts",
+        "tests/trinket-audit-group1.test.ts"
+      ],
+      "notes": "已修复跳过互动战吼；调用resolveTriggeredRecruitInteractiveBattlecry，两个边缘BG35_702按真实定向buff使总攻10→14；独立专项通过。"
+    },
+    {
+      "index": 185,
+      "id": "greater-trinket-bg35-magicitem-753",
+      "cardId": "BG35_MagicItem_753",
+      "name": "奔波尔霸标签",
+      "tier": "greater",
+      "description": "在每个回合结束时，使你最左边的两个随从获得+1/+1。（在本局对战中你每触发一个战吼都会提升！）",
+      "status": "reviewed",
+      "initialStatus": "reviewed",
+      "initialStatusSource": "group-record",
+      "limitationKind": "none",
+      "implementation": [
+        "recordBattlecriesTriggered",
+        "applyOfficialTrinketAtEndOfTurn"
+      ],
+      "tests": [
+        "tests/trinket-yogg-tags-pauldrons.test.ts"
+      ],
+      "notes": "Leftmost two minions gain 1 plus lifetime triggered Battlecries, including history before acquisition. True trigger count includes Brann and re-triggers; EOT repetitions reuse current history."
+    },
+    {
+      "index": 186,
+      "id": "greater-trinket-bg35-magicitem-754",
+      "cardId": "BG35_MagicItem_754",
+      "name": "戏剧鱼人标签",
+      "tier": "greater",
+      "description": "战斗开始时：使你的鱼人获得你手牌中攻击力最高的随从牌的攻击力。",
+      "status": "reviewed",
+      "initialStatus": "reviewed",
+      "initialStatusSource": "current-status-fallback",
+      "limitationKind": "none",
+      "implementation": [
+        "applyStartOfCombatTrinkets",
+        "combatHandMinions",
+        "applyCombatEnchantingGain"
+      ],
+      "tests": [
+        "tests/trinket-combat-effects-batch4.test.ts"
+      ],
+      "notes": "开战仅从手牌随从读最高攻击并加到所有友方鱼人；法术不参与且手牌不消耗，战斗临时与永久保留共用账本。"
+    },
+    {
+      "index": 187,
+      "id": "greater-trinket-bg35-magicitem-755",
+      "cardId": "BG35_MagicItem_755",
+      "name": "切米尔拼贴画",
+      "tier": "greater",
+      "description": "塑造法术：刷新酒馆，使其中变为战吼随从牌。这些牌的消耗为（1）。",
+      "status": "reviewed",
+      "initialStatus": "reviewed",
+      "initialStatusSource": "current-status-fallback",
+      "limitationKind": "none",
+      "implementation": [
+        "queueTrinketSpellcraft",
+        "refreshWithChillmereMosaic",
+        "CHILLMERE_MOSAIC_COST_COUNTER"
+      ],
+      "tests": [
+        "tests/trinket-spellcraft-effects.test.ts"
+      ],
+      "notes": "刷新全部为真实战吼随从、消耗1，使用实际战吼标签（含interactive）；共享池/满手/后续普通刷新重置报价处理。"
+    },
+    {
+      "index": 188,
+      "id": "greater-trinket-bg35-magicitem-803t",
+      "cardId": "BG35_MagicItem_803t",
+      "name": "麦克斯韦标签",
+      "tier": "greater",
+      "description": "获取一张你的英雄技能对应的金色伙伴。",
+      "status": "partial",
+      "initialStatus": "partial",
+      "initialStatusSource": "group-record",
+      "limitationKind": "indirect-unimplemented",
+      "implementation": [
+        "getBuddyDefinitionIdForHeroPower",
+        "BUDDY_MINION_DEFINITIONS",
+        "applyOfficialTrinketOnAcquire"
+      ],
+      "tests": [
+        "tests/trinket-maxwell-sticker.test.ts"
+      ],
+      "notes": "Correct golden Buddy from current Hero Power and fixed-build links, saved/generated identity and missing-link eligibility tested. All 15 Buddy definitions explicitly partial; bespoke Buddy abilities are absent, so granting the card is not full functionality."
+    },
+    {
+      "index": 189,
+      "id": "greater-trinket-bg35-magicitem-812",
+      "cardId": "BG35_MagicItem_812",
+      "name": "腐蚀秘典",
+      "tier": "greater",
+      "description": "获取一张三连奖品。每当你即将获取三连奖励时，改为获取三连奖品。",
+      "status": "reviewed",
+      "initialStatus": "reviewed",
+      "initialStatusSource": "current-status-fallback",
+      "limitationKind": "none",
+      "implementation": [
+        "applyOfficialTrinketOnAcquire",
+        "grantTripleRewardBeforeGeneratedCards",
+        "CORRUPTED_TOME_CARD_ID",
+        "TRIPLE_PRIZE_DEFINITION"
+      ],
+      "tests": [
+        "tests/trinket-darkmoon-prizes.test.ts"
+      ],
+      "notes": "立即获取真实三连奖品，之后正常三连奖励替换为奖品；满手、金色随从互动战吼之前发奖、奖品发现不计作酒馆法术有专项。"
+    },
+    {
+      "index": 190,
+      "id": "greater-trinket-bg35-magicitem-816t",
+      "cardId": "BG35_MagicItem_816t",
+      "name": "未知宝珠",
+      "tier": "greater",
+      "description": "随机获取一项大型饰品和4枚铸币。",
+      "status": "partial",
+      "initialStatus": "partial",
+      "initialStatusSource": "current-status-fallback",
+      "limitationKind": "indirect-unimplemented",
+      "implementation": [
+        "grantRandomAdditionalTrinket",
+        "grantTrinketDefinitionWithoutCost"
+      ],
+      "tests": [
+        "tests/trinket-recruit-trigger-effects-batch5.test.ts"
+      ],
+      "notes": "额外随机大型饰品+4金币正确；随机候选可获取部分未完整间接牌或持续复制问题饰品，不能将入口测试等同完整行为。"
+    },
+    {
+      "index": 191,
+      "id": "greater-trinket-bg35-magicitem-820",
+      "cardId": "BG35_MagicItem_820",
+      "name": "安全徽章",
+      "tier": "greater",
+      "description": "施放寒冰屏障。获得5枚铸币。",
+      "status": "reviewed",
+      "initialStatus": "reviewed",
+      "initialStatusSource": "group-record",
+      "limitationKind": "none",
+      "implementation": [
+        "SAFE_BADGE_CARD_ID",
+        "damagePlayer",
+        "applyOfficialTrinketOnAcquire"
+      ],
+      "tests": [
+        "tests/trinket-safe-badge.test.ts"
+      ],
+      "notes": "Five Gold plus one Ice Block-like lethal-combat prevention; nonlethal hit preserves charge, damage cap applied before prevention, one-shot is not replayed when transformed copy appears."
+    },
+    {
+      "index": 192,
+      "id": "greater-trinket-bg35-magicitem-821t",
+      "cardId": "BG35_MagicItem_821t",
+      "name": "万花筒",
+      "tier": "greater",
+      "description": "发现一张等级7的金色随从牌。将其锁入你的手牌2\n回合。",
+      "status": "reviewed",
+      "initialStatus": "reviewed",
+      "initialStatusSource": "current-status-fallback",
+      "limitationKind": "none",
+      "implementation": [
+        "applyOfficialTrinketOnAcquire",
+        "beginDiscoverInteraction",
+        "prepareDiscoverSelection",
+        "playableFromRound"
+      ],
+      "tests": [
+        "tests/trinket-mystery-cube-kaleidoscope.test.ts",
+        "tests/trinket-audit-group3.test.ts"
+      ],
+      "notes": "发现7级池外金色牌，准确锁手至当前轮+2；候选可存档，金色无普通池扣除；本次罪碑复制回归验证金色及锁手不丢失。"
+    },
+    {
+      "index": 193,
+      "id": "greater-trinket-bg35-magicitem-823t",
+      "cardId": "BG35_MagicItem_823t",
+      "name": "老旧的烛台",
+      "tier": "greater",
+      "description": "发现一张来自大型时空扭曲的消耗为2的随从牌。",
+      "status": "partial",
+      "initialStatus": "partial",
+      "initialStatusSource": "current-status-fallback",
+      "limitationKind": "indirect-unimplemented",
+      "implementation": [
+        "beginTimewarpCandlestickDiscover",
+        "TIMEWARP_COST_TWO_MINION_DEFINITIONS",
+        "createTimewarpMinionDefinition"
+      ],
+      "tests": [
+        "tests/trinket-mirror-timewarp.test.ts"
+      ],
+      "notes": "固定快照的大型烛台成本2时空扭曲候选共41种（不是旧组说明写的21）；3选1身份、基础关键词、满手、AI和保存机制有证据，但赠送随从的专属时空扭曲文本未完整映射，全部仍标记部分支持。发现入口正常不证明所选牌的效果完整。",
+      "previousNotes": "21个大型时空扭曲消耗2牌的身份/3选1/关键词正确，但全部标记partial且特殊文本没有DSL覆盖；满手/AI/存档仅验证发现机制，不证明返回牌效果。"
+    },
+    {
+      "index": 194,
+      "id": "greater-trinket-bg35-magicitem-838",
+      "cardId": "BG35_MagicItem_838",
+      "name": "双线缝针",
+      "tier": "greater",
+      "description": "塑造法术：选择一个友方随从，使其属性值翻倍，并将其锁入你的手牌1个回合。",
+      "status": "reviewed",
+      "initialStatus": "reviewed",
+      "initialStatusSource": "group-record",
+      "limitationKind": "none",
+      "implementation": [
+        "TRINKET_SPELLCRAFT_DEFINITION_ID_BY_CARD_ID",
+        "queueTrinketSpellcraft"
+      ],
+      "tests": [
+        "tests/trinket-spellcraft-effects.test.ts"
+      ],
+      "notes": "Legal friendly target permanently doubles current stats, removes to hand and locks until next round; full hand, saved playableFromRound and expired Spellcraft queue tested."
+    },
+    {
+      "index": 195,
+      "id": "greater-trinket-bg35-magicitem-840t",
+      "cardId": "BG35_MagicItem_840t",
+      "name": "多彩之泪",
+      "tier": "greater",
+      "description": "随机获取2张多彩幼龙。在你使用7张战吼随从牌后，重复此效果。（还剩7张！）",
+      "status": "reviewed",
+      "initialStatus": "reviewed",
+      "initialStatusSource": "current-status-fallback",
+      "limitationKind": "none",
+      "implementation": [
+        "addRandomChromaticWhelps",
+        "applyAfterMinionPlayedTrinkets",
+        "CHROMATIC_TEAR_CARD_ID"
+      ],
+      "tests": [
+        "tests/trinket-recruit-trigger-effects-batch3.test.ts"
+      ],
+      "notes": "获取时随机生成2幼龙，之后每真实使用7张有战吼标识的随从再生成2张；计数由使用事件推进，布莱恩重复战吼不当多张使用。"
+    },
+    {
+      "index": 196,
+      "id": "greater-trinket-bg35-magicitem-850t",
+      "cardId": "BG35_MagicItem_850t",
+      "name": "袋中旋风",
+      "tier": "greater",
+      "description": "施放乘借东风，触发四次。在每个回合开始时，再施放\n两次。",
+      "status": "reviewed",
+      "initialStatus": "reviewed",
+      "initialStatusSource": "current-status-fallback",
+      "limitationKind": "none",
+      "implementation": [
+        "castRideTheWindFromTrinket",
+        "applyOfficialTrinketAtStartOfTurn"
+      ],
+      "tests": [
+        "tests/trinket-simple-effects.test.ts"
+      ],
+      "notes": "初始1施法4独立乘借东风脉冲；每回合开始再2次真正自动施法，各读当次buff参数；不会把4脉冲算4张施法。"
+    },
+    {
+      "index": 197,
+      "id": "greater-trinket-bg35-magicitem-861",
+      "cardId": "BG35_MagicItem_861",
+      "name": "投球手肖像",
+      "tier": "greater",
+      "description": "获取一张寒热骤变。在你使用10张元素牌后，重复此效果。（还剩10张！）",
+      "status": "reviewed",
+      "initialStatus": "reviewed",
+      "initialStatusSource": "group-record",
+      "limitationKind": "none",
+      "implementation": [
+        "BALLER_PORTRAIT_CARD_ID",
+        "applyAfterMinionPlayedTrinkets"
+      ],
+      "tests": [
+        "tests/trinket-recruit-trigger-effects-batch4.test.ts"
+      ],
+      "notes": "Exact Temperature Shift now and after each ten actual Elemental plays, All/dual included; lifetime per-copy remainder and full-hand handling share actual play event."
+    },
+    {
+      "index": 198,
+      "id": "greater-trinket-bg35-magicitem-862",
+      "cardId": "BG35_MagicItem_862",
+      "name": "爆燃余烬",
+      "tier": "greater",
+      "description": "在你刷新后，使酒馆中生命值最高的随从属性值翻倍。",
+      "status": "reviewed",
+      "initialStatus": "reviewed",
+      "initialStatusSource": "current-status-fallback",
+      "limitationKind": "none",
+      "implementation": [
+        "UPSTART_EMBERS_BY_CARD_ID",
+        "applyAfterManualRefreshTrinkets"
+      ],
+      "tests": [
+        "tests/trinket-recruit-trigger-effects.test.ts"
+      ],
+      "notes": "每次成功手动刷新后只选一个生命最高报价并将当前攻血翻倍，最高并列时随机单选；自动填空位不触发。"
+    },
+    {
+      "index": 199,
+      "id": "greater-trinket-bg35-magicitem-863",
+      "cardId": "BG35_MagicItem_863",
+      "name": "雪崩标签",
+      "tier": "greater",
+      "description": "获取一张累叠雪崩。在你出售4个随从后，重复此效果。（还剩4个！）",
+      "status": "reviewed",
+      "initialStatus": "reviewed",
+      "initialStatusSource": "current-status-fallback",
+      "limitationKind": "none",
+      "implementation": [
+        "applyRepeatableOfficialTrinketReward",
+        "applyAfterMinionSoldTrinkets",
+        "advanceTrinketCounter"
+      ],
+      "tests": [
+        "tests/trinket-recruit-trigger-effects-batch5.test.ts"
+      ],
+      "notes": "购买获取1累叠雪崩，以后4出售重复，计数归零跨回合；奖励是真实酒馆法术共用生成手牌上限。"
+    },
+    {
+      "index": 200,
+      "id": "greater-trinket-bg35-magicitem-923",
+      "cardId": "BG35_MagicItem_923",
+      "name": "魔力丝带",
+      "tier": "greater",
+      "description": "每当你施放一个法术，使你的随从永久获得+1/+1。（战斗中改为+2/+2！）",
+      "status": "reviewed",
+      "initialStatus": "bug",
+      "initialStatusSource": "group-record",
+      "limitationKind": "none",
+      "implementation": [
+        "applyAfterRecruitSpellCastTrinkets",
+        "triggerCombatAfterSpellCast"
+      ],
+      "tests": [
+        "tests/trinket-bewitched-ribbon.test.ts",
+        "tests/trinket-audit-group2.test.ts"
+      ],
+      "notes": "FIXED AND VERIFIED: 18/18 group-2 regression tests, TypeScript check and focused ESLint pass after root integration. Original audit finding: Confirmed two Ribbons yield only +1/+1 Recruit and +2/+2 combat permanent buffs instead of +2/+2 and +4/+4. Presence/find checks collapse copies. Single-copy combat, persistence and ghost behavior already tested."
+    },
+    {
+      "index": 201,
+      "id": "greater-trinket-bg35-magicitem-924",
+      "cardId": "BG35_MagicItem_924",
+      "name": "碎地者肖像",
+      "tier": "greater",
+      "description": "获取一张碎地者。你的碎地者还会使其左边的随从获得属性值。",
+      "status": "reviewed",
+      "initialStatus": "reviewed",
+      "initialStatusSource": "current-status-fallback",
+      "limitationKind": "none",
+      "implementation": [
+        "applyOfficialTrinketOnAcquire",
+        "applyRecruitEffects",
+        "GROUNDBREAKER_PORTRAIT_CARD_ID"
+      ],
+      "tests": [
+        "tests/trinket-audit-group3.test.ts",
+        "tests/card-effect-batch-v45.test.ts"
+      ],
+      "notes": "赠送完整碎地者；碎地者历史法术成长脉冲同时给当前左邻，相同金色及阶段倍率；最左没有邻居时只自身成长。"
+    },
+    {
+      "index": 202,
+      "id": "greater-trinket-bg35-magicitem-925",
+      "cardId": "BG35_MagicItem_925",
+      "name": "珊瑚长矛",
+      "tier": "greater",
+      "description": "每当你施放塑造法术的法术时，施放暴风城之力。",
+      "status": "reviewed",
+      "initialStatus": "reviewed",
+      "initialStatusSource": "current-status-fallback",
+      "limitationKind": "none",
+      "implementation": [
+        "triggerAfterRecruitSpellcraftCast",
+        "resolveTriggeredRecruitTavernSpell"
+      ],
+      "tests": [
+        "tests/trinket-recruit-trigger-effects-batch3.test.ts"
+      ],
+      "notes": "每真实塑造法术施放自动施放暴风城之力，逐副本循环，重复法术各触发；额外自动施法与玩家手牌施法历史区分。"
+    },
+    {
+      "index": 203,
+      "id": "greater-trinket-bg35-magicitem-930",
+      "cardId": "BG35_MagicItem_930",
+      "name": "战队口哨",
+      "tier": "greater",
+      "description": "获得一次免费的刷新，其中会包含你的战队随从的原始版复制。",
+      "status": "reviewed",
+      "initialStatus": "reviewed",
+      "initialStatusSource": "group-record",
+      "limitationKind": "none",
+      "implementation": [
+        "WAR_BAND_REFRESH_CARD_ID",
+        "refreshShop"
+      ],
+      "tests": [
+        "tests/trinket-recruit-economy-effects-batch4.test.ts"
+      ],
+      "notes": "Queues exactly one free refresh containing plain warband copies; subsequent refresh reverts to pool draw. Generated offer identities and one-shot charge separated from ordinary minion/spell pool and board buffs."
+    },
+    {
+      "index": 204,
+      "id": "greater-trinket-bg35-magicitem-931t",
+      "cardId": "BG35_MagicItem_931t",
+      "name": "转录打字机",
+      "tier": "greater",
+      "description": "获取你购买的下4个随从的各一张额外复制。（还剩4个！）",
+      "status": "reviewed",
+      "initialStatus": "reviewed",
+      "initialStatusSource": "current-status-fallback",
+      "limitationKind": "none",
+      "implementation": [
+        "TRANSCRIPTION_MACHINE_LIMIT_BY_CARD_ID",
+        "applyAfterMinionPurchasedTrinkets",
+        "addGeneratedMinionCopyToHand"
+      ],
+      "tests": [
+        "tests/trinket-recruit-trigger-effects.test.ts"
+      ],
+      "notes": "前4次成功购买随从各额外生成同definition的副本，不从共享池再扣；次数持久累计，满手失败购买不推进，生成后统一检查三连。"
+    }
+  ]
+}

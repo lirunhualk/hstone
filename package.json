@@ -36,14 +36,15 @@
     "test:card-effect-v49": "node --experimental-strip-types --test tests/card-effect-batch-v49.test.ts",
     "test:special-effects-v50": "node --experimental-strip-types --test tests/summon-overflow-minions.test.ts tests/perfect-vision.test.ts tests/rylak-interactive-battlecries.test.ts tests/deathly-striker.test.ts tests/stalwart-kodo.test.ts tests/stone-age-slab.test.ts tests/tier-seven-minions-batch1.test.ts tests/tier-seven-minions-batch2.test.ts tests/tier-seven-minions-batch3.test.ts tests/tier-seven-minions-batch4.test.ts tests/stitched-salvager.test.ts tests/polarizing-beatboxer.test.ts tests/tier-seven-zarjira.test.ts",
     "typecheck": "tsc --noEmit",
-    "check": "npm run assets:check && npm run lint && npm run typecheck && npm run test && npm run test:card-effect-v43 && npm run test:card-effect-v44 && npm run test:card-effect-v45 && npm run test:card-effect-v46 && npm run test:card-effect-v47 && npm run test:card-effect-v48 && npm run test:card-effect-v49 && npm run test:special-effects-v50 && npm run build",
+    "check": "npm run test:trinkets && npm run assets:check && npm run lint && npm run typecheck && npm run test && npm run test:card-effect-v43 && npm run test:card-effect-v44 && npm run test:card-effect-v45 && npm run test:card-effect-v46 && npm run test:card-effect-v47 && npm run test:card-effect-v48 && npm run test:card-effect-v49 && npm run test:special-effects-v50 && npm run build",
     "lint": "eslint . --ignore-pattern dist --ignore-pattern .next",
     "benchmark:ai-recruit-safety": "node --experimental-strip-types scripts/benchmark-ai-recruit-safety.ts",
     "benchmark:ai-capital-sale": "node --experimental-strip-types scripts/benchmark-ai-capital-sale.ts",
     "benchmark:ai-cooperative-cem": "node --experimental-strip-types scripts/run-ai-cooperative-cem.ts",
     "benchmark:ai-cooperative-cem-selection": "node --experimental-strip-types scripts/run-ai-cooperative-cem-selection.ts",
     "benchmark:ai-jev": "node scripts/run-ai-jev.mjs",
-    "diagnose:ai-jev": "node scripts/run-ai-jev.mjs --diagnose"
+    "diagnose:ai-jev": "node scripts/run-ai-jev.mjs --diagnose",
+    "test:trinkets": "node scripts/check-trinket-functional-audit.mjs --test"
   },
   "dependencies": {
     "next": "16.2.6",

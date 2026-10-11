@@ -31,6 +31,7 @@ import {
   getLegalTavernSpellTargetIds,
   getAiStrategyProfile,
   getHeroPowerActivationQuote,
+  heroPowerHasAvailableUse,
   getScheduledOpponent,
   getMinionPurchaseCost,
   getMinionPurchaseQuote,
@@ -5153,7 +5154,8 @@ export default function GameClient() {
     humanHeroPower !== null &&
     heroPowerCanBeManuallyActivated(humanHeroPower.id);
   const humanHeroPowerUsedThisTurn =
-    human.heroPowerActiveThisTurn === true;
+    human.heroPowerActiveThisTurn === true &&
+    !heroPowerHasAvailableUse(game, human.id);
   const systemEvent = game.systemEventId
     ? getSystemEventDefinition(game.systemEventId)
     : null;
