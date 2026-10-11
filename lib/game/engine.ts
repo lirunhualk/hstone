@@ -2329,6 +2329,9 @@ function stealHighestTierTavernCard(
     }
     const [stolen] = player.shop.splice(shopIndex, 1);
     addDrawnMinionToHand(state, player, stolen);
+    if (playerHasTrinketCardId(player, TAVERN_FAN_CARD_ID)) {
+      refillShopMinionSlotIfNeeded(state, player);
+    }
     return true;
   }
 
@@ -2341,6 +2344,9 @@ function stealHighestTierTavernCard(
     player.additionalSpellShop = player.additionalSpellShop.filter(
       (card) => card.instanceId !== selected.card.instanceId,
     );
+  }
+  if (playerHasTrinketCardId(player, TAVERN_FAN_CARD_ID)) {
+    fillShop(state, player, false);
   }
   return true;
 }
@@ -8436,6 +8442,12 @@ function refillShopMinionSlotIfNeeded(
   state: GameState,
   player: PlayerState,
 ): void {
+  if (playerHasTrinketCardId(player, TAVERN_FAN_CARD_ID)) {
+    // Replenishing an offer preserves the rest of the Tavern and does not
+    // count as a refresh. fillShop also accounts for spell-only pages.
+    fillShop(state, player, false);
+    return;
+  }
   if (!player.systemEventCounters.fullHouseActive) {
     return;
   }
@@ -10528,6 +10540,9 @@ function finishConsumedShopMinion(
 ): void {
   returnMinionToPool(state, consumed);
   observeMinionConsumed(player);
+  if (playerHasTrinketCardId(player, TAVERN_FAN_CARD_ID)) {
+    refillShopMinionSlotIfNeeded(state, player);
+  }
 }
 
 function consumeShopMinionInto(
@@ -16528,6 +16543,9 @@ function applyTavernSpellEffect(
         1,
       );
       addDrawnMinionToHand(state, player, stolen);
+      if (playerHasTrinketCardId(player, TAVERN_FAN_CARD_ID)) {
+        refillShopMinionSlotIfNeeded(state, player);
+      }
       break;
     }
     case "fortify":

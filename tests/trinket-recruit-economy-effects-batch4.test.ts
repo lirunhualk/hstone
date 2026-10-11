@@ -176,6 +176,209 @@ function gameWithActiveTribe(tribe: Tribe, firstSeed: number): GameState {
   throw new Error(`could not seed an active ${tribe} lobby`);
 }
 
+function tavernOffers(player: PlayerState) {
+  return [
+    ...player.shop,
+    ...(player.spellShop ? [player.spellShop] : []),
+    ...player.additionalSpellShop,
+  ];
+}
+
+test("Radiant Gauntlets refill repeated frozen purchases without changing retained offers", () => {
+  let state = acquireTrinket(createGame(9450), "BG30_MagicItem_841");
+  humanPlayer(state).hand = [];
+  state = gameReducer(state, { type: "TOGGLE_FREEZE" });
+
+  for (let purchase = 0; purchase < 2; purchase += 1) {
+    const before = humanPlayer(state);
+    const bought = before.shop[0];
+    assert.ok(bought);
+    const retained = structuredClone(tavernOffers(before).filter(
+      (offer) => offer.instanceId !== bought.instanceId,
+    ));
+    const poolBefore = { ...state.pool };
+    const goldBefore = before.gold;
+
+    state = gameReducer(state, { type: "BUY_MINION", shopIndex: 0 });
+    const after = humanPlayer(state);
+    const offers = tavernOffers(after);
+    assert.equal(offers.length, 7);
+    assert.equal(after.frozen, true);
+    assert.equal(after.gold, goldBefore - 3);
+    assert.ok(after.hand.some((card) => card.instanceId === bought.instanceId));
+    for (const offer of retained) {
+      assert.deepEqual(
+        offers.find((candidate) => candidate.instanceId === offer.instanceId),
+        offer,
+      );
+    }
+    const added = after.shop.filter(
+      (minion) => !retained.some((offer) => offer.instanceId === minion.instanceId),
+    );
+    assert.equal(added.length, 1);
+    const replacement = added[0]!;
+    const definition = getMinionDefinition(replacement.definitionId);
+    assert.equal(replacement.attack, definition.attack + 3);
+    assert.equal(replacement.health, definition.health + 3);
+    assert.equal(replacement.poolCopies, 1);
+    assert.equal(state.pool[definition.id], poolBefore[definition.id]! - 1);
+  }
+});
+
+test("Radiant Gauntlets refill a purchased Tavern Spell while preserving minions", () => {
+  let state = acquireTrinket(createGame(9451), "BG30_MagicItem_841");
+  const before = humanPlayer(state);
+  before.hand = [];
+  const bought = before.spellShop;
+  assert.ok(bought);
+  const retained = structuredClone(before.shop);
+
+  state = gameReducer(state, {
+    type: "BUY_TAVERN_SPELL",
+    spellInstanceId: bought.instanceId,
+  });
+  const after = humanPlayer(state);
+  assert.equal(tavernOffers(after).length, 7);
+  assert.ok(after.hand.some((card) => card.instanceId === bought.instanceId));
+  for (const minion of retained) {
+    assert.deepEqual(
+      after.shop.find((candidate) => candidate.instanceId === minion.instanceId),
+      minion,
+    );
+  }
+});
+
+test("Radiant Gauntlets count all retained spells when refilling a spell-only Tavern", () => {
+  let state = acquireTrinket(createGame(9452), "BG30_MagicItem_841");
+  humanPlayer(state).hand = [
+    tavernSpell("tavern-spell-saloons-finest", "radiant-saloons-finest"),
+  ];
+  state = gameReducer(state, {
+    type: "CAST_TAVERN_SPELL",
+    cardInstanceId: "radiant-saloons-finest",
+  });
+  let player = humanPlayer(state);
+  assert.equal(player.shop.length, 0);
+  assert.equal(tavernOffers(player).length, 7);
+  const bought = player.additionalSpellShop.at(-1);
+  assert.ok(bought);
+  const retained = structuredClone(tavernOffers(player).filter(
+    (offer) => offer.instanceId !== bought.instanceId,
+  ));
+
+  state = gameReducer(state, {
+    type: "BUY_TAVERN_SPELL",
+    spellInstanceId: bought.instanceId,
+  });
+  player = humanPlayer(state);
+  assert.equal(tavernOffers(player).length, 7);
+  assert.equal(player.shop.length, 1);
+  for (const spell of retained) {
+    assert.deepEqual(
+      tavernOffers(player).find((offer) => offer.instanceId === spell.instanceId),
+      spell,
+    );
+  }
+
+  state = gameReducer(state, { type: "BUY_MINION", shopIndex: 0 });
+  player = humanPlayer(state);
+  assert.equal(tavernOffers(player).length, 7);
+  assert.equal(player.shop.length, 1);
+});
+
+test("Radiant Gauntlets refill a consumed Tavern minion", () => {
+  let state = acquireTrinket(createGame(9453), "BG30_MagicItem_841");
+  const before = humanPlayer(state);
+  const offersBefore = structuredClone(tavernOffers(before));
+  before.hand = [definitionMinion(state, "BG24_009", "radiant-consumer")];
+
+  state = gameReducer(state, { type: "PLAY_MINION", handIndex: 0 });
+  const after = humanPlayer(state);
+  const offersAfter = tavernOffers(after);
+  assert.equal(after.board[0]?.instanceId, "radiant-consumer");
+  assert.equal(offersAfter.length, 7);
+  assert.equal(
+    offersBefore.filter((offer) =>
+      !offersAfter.some((candidate) => candidate.instanceId === offer.instanceId),
+    ).length,
+    1,
+  );
+  for (const offer of offersBefore) {
+    const retained = offersAfter.find(
+      (candidate) => candidate.instanceId === offer.instanceId,
+    );
+    if (retained) {
+      assert.deepEqual(retained, offer);
+    }
+  }
+});
+
+test("Radiant Gauntlets refill a stolen Tavern minion without replacing other offers", () => {
+  let state = acquireTrinket(createGame(9455), "BG30_MagicItem_841");
+  const before = humanPlayer(state);
+  const offersBefore = structuredClone(tavernOffers(before));
+  before.hand = [tavernSpell("tavern-spell-enchanted-lasso", "radiant-lasso")];
+
+  state = gameReducer(state, {
+    type: "CAST_TAVERN_SPELL",
+    cardInstanceId: "radiant-lasso",
+  });
+  const after = humanPlayer(state);
+  const stolen = after.hand[0];
+  assert.ok(stolen?.kind === "minion");
+  assert.deepEqual(
+    stolen,
+    offersBefore.find((offer) => offer.instanceId === stolen.instanceId),
+  );
+  const offersAfter = tavernOffers(after);
+  assert.equal(offersAfter.length, 7);
+  for (const offer of offersBefore.filter(
+    (candidate) => candidate.instanceId !== stolen.instanceId,
+  )) {
+    assert.deepEqual(
+      offersAfter.find((candidate) => candidate.instanceId === offer.instanceId),
+      offer,
+    );
+  }
+});
+
+test("Radiant Gauntlets leave failed purchases and exhausted pools unchanged", () => {
+  let state = acquireTrinket(createGame(9454), "BG30_MagicItem_841");
+  let player = humanPlayer(state);
+  player.hand = [];
+  player.gold = 0;
+  const spell = tavernSpell("tavern-spell-might-of-stormwind", "radiant-costly-spell");
+  player.spellShop = spell;
+  assert.deepEqual(gameReducer(state, { type: "BUY_MINION", shopIndex: 0 }), state);
+  assert.deepEqual(gameReducer(state, {
+    type: "BUY_TAVERN_SPELL",
+    spellInstanceId: spell.instanceId,
+  }), state);
+
+  player.gold = 100;
+  player.hand = Array.from({ length: 10 }, (_, index) =>
+    tavernSpell("tavern-spell-tavern-coin", `radiant-full-hand-${index}`),
+  );
+  assert.deepEqual(gameReducer(state, { type: "BUY_MINION", shopIndex: 0 }), state);
+  assert.deepEqual(gameReducer(state, {
+    type: "BUY_TAVERN_SPELL",
+    spellInstanceId: spell.instanceId,
+  }), state);
+
+  player.hand = [];
+  state.pool = Object.fromEntries(Object.keys(state.pool).map((id) => [id, 0]));
+  const bought = player.shop[0];
+  assert.ok(bought);
+  const retained = structuredClone(tavernOffers(player).filter(
+    (offer) => offer.instanceId !== bought.instanceId,
+  ));
+  state = gameReducer(state, { type: "BUY_MINION", shopIndex: 0 });
+  player = humanPlayer(state);
+  assert.deepEqual(tavernOffers(player), retained);
+  assert.ok(Object.values(state.pool).every((copies) => copies === 0));
+  assert.equal(player.hand[0]?.instanceId, bought.instanceId);
+});
+
 test("batch4 acquisition Trinkets install exact Tavern, economy, and one-shot rewards", () => {
   let fanState = createGame(9401);
   const fanBefore = new Map(
