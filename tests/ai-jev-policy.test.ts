@@ -9,15 +9,10 @@ import { createJevDecisionRequest, isJevCriticalCheckpoint, runJevRecruitTurn, s
 
 const profile = AI_STRATEGY_PROFILES[0];
 
-function response(questions: Record<string, JevQuestion>, choice: string, confidence = 1): JevResponse {
+function response(questions: Record<string, JevQuestion>, choice: string, evidence = 1): JevResponse {
   return { model: JEV_PINNED_MODEL, answers: Object.fromEntries(Object.entries(questions).map(([id, question]) => {
-    assert.equal(question.type, "choice");
-    if (question.type !== "choice") throw new Error("fixture only supports Choice");
-    const count = Object.keys(question.criteria).length;
-    const maximum = confidence * (1 - 1 / count) + 1 / count;
-    return [id, { type: "choice" as const, choice, confidence,
-      probabilities: Object.fromEntries(Object.keys(question.criteria).map((key) => [key,
-        key === choice ? maximum : (1 - maximum) / (count - 1)])) }];
+    assert.equal(question.type, "noul");
+    return [id, { type: "noul" as const, noul: id.startsWith(`${choice}_`) ? evidence : 0 }];
   })), usage: { input_tokens: 100, output_tokens: 40 }, latencyMs: 2 };
 }
 
@@ -53,7 +48,9 @@ test("Jev input has visible cards/effects and token-free legal actions, not priv
   }
   assert.match(serialized, /description/);
   assert.equal(request.state.candidates.length, actions.length);
-  assert.equal(Object.keys(request.questions).length, 4);
+  assert.equal(Object.keys(request.questions).length, actions.length * 4);
+  assert.ok(actions.length <= 6);
+  assert.equal(Object.values(request.questions).every((question) => question.type === "noul"), true);
   assert.ok(actions.some((action) => action.type === "END_TURN"));
   assert.ok(request.state.candidates.some((action) => action.deterministicDelta !== null));
 });
@@ -92,20 +89,63 @@ test("critical mode hands an ordinary opening directly to the existing policy", 
   assert.equal(legacyCalls(), 1);
 });
 
-test("low confidence and abstention finish locally without interpreting confidence as win rate", async () => {
-  for (const confidence of [0.4, 1]) {
+test("relative benefit ranking can choose an informative candidate without an uncalibrated absolute threshold", async () => {
+  for (const preservation of [0.5, 0.499]) {
+    const { environment, legacyCalls } = fixture();
+    const records: JevDecisionRecord[] = [];
+    const result = await runJevRecruitTurn(environment, { mode: "all-decisions", model: JEV_PINNED_MODEL, profile,
+      onDecision: (record) => records.push(record),
+      client: { evaluate: async (state, questions) => {
+        const end = (state as { candidates: { id: string; type: string }[] }).candidates.find((action) => action.type === "END_TURN");
+        assert.ok(end);
+        const reply = response(questions, end.id);
+        const values = { tempo: 0.3, growth: 0.7, economy: 0.9, preservation };
+        for (const [dimension, noul] of Object.entries(values)) reply.answers[`${end.id}_${dimension}`] = { type: "noul", noul };
+        return reply;
+      } },
+    });
+    assert.equal(result.completed, true);
+    assert.equal(result.appliedActions, 1);
+    assert.equal(legacyCalls(), 0);
+    assert.equal(records[0].status, "applied");
+    assert.ok(records[0].candidateBenefitEvidence);
+  }
+});
+
+test("critical checkpoint detection uses all legal actions even when candidate pruning omits an upgrade", async () => {
+  const { environment, legacyCalls } = fixture();
+  const original = environment.safeRecruitLegalActions();
+  const template = original.find((action) => action.type === "END_TURN");
+  assert.ok(template);
+  const extra = ["MAGNETIZE_MINION", "PLAY_HAND_CARD", "CAST_BLOOD_GEM", "CAST_SPELLCRAFT", "CAST_TAVERN_SPELL", "ACTIVATE_HERO_POWER", "UPGRADE_TAVERN"] as const;
+  const legal = [...original, ...extra.map((type, index) => ({ ...template, type, token: `fixture-${index}` }))];
+  environment.safeRecruitLegalActions = () => legal;
+  const selected = selectJevCandidates(environment, profile, { refreshes: 0, freezes: 0, moves: 0 });
+  assert.equal(selected.some((action) => action.type === "UPGRADE_TAVERN"), false);
+  let requests = 0;
+  const result = await runJevRecruitTurn(environment, { mode: "critical-decisions", model: JEV_PINNED_MODEL, profile,
+    client: { evaluate: async (_state, questions) => { requests += 1; return response(questions, "none"); } },
+  });
+  assert.equal(requests, 1);
+  assert.equal(result.fallbacks["unresolved-benefit-ranking"], 1);
+  assert.equal(legacyCalls(), 1);
+});
+
+test("uninformative candidate benefit ranking finishes using the exact local policy", async () => {
+  for (const evidence of [0, 0.4]) {
     const { environment, legacyCalls } = fixture();
     const result = await runJevRecruitTurn(environment, { mode: "all-decisions", model: JEV_PINNED_MODEL, profile,
-      client: { evaluate: async (_state, questions) => response(questions, "legacy", confidence) },
+      client: { evaluate: async (_state, questions) => ({ ...response(questions, "a0"),
+        answers: Object.fromEntries(Object.keys(questions).map((id) => [id, { type: "noul" as const, noul: evidence }])) }) },
     });
     assert.equal(result.appliedActions, 0);
     assert.equal(result.completed, true);
     assert.equal(legacyCalls(), 1);
-    assert.equal(result.fallbacks[confidence < 0.65 ? "low-confidence" : "model-abstained"], 1);
+    assert.equal(result.fallbacks["unresolved-benefit-ranking"], 1);
   }
 });
 
-test("inflated provider confidence cannot override a diffuse Choice distribution", async () => {
+test("extraneous provider confidence cannot override uninformative Noul rankings", async () => {
   const { environment, legacyCalls } = fixture();
   const result = await runJevRecruitTurn(environment, { mode: "all-decisions", model: JEV_PINNED_MODEL, profile,
     client: { evaluate: async (state, questions) => {
@@ -113,14 +153,15 @@ test("inflated provider confidence cannot override a diffuse Choice distribution
       assert.ok(buy);
       const answer = response(questions, buy.id, 0.4);
       for (const item of Object.values(answer.answers)) {
-        assert.equal(item.type, "choice");
-        if (item.type === "choice") item.confidence = 1;
+        assert.equal(item.type, "noul");
+        if (item.type === "noul") item.noul = 0.4;
+        (item as unknown as Record<string, unknown>).confidence = 1;
       }
       return answer;
     } },
   });
   assert.equal(result.appliedActions, 0);
-  assert.equal(result.fallbacks["low-confidence"], 1);
+  assert.equal(result.fallbacks["unresolved-benefit-ranking"], 1);
   assert.equal(result.completed, true);
   assert.equal(legacyCalls(), 1);
 });
@@ -147,7 +188,11 @@ test("malformed results, timeout and exhausted budgets safely finish locally", a
     const { environment, legacyCalls } = fixture();
     const result = await runJevRecruitTurn(environment, { mode: "all-decisions", model: JEV_PINNED_MODEL, profile,
       client: { evaluate: async (_state, questions) => {
-        if (code === "response") return response(questions, "unknown-action");
+        if (code === "response") {
+          const malformed = response(questions, "a0");
+          delete malformed.answers[Object.keys(malformed.answers)[0]];
+          return malformed;
+        }
         throw new JevClientError(code);
       } },
     });

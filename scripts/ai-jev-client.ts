@@ -61,7 +61,25 @@ export type JevClientUsage = {
   totalLatencyMs: number;
   inFlightLatencyMs: number;
   stopped: boolean;
+  knownUsageRequests?: number;
+  unknownUsageRequests?: number;
+  failedRequests?: number;
 };
+export type JevRequestReservation = {
+  model: string;
+  state: unknown;
+  questions: Record<string, JevQuestion>;
+  reservedInputTokens: number;
+};
+export type JevRequestSettlement = {
+  knownUsage: JevTokenUsage | null;
+  latencyMs: number;
+  requestSent: boolean;
+  budgetExceeded: boolean;
+} & (
+  { kind: "success"; response: JevResponse } |
+  { kind: "error"; code: JevErrorCode; status?: number; validationRule?: JevValidationRule; validationDiagnostic?: JevValidationDiagnostic }
+);
 export type JevClientOptions = {
   apiKey: string;
   model: string;
@@ -70,8 +88,13 @@ export type JevClientOptions = {
   fetch?: typeof globalThis.fetch;
   endpoint?: string;
   allowLoopbackFixture?: boolean;
+  /** No automatic retry; bounded mode permits subsequent new decisions. */
+  failurePolicy?: "stop" | "bounded";
+  maxConsecutiveFailures?: number;
+  onRequestReserved?: (reservation: JevRequestReservation) => void;
+  onRequestSettled?: (settlement: JevRequestSettlement) => void;
 };
-export type JevErrorCode = "configuration" | "request" | "budget" | "aborted" | "timeout" | "transport" | "http" | "response" | "stopped";
+export type JevErrorCode = "configuration" | "request" | "budget" | "aborted" | "timeout" | "transport" | "http" | "response" | "stopped" | "hook";
 export const JEV_VALIDATION_RULES = Object.freeze([
   "body-shape", "model", "answers", "usage", "answer-type", "noul",
   "confidence", "distribution-keys", "distribution-range", "distribution-sum",
@@ -280,6 +303,37 @@ async function boundedResponseText(response: Response, signal: AbortSignal): Pro
   }
 }
 
+function reportedUsage(value: unknown, model: string): JevTokenUsage | null {
+  if (!record(value) || value.model !== model || !record(value.usage) ||
+    !integer(value.usage.input_tokens) || !integer(value.usage.output_tokens)) return null;
+  return { input_tokens: value.usage.input_tokens, output_tokens: value.usage.output_tokens };
+}
+
+function recoverableFailure(error: JevClientError): boolean {
+  if (error.code === "response") return error.validationRule !== "model";
+  if (error.code === "timeout" || error.code === "transport") return true;
+  return error.code === "http" && error.status !== undefined &&
+    (error.status === 429 || (error.status >= 500 && error.status <= 599));
+}
+
+/** Hooks are synchronous durability boundaries, never async background work. */
+function invokeHook<T>(hook: ((value: T) => void) | undefined, value: T): void {
+  if (!hook) return;
+  try {
+    const returned: unknown = hook(value);
+    if (returned && (typeof returned === "object" || typeof returned === "function") &&
+      typeof (returned as { then?: unknown }).then === "function") {
+      void Promise.resolve(returned).catch(() => undefined);
+      fail("hook");
+    }
+  } catch (error) {
+    if (error instanceof JevClientError && (error.code === "budget" || error.code === "stopped")) {
+      throw new JevClientError(error.code);
+    }
+    fail("hook");
+  }
+}
+
 export function createJevClient(options: JevClientOptions) {
   if (typeof window !== "undefined" || typeof options.apiKey !== "string" || !options.apiKey.trim() || /[\r\n]/.test(options.apiKey) || !/^jev-\d+\.\d+\.\d+$/.test(options.model)) fail("configuration");
   const endpoint = endpointUrl(options);
@@ -288,8 +342,13 @@ export function createJevClient(options: JevClientOptions) {
   const fetchRequest = options.fetch ?? globalThis.fetch;
   const budget = { ...options.budget };
   const timeoutMs = options.timeoutMs ?? 5000;
-  if ([budget.maxRequests, budget.maxInputTokens, budget.maxInputTokensPerRequest, budget.maxTotalLatencyMs].some((item) => !integer(item) || item < 1) || !integer(timeoutMs) || timeoutMs < 1 || timeoutMs > 60_000 || budget.maxInputTokensPerRequest > 32_000 || budget.maxInputTokensPerRequest > budget.maxInputTokens || typeof fetchRequest !== "function") fail("configuration");
-  const usage: JevClientUsage = { requests: 0, reservedInputTokens: 0, inputTokens: 0, outputTokens: 0, totalLatencyMs: 0, inFlightLatencyMs: 0, stopped: false };
+  const failurePolicy = options.failurePolicy ?? "stop";
+  const maxConsecutiveFailures = options.maxConsecutiveFailures ?? 3;
+  const onRequestReserved = options.onRequestReserved;
+  const onRequestSettled = options.onRequestSettled;
+  if ([budget.maxRequests, budget.maxInputTokens, budget.maxInputTokensPerRequest, budget.maxTotalLatencyMs].some((item) => !integer(item) || item < 1) || !integer(timeoutMs) || timeoutMs < 1 || timeoutMs > 60_000 || budget.maxInputTokensPerRequest > 32_000 || budget.maxInputTokensPerRequest > budget.maxInputTokens || typeof fetchRequest !== "function" || !["stop", "bounded"].includes(failurePolicy) || !integer(maxConsecutiveFailures) || maxConsecutiveFailures < 1 || (onRequestReserved !== undefined && typeof onRequestReserved !== "function") || (onRequestSettled !== undefined && typeof onRequestSettled !== "function")) fail("configuration");
+  const usage: JevClientUsage = { requests: 0, reservedInputTokens: 0, inputTokens: 0, outputTokens: 0, totalLatencyMs: 0, inFlightLatencyMs: 0, stopped: false, knownUsageRequests: 0, unknownUsageRequests: 0, failedRequests: 0 };
+  let consecutiveFailures = 0;
 
   return {
     getUsage(): JevClientUsage { return { ...usage }; },
@@ -311,7 +370,10 @@ export function createJevClient(options: JevClientOptions) {
       if (signal?.aborted) fail("aborted");
       const remainingLatency = budget.maxTotalLatencyMs - usage.totalLatencyMs - usage.inFlightLatencyMs;
       const leaseMs = Math.min(timeoutMs, Math.floor(remainingLatency));
-      if (leaseMs < 1 || usage.requests >= budget.maxRequests || reservedInputTokens > budget.maxInputTokensPerRequest || usage.reservedInputTokens + reservedInputTokens > budget.maxInputTokens) fail("budget");
+      if (leaseMs < 1 || usage.requests >= budget.maxRequests || reservedInputTokens > budget.maxInputTokensPerRequest || usage.reservedInputTokens + reservedInputTokens > budget.maxInputTokens) {
+        usage.stopped = true;
+        fail("budget");
+      }
       // Reserve synchronously before any await, including concurrent callers.
       usage.requests += 1;
       usage.reservedInputTokens += reservedInputTokens;
@@ -320,13 +382,24 @@ export function createJevClient(options: JevClientOptions) {
       const started = performance.now();
       let timer: ReturnType<typeof setTimeout> | undefined;
       let abortListener: (() => void) | undefined;
-      const interrupted = new Promise<never>((_, reject) => {
-        timer = setTimeout(() => { controller.abort(); reject(new JevClientError("timeout")); }, leaseMs);
-        abortListener = () => { controller.abort(); reject(new JevClientError("aborted")); };
-        signal?.addEventListener("abort", abortListener, { once: true });
-      });
+      let requestSent = false;
+      const observed = { knownUsage: null as JevTokenUsage | null, usageOverrun: false };
+      let result: JevResponse | undefined;
+      let failure: JevClientError | undefined;
       try {
+        // Hook data is detached from both caller objects and validation input.
+        const hookPayload = JSON.parse(body) as { state: unknown; questions: Record<string, JevQuestion> };
+        invokeHook(onRequestReserved, { model, state: hookPayload.state, questions: hookPayload.questions, reservedInputTokens });
+        if (signal?.aborted) fail("aborted");
+        const remainingLease = leaseMs - (performance.now() - started);
+        if (remainingLease <= 0) fail("timeout");
+        const interrupted = new Promise<never>((_, reject) => {
+          timer = setTimeout(() => { controller.abort(); reject(new JevClientError("timeout")); }, remainingLease);
+          abortListener = () => { controller.abort(); reject(new JevClientError("aborted")); };
+          signal?.addEventListener("abort", abortListener, { once: true });
+        });
         const operation = (async () => {
+          requestSent = true;
           const response = await fetchRequest(endpoint, { method: "POST", headers: { "Content-Type": "application/json", Authorization: `Bearer ${credential}` }, body, signal: controller.signal, redirect: "error" });
           if (!response.ok) {
             void response.body?.cancel().catch(() => undefined);
@@ -335,28 +408,52 @@ export function createJevClient(options: JevClientOptions) {
           const text = await boundedResponseText(response, controller.signal);
           let value: unknown;
           try { value = JSON.parse(text); } catch { fail("response", "json"); }
+          const reported = reportedUsage(value, model);
+          if (reported && reported.input_tokens > reservedInputTokens) {
+            observed.usageOverrun = true;
+            // Invalid answers retain their original rejection; only a fully
+            // valid response can report an observed overrun as known usage.
+            const validated = validateJevResponse(value, requestQuestions, model);
+            observed.knownUsage = validated.usage;
+            fail("budget");
+          }
+          observed.knownUsage = reported;
           return validateJevResponse(value, requestQuestions, model, performance.now() - started);
         })();
-        const result = await Promise.race([operation, interrupted]);
-        usage.inputTokens += result.usage.input_tokens;
-        usage.outputTokens += result.usage.output_tokens;
-        if (result.usage.input_tokens > reservedInputTokens) {
-          usage.stopped = true;
-          fail("budget");
-        }
-        return result;
+        result = await Promise.race([operation, interrupted]);
       } catch (error) {
-        // A failed/unknown request may still be charged. Fail closed; no retries.
-        usage.stopped = true;
+        failure = error instanceof JevClientError ? error : new JevClientError(signal?.aborted ? "aborted" : "transport");
         controller.abort();
-        if (error instanceof JevClientError) throw error;
-        throw new JevClientError(controller.signal.aborted && signal?.aborted ? "aborted" : "transport");
       } finally {
         if (timer !== undefined) clearTimeout(timer);
         if (abortListener) signal?.removeEventListener("abort", abortListener);
         usage.inFlightLatencyMs -= leaseMs;
         usage.totalLatencyMs += performance.now() - started;
       }
+      if (requestSent) {
+        if (observed.knownUsage) {
+          usage.inputTokens += observed.knownUsage.input_tokens;
+          usage.outputTokens += observed.knownUsage.output_tokens;
+          usage.knownUsageRequests = (usage.knownUsageRequests ?? 0) + 1;
+        } else usage.unknownUsageRequests = (usage.unknownUsageRequests ?? 0) + 1;
+      }
+      if (failure) {
+        usage.failedRequests = (usage.failedRequests ?? 0) + 1;
+        consecutiveFailures += 1;
+        if (observed.usageOverrun || failurePolicy === "stop" || !recoverableFailure(failure) || consecutiveFailures >= maxConsecutiveFailures) usage.stopped = true;
+      } else consecutiveFailures = 0;
+      const common = { knownUsage: observed.knownUsage, requestSent, budgetExceeded: observed.usageOverrun, latencyMs: performance.now() - started };
+      const settlement: JevRequestSettlement = failure
+        ? { kind: "error", ...common, code: failure.code, status: failure.status, validationRule: failure.validationRule, validationDiagnostic: failure.validationDiagnostic }
+        : { kind: "success", ...common, response: result! };
+      try { invokeHook(onRequestSettled, JSON.parse(JSON.stringify(settlement)) as JevRequestSettlement); }
+      catch {
+        usage.stopped = true;
+        if (!failure) usage.failedRequests = (usage.failedRequests ?? 0) + 1;
+        fail("hook");
+      }
+      if (failure) throw failure;
+      return result!;
     },
   };
 }

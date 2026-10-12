@@ -6,14 +6,14 @@ import type { AiTrainingEnvironment, AiTrainingLegalAction } from "../lib/game/a
 import type { AiTrainingObservation, DeepReadonly } from "../lib/game/ai-training.ts";
 import { getHeroPowerDefinition } from "../lib/game/hero-powers.ts";
 import { getSystemEventDefinition, getTrinketDefinition } from "../lib/game/lobby-systems.ts";
-import { JevClientError, jevChoiceConfidence, reserveJevInputTokens, validateJevResponse, type JevClient, type JevQuestion, type JevResponse, type JevValidationRule, type JevValidationDiagnostic } from "./ai-jev-client.ts";
+import { JevClientError, reserveJevInputTokens, validateJevResponse, type JevClient, type JevQuestion, type JevResponse, type JevValidationRule, type JevValidationDiagnostic } from "./ai-jev-client.ts";
 
-export const JEV_RECRUIT_POLICY_VERSION = "jev-visible-recruit-v3-derived-confidence";
+export const JEV_RECRUIT_POLICY_VERSION = "jev-visible-recruit-v4-noul-ranked-benefit";
 export type JevDecisionMode = "all-decisions" | "critical-decisions";
 export const JEV_RECRUIT_PRESET = Object.freeze({
-  maxCandidates: 12,
+  maxCandidates: 6,
   maxDecisionsPerTurn: 50,
-  minimumConfidence: 0.65,
+  minimumEvidenceSpread: 1e-6,
   maxInputReservationPerRequest: 32_000,
   dimensions: Object.freeze({ tempo: 0.40, growth: 0.25, economy: 0.20, preservation: 0.15 }),
 });
@@ -48,6 +48,7 @@ export interface JevDecisionRecord {
   providerStatus: number | null;
   providerValidationRule?: JevValidationRule;
   providerValidationDiagnostic?: JevValidationDiagnostic;
+  candidateBenefitEvidence?: Record<string, number>;
 }
 
 export interface JevRecruitOptions {
@@ -219,24 +220,30 @@ export function createJevDecisionRequest(environment: JevRecruitEnvironment, act
       }
     }
     return { id: `a${index}`, ...publicAction(action), sourceName: referencedCard(observation, action.source)?.name ?? null,
-      targetName: referencedCard(observation, action.target)?.name ?? null, deterministicDelta };
+      targetName: referencedCard(observation, action.target)?.name ?? null, deterministicDelta,
+      commitment: action.type === "END_TURN" ? "Finish now; forgo remaining gold and playable hand cards."
+        : action.type === "RESOLVE_INTERACTION" ? "Commit the displayed option and its full effects at the displayed destination."
+        : "Pay the quoted currency and amount; include source loss and target effects." };
   });
+  const decisionCriteria = {
+    tempo: "A good next action for near-term combat survival: net board coverage, stats, keywords and damage risk after full effects, costs and affordable follow-up plays of known cards.",
+    growth: "A good next action for sustainable growth: net printed scaling, triples and tavern access after full effects and costs; unknown rolls remain unknown.",
+    economy: "A good next action for resource efficiency: net gold, hand/board capacity, cycling and forgone purchases compared with listed alternatives.",
+    preservation: "A good next action for preserving core and functional board order: net source loss, target changes and sacrificed scaling.",
+  };
   const state = {
     policyVersion: JEV_RECRUIT_POLICY_VERSION,
     observation: compactDefaults(observation) as DeepReadonly<AiTrainingObservation>,
     rules: rulesFor(observation),
     candidates,
+    decisionCriteria,
     objective: "Improve final placement in this fixed-version Battlegrounds game. Use printed effects and current counters. Omitted numeric counters mean 0, omitted boolean keywords mean false, omitted collections mean empty, and omitted optional values mean null. Full descriptions and zone order are retained. Hidden opponents, random future shops, and shared pool counts are unavailable. Unknown random outcomes are not predictions. Preserve core synergies and account for gold, health, hand space and board space.",
   };
-  const criteria: Record<string, string> = { legacy: "Use the existing local AI policy for the rest of this recruit turn when these candidates cannot be judged reliably." };
-  for (const candidate of candidates) criteria[candidate.id] = `candidates[${candidate.id.slice(1)}]: ${candidate.type}`;
-  const instructions = {
-    tempo: "Which candidate best improves immediate combat survival? Judge board coverage, stat gains, keywords and near-term damage risk; prefer legacy if uncertain.",
-    growth: "Which candidate best improves sustainable future scaling? Judge printed synergies, triples and tavern access; do not assume unknown rolls; prefer legacy if uncertain.",
-    economy: "Which candidate best uses present and future resources? Judge gold, cycling value, discounts and available hand/board space; prefer legacy if uncertain.",
-    preservation: "Which candidate best preserves invested scaling engines and functional board order? Judge lost core pieces and target choice; prefer legacy if uncertain.",
-  };
-  const questions: Record<string, JevQuestion> = Object.fromEntries(Object.entries(instructions).map(([id, instruction]) => [id, { type: "choice", instructions: instruction, criteria }]));
+  const questions: Record<string, JevQuestion> = Object.fromEntries(candidates.flatMap((candidate, index) =>
+    Object.keys(decisionCriteria).map((dimension) => [`${candidate.id}_${dimension}`, {
+      type: "noul", instructions: `After its complete effects and quoted costs, does candidates[${index}] satisfy decisionCriteria.${dimension}? Judge against the listed alternatives.`,
+    }]),
+  ));
   // Only the audited, public observation and token-free descriptors cross the
   // network boundary. Detached JSON also protects against later state changes.
   return JSON.parse(JSON.stringify({ state, questions })) as { state: typeof state; questions: Record<string, JevQuestion> };
@@ -293,7 +300,7 @@ export async function runJevRecruitTurn(environment: JevRecruitEnvironment, opti
     visited.add(visibleHash);
     const actions = selectJevCandidates(environment, options.profile, turn);
     if (actions.length === 0) return fallback(environment, diagnostics, "no-candidates");
-    if (options.mode === "critical-decisions" && !isJevCriticalCheckpoint(observation, actions)) return fallback(environment, diagnostics, "non-critical");
+    if (options.mode === "critical-decisions" && !isJevCriticalCheckpoint(observation, environment.safeRecruitLegalActions())) return fallback(environment, diagnostics, "non-critical");
     if (actions.length === 1) return fallback(environment, diagnostics, "forced-choice");
     const before = fingerprint(environment);
     const request = createJevDecisionRequest(environment, actions, options.profile);
@@ -333,24 +340,27 @@ export async function runJevRecruitTurn(environment: JevRecruitEnvironment, opti
       options.onDecision?.(record);
       return fallback(environment, diagnostics, "stale-response");
     }
-    const scores: Record<string, number> = { legacy: 0 };
-    actions.forEach((_action, ordinal) => { scores[`a${ordinal}`] = 0; });
-    let confidence = 0;
-    for (const [dimension, weight] of Object.entries(JEV_RECRUIT_PRESET.dimensions)) {
-      const answer = response.answers[dimension];
-      if (answer.type !== "choice") throw new Error("Validated Jev answer type changed");
-      confidence += weight * jevChoiceConfidence(answer.probabilities);
-      // The API rounds Choice vectors to two decimal places. Retain the raw
-      // response for review, but give each independently weighted head unit
-      // mass rather than favoring a head merely because its rounded sum is 1.01.
-      const mass = Object.values(answer.probabilities).reduce((sum, value) => sum + value, 0);
-      for (const id of Object.keys(scores)) scores[id] += weight * answer.probabilities[id] / mass;
+    const scores: Record<string, number> = {};
+    for (const [ordinal] of actions.entries()) {
+      const id = `a${ordinal}`;
+      scores[id] = 0;
+      for (const [dimension, weight] of Object.entries(JEV_RECRUIT_PRESET.dimensions)) {
+        const answer = response.answers[`${id}_${dimension}`];
+        if (answer.type !== "noul") throw new Error("Validated Jev answer type changed");
+        scores[id] += weight * answer.noul;
+      }
     }
-    // Stable ties prefer production fallback. Scores are weighted preferences,
-    // not expected game returns or probabilities of winning a battle/game.
-    const selected = Object.keys(scores).sort((left, right) => scores[right] - scores[left] || (left === "legacy" ? -1 : right === "legacy" ? 1 : left.localeCompare(right)))[0];
-    if (confidence < JEV_RECRUIT_PRESET.minimumConfidence || selected === "legacy") {
-      record.status = confidence < JEV_RECRUIT_PRESET.minimumConfidence ? "low-confidence" : "model-abstained";
+    record.candidateBenefitEvidence = scores;
+    // Independent binary judgments need not sum to one across candidates.
+    // Their weighted evidence is neither expected return nor winning odds.
+    // A stable tie uses the already-frozen local candidate ordering.
+    const selected = Object.keys(scores).sort((left, right) => {
+      const difference = scores[right] - scores[left];
+      return Math.abs(difference) > 1e-12 ? difference : Number(left.slice(1)) - Number(right.slice(1));
+    })[0];
+    const spread = Math.max(...Object.values(scores)) - Math.min(...Object.values(scores));
+    if (spread <= JEV_RECRUIT_PRESET.minimumEvidenceSpread) {
+      record.status = "unresolved-benefit-ranking";
       options.onDecision?.(record);
       return fallback(environment, diagnostics, record.status);
     }

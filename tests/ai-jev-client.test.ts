@@ -12,6 +12,7 @@ import {
   type JevClientOptions,
   type JevQuestion,
   type JevValidationRule,
+  type JevRequestSettlement,
 } from "../scripts/ai-jev-client.ts";
 
 const questions: Record<string, JevQuestion> = {
@@ -344,7 +345,7 @@ test("Jev enforces input and request budgets atomically, including concurrency",
   await assert.rejects(client.evaluate("state", questions), (error) => error instanceof JevClientError && error.code === "budget");
   await first;
   assert.equal(calls, 1);
-  assert.equal(client.getUsage().stopped, false);
+  assert.equal(client.getUsage().stopped, true, "a rejected budget lease permanently closes the client");
   const small = createJevClient(options({ budget: { maxRequests: 3, maxInputTokens: 16_000, maxInputTokensPerRequest: 5000, maxTotalLatencyMs: 10_000 } }));
   await assert.rejects(small.evaluate("x".repeat(10_000), questions), /\(budget\)/);
   assert.equal(small.getUsage().requests, 0);
@@ -445,4 +446,174 @@ test("Jev validation binds answers to transmitted criteria after caller mutation
   assert.ok(resolveFetch);
   resolveFetch(Response.json(responseValue()));
   assert.equal((await operation).answers.action.type, "choice");
+});
+
+function boundedOptions(overrides: Partial<JevClientOptions> = {}): JevClientOptions {
+  return options({ failurePolicy: "bounded", budget: { maxRequests: 10, maxInputTokens: 160_000, maxInputTokensPerRequest: 16_000, maxTotalLatencyMs: 10_000 }, ...overrides });
+}
+
+test("bounded failures retain strict response rejection, known usage and reservations, without retry", async () => {
+  const settlements: JevRequestSettlement[] = [];
+  let calls = 0;
+  const client = createJevClient(boundedOptions({ onRequestSettled: (value) => settlements.push(value), fetch: async () => {
+    calls += 1;
+    const value = responseValue();
+    if (calls === 1) value.answers.action.choice = "finish";
+    return Response.json(value);
+  } }));
+  await assert.rejects(client.evaluate("state", questions), (error) => error instanceof JevClientError && error.validationRule === "choice-argmax");
+  assert.equal(calls, 1, "a failed evaluation never retries itself");
+  const first = client.getUsage();
+  assert.equal(first.stopped, false);
+  assert.equal(first.inputTokens, 400);
+  assert.equal(first.outputTokens, 80);
+  assert.equal(first.knownUsageRequests, 1);
+  assert.equal(first.unknownUsageRequests, 0);
+  assert.equal(first.failedRequests, 1);
+  assert.deepEqual(settlements[0].knownUsage, { input_tokens: 400, output_tokens: 80 });
+  assert.equal(settlements[0].kind, "error");
+  await client.evaluate("new-state", questions);
+  assert.equal(calls, 2);
+  assert.equal(client.getUsage().inputTokens, 800);
+  assert.ok(client.getUsage().reservedInputTokens > first.reservedInputTokens, "failed reservations are never returned");
+});
+
+test("bounded failure circuit closes at three consecutive failures and success resets its count", async () => {
+  let calls = 0;
+  const client = createJevClient(boundedOptions({ fetch: async () => { calls += 1; return new Response("invalid-json"); } }));
+  for (let index = 0; index < 3; index += 1) {
+    await assert.rejects(client.evaluate("state", questions), /\(response\)/);
+    assert.equal(client.getUsage().stopped, index === 2);
+  }
+  await assert.rejects(client.evaluate("state", questions), /\(stopped\)/);
+  assert.equal(calls, 3);
+  assert.equal(client.getUsage().unknownUsageRequests, 3);
+  assert.equal(client.getUsage().failedRequests, 3);
+  let resets = 0;
+  const reset = createJevClient(boundedOptions({ fetch: async () => ++resets === 2 ? Response.json(responseValue()) : new Response("invalid-json") }));
+  await assert.rejects(reset.evaluate("state", questions), /\(response\)/);
+  await reset.evaluate("state", questions);
+  await assert.rejects(reset.evaluate("state", questions), /\(response\)/);
+  await assert.rejects(reset.evaluate("state", questions), /\(response\)/);
+  assert.equal(reset.getUsage().stopped, false, "two failures after a success do not trip the three-failure circuit");
+});
+
+test("bounded mode permits new requests after timeout, transport, HTTP 429 and 5xx failures", async () => {
+  for (const kind of ["timeout", "transport", 429, 500, 529, 599] as const) {
+    let calls = 0;
+    const client = createJevClient(boundedOptions({ timeoutMs: 15, fetch: async () => {
+      calls += 1;
+      if (calls > 1) return Response.json(responseValue());
+      if (kind === "timeout") return new Promise<Response>(() => undefined);
+      if (kind === "transport") throw new Error("not-a-real-key transport details");
+      return new Response("private-provider-body", { status: kind });
+    } }));
+    await assert.rejects(client.evaluate("state", questions), (error) => error instanceof JevClientError &&
+      error.code === (typeof kind === "number" ? "http" : kind) && !error.message.includes("private-provider-body") && !error.message.includes("not-a-real-key"));
+    assert.equal(calls, 1);
+    assert.equal(client.getUsage().stopped, false);
+    assert.equal(client.getUsage().unknownUsageRequests, 1);
+    await client.evaluate("state", questions);
+    assert.equal(calls, 2);
+    assert.equal(client.getUsage().knownUsageRequests, 1);
+  }
+});
+
+test("bounded mode always closes for terminal HTTP, pinned-model mismatch and usage overruns", async () => {
+  for (const status of [400, 401, 403, 404, 408, 422, 451]) {
+    let calls = 0;
+    const client = createJevClient(boundedOptions({ fetch: async () => { calls += 1; return new Response("private", { status }); } }));
+    await assert.rejects(client.evaluate("state", questions), (error) => error instanceof JevClientError && error.status === status);
+    await assert.rejects(client.evaluate("state", questions), /\(stopped\)/);
+    assert.equal(calls, 1);
+  }
+  const mismatch = responseValue();
+  mismatch.model = "jev-9.9.9";
+  const wrongModel = createJevClient(boundedOptions({ fetch: async () => Response.json(mismatch) }));
+  await assert.rejects(wrongModel.evaluate("state", questions), (error) => error instanceof JevClientError && error.validationRule === "model");
+  assert.equal(wrongModel.getUsage().stopped, true);
+  assert.equal(wrongModel.getUsage().knownUsageRequests, 0);
+  const excessive = responseValue();
+  excessive.usage.input_tokens = 20_000;
+  const overrun = createJevClient(boundedOptions({ fetch: async () => Response.json(excessive) }));
+  await assert.rejects(overrun.evaluate("state", questions), /\(budget\)/);
+  assert.equal(overrun.getUsage().stopped, true);
+  assert.equal(overrun.getUsage().inputTokens, 20_000, "fully valid overrun is still reported as observed usage");
+  excessive.answers.action.choice = "finish";
+  const settlements: JevRequestSettlement[] = [];
+  const invalidOverrun = createJevClient(boundedOptions({ fetch: async () => Response.json(excessive), onRequestSettled: (value) => settlements.push(value) }));
+  await assert.rejects(invalidOverrun.evaluate("state", questions), (error) => error instanceof JevClientError && error.validationRule === "choice-argmax");
+  assert.equal(invalidOverrun.getUsage().stopped, true);
+  assert.equal(invalidOverrun.getUsage().unknownUsageRequests, 1);
+  assert.equal(invalidOverrun.getUsage().inputTokens, 0);
+  assert.equal(settlements[0].budgetExceeded, true, "the global harness also receives the terminal budget signal");
+});
+
+test("schema-error usage is known only for a pinned model and safe nonnegative integer tokens", async () => {
+  for (const invalid of [-1, 1.5, Number.MAX_SAFE_INTEGER + 1]) {
+    const value = responseValue();
+    value.answers.action.choice = "finish";
+    value.usage.output_tokens = invalid;
+    const client = createJevClient(boundedOptions({ fetch: async () => Response.json(value) }));
+    await assert.rejects(client.evaluate("state", questions), /\(response\)/);
+    assert.equal(client.getUsage().knownUsageRequests, 0);
+    assert.equal(client.getUsage().unknownUsageRequests, 1);
+    assert.equal(client.getUsage().inputTokens, 0);
+  }
+});
+
+test("synchronous request hooks precede network and settlement, exclude secrets, and cannot mutate the wire contract", async () => {
+  const order: string[] = [];
+  const client = createJevClient(options({ onRequestReserved(reservation) {
+    order.push("reserved");
+    assert.deepEqual(Object.keys(reservation).sort(), ["model", "questions", "reservedInputTokens", "state"]);
+    assert.equal(JSON.stringify(reservation).includes("not-a-real-key"), false);
+    reservation.questions.action = { type: "choice", instructions: "Changed", criteria: { illegal: "Illegal", other: "Other" } };
+    (reservation.state as { gold: number }).gold = 0;
+  }, fetch: async (_url, init) => {
+    order.push("fetch");
+    assert.deepEqual(JSON.parse(init?.body as string), { state: { gold: 3 }, model: JEV_PINNED_MODEL, questions });
+    return Response.json(responseValue());
+  }, onRequestSettled(settlement) {
+    order.push("settled");
+    assert.equal(settlement.kind, "success");
+    assert.equal(settlement.requestSent, true);
+    assert.deepEqual(settlement.knownUsage, { input_tokens: 400, output_tokens: 80 });
+    assert.equal(JSON.stringify(settlement).includes("not-a-real-key"), false);
+    if (settlement.kind === "success" && settlement.response.answers.action.type === "choice") settlement.response.answers.action.choice = "illegal";
+  } }));
+  const response = await client.evaluate({ gold: 3 }, questions);
+  assert.deepEqual(order, ["reserved", "fetch", "settled"]);
+  assert.equal(response.answers.action.type, "choice");
+  if (response.answers.action.type === "choice") assert.equal(response.answers.action.choice, "buy");
+});
+
+test("failed reservation hooks prevent fetch, stop safely, consume reservation and settle without unknown paid usage", async () => {
+  for (const hook of [() => { throw new Error("not-a-real-key private-hook-message"); }, () => { throw new JevClientError("budget"); }, async () => { throw new Error("private-async-hook-message"); }]) {
+    let calls = 0;
+    const settlements: JevRequestSettlement[] = [];
+    const client = createJevClient(boundedOptions({ onRequestReserved: hook, onRequestSettled: (value) => settlements.push(value), fetch: async () => { calls += 1; return Response.json(responseValue()); } }));
+    await assert.rejects(client.evaluate("state", questions), (error) => error instanceof JevClientError && ["hook", "budget"].includes(error.code) && !error.message.includes("private") && !error.message.includes("not-a-real-key"));
+    assert.equal(calls, 0);
+    assert.equal(client.getUsage().stopped, true);
+    assert.equal(client.getUsage().requests, 1);
+    assert.ok(client.getUsage().reservedInputTokens > 0);
+    assert.equal(client.getUsage().unknownUsageRequests, 0);
+    assert.equal(settlements.length, 1);
+    assert.equal(settlements[0].requestSent, false);
+    assert.equal(settlements[0].knownUsage, null);
+    assert.equal(JSON.stringify(settlements).includes("private"), false);
+  }
+});
+
+test("failed settlement hook closes after recording known provider usage and emits a safe hook error once", async () => {
+  let settled = 0;
+  const client = createJevClient(boundedOptions({ onRequestSettled() { settled += 1; throw new Error("not-a-real-key private-settlement-message"); } }));
+  await assert.rejects(client.evaluate("state", questions), (error) => error instanceof JevClientError && error.code === "hook" && !error.message.includes("private"));
+  assert.equal(settled, 1);
+  assert.equal(client.getUsage().stopped, true);
+  assert.equal(client.getUsage().knownUsageRequests, 1);
+  assert.equal(client.getUsage().inputTokens, 400);
+  assert.equal(client.getUsage().failedRequests, 1);
+  await assert.rejects(client.evaluate("state", questions), /\(stopped\)/);
 });
