@@ -3,6 +3,7 @@ import { createHash, randomUUID } from "node:crypto";
 import { mkdtempSync, readFileSync, readdirSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { resolve } from "node:path";
+import { readFile as readFileAsync } from "node:fs/promises";
 import test from "node:test";
 
 import { createJevClient, JEV_PINNED_MODEL, reserveJevInputTokens, type JevClientUsage } from "../scripts/ai-jev-client.ts";
@@ -75,6 +76,9 @@ test("Jev CLI requires explicit mode/preset/fresh range and rejects unknown, dup
   const basic = ["--mode", "fixture", "--preset", "smoke", "--start-seed", "94900001"];
   assert.equal(parseAiJevArguments(basic).options.mode, "fixture");
   for (const extra of [["--unknown", "1"], ["--mode", "jev"], ["--max-requests", "100001"], ["--max-input-tokens", "1000000001"], ["--seeds", "2"], ["--env-file", ".env"], ["--concurrency", "5"], ["--resume", "maybe"]]) assert.throws(() => parseAiJevArguments([...basic, ...extra]));
+  assert.equal(parseAiJevArguments([...basic, "--max-provider-recoveries", "0"]).options.maxProviderRecoveries, 0);
+  assert.equal(parseAiJevArguments([...basic, "--max-provider-recoveries", "2"]).options.maxProviderRecoveries, 2);
+  assert.throws(() => parseAiJevArguments([...basic, "--max-provider-recoveries", "3"]), /0\.\.2/);
   assert.throws(() => parseAiJevArguments([]), /explicit/);
   assert.throws(() => parseAiJevArguments([...basic, "--seeds", "1.5"]), /positive integer/);
   assert.throws(() => freezeAiJevConfiguration({ ...options, runId: "../escaped" }));
@@ -88,6 +92,8 @@ test("default budgets never expand implicitly and larger run contracts require e
   assert.equal(explicit.maxRequests, 10_000);
   assert.equal(explicit.maxInputTokens, 50_000_000);
   assert.equal(normal.concurrency, 1);
+  assert.equal(normal.maxProviderRecoveries, 0);
+  assert.equal(normal.recoveryCooldownMs, 5000);
   assert.match(normal.adapterVersion!, /v4-noul-ranked-benefit/);
   assert.equal(normal.adapterPreset?.maxCandidates, 6);
   assert.equal(freezeAiJevConfiguration({ ...options, concurrency: 4, maxInputTokens: 800_000_000 }).maxInputTokens, 800_000_000);
@@ -113,6 +119,214 @@ test("one invalid response completes its full game and later games still use new
   assert.equal(report.usage.unknownUsageRequests, 0);
   assert.equal(report.availability.circuitReason, null);
   assert.equal(report.pairs.reduce((sum, pair) => sum + pair.candidate.usage.requests, 0), networkCalls, "parallel per-game usage is not a difference of shared snapshots");
+});
+
+test("circuit-open local game queue services another provider's timer and I/O before draining", async () => {
+  let startedCandidates = 0;
+  let finishedCandidates = 0;
+  let timerObservedAt = -1;
+  let ioObservedAt = -1;
+  const question = { valid: { type: "noul" as const, instructions: "Is the visible action valid?" } };
+  const report = await runAiJevBenchmark({ ...options, preset: "development", seeds: 2, concurrency: 4 }, dependencies({
+    createClient: (_configuration, hooks) => createJevClient({ apiKey: "not-a-real-key", model: JEV_PINNED_MODEL, ...hooks, timeoutMs: 5000,
+      budget: { maxRequests: 10, maxInputTokens: 100_000, maxInputTokensPerRequest: 32_000, maxTotalLatencyMs: 50_000 },
+      fetch: async (_input, init) => {
+        const request = JSON.parse(String(init?.body)) as { state: { role: string } };
+        if (request.state.role === "trip-circuit") return Response.json({}, { status: 451 });
+        await new Promise<void>((resolveTimer) => setTimeout(() => { timerObservedAt = finishedCandidates; resolveTimer(); }, 5));
+        await readFileAsync(new URL("../package.json", import.meta.url));
+        ioObservedAt = finishedCandidates;
+        return Response.json({ model: JEV_PINNED_MODEL, answers: { valid: { type: "noul", noul: 1 } }, usage: { input_tokens: 10, output_tokens: 1 } });
+      },
+    }),
+    runGame: async (request, client) => {
+      const result = successfulRun(request);
+      if (request.arm === "legacy") return result;
+      const order = ++startedCandidates;
+      if (order <= 2) {
+        try { await client.evaluate({ role: order === 1 ? "delayed-provider" : "trip-circuit" }, question); }
+        catch { result.diagnostics = [diagnostics({ successfulResponses: 0, appliedActions: 0, fallbacks: { http: 1 } })]; result.providerFailures = ["http"]; }
+      } else result.diagnostics = [diagnostics({ decisions: 0, calls: 0, successfulResponses: 0, appliedActions: 0 })];
+      finishedCandidates += 1;
+      return { ...result, usage: client.getUsage() };
+    },
+  }));
+  assert.equal(report.status, "complete");
+  assert.equal(report.processedGames, 480);
+  assert.equal(report.availability.circuitReason, "provider-http-451");
+  assert.equal(report.usage.requests, 2);
+  assert.equal(report.usage.failedRequests, 1);
+  assert.ok(timerObservedAt >= 0 && timerObservedAt < 446, "timer runs while fallback games remain queued");
+  assert.ok(ioObservedAt >= timerObservedAt && ioObservedAt < 446, "filesystem I/O completes before the local queue drains");
+  assert.equal(report.pairs[report.pairs.findIndex((pair) => pair.candidate.usage.knownUsageRequests === 1)].candidate.completed, true);
+});
+
+test("one shared recovery waits active requests, preserves old-game fallback and allows only new games", async () => {
+  let calls = 0;
+  let probes = 0;
+  let pending = 0;
+  let candidates = 0;
+  let cooled = 0;
+  let oldGameStopped = false;
+  let allowOldGame: () => void = () => undefined;
+  const recovered = new Promise<void>((resolveRecovery) => { allowOldGame = resolveRecovery; });
+  let allStarted: () => void = () => undefined;
+  const initialRequestsStarted = new Promise<void>((resolveStarted) => { allStarted = resolveStarted; });
+  const question = { valid: { type: "noul" as const, instructions: "Is this action valid?" } };
+  const report = await runAiJevBenchmark({ ...options, preset: "development", seeds: 2, concurrency: 4, maxProviderRecoveries: 2, maxInputTokens: 10_000_000, runId: `recovery-${randomUUID()}` }, dependencies({
+    waitForRecoveryCooldown: async (milliseconds) => { assert.equal(milliseconds, 5000); cooled += 1; },
+    probeHealth: async () => { assert.equal(pending, 0, "all sent POST operations settle before GET"); probes += 1; allowOldGame(); return { healthy: true, status: 200, failure: null }; },
+    createClient: (_configuration, hooks) => createJevClient({ apiKey: "not-a-real-key", model: JEV_PINNED_MODEL, ...hooks,
+      budget: { maxRequests: 2000, maxInputTokens: 10_000_000, maxInputTokensPerRequest: 32_000, maxTotalLatencyMs: 100_000 },
+      fetch: async (_input, init) => {
+        const order = ++calls;
+        pending += 1;
+        try {
+          if (order <= 3) { await initialRequestsStarted; return Response.json({}, { status: 503 }); }
+          if (order === 4) { allStarted(); await new Promise((resolveTimer) => setTimeout(resolveTimer, 15)); }
+          const wire = JSON.parse(String(init?.body)) as { questions: Record<string, unknown> };
+          return Response.json({ model: JEV_PINNED_MODEL, answers: Object.fromEntries(Object.keys(wire.questions).map((id) => [id, { type: "noul", noul: 1 }])), usage: { input_tokens: 10, output_tokens: 1 } });
+        } finally { pending -= 1; }
+      },
+    }),
+    runGame: async (request, client) => {
+      const result = successfulRun(request);
+      if (request.arm === "legacy") return result;
+      const order = ++candidates;
+      try {
+        await client.evaluate({ game: order }, question);
+        if (order === 4) {
+          await recovered;
+          try { await client.evaluate({ game: order, next: true }, question); }
+          catch { oldGameStopped = true; result.providerFailures = ["stopped"]; }
+        }
+      } catch { result.providerFailures = ["http"]; result.diagnostics = [diagnostics({ successfulResponses: 0, appliedActions: 0, fallbacks: { http: 1 } })]; }
+      return { ...result, usage: client.getUsage() };
+    },
+  }));
+  assert.equal(report.status, "complete");
+  assert.equal(report.processedGames, 480);
+  assert.equal(calls, 448, "each game sends at most its original request; no failed POST or old-game retry");
+  assert.equal(probes, 1);
+  assert.equal(cooled, 1);
+  assert.equal(oldGameStopped, true);
+  assert.equal(report.availability.circuitReason, null);
+  assert.equal(report.availability.recovery?.circuitEvents, 1, "reopening retains circuit history");
+  assert.equal(report.availability.recovery?.successful, 1);
+  assert.equal(report.usage.failedRequests, 3);
+  assert.equal(report.usage.unknownUsageRequests, 3);
+  assert.equal(report.pairs.reduce((sum, pair) => sum + pair.candidate.usage.requests, 0), report.usage.requests);
+});
+
+test("default recovery stays off and missing settlement fails closed without probe or completed checkpoint", async () => {
+  const question = { valid: { type: "noul" as const, instructions: "Is this action valid?" } };
+  let probes = 0;
+  let calls = 0;
+  const runGame: NonNullable<AiJevBenchmarkDependencies["runGame"]> = async (request, client) => {
+    const result = successfulRun(request);
+    if (request.arm !== "legacy") {
+      try { await client.evaluate({ arm: request.arm }, question); }
+      catch { result.providerFailures = ["http"]; result.diagnostics = [diagnostics({ successfulResponses: 0, appliedActions: 0, fallbacks: { http: 1 } })]; }
+    }
+    return { ...result, usage: client.getUsage() };
+  };
+  const report = await runAiJevBenchmark({ ...options, runId: `no-recovery-${randomUUID()}` }, dependencies({
+    probeHealth: async () => { probes += 1; return { healthy: true, status: 200, failure: null }; }, runGame,
+    createClient: (_configuration, hooks) => createJevClient({ apiKey: "not-a-real-key", model: JEV_PINNED_MODEL, ...hooks,
+      budget: { maxRequests: 2000, maxInputTokens: 10_000_000, maxInputTokensPerRequest: 32_000, maxTotalLatencyMs: 100_000 },
+      fetch: async () => { calls += 1; return Response.json({}, { status: 503 }); },
+    }),
+  }));
+  assert.equal(report.status, "complete");
+  assert.equal(calls, 3);
+  assert.equal(probes, 0);
+  assert.equal(report.availability.recovery?.maxAttempts, 0);
+  const directory = mkdtempSync(resolve(tmpdir(), "hstone-jev-missing-settlement-"));
+  const broken = await runAiJevBenchmark({ ...options, maxProviderRecoveries: 2, runId: `broken-hook-${randomUUID()}` }, dependencies({ journalDirectory: directory, runGame,
+    probeHealth: async () => { probes += 1; return { healthy: true, status: 200, failure: null }; },
+    createClient: (configuration, hooks) => ({ getUsage: () => zeroUsage, evaluate: async (state, questions) => {
+      const wire = { model: configuration.model, state, questions };
+      hooks!.onRequestReserved!({ ...wire, reservedInputTokens: reserveJevInputTokens(JSON.stringify(wire), Object.keys(questions).length) });
+      throw new Error("simulated broken transport without settlement");
+    } }),
+  }));
+  assert.equal(broken.status, "incomplete");
+  assert.equal(broken.pairs[0].candidate.completed, false);
+  assert.ok(broken.failures.includes("provider-settlement-integrity-failure"));
+  assert.equal(probes, 0);
+  assert.equal(readdirSync(resolve(directory, "games")).length, 2, "only canonical baseline games were checkpointed");
+});
+
+test("injected real-mode recovery without an explicit health fixture makes no native GET", async (context) => {
+  let nativeRequests = 0;
+  context.mock.method(globalThis, "fetch", async () => { nativeRequests += 1; throw new Error("test must stay offline"); });
+  const question = { valid: { type: "noul" as const, instructions: "Is this action valid?" } };
+  const report = await runAiJevBenchmark({ ...options, mode: "jev", maxProviderRecoveries: 2, runId: `offline-recovery-${randomUUID()}` }, dependencies({
+    waitForRecoveryCooldown: async () => undefined,
+    createClient: (_configuration, hooks) => createJevClient({ apiKey: "not-a-real-key", model: JEV_PINNED_MODEL, ...hooks,
+      budget: { maxRequests: 2000, maxInputTokens: 10_000_000, maxInputTokensPerRequest: 32_000, maxTotalLatencyMs: 100_000 },
+      fetch: async () => Response.json({}, { status: 503 }),
+    }),
+    runGame: async (request, client) => {
+      const result = successfulRun(request);
+      if (request.arm !== "legacy") {
+        try { await client.evaluate({ arm: request.arm }, question); }
+        catch { result.providerFailures = ["http"]; result.diagnostics = [diagnostics({ successfulResponses: 0, appliedActions: 0, fallbacks: { http: 1 } })]; }
+      }
+      return { ...result, usage: client.getUsage() };
+    },
+  }));
+  assert.equal(report.status, "complete");
+  assert.equal(nativeRequests, 0);
+  assert.equal(report.availability.recovery?.failed, 1);
+  assert.equal(report.availability.recovery?.history[0].failure, "shape");
+  assert.equal(report.usage.requests, 3);
+});
+
+test("resume after a healthy probe keeps a pre-circuit incomplete game local after replay", async () => {
+  const directory = mkdtempSync(resolve(tmpdir(), "hstone-jev-old-epoch-"));
+  const testOptions = { ...options, preset: "development" as const, seeds: 2, maxProviderRecoveries: 2, maxInputTokens: 10_000_000, runId: `old-epoch-${randomUUID()}` };
+  const configuration = freezeAiJevConfiguration(testOptions);
+  const journal = new AiJevJournal({ directory, identity: { version: AI_JEV_BENCHMARK_VERSION, configuration, provenance }, maxRequests: configuration.maxRequests, maxInputTokens: configuration.maxInputTokens, maxProviderRecoveries: 2 });
+  const questions = { valid: { type: "noul" as const, instructions: "Is this action valid?" } };
+  const oldKey = `${options.startSeed}-neutral-v1-r0-balanced-all-decisions`;
+  const keys = [oldKey, `${options.startSeed}-neutral-v1-r0-balanced-critical-decisions`, `${options.startSeed}-neutral-v1-r0-magnetic-all-decisions`, `${options.startSeed}-neutral-v1-r0-magnetic-critical-decisions`];
+  for (const [index, key] of keys.entries()) {
+    journal.startGame(key);
+    const wire = { model: JEV_PINNED_MODEL, state: { game: key }, questions };
+    journal.reserve(key, 0, { ...wire, reservedInputTokens: reserveJevInputTokens(JSON.stringify(wire), 1) });
+    journal.settle(key, 0, index === 0 ? { kind: "success", requestSent: true, budgetExceeded: false, latencyMs: 1, knownUsage: { input_tokens: 10, output_tokens: 1 }, response: { model: JEV_PINNED_MODEL, answers: { valid: { type: "noul", noul: 1 } }, usage: { input_tokens: 10, output_tokens: 1 }, latencyMs: 1 } } : { kind: "error", code: "http", status: 503, requestSent: true, budgetExceeded: false, latencyMs: 1, knownUsage: null });
+  }
+  journal.settleRecovery(journal.reserveRecovery(), { healthy: true, status: 200, failure: null });
+  journal.close();
+  let calls = 0;
+  let stopped = false;
+  const report = await runAiJevBenchmark({ ...testOptions, resume: true }, dependencies({ journalDirectory: directory,
+    probeHealth: async () => { throw new Error("already settled GET cannot repeat"); },
+    createClient: (_configuration, hooks) => createJevClient({ apiKey: "not-a-real-key", model: JEV_PINNED_MODEL, ...hooks,
+      budget: { maxRequests: 2000, maxInputTokens: 10_000_000, maxInputTokensPerRequest: 32_000, maxTotalLatencyMs: 100_000 },
+      fetch: async (input, init) => { calls += 1; return jevFixtureFetch(input, init); },
+    }),
+    runGame: async (request, client) => {
+      const result = successfulRun(request);
+      if (request.arm !== "legacy") {
+        const key = `${request.seed}-${request.scenario}-r${request.rotation}-${request.profile!.id}-${request.arm}`;
+        try {
+          await client.evaluate({ game: key }, questions);
+          if (key === oldKey) {
+            try { await client.evaluate({ game: key, next: true }, questions); }
+            catch { stopped = true; result.providerFailures = ["stopped"]; }
+          }
+        } catch { result.providerFailures = ["http"]; result.diagnostics = [diagnostics({ successfulResponses: 0, appliedActions: 0, fallbacks: { http: 1 } })]; }
+      }
+      return { ...result, usage: client.getUsage() };
+    },
+  }));
+  assert.equal(report.status, "complete");
+  assert.equal(stopped, true);
+  assert.equal(calls, 444, "four original POSTs and the settled GET are replayed without duplication or reviving the old game");
+  assert.equal(report.usage.requests, 448);
+  assert.equal(report.availability.recovery?.successful, 1);
 });
 
 test("durable resume replays paid responses without API duplication and retains completed checkpoints", async () => {

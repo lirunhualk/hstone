@@ -66,6 +66,10 @@ export interface JevReportExposureCell {
   modelAppliedActions: number; successfulResponses: number;
   bySeed: { seed: number; candidateGames: number; modelExposedGames: number; modelAppliedActions: number }[];
 }
+export interface JevReportRecovery {
+  attempts: number; successful: number; failed: number; unsettled: number; maxAttempts: number; circuitEvents: number;
+  history: { attempt: number; healthy: boolean | null; status: number | null; failure: string | null; startedAt: string; settledAt: string | null }[];
+}
 export interface AiJevFinalSummary {
   reportVersion: "ai-jev-final-report-v1"; label: "完整真实整局对照"; runId: string;
   model: string; seeds: number; scenarios: string[]; profiles: string[]; rotations: number[]; arms: string[];
@@ -75,9 +79,35 @@ export interface AiJevFinalSummary {
   interpretation: string; direction: string; uncertainty: string;
   findings: string[];
   promotionAccepted: false; modelExposureUsable: boolean; cleanEvidenceUsable: boolean; ittEvidenceUsable: boolean;
-  availability: { globalCircuitOpened: boolean; knownUsageRequests: number | null; unknownPossiblyChargedRequests: number | null; failedRequests: number | null };
+  availability: { globalCircuitOpened: boolean; knownUsageRequests: number | null; unknownPossiblyChargedRequests: number | null; failedRequests: number | null; recovery: JevReportRecovery };
   usage: { requests: number; reservedInputTokens: number; knownInputTokens: number; knownOutputTokens: number; knownCostUsd: number; pricePerMillionInputUsd: 0.042; outputPriceUsd: 0; priceSnapshot: "2026-10-12"; priceSource: string; costLimitation: string };
   sections: JevReportSection[];
+}
+
+function checkedRecovery(report: AiJevBenchmarkReport): JevReportRecovery {
+  const raw = (report.availability as unknown as Record<string, unknown> | undefined)?.recovery;
+  const configured = (report.configuration as unknown as Record<string, unknown>).maxProviderRecoveries;
+  if (raw === undefined) {
+    if (report.benchmarkVersion === "single-seat-jev-integration-itt-v3" || (configured !== undefined && count(configured) > 0)) reject("shape");
+    return { attempts: 0, successful: 0, failed: 0, unsettled: 0, maxAttempts: 0, circuitEvents: report.availability?.circuitReason == null ? 0 : 1, history: [] };
+  }
+  if (!object(raw) || !Array.isArray(raw.history)) reject("shape");
+  const attempts = count(raw.attempts), successful = count(raw.successful), failed = count(raw.failed), unsettled = count(raw.unsettled), maxAttempts = count(raw.maxAttempts), circuitEvents = count(raw.circuitEvents);
+  if (maxAttempts > 2 || attempts > maxAttempts || successful + failed + unsettled !== attempts || raw.history.length !== attempts || circuitEvents < attempts || (configured !== undefined && count(configured) !== maxAttempts)) reject("shape");
+  const utc = (value: unknown): value is string => typeof value === "string" && /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d{1,3})?Z$/.test(value) && Number.isFinite(Date.parse(value));
+  const history = raw.history.map((entry, index): JevReportRecovery["history"][number] => {
+    if (!object(entry) || entry.attempt !== index + 1 || !utc(entry.startedAt) || (entry.settledAt !== null && !utc(entry.settledAt)) || (entry.status !== null && (!Number.isInteger(entry.status) || Number(entry.status) < 100 || Number(entry.status) > 599))) reject("shape");
+    if (entry.healthy === null) {
+      if (entry.settledAt !== null || entry.status !== null || entry.failure !== null) reject("shape");
+    } else if (entry.healthy === true) {
+      if (entry.settledAt === null || entry.status !== 200 || entry.failure !== null) reject("shape");
+    } else if (entry.healthy === false) {
+      if (entry.settledAt === null || !["timeout", "transport", "http", "shape"].includes(String(entry.failure))) reject("shape");
+    } else reject("shape");
+    return { attempt: index + 1, healthy: entry.healthy, status: entry.status as number | null, failure: entry.failure as string | null, startedAt: entry.startedAt, settledAt: entry.settledAt as string | null };
+  });
+  if (history.filter((entry) => entry.healthy === true).length !== successful || history.filter((entry) => entry.healthy === false).length !== failed || history.filter((entry) => entry.healthy === null).length !== unsettled) reject("shape");
+  return { attempts, successful, failed, unsettled, maxAttempts, circuitEvents, history };
 }
 
 function pairKey(pair: Pick<AiJevPair, "seed" | "scenario" | "rotation" | "profile" | "arm">): string {
@@ -184,9 +214,10 @@ export function summarizeAiJevReport(value: unknown): AiJevFinalSummary {
   const knownUsageRequests = knownCount(report.usage.knownUsageRequests, report.availability?.knownUsageRequests);
   const unknownUsageRequests = knownCount(report.usage.unknownUsageRequests, report.availability?.unknownUsageRequests);
   const failedRequests = knownCount(report.usage.failedRequests, report.availability?.failedRequests);
+  const recovery = checkedRecovery(report);
   const modelExposureUsable = exposureCells.every((cell) => cell.candidateGames > 0 && cell.modelExposedGames > 0);
   const ittEvidenceUsable = config.seeds >= 2;
-  const cleanEvidenceUsable = ittEvidenceUsable && modelExposureUsable && failedRequests === 0 && unknownUsageRequests === 0 && report.availability?.circuitReason == null && overall.providerFailureGames === 0 && overall.emergencyChoiceActions === 0 && overall.rejectedActions === 0 && overall.staleResponses === 0 && overall.limitHits === 0 && report.pairs.every((pair) => pair.candidate.diagnostics.every((turn) => turn.completed && !(turn.fallbacks.cycle > 0)));
+  const cleanEvidenceUsable = ittEvidenceUsable && modelExposureUsable && failedRequests === 0 && unknownUsageRequests === 0 && report.availability?.circuitReason == null && recovery.circuitEvents === 0 && overall.providerFailureGames === 0 && overall.emergencyChoiceActions === 0 && overall.rejectedActions === 0 && overall.staleResponses === 0 && overall.limitHits === 0 && report.pairs.every((pair) => pair.candidate.diagnostics.every((turn) => turn.completed && !(turn.fallbacks.cycle > 0)));
   const input = count(report.usage.inputTokens);
   const adapterVersion = (config as unknown as Record<string, unknown>).adapterVersion;
   if (adapterVersion !== undefined && (typeof adapterVersion !== "string" || !/^[A-Za-z0-9._-]{1,96}$/.test(adapterVersion))) reject("shape");
@@ -206,7 +237,7 @@ export function summarizeAiJevReport(value: unknown): AiJevFinalSummary {
     }),
     uncertainty: `仅有 ${config.seeds} 个独立 seed cluster。先在每个 seed 内平均相关席位、策略和场景的配对差值，再用 Student t 计算 95% 区间；不是把所有配对当作独立样本。少量 cluster 的区间通常很宽，不能据开发样本宣称稳定提升。`,
     promotionAccepted: false, modelExposureUsable, cleanEvidenceUsable, ittEvidenceUsable,
-    availability: { globalCircuitOpened: report.availability?.circuitReason != null, knownUsageRequests, unknownPossiblyChargedRequests: unknownUsageRequests, failedRequests },
+    availability: { globalCircuitOpened: report.availability?.circuitReason != null || recovery.circuitEvents > 0, knownUsageRequests, unknownPossiblyChargedRequests: unknownUsageRequests, failedRequests, recovery },
     usage: { requests: count(report.usage.requests), reservedInputTokens: count(report.usage.reservedInputTokens), knownInputTokens: input, knownOutputTokens: count(report.usage.outputTokens),
       knownCostUsd: input * 0.042 / 1_000_000, pricePerMillionInputUsd: 0.042, outputPriceUsd: 0, priceSnapshot: "2026-10-12", priceSource: PRICE_SOURCE,
       costLimitation: "仅按供应商返回的已知输入 token 估算，输出 token 免费；未知使用量、可能已收费的失败请求不含在此费用内。保守预留单位不是账单 token，估算不是完整账单。" }, sections };
@@ -215,6 +246,9 @@ export function summarizeAiJevReport(value: unknown): AiJevFinalSummary {
 function format(number: number | null, digits = 2): string { return number === null ? "—" : number.toFixed(digits); }
 function percent(number: number | null): string { return number === null ? "—" : `${(number * 100).toFixed(2)}%`; }
 function interval(metric: AiRecruitPlannerComparisons["placement"], multiplier = 1): string { return metric.confidence95 ? `[${format(metric.confidence95.lower * multiplier)}, ${format(metric.confidence95.upper * multiplier)}]` : "不足两个 seed，不计算"; }
+function recoveryText(recovery: JevReportRecovery): string {
+  return `只读恢复探测 ${recovery.attempts}/${recovery.maxAttempts}；成功 ${recovery.successful}，失败 ${recovery.failed}，未结算 ${recovery.unsettled}；历史熔断 ${recovery.circuitEvents} 次。恢复不清空失败或未知费用，不重发原局请求；GET 健康不证明固定模型版本，版本由后续 POST 回答验证。`;
+}
 export function escapeJevReportHtml(value: unknown): string { return String(value).replace(/[&<>"']/g, (char) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" })[char]!); }
 function markdownTable(rows: JevReportComparison[]): string {
   return ["| 分组 / 配对数 | 基线名次 | 候选名次 | 名次差 / 95% CI | 基线前四 | 候选前四 | 前四差 pp / CI | 基线吃鸡 | 候选吃鸡 | 吃鸡差 pp / CI |",
@@ -233,6 +267,10 @@ export function renderAiJevMarkdown(summary: AiJevFinalSummary): string {
       ...section.exposureCells.map((cell) => `| ${cell.label} | ${cell.candidateGames} | ${cell.modelExposedGames} | ${cell.exposedSeedClusters} | ${cell.modelAppliedActions} | ${cell.successfulResponses} | ${cell.candidateGames === 0 ? "未安排" : cell.modelExposedGames === 0 ? "零模型暴露" : "有模型暴露"}；${cell.bySeed.map((seed) => `${seed.seed}: ${seed.modelExposedGames}/${seed.candidateGames}`).join("；")} |`), "");
   }
   lines.push("## 费用与可用性", "", `请求/预留：${summary.usage.requests} / ${summary.usage.reservedInputTokens}；已知输入/输出 token：${summary.usage.knownInputTokens} / ${summary.usage.knownOutputTokens}；已知使用量请求 ${summary.availability.knownUsageRequests ?? "未提供"}；未知可能收费请求 ${summary.availability.unknownPossiblyChargedRequests ?? "未提供"}；失败请求 ${summary.availability.failedRequests ?? "未提供"}；全局熔断：${summary.availability.globalCircuitOpened ? "是" : "否"}。`, "", `已知费用估算：$${summary.usage.knownCostUsd.toFixed(6)}，价格为输入 $0.042 / 百万 token、输出免费；[官方价格来源](${summary.usage.priceSource})，快照日期 ${summary.usage.priceSnapshot}。`, "", summary.usage.costLimitation, "");
+  const recovery = summary.availability.recovery;
+  lines.push("### 临时故障恢复", "", recoveryText(recovery), "");
+  if (recovery.history.length) lines.push("| 探测 | 结果 | HTTP | 失败类型 | 开始 UTC | 结算 UTC |", "|---:|---|---:|---|---|---|",
+    ...recovery.history.map((entry) => `| ${entry.attempt} | ${entry.healthy === null ? "未结算" : entry.healthy ? "恢复" : "关闭"} | ${entry.status ?? "—"} | ${entry.failure ?? "—"} | ${entry.startedAt} | ${entry.settledAt ?? "—"} |`), "");
   return lines.join("\n");
 }
 
@@ -245,6 +283,7 @@ export function renderAiJevHtml(summary: AiJevFinalSummary): string {
 <div class="card"><strong>${escaped(summary.label)}</strong><p>${escaped(summary.interpretation)}</p><p>${escaped(summary.direction)}</p>${summary.findings.map((finding) => `<p><strong>${escaped(finding)}</strong></p>`).join("")}<p class="note">${escaped(summary.uncertainty)}</p><p>推广未获批准（promotionAccepted=false）。模型暴露门槛：${summary.modelExposureUsable ? "通过" : "未通过"}；纯净门槛：${summary.cleanEvidenceUsable ? "通过" : "未通过"}。</p></div>
 <div class="card filters"><label>策略模式 <select id="arm-filter">${summary.arms.map((arm) => `<option value="${escaped(arm)}">${escaped(TITLES[arm])}</option>`).join("")}</select></label><label>场景 <select id="scenario-filter"><option value="all">全部场景</option>${summary.scenarios.map((scenario) => `<option value="${escaped(scenario)}">${escaped(TITLES[scenario])}</option>`).join("")}</select></label></div>
 <div id="coverage" class="card" aria-live="polite"></div><div id="tables"></div><div id="cells"></div>
+<div class="card"><h2>临时故障恢复</h2><p>${escaped(recoveryText(summary.availability.recovery))}</p>${summary.availability.recovery.history.map((entry) => `<p>探测 ${entry.attempt}：${entry.healthy === null ? "未结算" : entry.healthy ? "恢复" : "关闭"}，HTTP ${entry.status ?? "—"}，类型 ${escaped(entry.failure ?? "—")}；${escaped(entry.startedAt)} → ${escaped(entry.settledAt ?? "未结算")}。</p>`).join("")}</div>
 <div class="card"><h2>统计边界</h2><p>模型执行动作数不能冒充与正式策略的动作分歧；逐动作反事实分歧没有测量。游戏覆盖率的分子是至少一次模型动作的候选对局数，分母是全部候选对局数；决策执行率以记录的模型决策机会为分母。各行先独立按 seed 聚类；少于两个 cluster 不提供区间。</p><h2>费用与可用性</h2><p>已知输入 ${summary.usage.knownInputTokens} / 输出 ${summary.usage.knownOutputTokens} token；预留 ${summary.usage.reservedInputTokens}；请求 ${summary.usage.requests}。已知使用量请求 ${summary.availability.knownUsageRequests ?? "未提供"}，未知可能收费请求 ${summary.availability.unknownPossiblyChargedRequests ?? "未提供"}，失败请求 ${summary.availability.failedRequests ?? "未提供"}；全局熔断 ${summary.availability.globalCircuitOpened ? "已触发" : "未触发"}。</p><p>已知费用估算 $${summary.usage.knownCostUsd.toFixed(6)}；输入 $0.042 / 百万 token，输出免费。<a href="${PRICE_SOURCE}">官方价格来源</a>（${summary.usage.priceSnapshot}快照）。</p><p class="note">${escaped(summary.usage.costLimitation)}</p></div></main>
 <script type="application/json" id="report-data">${data}</script><script>
 (()=>{const data=JSON.parse(document.getElementById('report-data').textContent);const arm=document.getElementById('arm-filter'),scenario=document.getElementById('scenario-filter');const e=v=>String(v).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));const n=v=>v===null?'—':Number(v).toFixed(2),p=v=>v===null?'—':n(v*100)+'%',ci=(v,m)=>v.confidence95?'['+n(v.confidence95.lower*m)+', '+n(v.confidence95.upper*m)+']':'不足两个 seed';const table=(title,rows)=>'<section class="card scroll"><table><caption>'+e(title)+'</caption><thead><tr>'+['分组/配对数','基线名次','候选名次','名次差 / 95% CI','基线前四','候选前四','前四差 pp / CI','基线吃鸡','候选吃鸡','吃鸡差 pp / CI'].map(t=>'<th scope="col">'+e(t)+'</th>').join('')+'</tr></thead><tbody>'+rows.map(r=>'<tr>'+[r.label+' / '+r.pairs,n(r.baseline.meanPlacement),n(r.candidate.meanPlacement),n(r.delta.placement.meanDelta)+' / '+ci(r.delta.placement,1),p(r.baseline.topFourRate),p(r.candidate.topFourRate),n(r.delta.topFour.meanDelta===null?null:r.delta.topFour.meanDelta*100)+' / '+ci(r.delta.topFour,100),p(r.baseline.winRate),p(r.candidate.winRate),n(r.delta.win.meanDelta===null?null:r.delta.win.meanDelta*100)+' / '+ci(r.delta.win,100)].map(v=>'<td>'+e(v)+'</td>').join('')+'</tr>').join('')+'</tbody></table></section>';function render(){const s=data.find(v=>v.arm===arm.value&&v.scenario===scenario.value),c=s.overall.coverage;document.getElementById('coverage').textContent='模型游戏覆盖 '+c.modelExposedGames+'/'+c.candidateGames+'（'+p(c.gameCoverage)+'）；成功回答 '+c.successfulResponses+'；模型执行动作 '+c.modelAppliedActions+'；决策执行率 '+p(c.decisionApplicationRate)+'；timeout 回退 '+c.timeoutFallbacks+'；circuit 回退 '+c.circuitFallbacks+'；应急动作 '+c.emergencyChoiceActions+'；失败影响对局 '+c.providerFailureGames+'；输入超限回退 '+c.inputLimitFallbacks+'；无区分排序回退 '+c.unresolvedRankingFallbacks+'；关闭模型续跑对局 '+c.modelDisabledGames+'；成功响应 p95 '+n(c.latencyP95Ms)+'ms。';document.getElementById('tables').innerHTML=table('总体比较',[s.overall])+table('七种策略',s.profiles)+table('八个物理席位',s.seats)+table('场景',s.scenarios);}arm.addEventListener('change',render);scenario.addEventListener('change',render);render();})();

@@ -114,6 +114,33 @@ test("cell-level exposure cannot borrow model actions from another profile, seat
   assert.equal(summarizeAiJevReport(report).modelExposureUsable, true, "one exposed seed suffices for its cell; the other seed remains explicit");
 });
 
+test("report preserves circuit history after successful recovery and validates persisted attempt accounting", () => {
+  const report = fixture(true);
+  const recovery = { attempts: 1, successful: 1, failed: 0, unsettled: 0, maxAttempts: 2, circuitEvents: 1,
+    history: [{ attempt: 1, healthy: true, status: 200, failure: null, startedAt: "2026-10-12T00:00:00.000Z", settledAt: "2026-10-12T00:00:05.000Z" }] };
+  Object.assign(report.availability, { recovery });
+  Object.assign(report.configuration, { maxProviderRecoveries: 2 });
+  const summary = summarizeAiJevReport(report);
+  assert.equal(report.availability.circuitReason, null);
+  assert.equal(summary.availability.globalCircuitOpened, true, "reopened circuit is still recorded as a historical failure");
+  assert.equal(summary.cleanEvidenceUsable, false, "recovery does not erase the historical provider failure gate");
+  assert.deepEqual(summary.availability.recovery, recovery);
+  assert.match(renderAiJevMarkdown(summary), /历史熔断 1 次/);
+  assert.match(renderAiJevHtml(summary), /GET 健康不证明固定模型版本/);
+  const mismatch = structuredClone(report);
+  Object.assign(mismatch.availability, { recovery: { ...recovery, attempts: 0 } });
+  assert.throws(() => summarizeAiJevReport(mismatch), AiJevReportError);
+  const malformed = structuredClone(report);
+  Object.assign(malformed.availability, { recovery: { ...recovery, history: [{ ...recovery.history[0], failure: "vendor-detail-marker" }] } });
+  assert.throws(() => summarizeAiJevReport(malformed), AiJevReportError);
+  const missing = structuredClone(report);
+  delete (missing.availability as unknown as Record<string, unknown>).recovery;
+  assert.throws(() => summarizeAiJevReport(missing), AiJevReportError, "enabled recovery cannot silently lose its durable metadata");
+  const v3Missing = fixture(true);
+  Object.assign(v3Missing, { benchmarkVersion: "single-seat-jev-integration-itt-v3" });
+  assert.throws(() => summarizeAiJevReport(v3Missing), AiJevReportError, "v3 requires metadata even when recovery is disabled");
+});
+
 test("final report rejects incomplete games, missing pairs, duplicate keys and source drift", () => {
   const mutations: Array<(report: AiJevBenchmarkReport) => void> = [
     (report) => { report.status = "running"; },

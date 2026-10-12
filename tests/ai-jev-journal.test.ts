@@ -18,6 +18,89 @@ const success: JevRequestSettlement = {
 };
 const failure: JevRequestSettlement = { kind: "error", code: "response", validationRule: "answers", requestSent: true, latencyMs: 5, knownUsage: null, budgetExceeded: false };
 
+const temporary: JevRequestSettlement = { ...failure, code: "timeout", validationRule: undefined };
+const healthy = { healthy: true, status: 200, failure: null } as const;
+function threeFailures(journal: AiJevJournal, game: string, outcome: JevRequestSettlement = temporary): void {
+  for (let ordinal = 0; ordinal < 3; ordinal += 1) { journal.reserve(game, ordinal, reservation); journal.settle(game, ordinal, outcome); }
+}
+
+test("only three classified sent transient failures permit bounded recovery", () => {
+  for (const outcome of [temporary, { ...temporary, code: "http", status: 429 }, { ...temporary, code: "http", status: 503 }, { ...temporary, code: "transport", transportCode: "ECONNRESET" }] as JevRequestSettlement[]) {
+    const journal = new AiJevJournal({ identity, maxRequests: 20, maxInputTokens: 100_000, maxProviderRecoveries: 2 });
+    threeFailures(journal, "first", outcome);
+    assert.equal(journal.recoveryEligible(), true);
+    const first = journal.reserveRecovery();
+    assert.equal(journal.recoveryEligible(), false, "reserved GET cannot be duplicated");
+    journal.settleRecovery(first, healthy);
+    assert.equal(journal.circuitReason(), null);
+    threeFailures(journal, "second", outcome);
+    journal.settleRecovery(journal.reserveRecovery(), healthy);
+    threeFailures(journal, "third", outcome);
+    assert.equal(journal.recoveryEligible(), false, "two attempts are a cumulative cap");
+    assert.deepEqual({ ...journal.recoverySummary(), history: [] }, { attempts: 2, successful: 2, failed: 0, unsettled: 0, maxAttempts: 2, circuitEvents: 3, history: [] });
+    assert.equal(journal.usage().unknownUsageRequests, 9, "reopening refunds no unknown usage");
+  }
+  for (const outcome of [failure, { ...temporary, code: "transport" }, { ...temporary, code: "transport", transportCode: "CERT_HAS_EXPIRED" }, { ...temporary, code: "http", status: 400 }] as JevRequestSettlement[]) {
+    const journal = new AiJevJournal({ identity, maxRequests: 20, maxInputTokens: 100_000, maxProviderRecoveries: 2 });
+    threeFailures(journal, "blocked", outcome);
+    assert.equal(journal.recoveryEligible(), false);
+    assert.throws(() => journal.reserveRecovery(), /recovery reservation/);
+  }
+});
+
+test("recovery debit, failed or unsettled GET and allowance survive durable resume", () => {
+  for (const settled of [false, true]) {
+    const directory = mkdtempSync(resolve(tmpdir(), "hstone-jev-recovery-"));
+    const options = { directory, identity, maxRequests: 20, maxInputTokens: 100_000, maxProviderRecoveries: 2 };
+    const journal = new AiJevJournal(options);
+    threeFailures(journal, "first");
+    const attempt = journal.reserveRecovery();
+    if (settled) journal.settleRecovery(attempt, { healthy: false, status: 503, failure: "http" });
+    const usage = journal.usage();
+    const summary = journal.recoverySummary();
+    journal.close();
+    const resumed = new AiJevJournal({ ...options, resume: true });
+    assert.deepEqual(resumed.recoverySummary(), summary);
+    assert.deepEqual(resumed.usage(), usage);
+    assert.equal(resumed.recoveryEligible(), false, "failed or uncertain GET is not retried in the same outage");
+    assert.throws(() => resumed.reserveRecovery(), /recovery reservation/);
+    resumed.close();
+    assert.throws(() => new AiJevJournal({ ...options, resume: true, maxProviderRecoveries: 1 }), /drift/);
+  }
+});
+
+test("successful recovery persists and later hard failure or outstanding request prevents reopening", () => {
+  const directory = mkdtempSync(resolve(tmpdir(), "hstone-jev-reopened-"));
+  const options = { directory, identity, maxRequests: 20, maxInputTokens: 100_000, maxProviderRecoveries: 2 };
+  const journal = new AiJevJournal(options);
+  assert.deepEqual(journal.startGame("old-game"), { generation: 0, disabled: false });
+  journal.reserve("in-flight", 0, reservation);
+  threeFailures(journal, "first");
+  assert.throws(() => journal.reserveRecovery(), /recovery reservation/, "settlement must precede GET");
+  journal.settle("in-flight", 0, success);
+  journal.settleRecovery(journal.reserveRecovery(), healthy);
+  journal.close();
+  const resumed = new AiJevJournal({ ...options, resume: true });
+  assert.equal(resumed.circuitReason(), null);
+  assert.equal(resumed.recoverySummary().successful, 1);
+  assert.deepEqual(resumed.startGame("old-game"), { generation: 0, disabled: false }, "old incomplete game retains its pre-circuit epoch");
+  assert.deepEqual(resumed.startGame("new-game"), { generation: 1, disabled: false });
+  resumed.reserve("late", 0, reservation);
+  threeFailures(resumed, "second");
+  resumed.settle("late", 0, { ...temporary, code: "transport", transportCode: "CERT_HAS_EXPIRED" });
+  assert.equal(resumed.circuitReason(), "provider-unrecoverable-failure");
+  assert.equal(resumed.recoveryEligible(), false);
+  resumed.close();
+});
+
+test("journal rejects unknown or misplaced transport diagnostics", () => {
+  for (const outcome of [{ ...temporary, transportCode: "ECONNRESET" }, { ...temporary, code: "transport", transportCode: "secret-bearing-text" }, { ...success, transportCode: "ECONNRESET" }]) {
+    const journal = new AiJevJournal({ identity, maxRequests: 10, maxInputTokens: 100_000 });
+    journal.reserve("game", 0, reservation);
+    assert.throws(() => journal.settle("game", 0, outcome as JevRequestSettlement), /transport code/);
+  }
+});
+
 test("global reservation enforces request and token caps before any concurrent transport starts", async () => {
   for (const tokenLimited of [false, true]) {
     const journal = new AiJevJournal({ identity, maxRequests: tokenLimited ? 10 : 2, maxInputTokens: tokenLimited ? 10_000 : 100_000 });

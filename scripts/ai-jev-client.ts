@@ -78,7 +78,7 @@ export type JevRequestSettlement = {
   budgetExceeded: boolean;
 } & (
   { kind: "success"; response: JevResponse } |
-  { kind: "error"; code: JevErrorCode; status?: number; validationRule?: JevValidationRule; validationDiagnostic?: JevValidationDiagnostic }
+  { kind: "error"; code: JevErrorCode; status?: number; validationRule?: JevValidationRule; validationDiagnostic?: JevValidationDiagnostic; transportCode?: JevTransportCode }
 );
 export type JevClientOptions = {
   apiKey: string;
@@ -101,6 +101,26 @@ export const JEV_VALIDATION_RULES = Object.freeze([
   "choice", "choice-argmax", "score", "legend", "json", "body-size", "body-missing",
 ] as const);
 export type JevValidationRule = (typeof JEV_VALIDATION_RULES)[number];
+export const JEV_TRANSPORT_CODES = Object.freeze([
+  "ECONNRESET", "ECONNREFUSED", "ETIMEDOUT", "ENOTFOUND", "EAI_AGAIN",
+  "UND_ERR_SOCKET", "UND_ERR_CONNECT_TIMEOUT", "UND_ERR_HEADERS_TIMEOUT", "UND_ERR_BODY_TIMEOUT",
+  "CERT_HAS_EXPIRED", "UNABLE_TO_VERIFY_LEAF_SIGNATURE", "ERR_TLS_CERT_ALTNAME_INVALID",
+  "DEPTH_ZERO_SELF_SIGNED_CERT", "ERR_SSL_WRONG_VERSION_NUMBER",
+] as const);
+export type JevTransportCode = (typeof JEV_TRANSPORT_CODES)[number];
+
+function safeTransportCode(error: unknown): JevTransportCode | undefined {
+  const seen = new Set<unknown>();
+  for (let depth = 0; depth < 4 && error !== null && typeof error === "object" && !seen.has(error); depth += 1) {
+    seen.add(error);
+    try {
+      const value = error as { code?: unknown; cause?: unknown };
+      if (typeof value.code === "string" && JEV_TRANSPORT_CODES.includes(value.code as JevTransportCode)) return value.code as JevTransportCode;
+      error = value.cause;
+    } catch { return undefined; }
+  }
+  return undefined;
+}
 export type JevValidationDiagnostic = {
   readonly distributionSum: number;
   readonly distributionCount: number;
@@ -112,14 +132,16 @@ export class JevClientError extends Error {
   readonly status?: number;
   readonly validationRule?: JevValidationRule;
   readonly validationDiagnostic?: JevValidationDiagnostic;
+  readonly transportCode?: JevTransportCode;
 
-  constructor(code: JevErrorCode, status?: number, validationRule?: JevValidationRule, validationDiagnostic?: JevValidationDiagnostic) {
+  constructor(code: JevErrorCode, status?: number, validationRule?: JevValidationRule, validationDiagnostic?: JevValidationDiagnostic, transportCode?: JevTransportCode) {
     const rule = code === "response" && JEV_VALIDATION_RULES.includes(validationRule as JevValidationRule) ? validationRule : undefined;
     super(`Jev evaluation failed (${code})${status === undefined ? "" : `: HTTP ${status}`}${rule === undefined ? "" : `: rule ${rule}`}${code === "http" && status === 451 ? "; provider access is restricted. Ask TypeSafe support to confirm regional eligibility or investigate incorrect location classification." : ""}`);
     this.name = "JevClientError";
     this.code = code;
     this.status = status;
     this.validationRule = rule;
+    if (code === "transport" && JEV_TRANSPORT_CODES.includes(transportCode as JevTransportCode)) this.transportCode = transportCode;
     // Only aggregate numeric facts from a complete, bounded distribution may
     // accompany a sum error. Never attach option labels, values, or raw bodies.
     if (rule === "distribution-sum" && validationDiagnostic &&
@@ -422,7 +444,7 @@ export function createJevClient(options: JevClientOptions) {
         })();
         result = await Promise.race([operation, interrupted]);
       } catch (error) {
-        failure = error instanceof JevClientError ? error : new JevClientError(signal?.aborted ? "aborted" : "transport");
+        failure = error instanceof JevClientError ? error : new JevClientError(signal?.aborted ? "aborted" : "transport", undefined, undefined, undefined, safeTransportCode(error));
         controller.abort();
       } finally {
         if (timer !== undefined) clearTimeout(timer);
@@ -444,7 +466,7 @@ export function createJevClient(options: JevClientOptions) {
       } else consecutiveFailures = 0;
       const common = { knownUsage: observed.knownUsage, requestSent, budgetExceeded: observed.usageOverrun, latencyMs: performance.now() - started };
       const settlement: JevRequestSettlement = failure
-        ? { kind: "error", ...common, code: failure.code, status: failure.status, validationRule: failure.validationRule, validationDiagnostic: failure.validationDiagnostic }
+        ? { kind: "error", ...common, code: failure.code, status: failure.status, validationRule: failure.validationRule, validationDiagnostic: failure.validationDiagnostic, transportCode: failure.transportCode }
         : { kind: "success", ...common, response: result! };
       try { invokeHook(onRequestSettled, JSON.parse(JSON.stringify(settlement)) as JevRequestSettlement); }
       catch {

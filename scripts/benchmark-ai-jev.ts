@@ -3,6 +3,7 @@ import { execFileSync } from "node:child_process";
 import { appendFileSync, existsSync, mkdirSync, readFileSync, readdirSync, realpathSync, renameSync, truncateSync, writeFileSync } from "node:fs";
 import { dirname, isAbsolute, relative, resolve, sep } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
+import { setImmediate as yieldToEventLoop, setTimeout as waitForTimer } from "node:timers/promises";
 
 import { AI_POLICY_VERSION, getAiStrategyProfile, withAiStrategyProfileOverrides, type AiStrategyId, type AiStrategyProfile } from "../lib/game/ai.ts";
 import { hasAnyAiResidualPolicyOverrides, withAiResidualPolicyOverrides } from "../lib/game/ai-residual-policy.ts";
@@ -10,12 +11,14 @@ import { AiTrainingEnvironment } from "../lib/game/ai-training-environment.ts";
 import { advanceHeadlessGame, type GameState } from "../lib/game/engine.ts";
 import { createAiBenchmarkScenarioGame, type AiBenchmarkScenarioId } from "./ai-benchmark-scenarios.ts";
 import { createJevClient, JEV_PINNED_MODEL, JEV_VALIDATION_RULES, JevClientError, validateJevResponse, type JevAnswer, type JevClient, type JevClientOptions, type JevClientUsage, type JevQuestion } from "./ai-jev-client.ts";
-import { AiJevJournal, jevJournalHash } from "./ai-jev-journal.ts";
+import { AiJevJournal, jevJournalHash, type AiJevRecoverySummary } from "./ai-jev-journal.ts";
+import { probeJevProviderHealth, type JevProviderHealth } from "./ai-jev-health.ts";
 import { JEV_RECRUIT_POLICY_VERSION, JEV_RECRUIT_PRESET, runJevRecruitTurn, type JevDecisionRecord, type JevTurnDiagnostics } from "./ai-jev-policy.ts";
 import { assertAiBenchmarkSeedAccess } from "./ai-seed-ledger.ts";
 import { summarizeAiRecruitPlannerSeedMetrics, type AiRecruitPlannerComparisons, type AiRecruitPlannerSeedMetric } from "./benchmark-ai-recruit-planner.ts";
 
-export const AI_JEV_BENCHMARK_VERSION = "single-seat-jev-integration-itt-v2";
+export const AI_JEV_BENCHMARK_VERSION = "single-seat-jev-integration-itt-v3";
+export const AI_JEV_RECOVERY_COOLDOWN_MS = 5_000;
 export const AI_JEV_REQUEST_LIMIT = 2_000;
 export const AI_JEV_INPUT_TOKEN_LIMIT = 1_000_000;
 // Larger budgets require explicit caller/CLI values; defaults stay conservative.
@@ -40,6 +43,7 @@ export interface AiJevBenchmarkOptions {
   runId?: string;
   concurrency?: number;
   resume?: boolean;
+  maxProviderRecoveries?: number;
   /** Never written into reports, prompts or process arguments. */
   credential?: string;
 }
@@ -64,6 +68,8 @@ export interface AiJevFrozenConfiguration {
   concurrency: number;
   adapterVersion?: string;
   adapterPreset?: typeof JEV_RECRUIT_PRESET;
+  maxProviderRecoveries?: number;
+  recoveryCooldownMs?: number;
 }
 
 export interface AiJevProvenance {
@@ -123,6 +129,8 @@ export interface AiJevBenchmarkDependencies {
   captureProvenance?: (configuration: AiJevFrozenConfiguration) => AiJevProvenance;
   /** Explicit temporary directory for durability tests; live runs use their run directory. */
   journalDirectory?: string;
+  probeHealth?: () => Promise<JevProviderHealth>;
+  waitForRecoveryCooldown?: (milliseconds: number) => Promise<void>;
 }
 
 export interface AiJevBenchmarkReport {
@@ -147,7 +155,7 @@ export interface AiJevBenchmarkReport {
   ittEvidenceUsable: boolean;
   cleanEvidenceUsable: boolean;
   modelExposureUsable: boolean;
-  availability: { circuitReason: string | null; providerFailureGames: number; modelExposedGames: number; completedCandidateGames: number; requestSuccessRate: number | null; knownUsageRequests: number; unknownUsageRequests: number; failedRequests: number };
+  availability: { circuitReason: string | null; providerFailureGames: number; modelExposedGames: number; completedCandidateGames: number; requestSuccessRate: number | null; knownUsageRequests: number; unknownUsageRequests: number; failedRequests: number; recovery?: AiJevRecoverySummary };
   promotionAccepted: false;
   limitations: string[];
 }
@@ -171,6 +179,8 @@ export function freezeAiJevConfiguration(options: AiJevBenchmarkOptions): AiJevF
   if (options.preset === "smoke" && seeds !== 1) throw new RangeError("smoke uses exactly one seed; use development for clustered comparisons");
   const runId = options.runId ?? `jev-${options.mode}-${options.startSeed}-${Date.now()}`;
   if (!/^[A-Za-z0-9][A-Za-z0-9_-]{0,95}$/.test(runId)) throw new RangeError("runId must be 1..96 plain letters, numbers, underscores or hyphens");
+  const maxProviderRecoveries = options.maxProviderRecoveries ?? 0;
+  if (!Number.isSafeInteger(maxProviderRecoveries) || maxProviderRecoveries < 0 || maxProviderRecoveries > 2) throw new RangeError("maxProviderRecoveries must be an integer in 0..2");
   return Object.freeze({
     mode: options.mode, preset: options.preset, startSeed: options.startSeed, seeds, runId,
     maxRequests: boundedInteger(options.maxRequests, AI_JEV_REQUEST_LIMIT, AI_JEV_MAX_EXPLICIT_REQUESTS, "maxRequests"),
@@ -180,6 +190,7 @@ export function freezeAiJevConfiguration(options: AiJevBenchmarkOptions): AiJevF
     scenarios: SCENARIOS, rotations: Object.freeze(options.preset === "smoke" ? [0] : [0, 1, 2, 3, 4, 5, 6, 7]),
     profiles: Object.freeze(options.preset === "smoke" ? ["balanced" as const] : [...PROFILE_IDS]), arms: AI_JEV_MODES,
     concurrency: boundedInteger(options.concurrency, 1, 4, "concurrency"),
+    maxProviderRecoveries, recoveryCooldownMs: AI_JEV_RECOVERY_COOLDOWN_MS,
     adapterVersion: JEV_RECRUIT_POLICY_VERSION,
     adapterPreset: Object.freeze({ ...JEV_RECRUIT_PRESET, dimensions: Object.freeze({ ...JEV_RECRUIT_PRESET.dimensions }) }),
   });
@@ -196,7 +207,7 @@ export function captureAiJevProvenance(configuration: AiJevFrozenConfiguration):
   const source = createHash("sha256");
   const sources = [
     ...filesUnder(resolve(REPO, "lib/game")),
-    ...["benchmark-ai-jev.ts", "ai-jev-client.ts", "ai-jev-policy.ts", "ai-jev-journal.ts", "ai-benchmark-scenarios.ts", "ai-seed-ledger.ts", "benchmark-ai-recruit-planner.ts", "run-ai-jev.mjs", "diagnose-ai-jev.ts"].map((name) => resolve(REPO, "scripts", name)),
+    ...["benchmark-ai-jev.ts", "ai-jev-client.ts", "ai-jev-policy.ts", "ai-jev-journal.ts", "ai-jev-health.ts", "ai-benchmark-scenarios.ts", "ai-seed-ledger.ts", "benchmark-ai-recruit-planner.ts", "run-ai-jev.mjs", "diagnose-ai-jev.ts"].map((name) => resolve(REPO, "scripts", name)),
   ].sort();
   for (const path of sources) source.update(relative(REPO, path).split(sep).join("/")).update("\0").update(readFileSync(path)).update("\0");
   const content = createHash("sha256");
@@ -342,12 +353,18 @@ async function runGame(request: AiJevGameRequest, runtime: AiJevGameRuntime): Pr
   let failure: string | null = null;
   try {
     if (request.arm === "legacy") {
-      while (state.phase !== "gameOver" && state.round <= request.configuration.maxRounds) state = advanceHeadlessGame(state);
+      while (state.phase !== "gameOver" && state.round <= request.configuration.maxRounds) {
+        await yieldToEventLoop();
+        state = advanceHeadlessGame(state);
+      }
     } else {
       const seat = state.players.findIndex((player) => player.id === request.playerId);
       const environment = AiTrainingEnvironment.fromHeadlessState(state, seat);
       state = environment.snapshotForBenchmark();
       while (state.phase !== "gameOver" && state.round <= request.configuration.maxRounds) {
+        // In particular, circuit-open legacy phases are synchronous. Give
+        // other game requests' I/O and deadlines a turn between engine phases.
+        await yieldToEventLoop();
         if (state.phase === "recruit" && state.players[seat].alive) {
           if (runtime.modelDisabled() && !runtime.hasRecordedNext()) {
             environment.completeLegacyRecruitTurn();
@@ -477,7 +494,7 @@ export async function runAiJevBenchmark(options: AiJevBenchmarkOptions, dependen
       if (claim.runId !== configuration.runId || hash(claim.provenance) !== hash(provenance)) throw new Error("Jev resume seed claim does not belong to this frozen run");
     }
   }
-  const journal = new AiJevJournal({ directory, identity: { version: AI_JEV_BENCHMARK_VERSION, configuration, provenance }, resume: options.resume, maxRequests: configuration.maxRequests, maxInputTokens: configuration.maxInputTokens });
+  const journal = new AiJevJournal({ directory, identity: { version: AI_JEV_BENCHMARK_VERSION, configuration, provenance }, resume: options.resume, maxRequests: configuration.maxRequests, maxInputTokens: configuration.maxInputTokens, maxProviderRecoveries: configuration.maxProviderRecoveries });
   try {
   const credential = configuration.mode === "fixture" ? "not-a-real-key" : options.credential!;
   const profiles = PROFILE_IDS.map((id, index) => ({ id, playerId: `player-${index + 1}`, profile: Object.freeze({ ...getAiStrategyProfile(`player-${index + 1}`) }) })).filter((profile) => configuration.profiles.includes(profile.id));
@@ -489,13 +506,14 @@ export async function runAiJevBenchmark(options: AiJevBenchmarkOptions, dependen
     expectedPairs: episodes * configuration.profiles.length * 2, pairs: [], baselines: [], failures: [], usage: journal.usage(),
     diagnostics: summarizeDiagnostics([]), diagnosticsByArm: {}, comparisons: {},
     evidenceUsable: false, ittEvidenceUsable: false, cleanEvidenceUsable: false, modelExposureUsable: false, promotionAccepted: false,
-    availability: { circuitReason: null, providerFailureGames: 0, modelExposedGames: 0, completedCandidateGames: 0, requestSuccessRate: null, knownUsageRequests: 0, unknownUsageRequests: 0, failedRequests: 0 },
+    availability: { circuitReason: null, providerFailureGames: 0, modelExposedGames: 0, completedCandidateGames: 0, requestSuccessRate: null, knownUsageRequests: 0, unknownUsageRequests: 0, failedRequests: 0, recovery: journal.recoverySummary() },
     limitations: [
       "ITT includes the model plus its frozen production fallback on provider failure; clean availability is separate.",
       "Two independent seed clusters give exploratory uncertainty, not a production promotion.",
       "Model benefit evidence is not win probability; zero interventions cannot establish model strength.",
       "Action divergence from the exact legacy policy is not measured.",
       "Unknown possibly paid requests retain their reservations and are never retried.",
+      "Optional health recovery only enables new games after a bounded durable GET; existing fallback games stay local.",
       configuration.mode === "fixture" ? "Synthetic fixture answers measure infrastructure only." : "Only known vendor usage is summed.",
       configuration.preset === "smoke" ? "Smoke covers one profile and one rotation." : "Development covers seven profiles, eight seats and two scenarios.",
     ],
@@ -520,8 +538,29 @@ export async function runAiJevBenchmark(options: AiJevBenchmarkOptions, dependen
       completedCandidateGames: report.pairs.filter((pair) => pair.candidate.completed).length,
       requestSuccessRate: report.usage.requests ? (report.usage.requests - (report.usage.failedRequests ?? 0)) / report.usage.requests : null,
       knownUsageRequests: report.usage.knownUsageRequests ?? 0, unknownUsageRequests: report.usage.unknownUsageRequests ?? 0, failedRequests: report.usage.failedRequests ?? 0,
+      recovery: journal.recoverySummary(),
     };
     persist(report);
+  };
+  const activeEvaluations = new Set<Promise<unknown>>();
+  let recoveryPromise: Promise<void> | undefined;
+  const awaitProviderRecovery = async (): Promise<void> => {
+    if (recoveryPromise) return recoveryPromise;
+    if (!journal.recoveryEligible() || report.failures.length) return;
+    recoveryPromise = (async () => {
+      // Await actual operations, never poll durable reservations indefinitely.
+      await Promise.allSettled([...activeEvaluations]);
+      if (journal.pendingRequests() !== 0) { report.failures.push("provider-settlement-integrity-failure"); return; }
+      if (!journal.recoveryEligible() || report.failures.length) return;
+      await (dependencies.waitForRecoveryCooldown ?? waitForTimer)(AI_JEV_RECOVERY_COOLDOWN_MS);
+      if (!journal.recoveryEligible() || report.failures.length) return;
+      const attempt = journal.reserveRecovery(); // durable debit precedes GET
+      checkpoint();
+      const health = await (dependencies.probeHealth ? dependencies.probeHealth() : injected || configuration.mode === "fixture" ? Promise.resolve({ healthy: false, status: null, failure: "shape" } as JevProviderHealth) : probeJevProviderHealth(credential));
+      journal.settleRecovery(attempt, health);
+      checkpoint();
+    })();
+    try { await recoveryPromise; } finally { recoveryPromise = undefined; }
   };
   const gameKey = (request: AiJevGameRequest) => `${request.seed}-${request.scenario}-r${request.rotation}-${request.profile?.id ?? "lobby"}-${request.arm}`;
   const execute = async (request: AiJevGameRequest): Promise<AiJevGameRun> => {
@@ -545,9 +584,16 @@ export async function runAiJevBenchmark(options: AiJevBenchmarkOptions, dependen
     }
     let ordinal = 0;
     let pendingOrdinal = -1;
-    let disabled = false;
+    const gameStart = request.arm === "legacy" ? { generation: journal.circuitGeneration(), disabled: false } : journal.startGame(key);
+    let disabled = gameStart.disabled;
     let replayDrift = false;
     let hooksUsed = false;
+    let integrityFailure = false;
+    const initialCircuitGeneration = gameStart.generation;
+    const isModelDisabled = () => {
+      disabled ||= journal.circuitReason() !== null || journal.circuitGeneration() !== initialCircuitGeneration;
+      return disabled;
+    };
     const hooks: Pick<JevClientOptions, "onRequestReserved" | "onRequestSettled"> = {
       onRequestReserved: (reservation) => { hooksUsed = true; journal.reserve(key, pendingOrdinal, reservation); },
       onRequestSettled: (settlement) => journal.settle(key, pendingOrdinal, settlement),
@@ -567,7 +613,7 @@ export async function runAiJevBenchmark(options: AiJevBenchmarkOptions, dependen
           const outcome = prior.settlement!;
           if (outcome.kind === "success") return structuredClone(outcome.response);
           disabled = true;
-          throw new JevClientError(outcome.code, outcome.status, outcome.validationRule, outcome.validationDiagnostic);
+          throw new JevClientError(outcome.code, outcome.status, outcome.validationRule, outcome.validationDiagnostic, outcome.transportCode);
         }
         if (saved) {
           const audit = [...trace.records.values()].find((record) => record.requestHash === hash({ state, questions }) && record.response === null);
@@ -576,24 +622,34 @@ export async function runAiJevBenchmark(options: AiJevBenchmarkOptions, dependen
           replayDrift = true;
           throw new Error("Jev cached trace repair lacks a durable response; refuse a new request");
         }
-        if (disabled || journal.circuitReason()) { disabled = true; throw new JevClientError("stopped"); }
+        if (isModelDisabled()) throw new JevClientError("stopped");
         pendingOrdinal = current;
-        try { return await transport.evaluate(state, questions, signal); }
+        const operation = transport.evaluate(state, questions, signal);
+        activeEvaluations.add(operation);
+        try { return await operation; }
         catch (error) {
           disabled = true;
           if (error instanceof JevClientError) {
             if ([401, 403, 451].includes(error.status ?? 0)) journal.trip(`provider-http-${error.status}`);
             if (error.validationRule === "model") journal.trip("provider-model-mismatch");
             if (error.code === "budget") journal.trip("budget");
+            if (TECHNICAL_FALLBACKS.has(error.code)) { integrityFailure = true; report.failures.push("provider-hook-or-configuration-integrity-failure"); }
+          } else {
+            integrityFailure = true;
+            report.failures.push("provider-operation-integrity-failure");
           }
           throw error;
+        } finally {
+          activeEvaluations.delete(operation);
+          if (hooksUsed && journal.recorded(key, current) && !journal.recorded(key, current)?.settlement) { integrityFailure = true; report.failures.push("provider-settlement-integrity-failure"); }
         }
       },
     };
-    const runtime: AiJevGameRuntime = { client, hasRecordedNext: () => journal.recorded(key, ordinal) !== undefined, modelDisabled: () => disabled || journal.circuitReason() !== null, replayFailure: () => replayDrift, trace };
+    const runtime: AiJevGameRuntime = { client, hasRecordedNext: () => journal.recorded(key, ordinal) !== undefined, modelDisabled: isModelDisabled, replayFailure: () => replayDrift, trace };
     let result: AiJevGameRun;
     try { result = await (dependencies.runGame ? dependencies.runGame(request, client) : runGame(request, runtime)); }
     catch { result = { completed: false, drawn: false, truncated: false, failure: "game-runner-failure", initialStateSha256: hash(request.initialState), finalRound: request.initialState.round, decisionTrace: null, outcomes: {}, diagnostics: [], usage: client.getUsage() }; }
+    if (integrityFailure) result = { ...result, completed: false, failure: "provider-operation-integrity-failure" };
     if (saved) {
       const outcome = (game: AiJevGameRun) => ({ completed: game.completed, drawn: game.drawn, failure: game.failure, finalRound: game.finalRound, initialStateSha256: game.initialStateSha256, outcomes: game.outcomes, successfulResponses: game.diagnostics.reduce((sum, turn) => sum + turn.successfulResponses, 0), appliedActions: game.diagnostics.reduce((sum, turn) => sum + turn.appliedActions, 0) });
       if (canonicalTraceJson(outcome(saved)) !== canonicalTraceJson(outcome(result))) throw new Error("Jev cached trace repair outcome drift");
@@ -619,6 +675,11 @@ export async function runAiJevBenchmark(options: AiJevBenchmarkOptions, dependen
   let nextTask = 0;
   const worker = async () => {
     while (!report.failures.length && nextTask < tasks.length) {
+      // Awaiting an already resolved game is only a microtask yield. Without
+      // a macrotask here, a local fallback queue can starve pending providers.
+      await yieldToEventLoop();
+      await awaitProviderRecovery();
+      if (report.failures.length || nextTask >= tasks.length) break;
       const { request, baseline } = tasks[nextTask++];
       if (hash(capture(configuration)) !== hash(provenance)) { report.failures.push("source-content-profile-or-configuration-drift"); break; }
       const candidate = await execute(request);
@@ -678,7 +739,7 @@ export function loadAiJevCredential(envFile?: string, environment: NodeJS.Proces
 }
 
 export function parseAiJevArguments(args: readonly string[]): { options: AiJevBenchmarkOptions; envFile?: string } {
-  const allowed = new Set(["mode", "preset", "start-seed", "seeds", "max-requests", "max-input-tokens", "timeout-ms", "run-id", "env-file", "concurrency", "resume"]);
+  const allowed = new Set(["mode", "preset", "start-seed", "seeds", "max-requests", "max-input-tokens", "timeout-ms", "run-id", "env-file", "concurrency", "resume", "max-provider-recoveries"]);
   const flags = new Map<string, string>();
   for (let index = 0; index < args.length; index += 2) {
     const key = args[index].replace(/^--/, "");
@@ -688,7 +749,7 @@ export function parseAiJevArguments(args: readonly string[]): { options: AiJevBe
   const number = (name: string) => { const value = flags.get(name); if (value === undefined) return undefined; if (!/^\d+$/.test(value)) throw new Error(`--${name} requires a positive integer`); return Number(value); };
   if (flags.has("resume") && !["true", "false"].includes(flags.get("resume")!)) throw new Error("--resume requires true or false");
   if (flags.get("resume") === "true" && !flags.has("run-id")) throw new Error("--resume requires the original --run-id");
-  const options = { mode: flags.get("mode") as AiJevBenchmarkOptions["mode"], preset: flags.get("preset") as AiJevBenchmarkOptions["preset"], startSeed: number("start-seed")!, seeds: number("seeds"), maxRequests: number("max-requests"), maxInputTokens: number("max-input-tokens"), timeoutMs: number("timeout-ms"), runId: flags.get("run-id"), concurrency: number("concurrency"), resume: flags.get("resume") === "true" };
+  const options = { mode: flags.get("mode") as AiJevBenchmarkOptions["mode"], preset: flags.get("preset") as AiJevBenchmarkOptions["preset"], startSeed: number("start-seed")!, seeds: number("seeds"), maxRequests: number("max-requests"), maxInputTokens: number("max-input-tokens"), timeoutMs: number("timeout-ms"), runId: flags.get("run-id"), concurrency: number("concurrency"), resume: flags.get("resume") === "true", maxProviderRecoveries: number("max-provider-recoveries") };
   freezeAiJevConfiguration(options);
   if (options.mode === "fixture" && flags.has("env-file")) throw new Error("fixture does not load credentials");
   return { options, envFile: flags.get("env-file") };
@@ -696,7 +757,7 @@ export function parseAiJevArguments(args: readonly string[]): { options: AiJevBe
 
 if (process.argv[1] && import.meta.url === pathToFileURL(resolve(process.argv[1])).href) {
   try {
-    if (process.argv.slice(2).length === 1 && process.argv[2] === "--help") console.log("Explicit: --mode fixture|jev --preset smoke|development --start-seed N [--seeds 1..8] [--max-requests N, default2000, maximum100000] [--max-input-tokens N, default1000000, maximum1000000000] [--timeout-ms <=60000] [--concurrency 1..4, default1] [--run-id ID] [--resume true] [--env-file Git-ignored-file]. Resume requires the same run/source/configuration and never resends uncertain requests. Global budgets remain cumulative. Provider failure falls back to production for complete-game ITT. Fixture results cannot establish Jev strength; no promotion.");
+    if (process.argv.slice(2).length === 1 && process.argv[2] === "--help") console.log("Explicit: --mode fixture|jev --preset smoke|development --start-seed N [--seeds 1..8] [--max-requests N, default2000, maximum100000] [--max-input-tokens N, default1000000, maximum1000000000] [--timeout-ms <=60000] [--concurrency 1..4, default1] [--max-provider-recoveries 0..2, default0, cooldown5000ms] [--run-id ID] [--resume true] [--env-file Git-ignored-file]. Resume requires the same run/source/configuration and never resends uncertain requests or probes. Global budgets remain cumulative. Provider failure falls back to production for complete-game ITT. Health recovery enables only new games. Fixture results cannot establish Jev strength; no promotion.");
     else {
       const { options, envFile } = parseAiJevArguments(process.argv.slice(2));
       if (options.mode === "jev") options.credential = loadAiJevCredential(envFile);

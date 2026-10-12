@@ -2,7 +2,8 @@ import { createHash, randomUUID } from "node:crypto";
 import { appendFileSync, existsSync, mkdirSync, readFileSync, readdirSync, renameSync, unlinkSync, writeFileSync } from "node:fs";
 import { resolve } from "node:path";
 
-import { JevClientError, JEV_VALIDATION_RULES, reserveJevInputTokens, validateJevResponse, type JevClientUsage, type JevRequestReservation, type JevRequestSettlement } from "./ai-jev-client.ts";
+import { JevClientError, JEV_TRANSPORT_CODES, JEV_VALIDATION_RULES, reserveJevInputTokens, validateJevResponse, type JevClientUsage, type JevRequestReservation, type JevRequestSettlement } from "./ai-jev-client.ts";
+import type { JevProviderHealth } from "./ai-jev-health.ts";
 
 export function jevJournalHash(value: unknown): string {
   return createHash("sha256").update(JSON.stringify(value)).digest("hex");
@@ -14,6 +15,26 @@ export interface AiJevJournalOptions {
   resume?: boolean;
   maxRequests: number;
   maxInputTokens: number;
+  maxProviderRecoveries?: number;
+}
+
+export interface AiJevRecoveryHistory {
+  attempt: number;
+  healthy: boolean | null;
+  status: number | null;
+  failure: string | null;
+  startedAt: string;
+  settledAt: string | null;
+}
+
+export interface AiJevRecoverySummary {
+  attempts: number;
+  successful: number;
+  failed: number;
+  unsettled: number;
+  maxAttempts: number;
+  circuitEvents: number;
+  history: AiJevRecoveryHistory[];
 }
 
 export interface AiJevJournalRequest {
@@ -28,7 +49,20 @@ export interface AiJevJournalRequest {
 type JournalEvent =
   | { kind: "reserve"; request: AiJevJournalRequest }
   | { kind: "settle"; game: string; ordinal: number; settlement: JevRequestSettlement; recovered?: boolean }
-  | { kind: "circuit"; reason: string };
+  | { kind: "circuit"; reason: string; recoverable?: boolean }
+  | { kind: "probe-reserve"; attempt: number; circuit: number; startedAt: string }
+  | { kind: "probe-settle"; attempt: number; health: JevProviderHealth; settledAt: string }
+  | { kind: "game-start"; game: string; generation: number; disabled: boolean };
+
+const RECOVERABLE_TRANSPORT_CODES = new Set(["ECONNRESET", "ECONNREFUSED", "ETIMEDOUT", "ENOTFOUND", "EAI_AGAIN", "UND_ERR_SOCKET", "UND_ERR_CONNECT_TIMEOUT", "UND_ERR_HEADERS_TIMEOUT", "UND_ERR_BODY_TIMEOUT"]);
+
+function recoverableFailure(settlement: JevRequestSettlement): boolean {
+  return settlement.kind === "error" && settlement.requestSent && !settlement.budgetExceeded &&
+    (settlement.code === "timeout" || (settlement.code === "http" && (settlement.status === 429 || (settlement.status ?? 0) >= 500)) ||
+      (settlement.code === "transport" && RECOVERABLE_TRANSPORT_CODES.has(settlement.transportCode ?? "")));
+}
+
+function timestamp(value: unknown): value is string { return typeof value === "string" && /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{3}Z$/.test(value) && Number.isFinite(Date.parse(value)); }
 
 function object(value: unknown): value is Record<string, unknown> { return value !== null && typeof value === "object" && !Array.isArray(value); }
 function positiveInteger(value: unknown): value is number { return typeof value === "number" && Number.isSafeInteger(value) && value > 0; }
@@ -61,6 +95,7 @@ function validateSettlement(value: unknown, request: AiJevJournalRequest): asser
   const validatedOverrun = value.kind === "error" && value.code === "budget" && value.budgetExceeded === true && value.requestSent === true;
   if (value.knownUsage !== null && (!object(value.knownUsage) || !Number.isSafeInteger(value.knownUsage.input_tokens) || Number(value.knownUsage.input_tokens) < 0 || (!validatedOverrun && Number(value.knownUsage.input_tokens) > request.reservation.reservedInputTokens) || !Number.isSafeInteger(value.knownUsage.output_tokens) || Number(value.knownUsage.output_tokens) < 0)) throw new Error("invalid Jev journal known usage");
   if (!value.requestSent && value.knownUsage !== null) throw new Error("unsent Jev request cannot have charged known usage");
+  if (value.transportCode !== undefined && (value.kind !== "error" || value.code !== "transport" || !JEV_TRANSPORT_CODES.includes(value.transportCode as never))) throw new Error("invalid Jev journal transport code");
   if (value.kind === "success") {
     const response = validateJevResponse(value.response, request.reservation.questions, request.reservation.model, value.latencyMs);
     if (!value.requestSent || jevJournalHash(response.usage) !== jevJournalHash(value.knownUsage)) throw new Error("invalid Jev journal successful usage");
@@ -77,8 +112,13 @@ export class AiJevJournal {
   readonly #options: AiJevJournalOptions;
   readonly #requests = new Map<string, AiJevJournalRequest>();
   readonly #games = new Map<string, unknown>();
+  readonly #gameStarts = new Map<string, { generation: number; disabled: boolean }>();
   #circuit: string | null = null;
   #consecutiveFailures = 0;
+  #recentFailures: JevRequestSettlement[] = [];
+  #recoverableCircuit = false;
+  #circuitEvents = 0;
+  readonly #probes: (AiJevRecoveryHistory & { circuit: number })[] = [];
   #reservedRequests = 0;
   #reservedTokens = 0;
   readonly #requestCounts = new Map<string, number>();
@@ -88,6 +128,7 @@ export class AiJevJournal {
   constructor(options: AiJevJournalOptions) {
     this.#options = { ...options };
     if (!positiveInteger(options.maxRequests) || !positiveInteger(options.maxInputTokens)) throw new Error("invalid Jev journal global budget");
+    if (!Number.isSafeInteger(options.maxProviderRecoveries ?? 0) || (options.maxProviderRecoveries ?? 0) < 0 || (options.maxProviderRecoveries ?? 0) > 2) throw new Error("invalid Jev recovery attempt cap");
     if (!options.directory) {
       if (options.resume) throw new Error("resume requires a durable Jev journal");
       return;
@@ -96,7 +137,7 @@ export class AiJevJournal {
     this.#acquireOwner();
     try {
     const manifest = resolve(options.directory, "manifest.json");
-    const manifestIdentity = { identity: options.identity, maxRequests: options.maxRequests, maxInputTokens: options.maxInputTokens };
+    const manifestIdentity = { identity: options.identity, maxRequests: options.maxRequests, maxInputTokens: options.maxInputTokens, maxProviderRecoveries: options.maxProviderRecoveries ?? 0 };
     if (options.resume) {
       if (!existsSync(manifest) || readFileSync(manifest, "utf8").trim() !== JSON.stringify(manifestIdentity)) throw new Error("Jev resume source or configuration drift");
       const path = resolve(options.directory, "requests.jsonl");
@@ -110,7 +151,7 @@ export class AiJevJournal {
       for (const request of this.#requests.values()) if (!request.settlement) {
         this.settle(request.game, request.ordinal, { kind: "error", code: "aborted", knownUsage: null, latencyMs: 0, requestSent: true, budgetExceeded: false }, true);
       }
-      if (this.#consecutiveFailures >= 3) this.trip("three-consecutive-provider-failures");
+      if (this.#consecutiveFailures >= 3) this.trip("three-consecutive-provider-failures", this.#recentFailures.length === 3 && this.#recentFailures.every(recoverableFailure));
       for (const request of this.#requests.values()) {
         const outcome = request.settlement;
         if (outcome?.kind !== "error") continue;
@@ -191,7 +232,20 @@ export class AiJevJournal {
 
   #apply(event: JournalEvent): void {
     this.#validateEvent(event);
-    if (event.kind === "circuit") { this.#circuit ??= event.reason; return; }
+    if (event.kind === "circuit") { this.#circuit = event.reason; this.#recoverableCircuit = event.recoverable === true; this.#circuitEvents += 1; return; }
+    if (event.kind === "game-start") { this.#gameStarts.set(event.game, { generation: event.generation, disabled: event.disabled }); return; }
+    if (event.kind === "probe-reserve") {
+      this.#probes.push({ attempt: event.attempt, circuit: event.circuit, startedAt: event.startedAt, settledAt: null, healthy: null, status: null, failure: null });
+      return;
+    }
+    if (event.kind === "probe-settle") {
+      const probe = this.#probes[event.attempt - 1];
+      Object.assign(probe, { ...event.health, settledAt: event.settledAt });
+      if (event.health.healthy && this.#circuitEvents === probe.circuit && this.#recoverableCircuit) {
+        this.#circuit = null; this.#recoverableCircuit = false; this.#consecutiveFailures = 0; this.#recentFailures = [];
+      }
+      return;
+    }
     if (event.kind === "reserve") {
       const request = event.request;
       const key = this.#key(request.game, request.ordinal);
@@ -208,13 +262,33 @@ export class AiJevJournal {
     request.recovered = event.recovered;
     if (event.settlement.requestSent && !event.recovered) {
       this.#consecutiveFailures = event.settlement.kind === "success" ? 0 : this.#consecutiveFailures + 1;
+      this.#recentFailures = event.settlement.kind === "success" ? [] : [...this.#recentFailures, event.settlement].slice(-3);
     }
   }
 
   #validateEvent(value: unknown): asserts value is JournalEvent {
     if (!object(value)) throw new Error("invalid Jev journal event");
+    if (value.kind === "game-start") {
+      if (typeof value.game !== "string" || value.game.length > 192 || !/^[A-Za-z0-9_-]+$/.test(value.game) || this.#gameStarts.has(value.game) || value.generation !== this.#circuitEvents || value.disabled !== (this.#circuit !== null)) throw new Error("invalid Jev game start generation");
+      return;
+    }
     if (value.kind === "circuit") {
-      if (typeof value.reason !== "string" || !/^(?:budget|three-consecutive-provider-failures|provider-model-mismatch|provider-http-(?:401|403|451))$/.test(value.reason)) throw new Error("invalid Jev circuit reason");
+      if (typeof value.reason !== "string" || !/^(?:budget|three-consecutive-provider-failures|provider-unrecoverable-failure|provider-model-mismatch|provider-http-(?:401|403|451))$/.test(value.reason) ||
+        (value.recoverable !== undefined && typeof value.recoverable !== "boolean") ||
+        (value.recoverable === true && (value.reason !== "three-consecutive-provider-failures" || this.#recentFailures.length !== 3 || !this.#recentFailures.every(recoverableFailure)))) throw new Error("invalid Jev circuit reason");
+      return;
+    }
+    if (value.kind === "probe-reserve") {
+      if (!this.recoveryEligible() || value.attempt !== this.#probes.length + 1 || value.circuit !== this.#circuitEvents || !timestamp(value.startedAt) || this.pendingRequests() !== 0) throw new Error("invalid Jev recovery reservation");
+      return;
+    }
+    if (value.kind === "probe-settle") {
+      const probe = typeof value.attempt === "number" ? this.#probes[value.attempt - 1] : undefined;
+      const health = value.health;
+      if (!probe || probe.settledAt !== null || !timestamp(value.settledAt) || Date.parse(value.settledAt) < Date.parse(probe.startedAt) || !object(health) || typeof health.healthy !== "boolean" ||
+        (health.status !== null && (!Number.isInteger(health.status) || Number(health.status) < 100 || Number(health.status) > 599)) ||
+        ![null, "timeout", "transport", "http", "shape"].includes(health.failure as never) ||
+        (health.healthy ? health.status !== 200 || health.failure !== null : health.failure === null)) throw new Error("invalid Jev recovery settlement");
       return;
     }
     const request = value.kind === "reserve" ? value.request : value;
@@ -232,8 +306,37 @@ export class AiJevJournal {
 
   circuitReason(): string | null { return this.#circuit; }
 
-  trip(reason: string): void {
-    if (!this.#circuit) this.#append({ kind: "circuit", reason });
+  circuitGeneration(): number { return this.#circuitEvents; }
+
+  startGame(game: string): { generation: number; disabled: boolean } {
+    const previous = this.#gameStarts.get(game);
+    if (previous) return { ...previous };
+    this.#append({ kind: "game-start", game, generation: this.#circuitEvents, disabled: this.#circuit !== null });
+    return { ...this.#gameStarts.get(game)! };
+  }
+
+  pendingRequests(): number { return [...this.#requests.values()].filter((request) => !request.settlement).length; }
+
+  recoveryEligible(): boolean {
+    return this.#reservedRequests < this.#options.maxRequests && this.#reservedTokens < this.#options.maxInputTokens && this.#circuit === "three-consecutive-provider-failures" && this.#recoverableCircuit && this.#probes.length < (this.#options.maxProviderRecoveries ?? 0) && !this.#probes.some((probe) => probe.circuit === this.#circuitEvents);
+  }
+
+  reserveRecovery(): number {
+    const attempt = this.#probes.length + 1;
+    this.#append({ kind: "probe-reserve", attempt, circuit: this.#circuitEvents, startedAt: new Date().toISOString() });
+    return attempt;
+  }
+
+  settleRecovery(attempt: number, health: JevProviderHealth): void {
+    this.#append({ kind: "probe-settle", attempt, health: structuredClone(health), settledAt: new Date().toISOString() });
+  }
+
+  recoverySummary(): AiJevRecoverySummary {
+    return { attempts: this.#probes.length, successful: this.#probes.filter((probe) => probe.healthy === true).length, failed: this.#probes.filter((probe) => probe.healthy === false).length, unsettled: this.#probes.filter((probe) => probe.healthy === null).length, maxAttempts: this.#options.maxProviderRecoveries ?? 0, circuitEvents: this.#circuitEvents, history: this.#probes.map((probe) => ({ attempt: probe.attempt, healthy: probe.healthy, status: probe.status, failure: probe.failure, startedAt: probe.startedAt, settledAt: probe.settledAt })) };
+  }
+
+  trip(reason: string, recoverable = false): void {
+    if (!this.#circuit || (this.#recoverableCircuit && reason !== "three-consecutive-provider-failures")) this.#append({ kind: "circuit", reason, ...(recoverable ? { recoverable } : {}) });
   }
 
   recorded(game: string, ordinal: number): AiJevJournalRequest | undefined {
@@ -260,7 +363,8 @@ export class AiJevJournal {
       if ([401, 403, 451].includes(settlement.status ?? 0)) this.trip(`provider-http-${settlement.status}`);
       else if (settlement.validationRule === "model") this.trip("provider-model-mismatch");
       else if (settlement.code === "budget" || settlement.budgetExceeded) this.trip("budget");
-      else if (this.#consecutiveFailures >= 3) this.trip("three-consecutive-provider-failures");
+      else if (this.#recoverableCircuit && settlement.requestSent && !recoverableFailure(settlement)) this.trip("provider-unrecoverable-failure");
+      else if (this.#consecutiveFailures >= 3) this.trip("three-consecutive-provider-failures", this.#recentFailures.length === 3 && this.#recentFailures.every(recoverableFailure));
     }
   }
 

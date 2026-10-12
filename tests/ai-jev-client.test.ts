@@ -44,6 +44,57 @@ function options(overrides: Partial<JevClientOptions> = {}): JevClientOptions {
   };
 }
 
+test("transport failures preserve only enumerated nested network codes and unknown charged usage", async () => {
+  const settlements: JevRequestSettlement[] = [];
+  const native = new TypeError("vendor-detail-marker", { cause: Object.assign(new Error("private-detail-marker"), { code: "ECONNRESET", address: "private-detail-marker" }) });
+  const client = createJevClient(options({ fetch: async () => { throw native; }, onRequestSettled: (value) => settlements.push(value) }));
+  await assert.rejects(client.evaluate({ gold: 3 }, questions), (error: unknown) => {
+    assert.ok(error instanceof JevClientError);
+    assert.equal(error.code, "transport");
+    assert.equal(error.transportCode, "ECONNRESET");
+    assert.equal(error.cause, undefined);
+    assert.doesNotMatch(error.message + JSON.stringify(error), /detail-marker/);
+    return true;
+  });
+  assert.equal(settlements.length, 1);
+  assert.equal(settlements[0].kind, "error");
+  if (settlements[0].kind === "error") assert.equal(settlements[0].transportCode, "ECONNRESET");
+  assert.equal(settlements[0].knownUsage, null);
+  assert.equal(settlements[0].requestSent, true);
+  assert.equal(client.getUsage().unknownUsageRequests, 1);
+  assert.doesNotMatch(JSON.stringify(settlements), /detail-marker/);
+});
+
+test("transport diagnostics drop unknown codes and tolerate cyclic or throwing causes", async () => {
+  const cycle: { cause?: unknown; code: string } = { code: "private-detail-marker" };
+  cycle.cause = cycle;
+  const throwing = Object.defineProperty({}, "code", { get() { throw new Error("private-detail-marker"); } });
+  for (const cause of [cycle, throwing]) {
+    const settlements: JevRequestSettlement[] = [];
+    const client = createJevClient(options({ fetch: async () => { throw new TypeError("vendor-detail-marker", { cause }); }, onRequestSettled: (value) => settlements.push(value) }));
+    await assert.rejects(client.evaluate({ gold: 3 }, questions), (error: unknown) => {
+      assert.ok(error instanceof JevClientError);
+      assert.equal(error.code, "transport");
+      assert.equal(error.transportCode, undefined);
+      assert.doesNotMatch(error.message + JSON.stringify(error), /detail-marker/);
+      return true;
+    });
+    assert.equal(settlements.length, 1);
+    if (settlements[0].kind === "error") assert.equal(settlements[0].transportCode, undefined);
+  }
+});
+
+test("transport diagnostics keep certificate failures distinct and reject arbitrary constructor metadata", async () => {
+  const client = createJevClient(options({ fetch: async () => { throw new TypeError("vendor-detail-marker", { cause: { code: "ERR_TLS_CERT_ALTNAME_INVALID" } }); } }));
+  await assert.rejects(client.evaluate({}, questions), (error: unknown) => {
+    assert.ok(error instanceof JevClientError);
+    assert.equal(error.transportCode, "ERR_TLS_CERT_ALTNAME_INVALID");
+    return true;
+  });
+  assert.equal(new JevClientError("transport", undefined, undefined, undefined, "private-detail-marker" as never).transportCode, undefined);
+  assert.equal(new JevClientError("response", undefined, undefined, undefined, "ECONNRESET").transportCode, undefined);
+});
+
 test("Jev sends vendor wire schema with pinned model and exposes validated metadata", async () => {
   let calls = 0;
   const client = createJevClient(options({ fetch: async (url, init) => {
