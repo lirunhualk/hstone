@@ -10,6 +10,7 @@ import {
   isBountyTavernSpellDefinitionId,
 } from "./content.ts";
 import { getBuddyDefinitionIdForHeroPower } from "./buddies.ts";
+import { TIMEWARP_STAT_GRANTING_TAVERN_SPELL_EFFECTS } from "./timewarp.ts";
 import {
   RIME_OR_REASON_STAT_GRANTING_CARD_IDS,
   TAVERN_SPELL_DEFINITIONS,
@@ -5106,6 +5107,13 @@ function refreshDynamicMinionDescription(
       : `${printedDescription}${status}`;
     return;
   }
+  const spellcraftTrigger = definition.afterSpellcraftCast;
+  if (spellcraftTrigger) {
+    const progress = effectCounter(minion, "spellcraftCastProgress", 0) % spellcraftTrigger.threshold;
+    minion.description = printedDescription.replace(/（还剩\d+个！）/u,
+      `（还剩${spellcraftTrigger.threshold - progress}个！）`);
+    return;
+  }
   const goldSpendTrigger = definition.afterGoldSpent;
   if (goldSpendTrigger) {
     const progress =
@@ -5623,6 +5631,14 @@ function observeRecruitCardAddedToHand(
         }
         continue;
       }
+      if (trigger.kind === "buffFriendlyTribe") {
+        const repetitions = component.golden && trigger.goldenMode === "repeat" ? 2 : 1;
+        for (let repetition = 0; repetition < repetitions; repetition += 1) {
+          buffMinions(player.board.filter((target) => minionHasTribe(target, trigger.tribe)),
+            trigger.attack, trigger.health, player.board, player);
+        }
+        continue;
+      }
       if (
         card.kind !== "minion" ||
         !minionHasTribe(card, trigger.tribe)
@@ -5813,6 +5829,8 @@ function randomGeneratedTavernSpellDefinition(
         effect.filter.definitionIds.includes(definition.id)) &&
       (effect.filter.cost === undefined ||
         definition.cost === effect.filter.cost) &&
+      (effect.filter.minimumCost === undefined || definition.cost >= effect.filter.minimumCost) &&
+      (effect.filter.grantsStats !== true || TIMEWARP_STAT_GRANTING_TAVERN_SPELL_EFFECTS.has(definition.effect)) &&
       (effect.filter.exactTier === undefined ||
         definition.tier === effect.filter.exactTier) &&
       tavernSpellIsAvailable(definition, state.activeTribes),
@@ -7101,6 +7119,19 @@ function triggerAfterRecruitSpellcraftCast(
   state: GameState,
   player: PlayerState,
 ): void {
+  for (const source of [...player.board]) {
+    for (const component of minionEffectSources(source)) {
+      const trigger = getMinionDefinition(component.definitionId).afterSpellcraftCast;
+      if (!trigger) continue;
+      const progress = effectCounter(source, "spellcraftCastProgress", 0) + 1;
+      setEffectCounter(source, "spellcraftCastProgress", progress % trigger.threshold);
+      refreshDynamicMinionDescription(source, player);
+      if (progress >= trigger.threshold) {
+        applyRecruitEffects(state, player, source, trigger.effects, component.golden ? 2 : 1,
+          { effectSourceDefinitionId: component.definitionId });
+      }
+    }
+  }
   const triggerCount = player.trinketIds.reduce(
     (count, definitionId) =>
       count +
@@ -7690,13 +7721,15 @@ function playedCardMatches(
     tribe?: Tribe;
     tierParity?: "odd" | "even";
     maximumTier?: TavernTier;
+    minimumTier?: TavernTier;
   },
 ): boolean {
   if (
     filter.tribe !== undefined &&
     (event.cardKind !== "minion" ||
-      (!event.tribes.includes("all") &&
-        !event.tribes.includes(filter.tribe)))
+      (filter.tribe === "neutral"
+        ? event.tribes.length > 0
+        : !event.tribes.includes("all") && !event.tribes.includes(filter.tribe)))
   ) {
     return false;
   }
@@ -7707,6 +7740,9 @@ function playedCardMatches(
         ? event.tier % 2 !== 1
         : event.tier % 2 !== 0))
   ) {
+    return false;
+  }
+  if (filter.minimumTier !== undefined && (event.tier === undefined || event.tier < filter.minimumTier)) {
     return false;
   }
   return !(
@@ -9701,6 +9737,17 @@ function applyRecruitEffects(
           effect.health * scale + elementalGrantBonus.health,
         );
       }
+    } else if (effect.kind === "buffOwned") {
+      const targets = [...player.board, ...player.hand.filter(
+        (card): card is BoardMinionInstance => card.kind === "minion",
+      )];
+      buffMinions(targets, effect.attack * scale + elementalGrantBonus.attack,
+        effect.health * scale + elementalGrantBonus.health, player.board, player);
+    } else if (effect.kind === "onePerTribe") {
+      applyOnePerTribeBuff(state, player, effect.attack * scale + elementalGrantBonus.attack,
+        effect.health * scale + elementalGrantBonus.health);
+    } else if (effect.kind === "increaseMaxGold") {
+      player.maxGold += effect.amount * scale;
     } else if (effect.kind === "buffOwnedTribe") {
       buffMinions(
         [
@@ -9901,7 +9948,7 @@ function applyRecruitEffects(
       addBloodGems(
         state,
         player,
-        effect.count * scale,
+        effectSourceIsGolden && effect.goldenCount !== undefined ? effect.goldenCount : effect.count * scale,
         effect.bonusKeyword,
       );
     } else if (effect.kind === "applyBloodGemsToTribe") {
@@ -9940,6 +9987,7 @@ function applyRecruitEffects(
     } else if (effect.kind === "buffTavern") {
       const repetitions =
         effect.goldenMode === "repeat" ? scale : 1;
+      const statScale = effect.goldenMode === "doubleStats" ? scale : 1;
       const portraitBonus =
         source.definitionId === FELLEMENTAL_DEFINITION_ID &&
         playerHasTrinketCardId(player, FELLEMENTAL_PORTRAIT_CARD_ID)
@@ -9947,13 +9995,13 @@ function applyRecruitEffects(
           : 0;
       for (let repetition = 0; repetition < repetitions; repetition += 1) {
         player.tavernMinionAttackBonus +=
-          effect.attack + portraitBonus + elementalGrantBonus.attack;
+          effect.attack * statScale + portraitBonus + elementalGrantBonus.attack;
         player.tavernMinionHealthBonus +=
-          effect.health + portraitBonus + elementalGrantBonus.health;
+          effect.health * statScale + portraitBonus + elementalGrantBonus.health;
         buffMinions(
           player.shop,
-          effect.attack + portraitBonus + elementalGrantBonus.attack,
-          effect.health + portraitBonus + elementalGrantBonus.health,
+          effect.attack * statScale + portraitBonus + elementalGrantBonus.attack,
+          effect.health * statScale + portraitBonus + elementalGrantBonus.health,
           player.shop,
         );
       }
@@ -10897,10 +10945,21 @@ function applyOneEndOfTurnEffect(
     effect.kind === "gainBloodGems" ||
     effect.kind === "gainTavernSpell" ||
     effect.kind === "gainRandomTavernSpell" ||
+    effect.kind === "gainMinion" ||
+    effect.kind === "buffOwned" ||
     effect.kind === "improveTavernSpellBuffs" ||
     effect.kind === "queueDemonFodder"
   ) {
     applyRecruitEffects(state, player, source, [effect], scale);
+    return;
+  }
+
+  if (effect.kind === "buffLowerThanSource") {
+    // Attack resolves first; then the Health comparison reads the updated board.
+    buffMinions(player.board.filter((target) => target.attack < source.attack),
+      effect.attack * scale, 0, player.board, player);
+    buffMinions(player.board.filter((target) => target.health < source.health),
+      0, effect.health * scale, player.board, player);
     return;
   }
 
@@ -12559,11 +12618,15 @@ function sellMinionTransaction(
   beginSellDiscover(state, player, minion);
   for (const watcher of [...player.board]) {
     for (const component of minionEffectSources(watcher)) {
+      const definition = getMinionDefinition(component.definitionId);
+      if (definition.afterFriendlySoldTier !== undefined && minion.tier !== definition.afterFriendlySoldTier) {
+        continue;
+      }
       applyRecruitEffects(
         state,
         player,
         watcher,
-        getMinionDefinition(component.definitionId).afterFriendlySold,
+        definition.afterFriendlySold,
         component.golden ? 2 : 1,
         { effectSourceDefinitionId: component.definitionId, soldMinion: minion },
       );
@@ -14303,7 +14366,7 @@ function triggerRecruitAfterSpellCast(
       if (effect) {
         const scale = component.golden ? 2 : 1;
         buffMinions(
-          player.board,
+          effect.target === "onePerTribe" ? selectDistinctMinionsByTribe(state, player.board) : player.board,
           effect.attack * scale,
           effect.health * scale,
           player.board,
@@ -15279,7 +15342,7 @@ function castSpellcraft(
       // casts use that same branch and can fire generic cast observers now.
       triggerRecruitAfterSpellCast(state, player);
     }
-    if (!defersCastCompletion) {
+    if (!defersCastCompletion && card.spellFamily === "spellcraft") {
       triggerAfterRecruitSpellcraftCast(state, player);
     }
   }
@@ -19437,7 +19500,9 @@ function beginTimewarpCandlestickDiscover(
   const pool = TIMEWARP_COST_TWO_MINION_DEFINITIONS[
     isLesser ? "lesser" : "greater"
   ];
-  const candidates = [...pool];
+  const candidates = pool.filter((candidate) =>
+    candidate.effectSupport === "complete" && definitionMatchesActiveTribes(candidate, state.activeTribes),
+  );
   shuffleInPlace(state, candidates);
   const options = candidates
     .slice(0, 3)
@@ -25428,6 +25493,18 @@ function observeCombatCardAddedToHand(
         }
         continue;
       }
+      if (trigger.kind === "buffFriendlyTribe") {
+        const repetitions = component.golden && trigger.goldenMode === "repeat" ? 2 : 1;
+        for (let repetition = 0; repetition < repetitions; repetition += 1) {
+          for (const target of board) {
+            if (target.kind === "minion" && target.health > 0 && minionHasTribe(target, trigger.tribe)) {
+              applyCombatCardAddedBuff(context, ownerId, boardWatcher, component, target as BoardMinionInstance,
+                trigger.attack, trigger.health, "在有卡牌加入手牌后触发");
+            }
+          }
+        }
+        continue;
+      }
       if (
         card.kind !== "minion" ||
         !minionHasTribe(card, trigger.tribe)
@@ -27648,17 +27725,18 @@ function applyStartOfCombatEffects(
         if (attackDelta === 0 && healthDelta === 0) {
           continue;
         }
-        pushStartOfCombatBuff(
-          context,
-          ownerId,
-          source,
-          component,
-          source,
-          attackDelta,
-          healthDelta,
-          false,
-          `汇总手牌随从，获得+${attackDelta}/+${healthDelta}。`,
-        );
+        const sourceIndex = board.findIndex((minion) => minion.instanceId === source.instanceId);
+        const targets = effect.target === "adjacentFriendlyTribe"
+          ? [board[sourceIndex - 1], board[sourceIndex + 1]].filter((target) =>
+            target && target.health > 0 && effect.tribe !== undefined && minionHasTribe(target, effect.tribe))
+          : [source];
+        const repetitions = component.golden && effect.goldenMode === "repeat" ? 2 : 1;
+        for (let repetition = 0; repetition < repetitions; repetition += 1) {
+          for (const target of targets) {
+            pushStartOfCombatBuff(context, ownerId, source, component, target,
+              attackDelta, healthDelta, false, `汇总手牌随从，使${target.name}获得+${attackDelta}/+${healthDelta}。`);
+          }
+        }
       }
     }
   }
@@ -29286,8 +29364,8 @@ function resolveCombatGainBloodGems(
   if (!owner) {
     return;
   }
-  const requested =
-    effect.count * (component.golden ? 2 : 1);
+  const requested = component.golden && effect.goldenCount !== undefined
+    ? effect.goldenCount : effect.count * (component.golden ? 2 : 1);
   const sourceName = rallySourceLabel(component);
   const sourceLabel = triggerLabel
     ? `${sourceName}的${triggerLabel}`
@@ -31653,7 +31731,10 @@ function triggerCombatAfterSpellCast(
         continue;
       }
       const scale = component.golden ? 2 : 1;
-      for (const target of board.filter((candidate) => candidate.health > 0)) {
+      const liveBoard = board.filter((candidate) => candidate.health > 0);
+      const targets = effect.target === "onePerTribe"
+        ? selectDistinctMinionsByTribe(context.state, liveBoard) : liveBoard;
+      for (const target of targets) {
         pushCombatSpellBuff(
           context,
           ownerId,
@@ -31754,7 +31835,10 @@ function triggerCombatAfterTavernSpellCast(
           continue;
         }
         if (effect.kind === "buff") {
-          for (const target of combatBuffTargets(
+          const repetitions = effect.goldenMode === "repeat" ? scale : 1;
+          const statScale = effect.goldenMode === "repeat" ? 1 : scale;
+          for (let repetition = 0; repetition < repetitions; repetition += 1) {
+            for (const target of combatBuffTargets(
             context.state,
             board,
             source,
@@ -31765,10 +31849,11 @@ function triggerCombatAfterTavernSpellCast(
               ownerId,
               source,
               target,
-              effect.attack * scale,
-              effect.health * scale,
-              `${source.name}响应酒馆法术，使${target.name}获得+${effect.attack * scale}/+${effect.health * scale}。`,
+              effect.attack * statScale,
+              effect.health * statScale,
+              `${source.name}响应酒馆法术，使${target.name}获得+${effect.attack * statScale}/+${effect.health * statScale}。`,
             );
+            }
           }
           continue;
         }
@@ -32842,6 +32927,28 @@ function resolveCombatAvengeEffect(
   component: MinionEffectSource,
   effect: AvengeEffect,
 ): void {
+  if (effect.kind === "gainBloodGems") {
+    resolveCombatGainBloodGems(context, ownerId, watcher, component, effect, "复仇");
+    return;
+  }
+  if (effect.kind === "improveBloodGems") {
+    resolveCombatImproveBloodGems(context, ownerId, watcher, component, effect, "复仇");
+    return;
+  }
+  if (effect.kind === "increaseMaxGold") {
+    const owner = persistentCombatOwner(context, ownerId);
+    if (owner) owner.maxGold += effect.amount * (component.golden ? 2 : 1);
+    return;
+  }
+  if (effect.kind === "buff") {
+    const board = context.boards[ownerId];
+    for (const target of combatBuffTargets(context.state, board, watcher, effect)) {
+      pushCombatSpellBuff(context, ownerId, watcher, target,
+        effect.attack * (component.golden ? 2 : 1), effect.health * (component.golden ? 2 : 1),
+        `${watcher.name}的复仇使${target.name}获得属性值。`);
+    }
+    return;
+  }
   if (effect.kind === "gainLinkedRandomMinion") {
     resolveCombatGainLinkedRandomMinion(
       context,

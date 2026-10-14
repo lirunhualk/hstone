@@ -5,6 +5,7 @@ import trinketFeatureSnapshot from "./generated/battlegrounds-trinkets-36.0.3-24
   type: "json",
 };
 import { BUDDY_MINION_DEFINITIONS } from "./buddies.ts";
+import { FULLY_SUPPORTED_TIMEWARP_CARD_IDS, TIMEWARP_RULE_OVERRIDES } from "./timewarp.ts";
 import type { MinionDefinition, Tribe } from "./types.ts";
 
 export const CURRENT_ROSTER_VERSION = "battlegrounds-36.0.3-247416-v52";
@@ -4584,17 +4585,18 @@ function createTimewarpMinionDefinition(
   );
   return {
     ...definition,
+    ...TIMEWARP_RULE_OVERRIDES[card.cardId],
     goldenCardId: card.goldenCardId,
     goldenDescription: card.goldenDescription,
-    effectSupport: "partial",
+    effectSupport: FULLY_SUPPORTED_TIMEWARP_CARD_IDS.has(card.cardId) ? "complete" : "partial",
     collectible: false,
   };
 }
 
 /**
  * Complete build-247416 pools for the Lesser/Greater Old Candlestick. The
- * printed entities and basic keywords are exact; their bespoke Timewarp text
- * remains explicitly partial until those individual minion rules are added.
+ * source registry preserves every entity; only fully supported definitions
+ * are eligible for generated Discover rewards.
  */
 export const TIMEWARP_COST_TWO_MINION_DEFINITIONS: Readonly<
   Record<"lesser" | "greater", readonly MinionDefinition[]>

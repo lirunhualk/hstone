@@ -1,6 +1,7 @@
 import {
   CURRENT_ROSTER_VERSION,
   TIER_SEVEN_MINION_DEFINITIONS,
+  TIMEWARP_MINION_DEFINITIONS,
   TRIBE_NAMES,
   getMinionDefinition,
 } from "./content.ts";
@@ -567,6 +568,7 @@ function repairStaleLobbyInteraction(
         trinketCanBeOfferedWithHeroPower(
           getTrinketDefinition(definitionId),
           eligibleHeroPowerId,
+          true,
         ),
     ) ||
     !Array.isArray(player.board) ||
@@ -2539,6 +2541,40 @@ export function migrateLegacyGameState(value: unknown): unknown {
   return null;
 }
 
+const TIMEWARP_RUNTIME_IDS = new Set([
+  ...TIMEWARP_MINION_DEFINITIONS.map((definition) => definition.id),
+  "BG34_Giant_031", "BG34_Giant_314",
+]);
+
+/** Rule-only changes retain v52 saves and refresh presentation, not ownership. */
+function repairTimewarpMetadata(value: Record<string, unknown>): boolean {
+  if (!Array.isArray(value.players)) return false;
+  const repair = (card: unknown): void => {
+    if (!isRecord(card) || typeof card.definitionId !== "string" || !TIMEWARP_RUNTIME_IDS.has(card.definitionId)) return;
+    const definition = getMinionDefinition(card.definitionId);
+    card.effectSupport = definition.effectSupport ?? "complete";
+    if (definition.afterSpellcraftCast) {
+      const rawProgress = isRecord(card.effectCounters) ? card.effectCounters.spellcraftCastProgress : undefined;
+      const progress = typeof rawProgress === "number" && Number.isSafeInteger(rawProgress) && rawProgress >= 0
+        ? rawProgress % definition.afterSpellcraftCast.threshold : 0;
+      card.effectCounters = { ...(isRecord(card.effectCounters) ? card.effectCounters : {}), spellcraftCastProgress: progress };
+      const printed = card.golden === true ? definition.goldenDescription ?? definition.description : definition.description;
+      card.description = printed.replace(/（还剩\d+个！）/u, `（还剩${definition.afterSpellcraftCast.threshold - progress}个！）`);
+    }
+  };
+  for (const player of value.players) {
+    if (!isRecord(player)) continue;
+    for (const field of ["board", "hand", "shop", "ghostHand"]) {
+      const cards = player[field];
+      if (Array.isArray(cards)) cards.forEach(repair);
+    }
+  }
+  if (isRecord(value.pendingInteraction) && value.pendingInteraction.kind === "discover" && Array.isArray(value.pendingInteraction.options)) {
+    value.pendingInteraction.options.forEach(repair);
+  }
+  return true;
+}
+
 export function normalizePersistedGameState(value: unknown): unknown {
   if (
     isRecord(value) &&
@@ -2557,6 +2593,7 @@ export function normalizePersistedGameState(value: unknown): unknown {
       repairTrinketSelections(value) &&
       repairPendingMysteryCubeReplacements(value) &&
       repairStaleLobbyInteraction(value) &&
+      repairTimewarpMetadata(value) &&
       hasValidLobbySystemState(value)
       ? value
       : null;
@@ -2573,6 +2610,7 @@ export function normalizePersistedGameState(value: unknown): unknown {
     repairTrinketSelections(migrated) &&
     repairPendingMysteryCubeReplacements(migrated) &&
     repairStaleLobbyInteraction(migrated) &&
+    repairTimewarpMetadata(migrated) &&
     hasValidLobbySystemState(migrated)
     ? migrated
     : null;

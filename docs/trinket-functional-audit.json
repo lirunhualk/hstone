@@ -1799,7 +1799,7 @@
       "tests": [
         "tests/trinket-mirror-timewarp.test.ts"
       ],
-      "notes": "Discover correctly selects three options from all 25 fixed-build lesser cost-2 Timewarp cards and burns overflow safely; generated cards retain only base stats/basic keywords. Their bespoke Timewarp abilities are explicitly partial and not represented by DSL."
+      "notes": "固定小型来源保留25种；其中12种已接入普通/金色规则。新的烛台发现只抽完整支持且匹配本局种族的候选，至多3选1，满手安全烧毁，AI共用入口。其余13种仍为部分支持并排除获取；逐卡规则和验证见docs/timewarp-functional-audit.md及tests/timewarp-*.test.ts。"
     },
     {
       "index": 87,
@@ -1901,7 +1901,7 @@
       "tests": [
         "tests/trinket-acquisition-portraits.test.ts"
       ],
-      "notes": "获取真实BG34_Giant_031身份；该随从只有嘲讽/复生，未实现亡语为友方野兽+1/+1且传播亡语（金色+2/+2）。"
+      "notes": "旧实体保留真实BG34_Giant_031身份；亡语增益及传播仍未实现。来源饰品已从新的饰品报价和随机饰品候选排除，避免再次获取无效果牌；tests/timewarp-support.test.ts验证门禁。"
     },
     {
       "index": 92,
@@ -4016,7 +4016,7 @@
       "tests": [
         "tests/trinket-mirror-timewarp.test.ts"
       ],
-      "notes": "固定快照的大型烛台成本2时空扭曲候选共41种（不是旧组说明写的21）；3选1身份、基础关键词、满手、AI和保存机制有证据，但赠送随从的专属时空扭曲文本未完整映射，全部仍标记部分支持。发现入口正常不证明所选牌的效果完整。",
+      "notes": "固定大型来源保留41种（旧组说明的21不正确）；其中16种已接入普通/金色规则。新的烛台发现只抽完整支持且匹配本局种族的候选，至多3选1，满手、AI及保存走共同入口。其余25种仍为部分支持并排除获取；逐卡规则和验证见docs/timewarp-functional-audit.md及tests/timewarp-*.test.ts。",
       "previousNotes": "21个大型时空扭曲消耗2牌的身份/3选1/关键词正确，但全部标记partial且特殊文本没有DSL覆盖；满手/AI/存档仅验证发现机制，不证明返回牌效果。"
     },
     {

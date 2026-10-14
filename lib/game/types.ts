@@ -117,6 +117,8 @@ export interface GainRandomTavernSpellEffect {
   count: number;
   filter: {
     cost?: number;
+    minimumCost?: number;
+    grantsStats?: true;
     exactTier?: TavernTier;
     definitionIds?: readonly string[];
   };
@@ -141,6 +143,17 @@ export interface BuffOwnedTribeEffect {
   tribe: Tribe;
   attack: number;
   health: number;
+}
+
+export interface BuffOwnedEffect {
+  kind: "buffOwned";
+  attack: number;
+  health: number;
+}
+
+export interface IncreaseMaxGoldEffect {
+  kind: "increaseMaxGold";
+  amount: number;
 }
 
 export interface InstallTavernRefreshBuffEffect {
@@ -412,6 +425,7 @@ export interface DamageAllMinionsEffect {
 export interface GainBloodGemsEffect {
   kind: "gainBloodGems";
   count: number;
+  goldenCount?: number;
   bonusKeyword?: BloodGemBonusKeyword;
 }
 
@@ -463,7 +477,7 @@ export interface BuffTavernEffect {
   kind: "buffTavern";
   attack: number;
   health: number;
-  goldenMode?: "repeat";
+  goldenMode?: "repeat" | "doubleStats";
 }
 
 export interface BuffTavernTypeEffect {
@@ -538,6 +552,9 @@ export type MinionEffect =
   | CastTavernSpellEffect
   | BuffRandomHandMinionEffect
   | BuffOwnedTribeEffect
+  | BuffOwnedEffect
+  | IncreaseMaxGoldEffect
+  | MenagerieEndOfTurnEffect
   | InstallTavernRefreshBuffEffect
   | BuffTavernTierEffect
   | GainMinionEffect
@@ -706,7 +723,11 @@ export type AvengeEffect =
   | GainLinkedRandomMinionEffect
   | GainTavernSpellEffect
   | SummonEffect
-  | ApplyBloodGemsToTribeEffect;
+  | ApplyBloodGemsToTribeEffect
+  | GainBloodGemsEffect
+  | ImproveBloodGemsEffect
+  | IncreaseMaxGoldEffect
+  | BuffEffect;
 
 export interface AvengeTrigger {
   threshold: number;
@@ -717,6 +738,7 @@ export interface CardPlayedFilter {
   tribe?: Tribe;
   tierParity?: TierParity;
   maximumTier?: TavernTier;
+  minimumTier?: TavernTier;
 }
 
 export interface CardPlayedTrigger {
@@ -755,7 +777,8 @@ export interface IncreaseMaxGoldAfterTribeCardsAddedTrigger {
 export type CardAddedToHandTrigger =
   | BuffRandomOtherPirateAfterCardAddedTrigger
   | BuffWarbandAfterTribeCardAddedTrigger
-  | IncreaseMaxGoldAfterTribeCardsAddedTrigger;
+  | IncreaseMaxGoldAfterTribeCardsAddedTrigger
+  | { kind: "buffFriendlyTribe"; tribe: Tribe; attack: number; health: number; goldenMode?: "repeat" };
 
 export interface MinionConsumedTrigger {
   tavernAttackThisTurn: number;
@@ -793,6 +816,12 @@ export interface BuffEndOfTurnEffect {
   attack: number;
   health: number;
   repeatPerGoldenFriendly?: boolean;
+}
+
+export interface BuffLowerThanSourceEffect {
+  kind: "buffLowerThanSource";
+  attack: number;
+  health: number;
 }
 
 export interface PeriodicGainRandomMinionEndOfTurnEffect {
@@ -878,6 +907,9 @@ export type EndOfTurnEffect =
   | GainBloodGemsEffect
   | GainTavernSpellEffect
   | GainRandomTavernSpellEffect
+  | GainMinionEffect
+  | BuffOwnedEffect
+  | BuffLowerThanSourceEffect
   | ImproveTavernSpellBuffsEffect
   | PeriodicGainRandomMinionEndOfTurnEffect
   | QueueDemonFodderEffect
@@ -957,7 +989,9 @@ export interface StartOfCombatGainHighestHandAttackEffect {
 
 export interface StartOfCombatGainAllHandMinionStatsEffect {
   kind: "gainAllHandMinionStats";
-  goldenMode?: "doubleAmount";
+  target?: "adjacentFriendlyTribe";
+  tribe?: Tribe;
+  goldenMode?: "doubleAmount" | "repeat";
 }
 
 export interface StartOfCombatSummonHighestAttackHandTribeEffect {
@@ -1090,6 +1124,7 @@ export interface TavernSpellHistoryBuff {
 export interface AfterSpellCastEffect {
   attack: number;
   health: number;
+  target?: "onePerTribe";
 }
 
 export interface AfterPlayerSpellCastTrigger {
@@ -1212,6 +1247,7 @@ export interface MinionDefinition {
   afterSelfGainsAttack?: SelfAttackGainTrigger;
   afterSold?: readonly MinionEffect[];
   afterFriendlySold?: readonly MinionEffect[];
+  afterFriendlySoldTier?: TavernTier;
   afterMagnetized?: readonly MinionEffect[];
   /** Copies the complete Magnetic source onto this host without another pool return. */
   copyOtherMagnetization?: CopyOtherMagnetizationEffect;
@@ -1236,6 +1272,7 @@ export interface MinionDefinition {
   tavernSpellHistoryBuff?: TavernSpellHistoryBuff;
   /** Observer invoked after every actual spell-cast pulse. */
   afterSpellCast?: AfterSpellCastEffect;
+  afterSpellcraftCast?: { threshold: number; effects: readonly MinionEffect[] };
   /** Observer invoked only when this player is the spell's caster. */
   afterPlayerSpellCast?: AfterPlayerSpellCastTrigger;
   /** Number of targeted Spellcraft hand cards made permanent each turn. */

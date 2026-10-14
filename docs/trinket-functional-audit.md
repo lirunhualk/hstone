@@ -27,7 +27,7 @@
 | 间接取得内容未完整 | 12 | 包含伙伴、恩佐斯的鱼、无面操纵者、跳蛙、砰砰的怪物、混合体、摩戈尔、时空扭曲候选，以及仍可随机取得上述内容的未知宝珠；获取身份正确不等于赠送牌效果完整。 |
 | 缺专项验证 | 7 | 祝福、沙锤手、民谣歌手、魔焰肖像的关键行为，以及游学者卷轴、舒适的棺椁、蓝鳃脚蹼的战斗自动施法触发归属，仍需专项验证；未复现的边界不能当成确认缺陷。 |
 
-大型老旧烛台的固定成本 2 候选为 41 种，小型为 25 种。旧组说明中的大型“21”已纠正，并保留在 JSON 的 `previousNotes`。此审计没有修改饰品池、自动排除内容或提升未实现牌的支持等级。
+大型老旧烛台的固定成本 2 来源为 41 种，小型为 25 种。旧组说明中的大型“21”已纠正，并保留在 JSON 的 `previousNotes`。2026-10-14 的[时空扭曲审计](timewarp-functional-audit.md)接入大型 16 种、小型 12 种；新发现仅抽取完整且匹配本局种族的候选。其余来源保留部分支持，跳蛙骑士肖像不进入新报价或随机饰品候选。
 
 ## 离线校验与重跑
 
@@ -127,12 +127,12 @@ node scripts/check-trinket-functional-audit.mjs --test
 | 83 | 小 | 镜匣<br>`BG35_MagicItem_817` | 获取一张复映透镜。每2个回合，在回合开始时，重复此效果。（还剩2回合！） | 已核对 | Exact Mirror Lens supply now and each two starts; plain <=Tier 3 copy, full hand casting,… | [专项](../tests/trinket-mirror-timewarp.test.ts) |
 | 84 | 小 | 神秘宝珠<br>`BG35_MagicItem_818` | 获得8枚铸币。 你的下一件饰品为小型饰品。 | 已核对 | 立即+8金币，第9回合以新的小饰品选购替代普通大饰品报价；保留宝珠与附加小饰品，合法所有权和保存alias约束。 | [专项](../tests/trinket-high-coupling-effects.test.ts) |
 | 85 | 小 | 万花筒<br>`BG35_MagicItem_821` | 发现一张等级7的随从牌。将其锁入你的手牌2回合。 | 已核对 | 真实7星池3选1，选中牌锁到获取回合+2；人类交互可保存，AI同步选，满手可选择但烧毁，零普通池所有权。 | [专项](../tests/trinket-mystery-cube-kaleidoscope.test.ts) |
-| 86 | 小 | 老旧的烛台<br>`BG35_MagicItem_823` | 发现一张来自小型时空扭曲的消耗为2的随从牌。 | 间接内容未完整 | 25种固定小型候选身份存在；时空扭曲专属文本仍部分支持。 | [专项](../tests/trinket-mirror-timewarp.test.ts) |
+| 86 | 小 | 老旧的烛台<br>`BG35_MagicItem_823` | 发现一张来自小型时空扭曲的消耗为2的随从牌。 | 间接内容未完整 | 保留25种来源，接入12种完整规则；新发现按支持和本局种族过滤，其余13种排除。 | [专项](../tests/timewarp-support.test.ts) |
 | 87 | 小 | 双头飞龙肖像<br>`BG35_MagicItem_834` | 获取一张重金属双头飞龙。战斗开始时：触发你的重金属双头飞龙的亡语。 | 已核对 | 获取重金属双头飞龙；开战逐只触发仍存活双头飞龙亡语，读取当时邻接、金色、提图斯与布莱恩倍率，走真实战吼路径。 | [专项](../tests/trinket-portrait-high-coupling.test.ts) |
 | 88 | 小 | 多彩之泪<br>`BG35_MagicItem_840` | 随机获取一张 多彩幼龙。在每个回合开始时，重复此效果。 | 已核对 | 初始/每回合1真实随机多彩幼龙；生成牌不消耗共享池，循环取随机合法定义，满手停止。 | [专项](../tests/trinket-simple-effects.test.ts) |
 | 89 | 小 | 袋中旋风<br>`BG35_MagicItem_850` | 施放乘借东风。在每个回合开始时，再施放一次。 | 已核对 | Casts Ride the Wind immediately and each start; effect pulse count versus actual spell ca… | [专项](../tests/trinket-simple-effects.test.ts) |
 | 90 | 小 | 水车<br>`BG35_MagicItem_851` | 在你使用一张元素牌后，随机获取一张酒馆法术牌。（每回合两次。） | 已核对 | 元素真实使用后生成随机法术，每回合最多2次；轮次编码持久化且跨回合恢复额度，满手仍消耗本次触发。 | [专项](../tests/trinket-recruit-trigger-effects.test.ts) |
-| 91 | 小 | 跳蛙骑士肖像<br>`BG35_MagicItem_870` | 获取一张时空扭曲跳蛙骑士。 | 间接内容未完整 | 跳蛙的身份/关键词存在；亡语增益及传播未实现。 | [专项](../tests/trinket-acquisition-portraits.test.ts) |
+| 91 | 小 | 跳蛙骑士肖像<br>`BG35_MagicItem_870` | 获取一张时空扭曲跳蛙骑士。 | 间接内容未完整 | 亡语增益及传播未实现；新报价和随机饰品入口排除，旧实体保留。 | [专项](../tests/timewarp-support.test.ts) |
 | 92 | 小 | 熊妈妈标签<br>`BG35_MagicItem_871` | 每当你召唤一只野兽，使其获得+5/+5。 | 已核对 | Beast summons in both Recruit and combat gain +5/+5. Dual/All tribes use shared tribe che… | [专项](../tests/trinket-combat-effects-batch4.test.ts) |
 | 93 | 小 | 蛇首之杖<br>`BG35_MagicItem_872` | 塑造法术：使一只野兽获得+2/+2和 复生。 | 已核对 | 每回合提供固定蛇首之杖法术，只能选友方野兽；token文本未写直到下回合，当前实现永久+2/+2和复生，与既有专项一致；满手延后发牌及过期边界覆盖。 | [专项](../tests/trinket-spellcraft-effects.test.ts) |
 | 94 | 小 | 沉没的船锚<br>`BG35_MagicItem_890` | 随机获取2张悬赏令。在每个回合开始时，重复此 效果。 | 已核对 | 初始/每回合2真实悬赏令，随机奖励定义及次数正确；满手/法术卡期行为统一处理。 | [专项](../tests/trinket-simple-effects.test.ts) |
@@ -234,7 +234,7 @@ node scripts/check-trinket-functional-audit.mjs --test
 | 190 | 大 | 未知宝珠<br>`BG35_MagicItem_816t` | 随机获取一项大型饰品和4枚铸币。 | 间接内容未完整 | 随机大饰品和金币入口正确；仍可取得间接内容部分支持的饰品。 | [专项](../tests/trinket-recruit-trigger-effects-batch5.test.ts) |
 | 191 | 大 | 安全徽章<br>`BG35_MagicItem_820` | 施放寒冰屏障。获得5枚铸币。 | 已核对 | Five Gold plus one Ice Block-like lethal-combat prevention; nonlethal hit preserves charg… | [专项](../tests/trinket-safe-badge.test.ts) |
 | 192 | 大 | 万花筒<br>`BG35_MagicItem_821t` | 发现一张等级7的金色随从牌。将其锁入你的手牌2 回合。 | 已核对 | 发现7级池外金色牌，准确锁手至当前轮+2；候选可存档，金色无普通池扣除；本次罪碑复制回归验证金色及锁手不丢失。 | [专项](../tests/trinket-mystery-cube-kaleidoscope.test.ts) +1 |
-| 193 | 大 | 老旧的烛台<br>`BG35_MagicItem_823t` | 发现一张来自大型时空扭曲的消耗为2的随从牌。 | 间接内容未完整 | 41种固定大型候选身份存在；时空扭曲专属文本仍部分支持。 | [专项](../tests/trinket-mirror-timewarp.test.ts) |
+| 193 | 大 | 老旧的烛台<br>`BG35_MagicItem_823t` | 发现一张来自大型时空扭曲的消耗为2的随从牌。 | 间接内容未完整 | 保留41种来源，接入16种完整规则；新发现按支持和本局种族过滤，其余25种排除。 | [专项](../tests/timewarp-support.test.ts) |
 | 194 | 大 | 双线缝针<br>`BG35_MagicItem_838` | 塑造法术：选择一个友方随从，使其属性值翻倍，并将其锁入你的手牌1个回合。 | 已核对 | Legal friendly target permanently doubles current stats, removes to hand and locks until … | [专项](../tests/trinket-spellcraft-effects.test.ts) |
 | 195 | 大 | 多彩之泪<br>`BG35_MagicItem_840t` | 随机获取2张多彩幼龙。在你使用7张战吼随从牌后，重复此效果。（还剩7张！） | 已核对 | 获取时随机生成2幼龙，之后每真实使用7张有战吼标识的随从再生成2张；计数由使用事件推进，布莱恩重复战吼不当多张使用。 | [专项](../tests/trinket-recruit-trigger-effects-batch3.test.ts) |
 | 196 | 大 | 袋中旋风<br>`BG35_MagicItem_850t` | 施放乘借东风，触发四次。在每个回合开始时，再施放 两次。 | 已核对 | 初始1施法4独立乘借东风脉冲；每回合开始再2次真正自动施法，各读当次buff参数；不会把4脉冲算4张施法。 | [专项](../tests/trinket-simple-effects.test.ts) |

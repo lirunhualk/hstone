@@ -19,6 +19,7 @@ import {
 } from "../lib/game/engine.ts";
 import { normalizePersistedGameState } from "../lib/game/save.ts";
 import type { MinionTier } from "../lib/game/types.ts";
+import { FULLY_SUPPORTED_TIMEWARP_CARD_IDS } from "../lib/game/timewarp.ts";
 
 const MIRROR_BOX_CARD_ID = "BG35_MagicItem_817";
 const MIRROR_LENS_CARD_ID = "BG35_MagicItem_817t";
@@ -321,6 +322,7 @@ for (const [index, scenario] of [
       pending.options.every(
         (option) =>
           eligibleIds.has(option.definitionId) &&
+          option.effectSupport === "complete" &&
           option.tier === scenario.tier &&
           option.poolCopies === 0,
       ),
@@ -425,7 +427,7 @@ test("Timewarp runtime definitions preserve printed entities and basic keywords"
     ...TIMEWARP_COST_TWO_MINION_DEFINITIONS.greater,
   ]) {
     assert.equal(definition.collectible, false);
-    assert.equal(definition.effectSupport, "partial");
+    assert.equal(definition.effectSupport, FULLY_SUPPORTED_TIMEWARP_CARD_IDS.has(definition.id) ? "complete" : "partial");
     assert.equal(state.pool[definition.id], 0);
   }
 });

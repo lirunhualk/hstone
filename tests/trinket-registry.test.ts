@@ -76,7 +76,9 @@ test("tier pools contain only active definitions and never legacy removals", () 
   const lesser = trinketsForTier("lesser");
   const greater = trinketsForTier("greater");
 
-  assert.equal(lesser.length, 98);
+  // The fixed registry still has 98; its unsupported Leapfrogger reward is gated.
+  assert.equal(lesser.length, 97);
+  assert.ok(lesser.every((definition) => definition.cardId !== "BG35_MagicItem_870"));
   assert.equal(greater.length, 106);
   for (const definition of [...lesser, ...greater]) {
     assert.equal(definition.inPool, true);

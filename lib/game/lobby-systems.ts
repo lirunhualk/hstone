@@ -788,6 +788,7 @@ export function trinketsForTier(
     (definition) =>
       definition.inPool &&
       definition.tier === tier &&
+      definition.cardId !== "BG35_MagicItem_870" &&
       (heroPowerId === undefined ||
         trinketCanBeOfferedWithHeroPower(definition, heroPowerId)),
   ).map((definition) => ({ ...definition }));
@@ -796,7 +797,10 @@ export function trinketsForTier(
 export function trinketCanBeOfferedWithHeroPower(
   definition: TrinketDefinition,
   heroPowerId: string | null,
+  preserveExistingOffer = false,
 ): boolean {
+  // Its Timewarped Leapfrogger payload has no executable inherited Deathrattle.
+  if (definition.cardId === "BG35_MagicItem_870" && !preserveExistingOffer) return false;
   if (MAXWELL_STICKER_CARD_IDS.has(definition.cardId)) {
     return getBuddyDefinitionIdForHeroPower(heroPowerId) !== null;
   }
