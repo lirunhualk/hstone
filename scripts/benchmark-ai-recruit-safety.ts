@@ -323,6 +323,7 @@ function evaluatorHash(): string {
   const hash = createHash("sha256");
   for (const relativePath of [
     "../lib/game/ai.ts",
+    "../lib/game/ai-composition.ts",
     "../lib/game/engine.ts",
     "./ai-benchmark-scenarios.ts",
     "./ai-seed-ledger.ts",

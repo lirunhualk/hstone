@@ -89,6 +89,11 @@ import {
   resolveAiResidualMacroChoice,
 } from "./ai-residual-policy.ts";
 import { recruitGoldCapacity } from "./gold.ts";
+import {
+  aiCompositionMarginalValue,
+  aiCompositionOnPlayValue,
+  aiCompositionValue,
+} from "./ai-composition.ts";
 import type {
   AvengeEffect,
   ApplyBloodGemsToTribeEffect,
@@ -18061,12 +18066,24 @@ function estimatedCombatSummonsOfTribe(
   return Math.min(MAX_BOARD_SIZE - 1, summons);
 }
 
-function minionScore(
+function baseMinionScore(
   player: PlayerState,
   minion: BoardMinionInstance,
   purpose: AiMinionScorePurpose = "card",
+  asNewPlay = false,
 ): number {
   const profile = getAiStrategyProfile(player.id);
+  const candidateAlreadyOwned = !asNewPlay && player.board.some(
+    (owned) => owned.instanceId === minion.instanceId,
+  );
+  const ownedIndex = player.board.findIndex((owned) => owned.instanceId === minion.instanceId);
+  const battlecryAvailable = !candidateAlreadyOwned || player.board.some((source, index) =>
+    Math.abs(index - ownedIndex) === 1 && minionDeathrattleSources(source).some((component) =>
+      getMinionDefinition(component.definitionId).deathrattle?.some((effect) =>
+        effect.kind === "triggerAdjacentBattlecries",
+      ),
+    ),
+  );
   let score = (minion.attack + minion.health) * profile.statWeight;
   if (minion.divineShield) {
     score += Math.max(3, minion.attack * 0.65);
@@ -18098,7 +18115,7 @@ function minionScore(
     score += profile.deathrattleBonus * deathrattleScale;
   }
   if (
-    definitions.some(
+    battlecryAvailable && definitions.some(
       (definition) =>
         definition.battlecry || definition.interactiveBattlecry,
     )
@@ -18134,11 +18151,8 @@ function minionScore(
     );
   const candidateBeetleSummons = beetleSummonCount(minion);
   const growth = beetleGrowthPotential(minion);
-  const candidateAlreadyOwned = player.board.some(
-    (owned) => owned.instanceId === minion.instanceId,
-  );
   const expectedGrowth =
-    (candidateAlreadyOwned ? 0 : growth.battlecry * battlecryScale) +
+    (battlecryAvailable ? growth.battlecry * battlecryScale : 0) +
     growth.deathrattle * deathrattleScale +
     growth.selfDamaged * 2;
   const beetleStatValue =
@@ -18156,7 +18170,7 @@ function minionScore(
     const consumeEffect = (definition.battlecry ?? []).find(
       (effect) => effect.kind === "consumeRandomShopMinion",
     );
-    if (consumeEffect) {
+    if (consumeEffect && battlecryAvailable) {
       const edible = player.shop.filter(
         (offer) => offer.instanceId !== minion.instanceId,
       );
@@ -18176,7 +18190,7 @@ function minionScore(
           : 1) *
         0.7;
     }
-    for (const effect of definition.battlecry ?? []) {
+    for (const effect of battlecryAvailable ? definition.battlecry ?? [] : []) {
       if (effect.kind === "buffThenDamageFriendly") {
         const targets = projectedBoard.filter(
           (target) =>
@@ -19112,6 +19126,48 @@ function minionScore(
     score += profile.tripleBonus;
   }
   return score;
+}
+
+function minionScore(
+  player: PlayerState,
+  minion: BoardMinionInstance,
+  purpose: AiMinionScorePurpose = "card",
+): number {
+  return baseMinionScore(player, minion, purpose) +
+    (purpose === "card" ? aiCompositionMarginalValue(player, minion) : 0);
+}
+
+/** Compare the actual seven-unit formation, including the lost engine. */
+function aiReplacementPlan(
+  player: PlayerState,
+  candidate: BoardMinionInstance,
+): { boardIndex: number; gain: number } | null {
+  if (player.board.length !== MAX_BOARD_SIZE) {
+    return null;
+  }
+  const compositionBefore = aiCompositionValue(player);
+  let best: { boardIndex: number; gain: number } | null = null;
+  for (let boardIndex = 0; boardIndex < player.board.length; boardIndex += 1) {
+    const source = player.board[boardIndex];
+    const projected: PlayerState = {
+      ...player,
+      board: player.board.filter((_, index) => index !== boardIndex),
+      hand: player.hand.filter((card) => card.instanceId !== candidate.instanceId),
+      shop: player.shop.filter((offer) => offer.instanceId !== candidate.instanceId),
+    };
+    const settled: PlayerState = { ...projected, board: [...projected.board, candidate] };
+    const gain = baseMinionScore(settled, candidate, "card", true) -
+      baseMinionScore(player, source) +
+      aiCompositionValue(settled) +
+      aiCompositionOnPlayValue(projected, candidate, settled.board) -
+      compositionBefore;
+    if (best === null || gain > best.gain) {
+      best = { boardIndex, gain };
+    }
+  }
+  return best !== null && best.gain >= getAiStrategyProfile(player.id).replacementMargin
+    ? best
+    : null;
 }
 
 export function scoreMinionForAi(
@@ -21268,10 +21324,20 @@ function playBestAiBloodGem(
         : usefulRoogugs.length > 0
           ? usefulRoogugs
           : player.board;
-  const target = bestMinionByScore(
-    player,
-    candidates,
+  const compositionBefore = aiCompositionValue(player);
+  const keywordProperty = gem.bonusKeyword === "tauntForQuilboar" ? "taunt" :
+    gem.bonusKeyword === "rebornForQuilboar" ? "reborn" : "divineShield";
+  const growthTargets = keywordTargets.map((target) => ({
+    target,
+    gain: aiCompositionValue(player, player.board.map((minion) =>
+      minion.instanceId === target.instanceId
+        ? { ...minion, [keywordProperty]: true }
+        : minion,
+    )) - compositionBefore,
+  })).filter((option) => option.gain > 0).sort((left, right) =>
+    right.gain - left.gain || left.target.instanceId.localeCompare(right.target.instanceId),
   );
+  const target = growthTargets[0]?.target ?? bestMinionByScore(player, candidates);
   return castBloodGem(
     state,
     player,
@@ -21856,18 +21922,14 @@ function chooseAiHandMinionAction(
         target: bestMinionByScore(player, magnetic.targets),
       };
     }
-    const profile = getAiStrategyProfile(player.id);
-    const strongestHandMinion = bestMinionByScore(player, minions);
-    const weakestIndex = weakestBoardIndex(player);
-    const handScore = minionScore(player, strongestHandMinion);
-    const weakestScore = minionScore(player, player.board[weakestIndex]);
-    return handScore >= weakestScore + profile.replacementMargin
-      ? {
-          kind: "replace",
-          source: strongestHandMinion,
-          boardIndex: weakestIndex,
-        }
-      : null;
+    let best: { source: BoardMinionInstance; boardIndex: number; gain: number } | null = null;
+    for (const source of minions) {
+      const plan = aiReplacementPlan(player, source);
+      if (plan && (best === null || plan.gain > best.gain)) {
+        best = { source, ...plan };
+      }
+    }
+    return best ? { kind: "replace", source: best.source, boardIndex: best.boardIndex } : null;
   }
   let bestIndex = 0;
   let bestScore = Number.NEGATIVE_INFINITY;
@@ -22297,11 +22359,20 @@ function weakestBoardIndex(player: PlayerState): number {
   return weakestIndex;
 }
 
+function aiShopMinionScore(player: PlayerState, offer: BoardMinionInstance): number {
+  const ordinaryReplacement = player.board.length === MAX_BOARD_SIZE &&
+    tripleProgressForCandidate(player, offer) < 2 &&
+    !player.board.some((target) => canMagnetize(offer, target));
+  return ordinaryReplacement
+    ? aiReplacementPlan(player, offer)?.gain ?? Number.NEGATIVE_INFINITY
+    : minionScore(player, offer);
+}
+
 function bestShopIndex(player: PlayerState): number {
   let bestIndex = -1;
   let bestScore = Number.NEGATIVE_INFINITY;
   for (let index = 0; index < player.shop.length; index += 1) {
-    const score = minionScore(player, player.shop[index]);
+    const score = aiShopMinionScore(player, player.shop[index]);
     if (score > bestScore) {
       bestScore = score;
       bestIndex = index;
@@ -22324,7 +22395,7 @@ function bestPurchasableShopIndex(
     if (!canAiPurchaseMinion(state, player, index)) {
       continue;
     }
-    const score = minionScore(player, player.shop[index]);
+    const score = aiShopMinionScore(player, player.shop[index]);
     if (score > bestScore) {
       bestScore = score;
       bestIndex = index;
@@ -23897,13 +23968,9 @@ function runAiRecruit(state: GameState, player: PlayerState): void {
           playAiHand(state, player);
           continue;
         }
-        const weakestIndex = weakestBoardIndex(player);
         const certifiedOffer = player.shop[shopIndex];
-        const candidateScore = minionScore(player, certifiedOffer);
-        const weakestScore = minionScore(player, player.board[weakestIndex]);
         if (
-          candidateScore >=
-            weakestScore + profile.replacementMargin &&
+          aiReplacementPlan(player, certifiedOffer) !== null &&
           buyMinion(state, player, shopIndex)
         ) {
           // Secure the offer that passed the margin before selling anything.
@@ -24078,8 +24145,14 @@ function runAiRecruit(state: GameState, player: PlayerState): void {
     },
   )[0];
   const freezePairCount = profile.id === "triple" ? 1 : 2;
+  const canUseRemainingMinion = bestRemaining !== undefined &&
+    (player.board.length < MAX_BOARD_SIZE ||
+      tripleProgressForCandidate(player, bestRemaining) >= 2 ||
+      player.board.some((target) => canMagnetize(bestRemaining, target)) ||
+      aiReplacementPlan(player, bestRemaining) !== null);
   const freezeMinion =
     bestRemaining !== undefined &&
+    canUseRemainingMinion &&
     (!canAiPurchaseMinion(state, player, bestRemainingIndex) ||
       player.hand.length >= MAX_HAND_SIZE) &&
     (tripleProgressForCandidate(player, bestRemaining) >=
