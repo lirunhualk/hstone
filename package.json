@@ -17,7 +17,7 @@
     "data:trinkets:generate": "node scripts/generate-battlegrounds-trinkets.mjs",
     "data:trinkets:check": "node --test tests/battlegrounds-trinkets-data.test.mjs",
     "pretest": "npm run test:timewarp && npm run test:ai-jev && npm run test:trinket-audit && npm run test:damage-cap && npm run test:hero-choice-presentation && npm run test:hero-power-presentation && npm run test:discover-choice-presentation && npm run test:trinket-choice-presentation && npm run test:triple-forge-presentation && npm run test:spell-cast-presentation",
-    "test:timewarp": "node --experimental-strip-types --test tests/timewarp-recruit.test.ts tests/timewarp-combat.test.ts tests/timewarp-support.test.ts",
+    "test:timewarp": "node --experimental-strip-types --test tests/timewarp-recruit.test.ts tests/timewarp-combat.test.ts tests/timewarp-support.test.ts tests/timewarp-remaining-recruit.test.ts tests/timewarp-recruit-boundaries.test.ts tests/timewarp-remaining-combat.test.ts tests/timewarp-event-boundaries.test.ts tests/timewarp-save-compat.test.ts tests/tavern-special-save.test.ts",
     "test:ai-jev": "node --experimental-strip-types --test tests/ai-jev-client.test.ts tests/ai-jev-environment.test.ts tests/ai-jev-policy.test.ts tests/ai-jev-benchmark.test.ts tests/ai-jev-access.test.ts tests/ai-jev-network.test.mjs tests/ai-jev-journal.test.ts tests/ai-jev-report.test.ts tests/ai-jev-health.test.ts",
     "test:ai-midgame": "node --experimental-strip-types --test tests/ai-midgame-composition.test.ts",
     "report:ai-jev": "node --experimental-strip-types scripts/report-ai-jev.ts",

@@ -10,7 +10,7 @@ import {
   isBountyTavernSpellDefinitionId,
 } from "./content.ts";
 import { getBuddyDefinitionIdForHeroPower } from "./buddies.ts";
-import { TIMEWARP_STAT_GRANTING_TAVERN_SPELL_EFFECTS } from "./timewarp.ts";
+import { refreshTimewarpDescription, TIMEWARP_STAT_GRANTING_TAVERN_SPELL_EFFECTS } from "./timewarp.ts";
 import {
   RIME_OR_REASON_STAT_GRANTING_CARD_IDS,
   TAVERN_SPELL_DEFINITIONS,
@@ -140,6 +140,7 @@ import type {
   ImproveUndeadArmyEffect,
   IncreaseMaxGoldAfterTribeCardsAddedTrigger,
   MagneticAttachment,
+  MinionDefinition,
   MinionTier,
   MinionEffect,
   MinionInstance,
@@ -739,6 +740,7 @@ interface MinionEffectSource {
   definitionId: string;
   golden: boolean;
   learnedDeathrattle?: true;
+  count?: number;
 }
 
 function cloneState(state: GameState): GameState {
@@ -990,13 +992,14 @@ function minionDeathrattleSources(
   const sources = minionEffectSources(minion).filter((source) =>
     definitionHasDeathrattle(source.definitionId),
   );
-  if (minion.definitionId === FISH_DEFINITION_ID) {
+  {
     for (const learned of minion.learnedDeathrattles ?? []) {
       sources.push({
         sourceInstanceId: learned.sourceInstanceId,
         definitionId: learned.definitionId,
         golden: learned.golden,
         learnedDeathrattle: true,
+        count: learned.count ?? 1,
       });
     }
   }
@@ -1009,7 +1012,7 @@ function deathrattleSourceRepetitions(
   repetitions: number,
 ): number {
   return (
-    repetitions *
+    repetitions * (source.count ?? 1) *
     (minion.definitionId === FISH_DEFINITION_ID &&
     minion.golden &&
     source.learnedDeathrattle
@@ -1038,6 +1041,7 @@ function addLearnedDeathrattles(
       sourceInstanceId: learned.sourceInstanceId,
       definitionId: learned.definitionId,
       golden: learned.golden,
+      ...(learned.count !== undefined ? { count: learned.count } : {}),
     });
     changed = true;
   }
@@ -4906,6 +4910,7 @@ function refreshDynamicMinionDescription(
   const printedDescription = minion.golden
     ? goldenMinionDescription(minion.definitionId)
     : definition.description;
+  if (refreshTimewarpDescription(minion, undefined, printedDescription)) return;
   if (definition.afterCardAddedToHand?.kind === "increaseMaxGold") {
     const remaining =
       definition.afterCardAddedToHand.count -
@@ -5885,10 +5890,11 @@ function addRandomSpellcraftSpells(
   state: GameState,
   player: PlayerState,
   count: number,
+  maximumTier: number = player.tavernTier,
 ): number {
   const eligible = SPELLCRAFT_DEFINITIONS.filter(
     (definition) =>
-      definition.sourceTier <= player.tavernTier &&
+      definition.sourceTier <= maximumTier &&
       (!("randomlyGeneratable" in definition) ||
         definition.randomlyGeneratable !== false),
   );
@@ -6209,6 +6215,15 @@ function applyRecruitBloodGemPulse(
   }
   if (options.triggerObservers !== false) {
     triggerRecruitBloodGemObservers(state, player, target, trace);
+    for (const component of timewarpSources(target, "bloodGemBarrage")) {
+      for (let count = 0; count < (component.golden ? 2 : 1); count += 1) {
+        const definition = TAVERN_SPELL_DEFINITIONS.find((spell) => spell.effect === "bloodGemBarrage");
+        if (definition) {
+          applyTavernSpellEffect(state, player, createTavernSpell(state, definition), definition, undefined);
+          recordRecruitTavernSpellCast(state, player, definition.id);
+        }
+      }
+    }
   }
 }
 
@@ -6823,6 +6838,10 @@ function applyOwnedUndeadArmyBonus(
   player: PlayerState,
   minion: BoardMinionInstance,
 ): void {
+  if (minionHasTribe(minion, "beast")) {
+    minion.attack += player.beastArmyAttackBonus ?? 0;
+    minion.health += player.beastArmyHealthBonus ?? 0;
+  }
   if (!minionHasTribe(minion, "undead")) {
     return;
   }
@@ -7761,6 +7780,7 @@ function finishCardPlayed(
   }
   player.pendingCardPlayed = null;
   player.cardsPlayedThisTurn += 1;
+  observeTimewarpRecruitCardPlayed(state, player, event);
   applyAfterMinionPlayedTrinkets(state, player, event);
 
   if (
@@ -8330,6 +8350,7 @@ function applyAfterTavernRefreshEffects(
     }
   }
   applyAfterTavernRefreshedTrinkets(player);
+  observeTimewarpTavernRefresh(state, player);
 }
 
 function addDarkmoonExtraTavernMinion(
@@ -8991,6 +9012,8 @@ function tavernSpellPurchaseCost(
         0,
         spell.cost -
           (player.nextTavernSpellDiscount ?? 0) -
+          player.board.reduce((total, source) => total + timewarpSources(source, "discountSpells").reduce((amount, component) =>
+            amount + (effectCounter(source, "timewarpDiscountUses", 0) < (component.golden ? 4 : 2) ? 2 : 0), 0), 0) -
           statSpellDiscount -
           reservePricesDiscount,
       )
@@ -9453,8 +9476,8 @@ function recruitElementalStatGrantBonus(
     return { attack: 0, health: 0 };
   }
   return {
-    attack: player.elementalGrantAttackBonus,
-    health: player.elementalGrantHealthBonus,
+    attack: player.elementalGrantAttackBonus + timewarpElementalGrantAura(player.board).attack,
+    health: player.elementalGrantHealthBonus + timewarpElementalGrantAura(player.board).health,
   };
 }
 
@@ -9582,6 +9605,7 @@ function applyRecruitBuffThenDamageFriendly(
       if (target.divineShield) {
         target.divineShield = false;
         target.temporaryDivineShield = false;
+        observeTimewarpRecruitWarband(player, "shieldLossWarband");
         continue;
       }
       const observers = player.board.flatMap((watcher) =>
@@ -9678,7 +9702,11 @@ function applyRecruitEffects(
     context,
   );
   for (const effect of effects) {
-    if (effect.kind === "buff") {
+    if (effect.kind === "timewarpDeathrattle") {
+      resolveTimewarpRecruitDeathrattle(state, player, source, effect.action, scale, context.deathBoardIndex ?? player.board.length);
+    } else if (effect.kind === "gainRandomSpellcraft") {
+      addRandomSpellcraftSpells(state, player, effect.count * scale, 7);
+    } else if (effect.kind === "buff") {
       const repetitions = effect.goldenMode === "repeat" ? scale : 1;
       const statScale = effect.goldenMode === "repeat" ? 1 : scale;
       for (let repetition = 0; repetition < repetitions; repetition += 1) {
@@ -10320,6 +10348,7 @@ function applyRecruitSummonTriggers(
   player: PlayerState,
   summoned: MinionInstance,
 ): void {
+  observeTimewarpRecruitSummon(state, player, summoned);
   if (summoned.kind === "minion") {
     reconcileWhereverMinion(
       summoned,
@@ -10548,12 +10577,234 @@ function applyOnePerTribeBuff(
   );
 }
 
+function timewarpSources(minion: MinionInstance, mechanic: NonNullable<MinionDefinition["timewarp"]>): MinionEffectSource[] {
+  return minionEffectSources(minion).filter((component) =>
+    getMinionDefinition(component.definitionId).timewarp === mechanic);
+}
+
+/** Encode a turn and its usage together so combat copies cannot reset a limit. */
+function timewarpTurnUses(source: MinionInstance, key: string, round: number): number {
+  const encoded = effectCounter(source, key, 0);
+  return Math.floor(encoded / 100) === round ? encoded % 100 : 0;
+}
+
+function spendTimewarpTurnTrigger(source: MinionInstance, key: string, round: number, limit: number): boolean {
+  const used = timewarpTurnUses(source, key, round);
+  if (used >= limit) return false;
+  setEffectCounter(source, key, round * 100 + used + 1);
+  refreshTimewarpDescription(source, round);
+  return true;
+}
+
+function relayTimewarpHandStats(player: PlayerState, source: MinionInstance, attack: number, health: number): void {
+  if (attack <= 0 && health <= 0) return;
+  for (const component of timewarpSources(source, "handStatRelay")) {
+    const scale = component.golden ? 2 : 1;
+    const targets = player.hand.filter((card): card is BoardMinionInstance => card.kind === "minion").slice(0, 2);
+    buffMinions(targets, Math.max(0, attack) * scale, Math.max(0, health) * scale);
+  }
+}
+
+function timewarpElementalGrantAura(board: readonly MinionInstance[]): CombatStatBuff {
+  const amount = board.filter((source) => source.health > 0).reduce((sum, source) =>
+    sum + timewarpSources(source, "elementalGrantAura").reduce((n, component) => n + (component.golden ? 6 : 3), 0), 0);
+  return { attack: amount, health: amount };
+}
+
+function timewarpMechPlayedOrMagnetized(state: GameState, player: PlayerState): void {
+  for (const watcher of [...player.board]) {
+    for (const component of timewarpSources(watcher, "mechPlayedOrMagnetized")) {
+      const amount = component.golden ? 6 : 3;
+      buffMinions(player.board.filter((target) => minionHasTribe(target, "mech")), amount, amount, player.board, player);
+    }
+  }
+}
+
+function observeTimewarpRecruitWarband(player: PlayerState, mechanic: "rebornWarband" | "shieldLossWarband" | "deathrattleWarband"): void {
+  for (const watcher of [...player.board]) for (const component of timewarpSources(watcher, mechanic)) {
+    const scale = component.golden ? 2 : 1;
+    buffMinions(player.board, (mechanic === "rebornWarband" ? 2 : 3) * scale,
+      (mechanic === "shieldLossWarband" ? 3 : 2) * scale, player.board, player);
+  }
+}
+
+function resolveTimewarpRecruitDeathrattle(state: GameState, player: PlayerState, source: MinionInstance,
+  action: Extract<MinionEffect, { kind: "timewarpDeathrattle" }>["action"], scale: number, insertAt: number): void {
+  if (action === "leapfrog") {
+    const candidates = player.board.filter((m) => m.instanceId !== source.instanceId && minionHasTribe(m, "beast"));
+    if (!candidates.length) return;
+    const target = candidates[randomIndex(state, candidates.length)];
+    stackTimewarpDeathrattles(target, [{ sourceInstanceId: source.instanceId, definitionId: "BG34_Giant_031", golden: scale > 1 }]);
+    buffMinions([target], scale, scale, player.board, player);
+  } else if (action === "permanentBeasts") {
+    const amount = 4 * scale;
+    player.beastArmyAttackBonus = (player.beastArmyAttackBonus ?? 0) + amount;
+    player.beastArmyHealthBonus = (player.beastArmyHealthBonus ?? 0) + amount;
+    buffMinions(ownedMinionCards(player).filter((m) => minionHasTribe(m, "beast")), amount, amount, player.board, player);
+  } else if (action === "overflowSkeletons") {
+    for (let count = 0; count < 5 * scale; count += 1) {
+      if (rejectRecruitSummonForFullBoard(player)) {
+        applyRecruitEffects(state, player, source, [{ kind: "improveUndeadArmy", attack: 1, health: 0 }], 1);
+        continue;
+      }
+      const skeleton = createMinionInstance(state, "live-skeleton-token", 0);
+      applyOwnedUndeadArmyBonus(player, skeleton);
+      player.board.splice(Math.min(insertAt + count, player.board.length), 0, skeleton);
+      applyRecruitSummonTriggers(state, player, skeleton);
+    }
+  } else {
+    for (let count = 0; count < scale; count += 1) {
+      let card: BoardMinionInstance;
+      if (action === "opponentCopy") {
+        const opponents = state.players.filter((p) => p.alive && p.id !== player.id && p.board.length > 0);
+        if (!opponents.length) continue;
+        const opponent = opponents[randomIndex(state, opponents.length)];
+        card = cloneMinionAsGeneratedCopy(state, opponent.board[randomIndex(state, opponent.board.length)]);
+        applyOwnedUndeadArmyBonus(player, card);
+      } else {
+        const utility = createPutricideComponentOptions(state, player, "utility");
+        const combat = createPutricideComponentOptions(state, player, "combat");
+        if (!utility.length || !combat.length) continue;
+        card = createPutricideCustomUndead(state, player, utility[randomIndex(state, utility.length)].definitionId, combat[randomIndex(state, combat.length)].definitionId);
+      }
+      addCardToHand(state, player, cloneMinionAsGeneratedCopy(state, card));
+      if (!rejectRecruitSummonForFullBoard(player)) {
+        const summoned = cloneMinionAsGeneratedCopy(state, card);
+        player.board.splice(Math.min(insertAt + count, player.board.length), 0, summoned);
+        applyRecruitSummonTriggers(state, player, summoned);
+      }
+      resolveTriples(state, player);
+    }
+  }
+}
+
+function observeTimewarpRecruitSummon(state: GameState, player: PlayerState, summoned: MinionInstance): void {
+  for (const watcher of [...player.board]) {
+    for (const component of minionEffectSources(watcher)) {
+      const mechanic = getMinionDefinition(component.definitionId).timewarp;
+      const scale = component.golden ? 2 : 1;
+      if (mechanic === "rebornSummons" && watcher.instanceId !== summoned.instanceId && spendTimewarpTurnTrigger(watcher, "timewarpSummons", state.round, scale)) {
+        summoned.reborn = true;
+      }
+      if (mechanic === "growingBeastSummon" && watcher.instanceId !== summoned.instanceId && minionHasTribe(summoned, "beast")) {
+        const upgrades = effectCounter(watcher, "timewarpGrowth", 0);
+        buffMinions([summoned as BoardMinionInstance], 4 * (1 + upgrades) * scale, 3 * (1 + upgrades) * scale, player.board, player);
+      }
+    }
+  }
+}
+
+function observeTimewarpRecruitCardPlayed(state: GameState, player: PlayerState, event: NonNullable<PlayerState["pendingCardPlayed"]>): void {
+  const tribes = event.tribes ?? [];
+  if (event.cardKind === "minion" && (tribes.includes("mech") || tribes.includes("all"))) {
+    timewarpMechPlayedOrMagnetized(state, player);
+  }
+  for (const source of [...player.board]) {
+    for (const component of minionEffectSources(source)) {
+      const mechanic = getMinionDefinition(component.definitionId).timewarp;
+      if (mechanic === "growingPainter" && event.tier !== undefined && event.tier <= 3) {
+        setEffectCounter(source, "timewarpGrowth", effectCounter(source, "timewarpGrowth", 0) + 1);
+        refreshDynamicMinionDescription(source, player);
+      }
+      if (mechanic === "playedTribeTavern" && event.cardKind === "minion" && tribes.length > 0) {
+        // A dual-type minion contributes one union of types, not overlapping buffs.
+        const matched = [...new Set(tribes.includes("all") ? LOBBY_TRIBES : tribes)].filter((tribe) => tribe !== "neutral");
+        for (let pulse = 0; pulse < (component.golden ? 2 : 1); pulse += 1) {
+          player.tavernTypeBuffs.push({ tribes: matched, attack: 4, health: 4 });
+          buffMinions(player.shop.filter((target) => matched.some((tribe) => minionHasTribe(target, tribe))), 4, 4, player.shop);
+        }
+      }
+    }
+  }
+}
+
+function observeTimewarpTavernRefresh(state: GameState, player: PlayerState): void {
+  for (const source of [...player.board]) {
+    for (const component of minionEffectSources(source)) {
+      const mechanic = getMinionDefinition(component.definitionId).timewarp;
+      if (mechanic === "extraDemons") {
+        const amount = 7 * (1 + effectCounter(source, "timewarpGrowth", 0)) * (component.golden ? 2 : 1);
+        for (let count = 0; count < 2; count += 1) {
+          const demon = drawMatchingFromPool(state, player.tavernTier, (definition) => definitionHasTribe(definition, "demon"));
+          if (!demon) break;
+          prepareTavernMinionForShop(state, player, demon);
+          buffMinions([demon], amount, amount);
+          player.shop.push(demon);
+        }
+      }
+      if (mechanic === "refreshGolden") {
+        const progress = effectCounter(source, "timewarpRefreshes", 0) + 1;
+        setEffectCounter(source, "timewarpRefreshes", progress % 5);
+        if (progress >= 5) {
+          const candidates = player.shop.filter((minion) => !minion.golden).sort((a, b) => b.tier - a.tier);
+          for (const target of candidates.slice(0, component.golden ? 2 : 1)) {
+            makeMinionGoldenPreservingEnchantments(target);
+          }
+        }
+        refreshDynamicMinionDescription(source, player);
+      }
+    }
+  }
+}
+
+function applyTimewarpEndOfTurn(state: GameState, player: PlayerState, source: BoardMinionInstance, component: MinionEffectSource, triggerCount: number): void {
+  const mechanic = getMinionDefinition(component.definitionId).timewarp;
+  if (mechanic === "growingCombatBuff" || mechanic === "extraDemons") {
+    setEffectCounter(source, "timewarpGrowth", effectCounter(source, "timewarpGrowth", 0) + triggerCount);
+    refreshDynamicMinionDescription(source, player);
+  }
+  if (mechanic === "growingPainter") {
+    const amount = effectCounter(source, "timewarpGrowth", 0);
+    for (let count = 0; count < triggerCount; count += 1) {
+      applyRecruitEffects(state, player, source, [{ kind: "buff", target: "adjacentFriendly", attack: 3 * (1 + amount), health: 2 * (1 + amount) }], component.golden ? 2 : 1);
+    }
+  }
+}
+
+function observeTimewarpRecruitTavernSpell(state: GameState, player: PlayerState, definitionId: string): void {
+  for (const source of [...player.board]) {
+    for (const component of minionEffectSources(source)) {
+      const mechanic = getMinionDefinition(component.definitionId).timewarp;
+      if (mechanic === "copyTavernSpell" && spendTimewarpTurnTrigger(source, "timewarpSpellCopies", state.round, 3)) {
+        for (let count = 0; count < (component.golden ? 2 : 1); count += 1) {
+          addCardToHand(state, player, createTavernSpell(state, getTavernSpellDefinition(definitionId)));
+        }
+      }
+      if (mechanic === "spellSatellites") {
+        const progress = effectCounter(source, "timewarpTavernSpells", 0) + 1;
+        setEffectCounter(source, "timewarpTavernSpells", progress % 2);
+        if (progress >= 2) {
+          for (let pulse = 0; pulse < (component.golden ? 2 : 1); pulse += 1) {
+            for (const target of [...player.board].filter((minion) => minionHasTribe(minion, "mech"))) {
+              const satellite = createMinionInstance(state, "timewarp-magnetic-satellite-token", 0);
+              satellite.attack = 4;
+              satellite.health = 4;
+              fuseMinionIntoHost(state, player, satellite, target);
+              applyAfterMagnetizedEffects(state, player);
+            }
+          }
+        }
+        refreshDynamicMinionDescription(source, player);
+      }
+    }
+  }
+}
+
 function applyStartOfTurnEffects(
   state: GameState,
   player: PlayerState,
 ): void {
   for (const source of [...player.board]) {
+    if (timewarpSources(source, "discountSpells").length > 0) {
+      setEffectCounter(source, "timewarpDiscountUses", 0);
+    }
     for (const component of minionEffectSources(source)) {
+      if (getMinionDefinition(component.definitionId).timewarp === "currentBuddy") {
+        const buddy = getBuddyDefinitionIdForHeroPower(player.heroPowerId);
+        if (buddy) for (let count = 0; count < (component.golden ? 2 : 1); count += 1) {
+          addGeneratedMinionCopyToHand(state, player, buddy);
+        }
+      }
       addMinionSpellcraft(
         state,
         player,
@@ -10574,9 +10825,13 @@ function applyStartOfTurnEffects(
   }
 }
 
-function observeMinionConsumed(player: PlayerState): void {
+function observeMinionConsumed(player: PlayerState, consumed: BoardMinionInstance): void {
   for (const watcher of [...player.board]) {
     for (const component of minionEffectSources(watcher)) {
+      if (getMinionDefinition(component.definitionId).timewarp === "consumeStats") {
+        const scale = component.golden ? 2 : 1;
+        buffMinions([watcher], consumed.attack * scale, consumed.health * scale, player.board, player);
+      }
       const trigger = getMinionDefinition(
         component.definitionId,
       ).afterMinionConsumed;
@@ -10605,7 +10860,7 @@ function finishConsumedShopMinion(
   consumed: BoardMinionInstance,
 ): void {
   returnMinionToPool(state, consumed);
-  observeMinionConsumed(player);
+  observeMinionConsumed(player, consumed);
   if (playerHasTrinketCardId(player, TAVERN_FAN_CARD_ID)) {
     refillShopMinionSlotIfNeeded(state, player);
   }
@@ -11254,6 +11509,7 @@ function applyEndOfTurnEffects(
   for (const source of [...player.board]) {
     for (const component of minionEffectSources(source)) {
       const definition = getMinionDefinition(component.definitionId);
+      applyTimewarpEndOfTurn(state, player, source, component, triggerCount);
       if (definition.sellDiscover) {
         setEffectCounter(
           source,
@@ -11325,7 +11581,9 @@ function applyEndOfTurnEffects(
 function applyAfterMagnetizedEffects(
   state: GameState,
   player: PlayerState,
+  fromHandMagnetize = false,
 ): void {
+  if (!fromHandMagnetize) timewarpMechPlayedOrMagnetized(state, player);
   for (const watcher of [...player.board]) {
     for (const component of minionEffectSources(watcher)) {
       const effects =
@@ -12360,6 +12618,12 @@ function buyMinion(
   }
   applyOwnedUndeadArmyBonus(player, minion);
   applyOwnedBeetleBonus(player, minion);
+  if (minionHasTribe(minion, "elemental")) {
+    for (const watcher of [...player.board]) for (const component of timewarpSources(watcher, "purchaseElementalStats")) {
+      const scale = component.golden ? 2 : 1;
+      buffMinions([watcher], minion.attack * scale, minion.health * scale, player.board, player);
+    }
+  }
   reconcileWhereverMinion(
     minion,
     player.astralAutomatonsSummoned ?? 0,
@@ -12476,6 +12740,9 @@ function buyTavernSpell(
     spendGold(state, player, cost);
   }
   if (tavernSpellPurchaseCurrency(spell) === "gold") {
+    for (const source of player.board) if (timewarpSources(source, "discountSpells").length > 0) {
+      setEffectCounter(source, "timewarpDiscountUses", effectCounter(source, "timewarpDiscountUses", 0) + 1);
+    }
     player.nextTavernSpellDiscount = 0;
   }
   if (usesFreeTavernSpellPurchase) {
@@ -13597,6 +13864,7 @@ function destroyRecruitMinion(
           effectSourceDefinitionId: component.definitionId,
         },
       );
+      observeTimewarpRecruitWarband(player, "deathrattleWarband");
     }
   }
   const crabDeathrattlePulses =
@@ -13605,6 +13873,7 @@ function destroyRecruitMinion(
   for (let count = 0; count < crabDeathrattlePulses; count += 1) {
     observeRecruitDeathrattleTriggered(player);
     if (rejectRecruitSummonForFullBoard(player)) {
+      observeTimewarpRecruitWarband(player, "deathrattleWarband");
       continue;
     }
     const crab = createMinionInstance(state, "live-crab-token", 0);
@@ -13614,6 +13883,7 @@ function destroyRecruitMinion(
       crab,
     );
     applyRecruitSummonTriggers(state, player, crab);
+    observeTimewarpRecruitWarband(player, "deathrattleWarband");
   }
   const goldenCrabDeathrattlePulses =
     ((source.goldenCrabDeathrattles ?? 0) +
@@ -13625,6 +13895,7 @@ function destroyRecruitMinion(
   ) {
     observeRecruitDeathrattleTriggered(player);
     if (rejectRecruitSummonForFullBoard(player)) {
+      observeTimewarpRecruitWarband(player, "deathrattleWarband");
       continue;
     }
     const crab = createMinionInstance(state, "live-crab-token", 0);
@@ -13640,6 +13911,7 @@ function destroyRecruitMinion(
       crab,
     );
     applyRecruitSummonTriggers(state, player, crab);
+    observeTimewarpRecruitWarband(player, "deathrattleWarband");
   }
   if (source.reborn && !rejectRecruitSummonForFullBoard(player)) {
     const reborn = createMinionInstance(
@@ -13660,6 +13932,7 @@ function destroyRecruitMinion(
       reborn,
     );
     applyRecruitSummonTriggers(state, player, reborn);
+    observeTimewarpRecruitWarband(player, "rebornWarband");
   }
   return source;
 }
@@ -13805,7 +14078,7 @@ function magnetizeMinion(
   applyCopperCoilBeforeMagnetize(player, source);
   fuseMinionIntoHost(state, player, source, target);
 
-  applyAfterMagnetizedEffects(state, player);
+  applyAfterMagnetizedEffects(state, player, true);
   finishCardPlayed(state, player);
   return true;
 }
@@ -14112,6 +14385,14 @@ function observeRecruitFriendlyAttackGain(
   target: MinionInstance,
   attackGain: number,
 ): void {
+  if (player && attackGain > 0 && player.board.some((candidate) => candidate.instanceId === target.instanceId)) {
+    relayTimewarpHandStats(player, target, attackGain, 0);
+    for (const watcher of [...player.board]) for (const component of timewarpSources(watcher, "attackGainHealth")) {
+      const health = component.golden ? 6 : 3;
+      target.health += health;
+      observeRecruitFriendlyHealthGain(player, target, health);
+    }
+  }
   if (
     !player ||
     attackGain <= 0 ||
@@ -14195,6 +14476,9 @@ function observeRecruitFriendlyHealthGain(
   target: MinionInstance,
   healthGain: number,
 ): void {
+  if (player && healthGain > 0 && player.board.some((candidate) => candidate.instanceId === target.instanceId)) {
+    relayTimewarpHandStats(player, target, 0, healthGain);
+  }
   if (
     !player ||
     healthGain <= 0 ||
@@ -14362,6 +14646,10 @@ function triggerRecruitAfterSpellCast(
   for (const source of [...player.board]) {
     for (const component of minionEffectSources(source)) {
       const definition = getMinionDefinition(component.definitionId);
+      if (definition.timewarp === "growingBeastSummon") {
+        setEffectCounter(source, "timewarpGrowth", effectCounter(source, "timewarpGrowth", 0) + 1);
+        refreshDynamicMinionDescription(source, player);
+      }
       const effect = definition.afterSpellCast;
       if (effect) {
         const scale = component.golden ? 2 : 1;
@@ -14700,6 +14988,12 @@ function applySpellcraftCastPulse(
 ): void {
   const effectMultiplier = card.effectMultiplier ?? 1;
   switch (definition.effect) {
+    case "timewarpedShoal":
+      if (target) {
+        const amount = 2 * effectMultiplier * player.board.filter((minion) => minionHasTribe(minion, "naga")).length;
+        applySpellcraftStats(target, amount, amount, permanent, player);
+      }
+      break;
     case "sirensSong":
       if (target) {
         for (
@@ -15354,6 +15648,19 @@ function castSpellcraft(
       card,
     );
   }
+  if (target && card.spellFamily === "spellcraft") {
+    for (const source of [...player.board]) for (const component of timewarpSources(source, "spellcraftLurker")) {
+      if (!spendTimewarpTurnTrigger(source, "timewarpPermanentCopies", state.round, 2)) continue;
+      for (let copy = 0; copy < (component.golden ? 2 : 1); copy += 1) {
+        if (!player.board.some((m) => m.instanceId === source.instanceId) ||
+            !spellcraftLegalTargets(player, definition).some((m) => m.instanceId === source.instanceId)) break;
+        applySpellcraftCastPulse(state, player, card, definition, source, true);
+        triggerRecruitTargetedSpellCast(player, source);
+        triggerRecruitAfterSpellCast(state, player, false);
+        triggerAfterRecruitSpellcraftCast(state, player);
+      }
+    }
+  }
   if (state.pendingInteraction === null) {
     finishCardPlayed(state, player);
   }
@@ -15627,6 +15934,7 @@ function recordRecruitTavernSpellCast(
   player.lastTavernSpellDefinitionId = definitionId;
   player.tavernSpellsCastThisTurn += 1;
   player.tavernSpellsCast = (player.tavernSpellsCast ?? 0) + 1;
+  observeTimewarpRecruitTavernSpell(state, player, definitionId);
   reconcileOwnedWhereverMinions(player);
   applyAfterTavernSpellCastTrinkets(player, fromHand);
   triggerRecruitAfterSpellCast(state, player, castByPlayer);
@@ -25301,6 +25609,17 @@ function deferCombatFriendlyAttackGainTriggers(
   target: MinionInstance,
   attackGain: number,
 ): void {
+  if (attackGain > 0) {
+    const observers = context.boards[ownerId].filter((m) => m.health > 0)
+      .flatMap((watcher) => timewarpSources(watcher, "attackGainHealth").map((component) => ({ watcher, component })));
+    if (observers.length) deferBattleEventsAfterCurrent(context.events, () => {
+      for (const { watcher, component } of observers) {
+        if (watcher.health > 0 && target.health > 0 && context.boards[ownerId].includes(watcher))
+          pushTimewarpCombatBuff(context, ownerId, watcher, target, 0, component.golden ? 6 : 3, false);
+      }
+      return [];
+    });
+  }
   const triggers = captureCombatFriendlyAttackGainTriggers(
     context,
     ownerId,
@@ -25332,6 +25651,8 @@ function applyCombatEnchantingGain(
   const health = gain.health ?? 0;
   const attackGainHealth = healthGainedFromExternalAttack(target, attack);
   const totalHealth = health + attackGainHealth;
+  const relayOwner = persistentCombatOwner(context, ownerId);
+  if (relayOwner) relayTimewarpHandStats(relayOwner, target, Math.max(0, attack), Math.max(0, totalHealth));
   const retentionMultiplier = combatRetentionMultiplier(
     context,
     ownerId,
@@ -25624,6 +25945,8 @@ function applyExplicitPermanentCombatStatGain(
     gain.attack,
   );
   const combatHealthGain = gain.health + attackGainHealth;
+  const relayOwner = persistentCombatOwner(context, ownerId);
+  if (relayOwner) relayTimewarpHandStats(relayOwner, target, Math.max(0, gain.attack), Math.max(0, combatHealthGain));
   if (combatHealthGain !== 0) {
     adjustCombatMaximumHealth(
       context,
@@ -25819,6 +26142,7 @@ function improveBeetlesInCombat(
       healthDelta,
     );
     reconcileConditionalMinion(target);
+    observeDirectCombatStatGain(context, ownerId, target, attackDelta, healthDelta);
 
     const persistentTarget = owner?.board.find(
       (candidate) =>
@@ -25859,6 +26183,12 @@ function triggerCombatBloodGemObservers(
 ): void {
   if (target.kind !== "minion" || target.health <= 0) {
     return;
+  }
+  for (const component of timewarpSources(target, "bloodGemBarrage")) {
+    for (let repeat = 0; repeat < (component.golden ? 2 : 1); repeat += 1) {
+      resolveCombatCastTavernSpell(context, ownerId, target, { ...component, golden: false },
+        { kind: "castTavernSpell", definitionId: "tavern-spell-blood-gem-barrage" }, "鲜血宝石响应");
+    }
   }
   for (const component of minionEffectSources(target)) {
     const effect = getMinionDefinition(
@@ -25981,7 +26311,7 @@ function applyCombatBloodGemPulse(
 function applyPermanentCombatBloodGemFromTrinket(
   context: CombatContext,
   ownerId: PlayerId,
-  trinket: TrinketDefinition,
+  trinket: Pick<TrinketDefinition, "id" | "name">,
   target: MinionInstance,
 ): void {
   const owner = findPlayer(context.state, ownerId);
@@ -27438,6 +27768,214 @@ function pushStartOfCombatBuff(
   });
 }
 
+/** Observes a global ledger grant without enqueuing a second stat writeback. */
+function observeDirectCombatStatGain(context: CombatContext, ownerId: PlayerId, target: MinionInstance, attack: number, health: number): void {
+  deferCombatFriendlyAttackGainTriggers(context, ownerId, target, Math.max(0, attack));
+  deferCombatFriendlyHealthGainTriggers(context, ownerId, target, Math.max(0, health));
+  const owner = persistentCombatOwner(context, ownerId);
+  if (owner) relayTimewarpHandStats(owner, target, Math.max(0, attack), Math.max(0, health));
+}
+
+function pushTimewarpCombatBuff(
+  context: CombatContext, ownerId: PlayerId, source: MinionInstance,
+  target: MinionInstance, attack: number, health: number, permanent = true,
+): void {
+  const gain = permanent
+    ? applyExplicitPermanentCombatStatGain(context, ownerId, target, { attack, health })
+    : applyCombatEnchantingGain(context, ownerId, target, { attack, health });
+  const retained = "persisted" in gain ? gain.persisted : gain.retentionMultiplier > 0;
+  pushBattleEvent(context.events, { type: "buff", actorPlayerId: ownerId, actorInstanceId: source.instanceId,
+    targetPlayerId: ownerId, targetInstanceId: target.instanceId, attackDelta: attack,
+    healthDelta: health + gain.attackGainHealth, minion: cloneMinion(target), retained,
+    ...(retained ? { retentionMultiplier: 1 } : {}),
+    message: `${source.name}使${target.name}${permanent ? "永久" : ""}获得+${attack}/+${health}。` });
+}
+
+function observeTimewarpWarband(
+  context: CombatContext, ownerId: PlayerId,
+  mechanic: "rebornWarband" | "shieldLossWarband" | "deathrattleWarband",
+): void {
+  for (const watcher of [...context.boards[ownerId]].filter((m) => m.health > 0)) {
+    for (const component of timewarpSources(watcher, mechanic)) {
+      const scale = component.golden ? 2 : 1;
+      const attack = (mechanic === "rebornWarband" ? 2 : 3) * scale;
+      const health = (mechanic === "shieldLossWarband" ? 3 : 2) * scale;
+      for (const target of [...context.boards[ownerId]].filter((m) => m.health > 0)) {
+        pushTimewarpCombatBuff(context, ownerId, watcher, target, attack, health);
+      }
+    }
+  }
+}
+
+function stackTimewarpDeathrattles(target: MinionInstance, sources: readonly MinionEffectSource[], copies = 1): void {
+  target.learnedDeathrattles ??= [];
+  for (const source of sources) {
+    const count = (source.count ?? 1) * copies;
+    const previous = target.learnedDeathrattles.find((d) => d.sourceInstanceId === source.sourceInstanceId && d.definitionId === source.definitionId && d.golden === source.golden);
+    if (previous) previous.count = (previous.count ?? 1) + count;
+    else target.learnedDeathrattles.push({ sourceInstanceId: source.sourceInstanceId, definitionId: source.definitionId, golden: source.golden, count });
+  }
+}
+
+function spendTimewarpCombatTurnTrigger(context: CombatContext, ownerId: PlayerId, watcher: MinionInstance, key: string, limit: number): boolean {
+  if (!spendTimewarpTurnTrigger(watcher, key, context.state.round, limit)) return false;
+  const owner = persistentCombatOwner(context, ownerId);
+  const original = owner && context.originalCombatMinionIds[ownerId].has(watcher.instanceId)
+    ? findCombatWritebackMinion(context, owner, ownerId, watcher.instanceId) : undefined;
+  if (original) {
+    setEffectCounter(original, key, effectCounter(watcher, key, 0));
+    refreshTimewarpDescription(original, context.state.round);
+  }
+  return true;
+}
+
+function observeTimewarpCombatSummon(context: CombatContext, ownerId: PlayerId, summoned: MinionInstance): FriendlySummonTriggerResult {
+  const growers: Array<{ watcher: MinionInstance; component: MinionEffectSource }> = [];
+  for (const watcher of [...context.boards[ownerId]].filter((m) => m.health > 0 && m.instanceId !== summoned.instanceId)) {
+    for (const component of minionEffectSources(watcher)) {
+      const mechanic = getMinionDefinition(component.definitionId).timewarp;
+      const scale = component.golden ? 2 : 1;
+      if (mechanic === "rebornSummons" && spendTimewarpCombatTurnTrigger(context, ownerId, watcher, "timewarpSummons", scale)) summoned.reborn = true;
+      if (mechanic === "growingBeastSummon" && minionHasTribe(summoned, "beast")) {
+        growers.push({ watcher, component });
+      }
+    }
+  }
+  const before = growers.length ? cloneMinion(summoned) : undefined;
+  const events: Omit<BattleEvent, "index">[] = [];
+  for (const { watcher, component } of growers) {
+    const growth = (1 + effectCounter(watcher, "timewarpGrowth", 0)) * (component.golden ? 2 : 1);
+    const gain = applyCombatEnchantingGain(context, ownerId, summoned, { attack: 4 * growth, health: 3 * growth }, false);
+    events.push({ type: "buff", actorPlayerId: ownerId, actorInstanceId: watcher.instanceId,
+      targetPlayerId: ownerId, targetInstanceId: summoned.instanceId, attackDelta: 4 * growth,
+      healthDelta: 3 * growth + gain.attackGainHealth, minion: cloneMinion(summoned),
+      retained: gain.retentionMultiplier > 0, message: `${watcher.name}使召唤的野兽获得+${4 * growth}/+${3 * growth}。` });
+  }
+  return { events, ...(before ? { summonSnapshotBeforeBuff: before } : {}) };
+}
+
+function resolveTimewarpCombatStart(context: CombatContext, ownerId: PlayerId, source: MinionInstance, component: MinionEffectSource): void {
+  const board = context.boards[ownerId];
+  const mechanic = getMinionDefinition(component.definitionId).timewarp;
+  const scale = component.golden ? 2 : 1;
+  if (mechanic === "copyLeft") {
+    const left = board[board.findIndex((m) => m.instanceId === source.instanceId) - 1];
+    if (!left) return;
+    const copy = cloneMinionAsGeneratedCopy(context.state, cloneMinion(left));
+    if (component.golden && !copy.golden) makeMinionGoldenPreservingEnchantments(copy);
+    const originalId = source.instanceId;
+    Object.assign(source, copy, { instanceId: originalId });
+    context.maximumHealths[ownerId][originalId] = copy.health;
+    pushBattleEvent(context.events, { type: "buff", actorPlayerId: ownerId, actorInstanceId: originalId,
+      targetPlayerId: ownerId, targetInstanceId: originalId, minion: cloneMinion(source), message: `${rallySourceLabel(component)}变形成左侧随从的${component.golden ? "金色" : ""}复制（仅限本场战斗）。` });
+  }
+  if (mechanic === "growingCombatBuff") {
+    const amount = 5 * (1 + effectCounter(source, "timewarpGrowth", 0)) * scale;
+    for (const target of [...board].filter((m) => m.health > 0)) pushTimewarpCombatBuff(context, ownerId, source, target, amount, amount, false);
+  }
+  if (mechanic === "copyLeftDeathrattles") {
+    const abilities: Array<{ component?: MinionEffectSource; goldenCrab?: boolean }> = [];
+    for (const donor of board.filter((m) => m.health > 0 && m.definitionId !== "BG34_Giant_599")) {
+      for (const copied of minionDeathrattleSources(donor)) {
+        const copies = Math.min(2 - abilities.length, copied.count ?? 1);
+        for (let copy = 0; copy < copies; copy += 1) abilities.push({ component: { ...copied, count: 1 } });
+      }
+      for (const [goldenCrab, count] of [[false, (donor.crabDeathrattles ?? 0) + donor.temporaryCrabDeathrattles], [true, (donor.goldenCrabDeathrattles ?? 0) + (donor.temporaryGoldenCrabDeathrattles ?? 0)]] as const) {
+        const copies = Math.min(2 - abilities.length, count);
+        for (let copy = 0; copy < copies; copy += 1) abilities.push({ goldenCrab });
+      }
+      if (abilities.length >= 2) break;
+    }
+    for (const ability of abilities) {
+      if (ability.component) stackTimewarpDeathrattles(source, [ability.component], scale);
+      else if (ability.goldenCrab) source.temporaryGoldenCrabDeathrattles = (source.temporaryGoldenCrabDeathrattles ?? 0) + scale;
+      else source.temporaryCrabDeathrattles += scale;
+    }
+    pushBattleEvent(context.events, { type: "buff", actorPlayerId: ownerId, actorInstanceId: source.instanceId,
+      targetPlayerId: ownerId, targetInstanceId: source.instanceId, minion: cloneMinion(source), message: `${source.name}复制了最左边的两个亡语${component.golden ? "各两次" : ""}。` });
+  }
+  if (mechanic === "triggerAllDeathrattles") {
+    for (let round = 0; round < scale; round += 1) {
+      for (const target of [...board].filter((m) => m.health > 0 && minionHasDeathrattle(m))) {
+        resolveOneDeathrattle(context, { ownerId, minion: target, index: board.findIndex((m) => m.instanceId === target.instanceId) });
+      }
+    }
+  }
+}
+
+function timewarpCombatGainCopy(context: CombatContext, ownerId: PlayerId, source: MinionInstance, card: BoardMinionInstance): void {
+  const owner = persistentCombatOwner(context, ownerId);
+  if (!owner) return;
+  const copy = cloneMinionAsGeneratedCopy(context.state, card);
+  const added = addCardToHand(context.state, owner, copy, { combatContext: context, combatOwnerId: ownerId,
+    combatEvent: { type: "cardGain", actorPlayerId: ownerId, actorInstanceId: source.instanceId,
+      targetPlayerId: ownerId, targetInstanceId: owner.isHuman ? copy.instanceId : undefined,
+      cardKind: "minion", cardName: owner.isHuman ? copy.name : undefined, amount: 1,
+      cardGainResult: "added", message: `${source.name}使${owner.name}获得了一张随从牌。` } });
+  if (!added) pushBattleEvent(context.events, { type: "cardGain", actorPlayerId: ownerId, actorInstanceId: source.instanceId,
+    targetPlayerId: ownerId, amount: 0, cardGainResult: "handFull", message: `${source.name}的随从奖励因手牌已满而无法获取。` });
+  resolveTriples(context.state, owner, context);
+}
+
+function resolveTimewarpDeathrattle(context: CombatContext, death: DeadMinion, component: MinionEffectSource,
+  action: "leapfrog" | "undeadCreation" | "permanentBeasts" | "overflowSkeletons" | "opponentCopy"): void {
+  const { ownerId, minion: source } = death;
+  const board = context.boards[ownerId];
+  const scale = component.golden ? 2 : 1;
+  if (action === "leapfrog") {
+    const candidates = board.filter((m) => m.health > 0 && m.instanceId !== source.instanceId && minionHasTribe(m, "beast"));
+    if (!candidates.length) return;
+    const target = candidates[randomIndex(context.state, candidates.length)];
+    stackTimewarpDeathrattles(target, [{ ...component, count: 1 }]);
+    pushTimewarpCombatBuff(context, ownerId, source, target, scale, scale, false);
+  } else if (action === "permanentBeasts") {
+    const amount = 4 * scale;
+    const previous = context.tribeBuffs[ownerId].beast ?? { attack: 0, health: 0 };
+    context.tribeBuffs[ownerId].beast = { attack: previous.attack + amount, health: previous.health + amount };
+    for (const target of board.filter((m) => m.health > 0 && minionHasTribe(m, "beast"))) {
+      target.attack += amount; target.health += amount; adjustCombatMaximumHealth(context, ownerId, target, amount);
+      observeDirectCombatStatGain(context, ownerId, target, amount, amount);
+      pushBattleEvent(context.events, { type: "buff", actorPlayerId: ownerId, actorInstanceId: source.instanceId,
+        targetPlayerId: ownerId, targetInstanceId: target.instanceId, attackDelta: amount, healthDelta: amount,
+        minion: cloneMinion(target), retained: persistentCombatOwner(context, ownerId) !== null, message: `${source.name}使野兽永久获得+${amount}/+${amount}。` });
+    }
+    const owner = persistentCombatOwner(context, ownerId);
+    if (owner) {
+      owner.beastArmyAttackBonus = (owner.beastArmyAttackBonus ?? 0) + amount;
+      owner.beastArmyHealthBonus = (owner.beastArmyHealthBonus ?? 0) + amount;
+      buffMinions([...owner.board, ...owner.hand.filter((m): m is BoardMinionInstance => m.kind === "minion")].filter((m) => minionHasTribe(m, "beast")), amount, amount);
+    }
+  } else if (action === "overflowSkeletons") {
+    for (let count = 0; count < 5 * scale; count += 1) {
+      const full = board.length >= MAX_BOARD_SIZE;
+      const skeleton = createMinionInstance(context.state, "live-skeleton-token", 0);
+      const summoned = insertCombatMinion(context, ownerId, skeleton, death.index + count, source, `${source.name}召唤了骷髅。`);
+      if (!summoned && full) resolveCombatImproveUndeadArmy(context, ownerId, source, { ...component, golden: false }, { kind: "improveUndeadArmy", attack: 1, health: 0 }, "亡语满场奖励");
+    }
+  } else {
+    for (let count = 0; count < scale; count += 1) {
+      let card: BoardMinionInstance | undefined;
+      if (action === "opponentCopy") {
+        const opponents = context.state.players.filter((p) => p.id !== ownerId && p.alive && p.board.length > 0);
+        if (!opponents.length) continue;
+        const opponent = opponents[randomIndex(context.state, opponents.length)];
+        card = cloneMinionAsGeneratedCopy(context.state, opponent.board[randomIndex(context.state, opponent.board.length)]);
+        const owner = findPlayer(context.state, ownerId);
+        if (owner) applyOwnedUndeadArmyBonus(owner, card);
+      } else {
+        const owner = findPlayer(context.state, ownerId);
+        if (!owner) continue;
+        const utility = createPutricideComponentOptions(context.state, owner, "utility");
+        const combat = createPutricideComponentOptions(context.state, owner, "combat");
+        if (!utility.length || !combat.length) continue;
+        card = createPutricideCustomUndead(context.state, owner, utility[randomIndex(context.state, utility.length)].definitionId, combat[randomIndex(context.state, combat.length)].definitionId);
+      }
+      timewarpCombatGainCopy(context, ownerId, source, card);
+      insertCombatMinion(context, ownerId, cloneMinionAsGeneratedCopy(context.state, card), death.index + count, source, `${source.name}召唤了${card.name}。`, "timewarpLinkedCopy");
+    }
+  }
+}
+
 function applyStartOfCombatEffects(
   context: CombatContext,
   ownerId: PlayerId,
@@ -27445,6 +27983,7 @@ function applyStartOfCombatEffects(
   const board = context.boards[ownerId];
   for (const source of [...board]) {
     for (const component of minionEffectSources(source)) {
+      resolveTimewarpCombatStart(context, ownerId, source, component);
       const effects =
         getMinionDefinition(component.definitionId).startOfCombat ?? [];
       if (effects.length === 0) {
@@ -27923,9 +28462,9 @@ function applyPersistentTribeBuff(
       continue;
     }
     const inheritedAttack =
-      tribe === "undead" ? (owner?.undeadArmyAttackBonus ?? 0) : 0;
+      tribe === "undead" ? (owner?.undeadArmyAttackBonus ?? 0) : tribe === "beast" ? (owner?.beastArmyAttackBonus ?? 0) : 0;
     const inheritedHealth =
-      tribe === "undead" ? (owner?.undeadArmyHealthBonus ?? 0) : 0;
+      tribe === "undead" ? (owner?.undeadArmyHealthBonus ?? 0) : tribe === "beast" ? (owner?.beastArmyHealthBonus ?? 0) : 0;
     const attack = Math.max(0, buff.attack - inheritedAttack);
     const health = Math.max(0, buff.health - inheritedHealth);
     const triggeredHealth = healthGainedFromExternalAttack(
@@ -28390,7 +28929,7 @@ function insertCombatMinion(
       ownerId,
       summoned,
       summonReason === "rallyFromHand" ||
-        summonReason === "startOfCombatFromHand",
+        summonReason === "startOfCombatFromHand" || summonReason === "timewarpLinkedCopy",
     );
   }
   applyCombatSummonHeroPower(context, ownerId, summoned);
@@ -28405,6 +28944,7 @@ function insertCombatMinion(
   );
   const boardIndex = Math.min(Math.max(0, insertAt), board.length);
   board.splice(boardIndex, 0, summoned);
+  const timewarpAfterSummon = observeTimewarpCombatSummon(context, ownerId, summoned);
   const auraEvents = applyNewAuraSource(context, summoned, ownerId);
   const afterSummon = triggerAfterFriendlySummoned(
     context,
@@ -28422,15 +28962,16 @@ function insertCombatMinion(
     targetInstanceId: summoned.instanceId,
     boardIndex,
     minion:
-      afterSummon.summonSnapshotBeforeBuff ?? cloneMinion(summoned),
+      timewarpAfterSummon.summonSnapshotBeforeBuff ?? afterSummon.summonSnapshotBeforeBuff ?? cloneMinion(summoned),
     summonReason,
     message,
   });
-  for (const event of [...auraEvents, ...afterSummon.events]) {
+  for (const event of [...timewarpAfterSummon.events, ...auraEvents, ...afterSummon.events]) {
     pushBattleEvent(context.events, event);
   }
   triggerCombatSummonTrinkets(context, ownerId, summoned);
   observeCombatAutomatonSummon(context, ownerId, summoned);
+  if (summonReason === "reborn") observeTimewarpWarband(context, ownerId, "rebornWarband");
   return summoned;
 }
 
@@ -28973,6 +29514,15 @@ function triggerCombatDamageObservation(
   context: CombatContext,
   observation: CombatDamageObservation,
 ): void {
+  for (const component of timewarpSources(observation.target, "damageGems")) {
+    const counts = context.limitedSelfDamageTriggers[observation.targetOwnerId];
+    const key = `${observation.target.instanceId}:${component.sourceInstanceId}:timewarpDamageGems`;
+    const used = counts[key] ?? 0;
+    if (used >= 3) continue;
+    counts[key] = used + 1;
+    resolveCombatImproveBloodGems(context, observation.targetOwnerId, observation.target, component,
+      { kind: "improveBloodGems", attack: 1, health: 0 }, "受伤");
+  }
   triggerSelfDamaged(
     context,
     observation.targetOwnerId,
@@ -29082,6 +29632,7 @@ function dealCombatDamage(
       minion: cloneMinion(target),
       message: `${target.name}的圣盾被击破。`,
     });
+    observeTimewarpWarband(context, targetOwnerId, "shieldLossWarband");
     return null;
   }
   target.health -= amount;
@@ -29688,6 +30239,7 @@ function resolveCombatImproveUndeadArmy(
     }
     target.attack += attackDelta;
     target.health += healthDelta;
+    observeDirectCombatStatGain(context, ownerId, target, attackDelta, healthDelta);
     if (healthDelta !== 0) {
       adjustCombatMaximumHealth(
         context,
@@ -30131,9 +30683,15 @@ function resolveCombatCastTavernSpell(
       }。`,
     });
 
-    const pulses = tavernSpellWarbandBuffPulses(
-      definition.effect,
-    );
+    const pulses = definition.effect === "bloodGemBarrage" ? [] : tavernSpellWarbandBuffPulses(definition.effect);
+    if (definition.effect === "bloodGemBarrage") {
+      const persistent = persistentCombatOwner(context, ownerId);
+      if (persistent) {
+        persistent.tavernBloodGemBarrageCount += 1;
+        persistent.tavernBloodGemBarrageAttack += attackBonus;
+        persistent.tavernBloodGemBarrageHealth += healthBonus;
+      }
+    }
     if (!pulses) {
       throw new Error(
         `Combat-triggered Tavern Spell ${definition.id} is not supported`,
@@ -30250,10 +30808,9 @@ function combatElementalStatGrantBonus(
   ) {
     return { attack: 0, health: 0 };
   }
-  return context.elementalGrantBonuses[ownerId] ?? {
-    attack: 0,
-    health: 0,
-  };
+  const base = context.elementalGrantBonuses[ownerId] ?? { attack: 0, health: 0 };
+  const aura = timewarpElementalGrantAura(context.boards[ownerId]);
+  return { attack: base.attack + aura.attack, health: base.health + aura.health };
 }
 
 function improveElementalStatGrantsInCombat(
@@ -31230,12 +31787,7 @@ function resolveTriggeredCombatInteractiveBattlecry(
         elementalBonus,
       );
       returnMinionToPool(context.state, magnetic);
-      context.magnetizationsThisGame[ownerId] += 1;
-      const persistentOwner = persistentCombatOwner(context, ownerId);
-      if (persistentOwner) {
-        persistentOwner.magnetizationsThisGame += 1;
-        reconcilePlayerWhereverMinions(persistentOwner);
-      }
+      observeTimewarpCombatMagnetized(context, ownerId, source);
       pushBattleEvent(context.events, {
         type: "buff",
         actorPlayerId: ownerId,
@@ -31634,11 +32186,79 @@ function resolveCombatImproveStartOfCombatBuff(
   });
 }
 
+function observeTimewarpCombatMagnetized(context: CombatContext, ownerId: PlayerId, actor: MinionInstance): void {
+  context.magnetizationsThisGame[ownerId] += 1;
+  const owner = persistentCombatOwner(context, ownerId);
+  if (owner) { owner.magnetizationsThisGame += 1; reconcilePlayerWhereverMinions(owner); }
+  for (const watcher of [...context.boards[ownerId]].filter((m) => m.health > 0)) {
+    for (const component of timewarpSources(watcher, "mechPlayedOrMagnetized")) {
+      for (const target of context.boards[ownerId].filter((m) => m.health > 0 && minionHasTribe(m, "mech"))) {
+        pushTimewarpCombatBuff(context, ownerId, watcher, target, component.golden ? 6 : 3, component.golden ? 6 : 3, false);
+      }
+    }
+    for (const component of minionEffectSources(watcher)) {
+      for (const effect of getMinionDefinition(component.definitionId).afterMagnetized ?? [])
+        resolveCombatBattlecryEffect(context, ownerId, watcher, component, effect);
+    }
+  }
+  reconcileCombatWhereverMinions(context, ownerId, actor.instanceId, "磁力使随从的本局属性成长。");
+}
+
+function setTimewarpCombatCounter(context: CombatContext, ownerId: PlayerId, source: MinionInstance, key: string, value: number): void {
+  setEffectCounter(source, key, value);
+  refreshDynamicMinionDescription(source);
+  const owner = persistentCombatOwner(context, ownerId);
+  const original = owner && context.originalCombatMinionIds[ownerId].has(source.instanceId)
+    ? findCombatWritebackMinion(context, owner, ownerId, source.instanceId) : undefined;
+  if (original) { setEffectCounter(original, key, value); refreshDynamicMinionDescription(original, owner ?? undefined); }
+}
+
+function observeTimewarpCombatTavernSpell(context: CombatContext, ownerId: PlayerId, definitionId: string): void {
+  const board = context.boards[ownerId];
+  for (const source of [...board].filter((m) => m.health > 0)) for (const component of minionEffectSources(source)) {
+    const mechanic = getMinionDefinition(component.definitionId).timewarp;
+    if (mechanic === "copyTavernSpell" && spendTimewarpCombatTurnTrigger(context, ownerId, source, "timewarpSpellCopies", 3)) {
+      const owner = persistentCombatOwner(context, ownerId);
+      if (owner) for (let count = 0; count < (component.golden ? 2 : 1); count += 1) {
+        const spell = createTavernSpell(context.state, getTavernSpellDefinition(definitionId));
+        const added = addCardToHand(context.state, owner, spell, { combatContext: context, combatOwnerId: ownerId,
+          combatEvent: { type: "cardGain", actorPlayerId: ownerId, actorInstanceId: source.instanceId,
+            targetPlayerId: ownerId, amount: 1, cardGainResult: "added", cardKind: "tavernSpell",
+            cardName: owner.isHuman ? spell.name : undefined, message: `${source.name}使${owner.name}获得所施放酒馆法术的复制。` } });
+        if (!added) pushBattleEvent(context.events, { type: "cardGain", actorPlayerId: ownerId, actorInstanceId: source.instanceId,
+          targetPlayerId: ownerId, amount: 0, cardGainResult: "handFull", message: `${source.name}的复制因手牌已满而无法获取。` });
+      }
+    }
+    if (mechanic === "spellSatellites") {
+      const progress = effectCounter(source, "timewarpTavernSpells", 0) + 1;
+      setTimewarpCombatCounter(context, ownerId, source, "timewarpTavernSpells", progress % 2);
+      if (progress >= 2) for (let pulse = 0; pulse < (component.golden ? 2 : 1); pulse += 1) {
+        for (const target of [...board].filter((m) => m.health > 0 && minionHasTribe(m, "mech"))) {
+          const satellite = createMinionInstance(context.state, "timewarp-magnetic-satellite-token", 0);
+          const bonus = { attack: 0, health: 0 };
+          const gain = applyCombatMagneticSourceToHost(context, ownerId, satellite, target, bonus);
+          pushBattleEvent(context.events, { type: "buff", actorPlayerId: ownerId, actorInstanceId: source.instanceId,
+            targetPlayerId: ownerId, targetInstanceId: target.instanceId, attackDelta: gain.attackDelta, healthDelta: gain.healthDelta,
+            minion: cloneMinion(target), retained: gain.retentionMultiplier > 0, message: `${source.name}为${target.name}磁力吸附了一个4/4的卫星。` });
+          copyCombatMagnetizationToBeatboxers(context, ownerId, satellite, target, bonus);
+          observeTimewarpCombatMagnetized(context, ownerId, source);
+        }
+      }
+    }
+  }
+}
+
 function triggerCombatAfterSpellCast(
   context: CombatContext,
   ownerId: PlayerId,
 ): void {
   const board = context.boards[ownerId];
+  for (const source of [...board].filter((m) => m.health > 0)) {
+    for (const component of timewarpSources(source, "growingBeastSummon")) {
+      void component;
+      setTimewarpCombatCounter(context, ownerId, source, "timewarpGrowth", effectCounter(source, "timewarpGrowth", 0) + 1);
+    }
+  }
   const owner = persistentCombatOwner(context, ownerId);
   if (owner) {
     for (const { definition, value } of configuredOwnedTrinkets(owner, BLOODBOUND_EARRINGS_BY_CARD_ID)) {
@@ -31805,6 +32425,7 @@ function triggerCombatAfterTavernSpellCast(
   tavernSpellDefinitionId: string,
 ): void {
   recordCombatTavernSpellCast(context, ownerId, actorInstanceId);
+  observeTimewarpCombatTavernSpell(context, ownerId, tavernSpellDefinitionId);
   const board = context.boards[ownerId];
   for (const source of [...board]) {
     for (const component of minionEffectSources(source)) {
@@ -32327,6 +32948,14 @@ function resolveRallyDamageTargetAndAdjacent(
 }
 
 function triggerRally(
+  context: CombatContext, ownerId: PlayerId, attacker: MinionInstance, attackTarget: MinionInstance,
+): void {
+  const extra = context.boards[ownerId].filter((m) => m.health > 0).reduce((highest, m) =>
+    Math.max(highest, ...minionEffectSources(m).map((c) => (getMinionDefinition(c.definitionId).extraRallies ?? 0) * (c.golden ? 2 : 1))), 0);
+  for (let repeat = 0; repeat <= extra; repeat += 1) triggerRallyOnce(context, ownerId, attacker, attackTarget);
+}
+
+function triggerRallyOnce(
   context: CombatContext,
   ownerId: PlayerId,
   attacker: MinionInstance,
@@ -32334,8 +32963,35 @@ function triggerRally(
 ): void {
   for (const component of minionEffectSources(attacker)) {
     const definition = getMinionDefinition(component.definitionId);
+    if (definition.timewarp === "rallyShield") {
+      const targets = randomBoardSubset(context.state, context.boards[ownerId].filter((m) => m.health > 0 && m.instanceId !== attacker.instanceId && !m.divineShield), component.golden ? 2 : 1);
+      for (const target of targets) {
+        target.divineShield = true; target.temporaryDivineShield = false;
+        const owner = persistentCombatOwner(context, ownerId);
+        const persistent = owner && context.originalCombatMinionIds[ownerId].has(target.instanceId) ? findCombatWritebackMinion(context, owner, ownerId, target.instanceId) : undefined;
+        if (persistent) { persistent.divineShield = true; persistent.temporaryDivineShield = false; }
+        pushBattleEvent(context.events, { type: "buff", actorPlayerId: ownerId, actorInstanceId: attacker.instanceId,
+          targetPlayerId: ownerId, targetInstanceId: target.instanceId, minion: cloneMinion(target), retained: !!persistent,
+          message: `${attacker.name}的进击使${target.name}永久获得圣盾。` });
+      }
+    }
+    if (definition.timewarp === "rallyBloodGems") {
+      for (const target of [...context.boards[ownerId]].filter((m) => m.health > 0 && m.instanceId !== attacker.instanceId)) {
+        for (let gem = 0; gem < (component.golden ? 4 : 2); gem += 1) {
+          applyPermanentCombatBloodGemFromTrinket(context, ownerId, { id: attacker.instanceId, name: rallySourceLabel(component) }, target);
+        }
+      }
+    }
     const effects = definition.rally ?? [];
     for (const effect of effects) {
+      if (effect.kind === "improveBeetles") {
+        improveBeetlesInCombat(context, ownerId, attacker, component, effect, "进击");
+        continue;
+      }
+      if (effect.kind === "summon") {
+        resolveCombatSummonEffect(context, ownerId, attacker, component, effect, context.boards[ownerId].findIndex((m) => m.instanceId === attacker.instanceId) + 1);
+        continue;
+      }
       if (effect.kind === "getRandomMinion") {
         resolveCombatGetRandomMinion(
           context,
@@ -32566,6 +33222,22 @@ function triggerAfterAttackKills(
   targetHealthBefore: number,
   attackDamage: number,
 ): void {
+  if (targetHealthBefore > 0 && target.health <= 0) {
+    for (const component of timewarpSources(attacker, "attackKillTriple")) {
+      const counts = context.limitedSelfDamageTriggers[ownerId];
+      const key = `${attacker.instanceId}:${component.sourceInstanceId}:timewarpPagle`;
+      if (counts[key]) continue;
+      counts[key] = 1;
+      const owner = persistentCombatOwner(context, ownerId);
+      if (owner) for (let count = 0; count < (component.golden ? 2 : 1); count += 1) {
+        const reward = createTripleRewardSpell(context.state, owner.tavernTier);
+        addCardToHand(context.state, owner, reward, { combatContext: context, combatOwnerId: ownerId,
+          combatEvent: { type: "cardGain", actorPlayerId: ownerId, actorInstanceId: attacker.instanceId,
+            targetPlayerId: ownerId, amount: 1, cardGainResult: "added", cardName: owner.isHuman ? reward.name : undefined,
+            message: `${attacker.name}的攻击击杀使${owner.name}获得三连奖励。` } });
+      }
+    }
+  }
   if (
     targetHealthBefore <= 0 ||
     target.health > 0 ||
@@ -32666,6 +33338,7 @@ function performAttackStrike(
     targetPlayerId: enemyId,
     targetInstanceId: target.instanceId,
     amount: attacker.attack,
+    actorMinion: cloneMinion(attacker),
     message: `${attacker.name}${options.immediate ? "立即攻击" : "攻击"}${target.name}${options.windfuryStrike ? "（风怒）" : ""}。`,
   });
   resolveFriendlyAttackedHeroSecrets(
@@ -32703,6 +33376,11 @@ function performAttackStrike(
     }
   }
   triggerRally(context, ownerId, attacker, target);
+  for (const watcher of context.boards[enemyId].filter((m) => m.health > 0)) {
+    for (const component of timewarpSources(watcher, "attackedAttack")) {
+      pushTimewarpCombatBuff(context, enemyId, watcher, target, component.golden ? 16 : 8, 0);
+    }
+  }
   if (context.deathResolutionDepth === 0) {
     summonPendingStartOfCombatHandMinions(context, ownerId);
   }
@@ -32927,6 +33605,25 @@ function resolveCombatAvengeEffect(
   component: MinionEffectSource,
   effect: AvengeEffect,
 ): void {
+  if (effect.kind === "gainRandomTavernSpell") {
+    resolveCombatGainRandomTavernSpell(context, ownerId, watcher, component, effect, "复仇");
+    return;
+  }
+  if (effect.kind === "gainRandomSpellcraft") {
+    const owner = persistentCombatOwner(context, ownerId);
+    const candidates = SPELLCRAFT_DEFINITIONS.filter((d) => !("randomlyGeneratable" in d) || d.randomlyGeneratable !== false);
+    if (!owner || !candidates.length) return;
+    for (let count = 0; count < effect.count * (component.golden ? 2 : 1); count += 1) {
+      const spell = createSpellcraftSpell(context.state, candidates[randomIndex(context.state, candidates.length)]);
+      const added = addCardToHand(context.state, owner, spell, { combatContext: context, combatOwnerId: ownerId,
+        combatEvent: { type: "cardGain", actorPlayerId: ownerId, actorInstanceId: watcher.instanceId,
+          targetPlayerId: ownerId, targetInstanceId: owner.isHuman ? spell.instanceId : undefined, amount: 1,
+          cardName: owner.isHuman ? spell.name : undefined, cardGainResult: "added", message: `${watcher.name}的复仇使${owner.name}获得塑造法术。` } });
+      if (!added) pushBattleEvent(context.events, { type: "cardGain", actorPlayerId: ownerId, actorInstanceId: watcher.instanceId,
+        targetPlayerId: ownerId, amount: 0, cardGainResult: "handFull", message: `${watcher.name}的复仇奖励因手牌已满而无法获取。` });
+    }
+    return;
+  }
   if (effect.kind === "gainBloodGems") {
     resolveCombatGainBloodGems(context, ownerId, watcher, component, effect, "复仇");
     return;
@@ -33436,6 +34133,7 @@ function dealFriendlyTrinketDamage(
       minion: cloneMinion(target),
       message: `${trinket.name}造成的伤害击破了${target.name}的圣盾。`,
     });
+    observeTimewarpWarband(context, ownerId, "shieldLossWarband");
     return null;
   }
 
@@ -34586,6 +35284,7 @@ function triggerBloodAmuletAfterDeathrattle(
   ownerId: PlayerId,
   source: MinionInstance,
 ): void {
+  observeTimewarpWarband(context, ownerId, "deathrattleWarband");
   for (const bloodAmulet of combatTrinketsByCardId(
     context,
     ownerId,
@@ -34651,7 +35350,9 @@ function resolveOneDeathrattle(
         observeCombatDeathrattleTriggered(context, ownerId, source);
       }
       for (const effect of effects) {
-        if (effect.kind === "summonLinkedHandMinions") {
+        if (effect.kind === "timewarpDeathrattle") {
+          resolveTimewarpDeathrattle(context, death, component, effect.action);
+        } else if (effect.kind === "summonLinkedHandMinions") {
           resolveCombatSummonLinkedHandMinions(
             context,
             death,
@@ -36545,12 +37246,14 @@ function simulateBattle(
     },
     tribeBuffs: {
       [playerA.id]: {
+        beast: { attack: playerA.beastArmyAttackBonus ?? 0, health: playerA.beastArmyHealthBonus ?? 0 },
         undead: {
           attack: playerA.undeadArmyAttackBonus,
           health: playerA.undeadArmyHealthBonus,
         },
       },
       [playerB.id]: {
+        beast: { attack: playerB.beastArmyAttackBonus ?? 0, health: playerB.beastArmyHealthBonus ?? 0 },
         undead: {
           attack: playerB.undeadArmyAttackBonus,
           health: playerB.undeadArmyHealthBonus,
@@ -37786,6 +38489,10 @@ function beginNextRecruit(state: GameState): void {
     player.pendingCardPlayed = null;
     player.pendingTavernSpellDefinitionId = null;
     for (const minion of ownedMinionCards(player)) {
+      for (const key of ["timewarpSummons", "timewarpSpellCopies", "timewarpPermanentCopies", "timewarpDiscountUses"]) {
+        if (minion.effectCounters?.[key] !== undefined) setEffectCounter(minion, key, 0);
+      }
+      refreshDynamicMinionDescription(minion, player);
       const definition = getMinionDefinition(minion.definitionId);
       if (definition.spellcraftPermanentOnSelf) {
         setEffectCounter(

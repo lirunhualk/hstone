@@ -1,20 +1,62 @@
+import { TRIBE_NAMES } from "./content.ts";
 import {
   getHeroPowerDefinition,
   isHeroPowerDefinitionId,
 } from "./hero-powers.ts";
 import { isHeroSecretDefinitionId } from "./hero-secrets.ts";
+import {
+  getSystemEventDefinition,
+  isSystemEventDefinitionId,
+} from "./lobby-systems.ts";
 import type {
   MinionTier,
   PendingDiscoverInteraction,
   PendingSecretChoiceInteraction,
   PlayerState,
+  Tribe,
 } from "./types.ts";
 
 const GALAKROND_HERO_POWER_ID =
   "hero-power-tb_baconshop_hp_011" as const;
+const LOBBY_TRIBE_IDS = new Set(
+  Object.keys(TRIBE_NAMES).filter(
+    (tribe) => tribe !== "neutral" && tribe !== "all",
+  ),
+);
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null;
+}
+
+export function isPersistedActiveTribes(
+  value: unknown,
+  lobbySystemsEnabled: unknown,
+  systemEventId: unknown,
+): value is Tribe[] {
+  if (
+    !Array.isArray(value) ||
+    !value.every(
+      (tribe) => typeof tribe === "string" && LOBBY_TRIBE_IDS.has(tribe),
+    ) ||
+    new Set(value).size !== value.length
+  ) {
+    return false;
+  }
+  if (lobbySystemsEnabled === false) {
+    return systemEventId === null && value.length === 5;
+  }
+  if (
+    lobbySystemsEnabled !== true ||
+    typeof systemEventId !== "string" ||
+    !isSystemEventDefinitionId(systemEventId)
+  ) {
+    return false;
+  }
+  const expectedCount =
+    getSystemEventDefinition(systemEventId).effect === "tavernSpecial"
+      ? LOBBY_TRIBE_IDS.size
+      : 5;
+  return value.length === expectedCount;
 }
 
 export function isPersistedSecretChoiceInteraction(

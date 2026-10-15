@@ -80,6 +80,7 @@ import {
   type Tribe,
 } from "../lib/game/engine";
 import {
+  isPersistedActiveTribes,
   isPersistedSecretChoiceInteraction,
   persistedGalakrondDiscoverMatchesPlayer,
   persistedSecretChoiceMatchesPlayer,
@@ -2036,9 +2037,11 @@ function isGameState(value: unknown): value is GameState {
       : candidate.systemEventId === null) &&
     isTavernSpellPool(candidate.spellPool) &&
     isHumanScoutingReports(candidate.humanScoutingReports) &&
-    Array.isArray(candidate.activeTribes) &&
-    candidate.activeTribes.length === 5 &&
-    candidate.activeTribes.every(isTribe) &&
+    isPersistedActiveTribes(
+      candidate.activeTribes,
+      candidate.lobbySystemsEnabled,
+      candidate.systemEventId,
+    ) &&
     Array.isArray(candidate.players) &&
     candidate.players.length === 8 &&
     Array.isArray(candidate.deferredTriplePlayerIds) &&
@@ -8821,7 +8824,7 @@ export default function GameClient() {
               .map((tribe) => TRIBE_NAMES[tribe])
               .join("、")}`}
           >
-            第 {game.round} 回合 · 36.0.3 · 本局 5 种族
+            第 {game.round} 回合 · 36.0.3 · 本局 {game.activeTribes.length} 种族
           </small>
         </div>
         <span className="phase-pill">{phaseLabel(game.phase)}</span>

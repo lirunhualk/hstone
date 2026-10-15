@@ -129,7 +129,7 @@ test("keeps all current Tier 7 rewards addressable but outside the Tavern pool",
 test("keeps legacy rules and tokens addressable but out of the shared pool", () => {
   assert.equal(LEGACY_RULE_DEFINITIONS.length, 36);
   assert.equal(TOKEN_DEFINITIONS.length, 11);
-  assert.equal(LIVE_TOKEN_DEFINITIONS.length, 47);
+  assert.equal(LIVE_TOKEN_DEFINITIONS.length, 48);
   assert.ok(
     [
       ...LEGACY_RULE_DEFINITIONS,
@@ -141,6 +141,8 @@ test("keeps legacy rules and tokens addressable but out of the shared pool", () 
     ),
   );
   assert.equal(getMinionDefinition("wrath-weaver").collectible, false);
+  const satellite = getMinionDefinition("timewarp-magnetic-satellite-token");
+  assert.deepEqual([satellite.cardId, satellite.attack, satellite.health], ["BG34_Giant_610t", 4, 4]);
   assert.equal(getMinionDefinition("BGS_004").collectible, true);
   assert.equal(
     MINION_DEFINITIONS.filter(

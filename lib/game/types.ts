@@ -379,6 +379,8 @@ export interface RallyTriggerLeftmostDeathrattleEffect {
 }
 
 export type RallyEffect =
+  | ImproveBeetlesEffect
+  | SummonEffect
   | GetRandomMinionEffect
   | GainRandomTavernSpellEffect
   | CastTavernSpellEffect
@@ -540,6 +542,8 @@ export interface GainStatsFromSoldEffect {
 }
 
 export type MinionEffect =
+  | TimewarpDeathrattleEffect
+  | GainRandomSpellcraftEffect
   | BuffEffect
   | SummonEffect
   | GrantShieldEffect
@@ -719,6 +723,8 @@ export interface FriendlyCombatDeathTrigger {
 }
 
 export type AvengeEffect =
+  | GainRandomSpellcraftEffect
+  | GainRandomTavernSpellEffect
   | GainRandomGeneratedMinionEffect
   | GainLinkedRandomMinionEffect
   | GainTavernSpellEffect
@@ -1163,6 +1169,28 @@ export interface AfterTargetedSpellCastEffect {
   goldenMode: "permanent";
 }
 
+/** Event observers that require the actual event object rather than a stat buff. */
+export type TimewarpMechanic =
+  | "discountSpells" | "refreshGolden" | "rebornWarband" | "attackedAttack"
+  | "attackGainHealth" | "rallyShield" | "damageGems" | "attackKillTriple"
+  | "rebornSummons" | "currentBuddy" | "bloodGemBarrage" | "mechPlayedOrMagnetized"
+  | "consumeStats" | "extraDemons" | "handStatRelay" | "growingPainter"
+  | "playedTribeTavern" | "deathrattleWarband" | "spellSatellites"
+  | "shieldLossWarband" | "spellcraftLurker" | "elementalGrantAura"
+  | "purchaseElementalStats" | "growingBeastSummon" | "copyTavernSpell"
+  | "copyLeft" | "growingCombatBuff" | "rallyBloodGems"
+  | "triggerAllDeathrattles" | "copyLeftDeathrattles";
+
+export interface TimewarpDeathrattleEffect {
+  kind: "timewarpDeathrattle";
+  action: "leapfrog" | "undeadCreation" | "permanentBeasts" | "overflowSkeletons" | "opponentCopy";
+}
+
+export interface GainRandomSpellcraftEffect {
+  kind: "gainRandomSpellcraft";
+  count: number;
+}
+
 export interface MinionDefinition {
   id: string;
   /** Hearthstone CardID used only to locate the familiar card artwork. */
@@ -1179,6 +1207,7 @@ export interface MinionDefinition {
   associatedTribes?: readonly Tribe[];
   /** Whether all card-text behavior is represented by the current rules DSL. */
   effectSupport?: EffectSupport;
+  timewarp?: TimewarpMechanic;
   /** Printed client mechanics retained for pool-wide Discover filters. */
   printedMechanics?: readonly string[];
   /** Whether the live card uses Hearthstone's legendary border. */
@@ -1289,6 +1318,7 @@ export interface MinionDefinition {
   combatTavernSpellExtraCasts?: number;
   extraBattlecries?: number;
   extraDeathrattles?: number;
+  extraRallies?: number;
   extraEndOfTurnTriggers?: number;
   sellValue?: number;
   goldenSellValue?: number;
@@ -1413,7 +1443,7 @@ export interface MinionInstance {
    * shared pool immediately when Magnetized.
    */
   attachments: MagneticAttachment[];
-  /** Deathrattle components permanently learned by Fish of N'Zoth. */
+  /** Copied or inherited Deathrattles; copies retain their original Golden text. */
   learnedDeathrattles?: LearnedDeathrattle[];
 }
 
@@ -1440,6 +1470,8 @@ export interface LearnedDeathrattle {
   sourceInstanceId: string;
   definitionId: string;
   golden: boolean;
+  /** Repeated same-source copies, including Leapfrogger inheritance. Default 1. */
+  count?: number;
 }
 
 export type BoardMinionInstance = MinionInstance & { kind: "minion" };
@@ -1485,6 +1517,7 @@ export interface ConsolationCoinSpellInstance {
 }
 
 export type SpellcraftEffect =
+  | "timewarpedShoal"
   | "crabRider"
   | "slimyShield"
   | "anglersLure"
@@ -2001,6 +2034,9 @@ export interface PlayerState {
   /** Permanent "wherever they are" stats granted by Slaughter. */
   undeadArmyAttackBonus: number;
   undeadArmyHealthBonus: number;
+  /** Permanent Timewarped Goldrinn bonuses applied to owned and future Beasts. */
+  beastArmyAttackBonus?: number;
+  beastArmyHealthBonus?: number;
   /** Persistent game-wide history used by Astral Automaton and Eternal Knight. */
   astralAutomatonsSummoned: number;
   eternalKnightsDied: number;
@@ -2071,6 +2107,7 @@ export interface BattleEvent {
     | "inHandStartOfCombat"
     | "deathlyStrikerFromHand"
     | "stitchedSalvagerCopy"
+    | "timewarpLinkedCopy"
     | "beetle"
     | "spellcraft";
   removedKeywords?: RallyRemovedKeyword[];

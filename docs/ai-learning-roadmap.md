@@ -201,6 +201,7 @@ step(actionToken) -> { observation, legalActions, accepted, ownBattle, rewardSig
 - 同一种子、席位和动作序列必须逐字节可重复；
 - 非法动作由 `legalActions` 在边界处消除，而不是靠训练惩罚掩盖引擎错误；
 - 观测使用显式 allowlist 和递归禁键测试，不泄露 `seed`、随机数状态、精确共享池、其他六场战斗或对手当前手牌/商店/战队；动作所需的实例 ID 保留在环境内部，模型只看到当前状态版本有效的 opaque token、区域和索引，旧 mask 的 token 会被拒绝；
+- 观测 schema v5 增加己方野兽永久加成与继承亡语的数量，避免时空扭曲戈德林、跳蛙及飓风机甲在训练输入中丢失效果状态；planner v5 按继承份数计算可见亡语价值。亡语运行时来源 ID 和对手隐藏状态继续排除。游戏存档仍兼容 schema 11 / 内容 v52。
 - 允许纯 7/8 AI 对局在没有人类玩家时继续到结束。
 
 默认 `legalActions` 继续以“有界候选枚举 + 真实 reducer 裁决”优先保证正确性；同一 state revision 的 mask 会缓存，fork 直接克隆当前状态。planner 专用 mask 排除其评分尚未使用的 `MOVE_MINION`，并复用引擎已有的费用、容量、合法目标和磁力查询走无副作用快速路径；固定 seed 的线性 walker 会在每个 revision 先构造 fast mask，再与 reducer mask 的动作描述和顺序逐项比较。每步另报告是否跨过私有 RNG 边界，但不暴露 RNG 值。动作在执行前被保守分为 deterministic、replan、terminal 和 unsupported；replan transition 不执行动作，也不返回 environment 或 observation，调用者把 token 提交给真实 episode 后必须重新规划。这样刷新、随机生成、发现和可能带随机触发的购买不再被永久剪枝，也不能偷看 counterfactual 随机结果。`scripts/benchmark-ai.ts` 继续负责完整大厅名次、前四率、吃鸡率和策略诊断；中性训练/基准环境尚未自动处理英雄、饰品和异常选择。

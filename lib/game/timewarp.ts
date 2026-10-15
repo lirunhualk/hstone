@@ -13,6 +13,51 @@ export const TIMEWARP_STAT_GRANTING_TAVERN_SPELL_EFFECTS: ReadonlySet<TavernSpel
  * The complete fixed-build source registry remains available for old saves.
  */
 export const TIMEWARP_RULE_OVERRIDES: Readonly<Record<string, Partial<MinionDefinition>>> = {
+  BG34_Giant_008: { timewarp: "discountSpells" },
+  BG34_Giant_024: { timewarp: "rebornWarband" },
+  BG34_Giant_027: { timewarp: "attackedAttack" },
+  BG34_Giant_038: { timewarp: "refreshGolden" },
+  BG34_Giant_064: { timewarp: "attackGainHealth" },
+  BG34_Giant_068: { timewarp: "rallyShield" },
+  BG34_Giant_069: { timewarp: "damageGems" },
+  BG34_Giant_208: { timewarp: "attackKillTriple" },
+  BG34_Giant_210: { spellcraft: { definitionId: "spellcraft-timewarped-shoal" } },
+  BG34_Giant_211: { avenge: { threshold: 3, effects: [
+    { kind: "gainRandomSpellcraft", count: 1 },
+    { kind: "gainRandomTavernSpell", count: 1, filter: {}, goldenMode: "doubleCount" },
+  ] } },
+  BG34_Giant_332: { timewarp: "rebornSummons" },
+  BG34_Giant_590: { deathrattle: [{ kind: "timewarpDeathrattle", action: "undeadCreation" }] },
+  BG34_Giant_602: { timewarp: "currentBuddy" },
+  BG34_Giant_042: { timewarp: "copyLeft" },
+  BG34_Giant_088: { timewarp: "growingCombatBuff" },
+  BG34_Giant_102: { timewarp: "rallyBloodGems" },
+  BG34_Giant_105: { timewarp: "bloodGemBarrage" },
+  BG34_Giant_120: { timewarp: "mechPlayedOrMagnetized" },
+  BG34_Giant_311: { timewarp: "consumeStats" },
+  BG34_Giant_313: { timewarp: "extraDemons" },
+  BG34_Giant_317: { timewarp: "handStatRelay" },
+  BG34_Giant_319: { timewarp: "growingPainter" },
+  BG34_Giant_336: { timewarp: "playedTribeTavern" },
+  BG34_Giant_362: { deathrattle: [{ kind: "timewarpDeathrattle", action: "permanentBeasts" }] },
+  BG34_Giant_370: { timewarp: "triggerAllDeathrattles" },
+  BG34_Giant_376: { extraBattlecries: 1, extraDeathrattles: 1, extraRallies: 1 },
+  BG34_Giant_599: { timewarp: "copyLeftDeathrattles" },
+  BG34_Giant_609: { timewarp: "deathrattleWarband" },
+  BG34_Giant_610: { timewarp: "spellSatellites" },
+  BG34_Giant_618: { deathrattle: [{ kind: "timewarpDeathrattle", action: "overflowSkeletons" }] },
+  BG34_Giant_619: { deathrattle: [{ kind: "timewarpDeathrattle", action: "opponentCopy" }] },
+  BG34_Giant_656: { timewarp: "shieldLossWarband" },
+  BG34_Giant_678: { timewarp: "spellcraftLurker" },
+  BG34_Giant_686: { timewarp: "elementalGrantAura" },
+  BG34_Giant_687: {
+    battlecry: [{ kind: "improveBeetles", attack: 2, health: 2 }, { kind: "summon", definitionId: "live-beetle-token", count: 1, goldenMode: "doubleCount" }],
+    deathrattle: [{ kind: "improveBeetles", attack: 2, health: 2 }, { kind: "summon", definitionId: "live-beetle-token", count: 1, goldenMode: "doubleCount" }],
+    rally: [{ kind: "improveBeetles", attack: 2, health: 2 }, { kind: "summon", definitionId: "live-beetle-token", count: 1, goldenMode: "doubleCount" }],
+  },
+  BG34_Giant_777: { timewarp: "purchaseElementalStats" },
+  BG34_PreMadeChamp_004: { timewarp: "growingBeastSummon" },
+  BG34_PreMadeChamp_200: { timewarp: "copyTavernSpell" },
   BG34_Giant_065: {
     endOfTurn: { kind: "buffLowerThanSource", attack: 2, health: 2 },
   },
@@ -102,3 +147,60 @@ export const TIMEWARP_RULE_OVERRIDES: Readonly<Record<string, Partial<MinionDefi
 
 export const FULLY_SUPPORTED_TIMEWARP_CARD_IDS: ReadonlySet<string> =
   new Set(Object.keys(TIMEWARP_RULE_OVERRIDES));
+
+interface TimewarpPresentation {
+  definitionId: string;
+  description: string;
+  golden: boolean;
+  effectCounters?: Readonly<Record<string, unknown>>;
+}
+
+/** Shared by live rendering and save repair; does not change stats or counters. */
+export function refreshTimewarpDescription(
+  minion: TimewarpPresentation,
+  round?: number,
+  printedDescription = minion.description,
+): boolean {
+  const mechanic = TIMEWARP_RULE_OVERRIDES[minion.definitionId]?.timewarp;
+  const counter = (key: string): number => {
+    const value = minion.effectCounters?.[key];
+    return typeof value === "number" && Number.isSafeInteger(value) && value >= 0 ? value : 0;
+  };
+  const scale = minion.golden ? 2 : 1;
+  const upgrades = 1 + counter("timewarpGrowth");
+  const growth = mechanic === "growingPainter" ? [3, 2]
+    : mechanic === "growingBeastSummon" ? [4, 3]
+      : mechanic === "growingCombatBuff" ? [5, 5]
+        : mechanic === "extraDemons" ? [7, 7] : undefined;
+  if (growth) {
+    minion.description = printedDescription.replace(/\+\d+\/\+\d+/u,
+      `+${growth[0] * upgrades * scale}/+${growth[1] * upgrades * scale}`);
+    return true;
+  }
+  let remaining: number;
+  let unit: string;
+  if (mechanic === "discountSpells") {
+    remaining = Math.max(0, 2 * scale - counter("timewarpDiscountUses"));
+    unit = "张";
+  } else if (mechanic === "refreshGolden") {
+    remaining = 5 - counter("timewarpRefreshes") % 5;
+    unit = "次";
+  } else if (mechanic === "spellSatellites") {
+    remaining = 2 - counter("timewarpTavernSpells") % 2;
+    unit = "个";
+  } else if (mechanic === "rebornSummons" || mechanic === "copyTavernSpell" || mechanic === "spellcraftLurker") {
+    const key = mechanic === "rebornSummons" ? "timewarpSummons"
+      : mechanic === "copyTavernSpell" ? "timewarpSpellCopies" : "timewarpPermanentCopies";
+    const encoded = counter(key);
+    const used = round === undefined || Math.floor(encoded / 100) === round ? encoded % 100 : 0;
+    remaining = Math.max(0, (mechanic === "rebornSummons" ? scale : mechanic === "copyTavernSpell" ? 3 : 2) - used);
+    unit = mechanic === "rebornSummons" ? "个" : "次";
+  } else {
+    return false;
+  }
+  const suffix = `（还剩${remaining}${unit}！）`;
+  minion.description = /（还剩\d+[^）]*）/u.test(printedDescription)
+    ? printedDescription.replace(/（还剩\d+[^）]*）/u, suffix)
+    : `${printedDescription}${suffix}`;
+  return true;
+}

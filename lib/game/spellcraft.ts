@@ -153,11 +153,23 @@ export const GENERATED_TARGETED_SPELL_DEFINITIONS = [
 ] as const satisfies readonly SpellcraftDefinition[];
 
 /**
- * Current Solo Trinkets that generate a real Spellcraft card each turn in
- * build 247416. They participate in Spellcraft cast triggers, but are kept
+ * Current Solo Trinkets and their Timewarp rewards that generate real
+ * Spellcraft cards in build 247416. They participate in Spellcraft cast triggers, but are kept
  * outside Slimy Seafood's ordinary Naga generation pool.
  */
 export const TRINKET_SPELLCRAFT_DEFINITIONS = [
+  {
+    id: "spellcraft-timewarped-shoal",
+    cardId: "BG34_Giant_210t",
+    goldenCardId: "BG34_Giant_210_Gt",
+    name: "时空扭曲抢滩猛攻",
+    description: "每有一个友方纳迦，使一个随从获得+2/+2。",
+    goldenDescription: "每有一个友方纳迦，使一个随从获得+4/+4。",
+    sourceTier: 3,
+    effect: "timewarpedShoal",
+    target: "friendly",
+    randomlyGeneratable: false,
+  },
   {
     id: "trinket-spellcraft-jailer-sticker-lesser",
     cardId: "BG35_MagicItem_306t",

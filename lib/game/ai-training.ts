@@ -23,7 +23,7 @@ import type {
   Tribe,
 } from "./types.ts";
 
-export const AI_TRAINING_OBSERVATION_VERSION = 4 as const;
+export const AI_TRAINING_OBSERVATION_VERSION = 5 as const;
 
 export type DeepReadonly<T> = T extends readonly (infer Item)[]
   ? readonly DeepReadonly<Item>[]
@@ -56,6 +56,7 @@ export interface AiTrainingMagneticAttachmentObservation {
 export interface AiTrainingLearnedDeathrattleObservation {
   definitionId: string;
   golden: boolean;
+  count: number;
 }
 
 /**
@@ -351,6 +352,8 @@ export interface AiTrainingRecruitObservation {
   deepBlueBonus: number;
   undeadArmyAttackBonus: number;
   undeadArmyHealthBonus: number;
+  beastArmyAttackBonus: number;
+  beastArmyHealthBonus: number;
   astralAutomatonsSummoned: number;
   eternalKnightsDied: number;
   bloodGemAttack: number;
@@ -493,6 +496,7 @@ function observeLearnedDeathrattle(
   return {
     definitionId: deathrattle.definitionId,
     golden: deathrattle.golden,
+    count: deathrattle.count ?? 1,
   };
 }
 
@@ -998,6 +1002,8 @@ function observeRecruitState(
     deepBlueBonus: player.deepBlueBonus,
     undeadArmyAttackBonus: player.undeadArmyAttackBonus,
     undeadArmyHealthBonus: player.undeadArmyHealthBonus,
+    beastArmyAttackBonus: player.beastArmyAttackBonus ?? 0,
+    beastArmyHealthBonus: player.beastArmyHealthBonus ?? 0,
     astralAutomatonsSummoned: player.astralAutomatonsSummoned,
     eternalKnightsDied: player.eternalKnightsDied,
     bloodGemAttack: player.bloodGemAttack,

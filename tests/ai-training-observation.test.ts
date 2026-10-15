@@ -232,7 +232,7 @@ test("training observation is an immutable JSON privacy boundary", () => {
   const stateBefore = JSON.stringify(state);
   const observation = createAiTrainingObservation(state, controlledSeat);
   assert.equal(JSON.stringify(state), stateBefore);
-  assert.equal(observation.schemaVersion, 4);
+  assert.equal(observation.schemaVersion, 5);
   assert.equal(observation.controlledSeat, controlledSeat);
   assert.equal(observation.own.board[0]?.name, "OWN_BOARD_ALLOWED");
   assert.equal(observation.own.board[0]?.venomous, true);
@@ -298,7 +298,7 @@ test("training observation is an immutable JSON privacy boundary", () => {
   }, TypeError);
 });
 
-test("learned deathrattles use deterministic v4 JSON without leaking runtime sources", () => {
+test("learned deathrattles use deterministic v5 JSON without leaking runtime sources", () => {
   const state = createGame(0x7a05);
   const controlledSeat = state.players.findIndex((player) => player.isHuman);
   assert.notEqual(controlledSeat, -1);
@@ -357,19 +357,21 @@ test("learned deathrattles use deterministic v4 JSON without leaking runtime sou
     createAiTrainingObservation(state, controlledSeat),
   );
 
-  assert.equal(AI_TRAINING_OBSERVATION_VERSION, 4);
-  assert.equal(observation.schemaVersion, 4);
+  assert.equal(AI_TRAINING_OBSERVATION_VERSION, 5);
+  assert.equal(observation.schemaVersion, 5);
   assert.equal(repeatedSerialized, serialized);
   assert.deepEqual(observation.own.board[0]?.learnedDeathrattles, [
     {
       definitionId: "ordinary-learned-deathrattle",
       golden: false,
+      count: 1,
     },
   ]);
   assert.deepEqual(observation.own.board[1]?.learnedDeathrattles, [
     {
       definitionId: "golden-learned-deathrattle",
       golden: true,
+      count: 1,
     },
   ]);
   assert.equal(observation.own.board[0]?.golden, false);
@@ -392,8 +394,8 @@ test("learned deathrattles use deterministic v4 JSON without leaking runtime sou
     assert.equal(serialized.includes(secret), false, secret);
   }
 
-  const parsedV4 = JSON.parse(serialized) as Record<string, unknown>;
-  assert.equal(parsedV4.schemaVersion, 4);
+  const parsedV5 = JSON.parse(serialized) as Record<string, unknown>;
+  assert.equal(parsedV5.schemaVersion, 5);
 
   ordinary.learnedDeathrattles[0].definitionId = "mutated-after-observation";
   ordinary.learnedDeathrattles.push({
@@ -405,6 +407,7 @@ test("learned deathrattles use deterministic v4 JSON without leaking runtime sou
     {
       definitionId: "ordinary-learned-deathrattle",
       golden: false,
+      count: 1,
     },
   ]);
   assert.equal(serialized.includes("mutated-after-observation"), false);

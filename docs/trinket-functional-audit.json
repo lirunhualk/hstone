@@ -29,14 +29,14 @@
     "total": 204,
     "lesser": 98,
     "greater": 106,
-    "reviewed": 182,
+    "reviewed": 185,
     "bug": 1,
-    "partial": 21,
+    "partial": 18,
     "initialBug": 29,
     "resolvedInitialBug": 28,
     "partialByLimitation": {
       "implementation-gap": 2,
-      "indirect-unimplemented": 12,
+      "indirect-unimplemented": 9,
       "verification-gap": 7
     }
   },
@@ -1787,19 +1787,23 @@
       "name": "老旧的烛台",
       "tier": "lesser",
       "description": "发现一张来自小型时空扭曲的消耗为2的随从牌。",
-      "status": "partial",
+      "status": "reviewed",
       "initialStatus": "partial",
       "initialStatusSource": "group-record",
-      "limitationKind": "indirect-unimplemented",
+      "limitationKind": "none",
       "implementation": [
         "beginTimewarpCandlestickDiscover",
         "TIMEWARP_COST_TWO_MINION_DEFINITIONS",
         "createTimewarpMinionDefinition"
       ],
       "tests": [
-        "tests/trinket-mirror-timewarp.test.ts"
+        "tests/trinket-mirror-timewarp.test.ts",
+        "tests/timewarp-support.test.ts",
+        "tests/timewarp-remaining-recruit.test.ts",
+        "tests/timewarp-remaining-combat.test.ts",
+        "tests/timewarp-save-compat.test.ts"
       ],
-      "notes": "固定小型来源保留25种；其中12种已接入普通/金色规则。新的烛台发现只抽完整支持且匹配本局种族的候选，至多3选1，满手安全烧毁，AI共用入口。其余13种仍为部分支持并排除获取；逐卡规则和验证见docs/timewarp-functional-audit.md及tests/timewarp-*.test.ts。"
+      "notes": "固定小型25种来源的普通/金色规则均已接入；烛台恢复完整且匹配本局种族的候选，至多3选1。满手、AI、共享池、永久战斗增益、重复触发和保存走共同入口；逐卡规则见docs/timewarp-functional-audit.md。"
     },
     {
       "index": 87,
@@ -1890,18 +1894,22 @@
       "name": "跳蛙骑士肖像",
       "tier": "lesser",
       "description": "获取一张时空扭曲跳蛙骑士。",
-      "status": "partial",
+      "status": "reviewed",
       "initialStatus": "partial",
       "initialStatusSource": "current-status-fallback",
-      "limitationKind": "indirect-unimplemented",
+      "limitationKind": "none",
       "implementation": [
         "applyOfficialTrinketOnAcquire",
         "LEAPFROGGER_DEFINITION_ID"
       ],
       "tests": [
-        "tests/trinket-acquisition-portraits.test.ts"
+        "tests/trinket-acquisition-portraits.test.ts",
+        "tests/timewarp-support.test.ts",
+        "tests/timewarp-remaining-recruit.test.ts",
+        "tests/timewarp-remaining-combat.test.ts",
+        "tests/timewarp-save-compat.test.ts"
       ],
-      "notes": "旧实体保留真实BG34_Giant_031身份；亡语增益及传播仍未实现。来源饰品已从新的饰品报价和随机饰品候选排除，避免再次获取无效果牌；tests/timewarp-support.test.ts验证门禁。"
+      "notes": "真实BG34_Giant_031的嘲讽、复生、普通/金色亡语增益和可叠加的继承亡语已接入；来源肖像恢复新报价与随机饰品候选。继承数量、重复触发、幽灵隔离和存档恢复有专项回归。"
     },
     {
       "index": 92,
@@ -4004,19 +4012,23 @@
       "name": "老旧的烛台",
       "tier": "greater",
       "description": "发现一张来自大型时空扭曲的消耗为2的随从牌。",
-      "status": "partial",
+      "status": "reviewed",
       "initialStatus": "partial",
       "initialStatusSource": "current-status-fallback",
-      "limitationKind": "indirect-unimplemented",
+      "limitationKind": "none",
       "implementation": [
         "beginTimewarpCandlestickDiscover",
         "TIMEWARP_COST_TWO_MINION_DEFINITIONS",
         "createTimewarpMinionDefinition"
       ],
       "tests": [
-        "tests/trinket-mirror-timewarp.test.ts"
+        "tests/trinket-mirror-timewarp.test.ts",
+        "tests/timewarp-support.test.ts",
+        "tests/timewarp-remaining-recruit.test.ts",
+        "tests/timewarp-remaining-combat.test.ts",
+        "tests/timewarp-save-compat.test.ts"
       ],
-      "notes": "固定大型来源保留41种（旧组说明的21不正确）；其中16种已接入普通/金色规则。新的烛台发现只抽完整支持且匹配本局种族的候选，至多3选1，满手、AI及保存走共同入口。其余25种仍为部分支持并排除获取；逐卡规则和验证见docs/timewarp-functional-audit.md及tests/timewarp-*.test.ts。",
+      "notes": "固定大型41种来源的普通/金色规则均已接入；烛台恢复完整且匹配本局种族的候选，至多3选1。满手、AI、共享池、永久战斗增益、重复触发和保存走共同入口；逐卡规则见docs/timewarp-functional-audit.md。",
       "previousNotes": "21个大型时空扭曲消耗2牌的身份/3选1/关键词正确，但全部标记partial且特殊文本没有DSL覆盖；满手/AI/存档仅验证发现机制，不证明返回牌效果。"
     },
     {

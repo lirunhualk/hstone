@@ -17,7 +17,7 @@ import {
 } from "./ai-training-environment.ts";
 import { getTavernSpellDefinition } from "./tavern-spells.ts";
 
-export const AI_RECRUIT_PLANNER_VERSION = 4 as const;
+export const AI_RECRUIT_PLANNER_VERSION = 5 as const;
 
 const LEARNED_DEATHRATTLE_VISIBLE_WEIGHT = 0.5;
 
@@ -114,7 +114,7 @@ function minionVisiblePower(
   // duplicating the engine's effect-specific resolution rules here.
   const learnedDeathrattleValue =
     minion.learnedDeathrattles.reduce(
-      (total, learned) => total + (learned.golden ? 2 : 1),
+      (total, learned) => total + learned.count * (learned.golden ? 2 : 1),
       0,
     ) *
     (minion.golden ? 2 : 1) *

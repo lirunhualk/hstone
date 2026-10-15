@@ -166,7 +166,7 @@ function keepOnlyPoolDefinition(
   }
 }
 
-test("the Trinket Spellcraft tokens use the fixed build 247416 identities", () => {
+test("the Trinket and Timewarp Spellcraft tokens use the fixed build 247416 identities", () => {
   assert.deepEqual(
     TRINKET_SPELLCRAFT_DEFINITIONS.map((definition) => [
       definition.cardId,
@@ -174,6 +174,7 @@ test("the Trinket Spellcraft tokens use the fixed build 247416 identities", () =
       definition.target,
     ]),
     [
+      ["BG34_Giant_210t", "时空扭曲抢滩猛攻", "friendly"],
       ["BG35_MagicItem_306t", "典狱长标签", "friendly"],
       ["BG35_MagicItem_733t", "典狱长标签", "friendly"],
       ["BG35_MagicItem_872t", "蛇首之杖", "friendly"],

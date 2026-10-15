@@ -21,6 +21,7 @@ import {
   isHeroPowerDefinitionId,
 } from "./hero-powers.ts";
 import { isHeroSecretDefinitionId } from "./hero-secrets.ts";
+import { refreshTimewarpDescription } from "./timewarp.ts";
 import {
   GREATER_TRINKET_ROUND,
   LESSER_TRINKET_ROUND,
@@ -568,7 +569,6 @@ function repairStaleLobbyInteraction(
         trinketCanBeOfferedWithHeroPower(
           getTrinketDefinition(definitionId),
           eligibleHeroPowerId,
-          true,
         ),
     ) ||
     !Array.isArray(player.board) ||
@@ -999,10 +999,6 @@ function repairLearnedDeathrattles(value: unknown): void {
   if (!isRecord(value) || value.kind !== "minion") {
     return;
   }
-  if (value.definitionId !== "TB_BaconShop_HP_105t") {
-    delete value.learnedDeathrattles;
-    return;
-  }
   if (!Array.isArray(value.learnedDeathrattles)) {
     delete value.learnedDeathrattles;
     return;
@@ -1013,8 +1009,16 @@ function repairLearnedDeathrattles(value: unknown): void {
       !isRecord(entry) ||
       typeof entry.sourceInstanceId !== "string" ||
       typeof entry.definitionId !== "string" ||
-      typeof entry.golden !== "boolean"
+      typeof entry.golden !== "boolean" ||
+      (entry.count !== undefined &&
+        (typeof entry.count !== "number" || !Number.isSafeInteger(entry.count) || entry.count < 1))
     ) {
+      return false;
+    }
+    // Fish and Hurricane Mech copy arbitrary Deathrattles. Other minions can
+    // acquire Leapfrogger's inherited payload, not unrelated fabricated text.
+    if (value.definitionId !== "TB_BaconShop_HP_105t" &&
+      value.definitionId !== "BG34_Giant_599" && entry.definitionId !== "BG34_Giant_031") {
       return false;
     }
     let definition: ReturnType<typeof getMinionDefinition>;
@@ -2550,9 +2554,27 @@ const TIMEWARP_RUNTIME_IDS = new Set([
 function repairTimewarpMetadata(value: Record<string, unknown>): boolean {
   if (!Array.isArray(value.players)) return false;
   const repair = (card: unknown): void => {
-    if (!isRecord(card) || typeof card.definitionId !== "string" || !TIMEWARP_RUNTIME_IDS.has(card.definitionId)) return;
+    if (!isRecord(card)) return;
+    if (isRecord(card.effectCounters)) {
+      for (const [key, count] of Object.entries(card.effectCounters)) {
+        if (key.startsWith("timewarp") &&
+          (typeof count !== "number" || !Number.isSafeInteger(count) || count < 0)) {
+          card.effectCounters[key] = 0;
+        }
+      }
+    }
+    if (typeof card.definitionId !== "string" || !TIMEWARP_RUNTIME_IDS.has(card.definitionId)) return;
     const definition = getMinionDefinition(card.definitionId);
     card.effectSupport = definition.effectSupport ?? "complete";
+    const presentation = {
+      definitionId: card.definitionId,
+      description: card.golden === true ? definition.goldenDescription ?? definition.description : definition.description,
+      golden: card.golden === true,
+      effectCounters: isRecord(card.effectCounters) ? card.effectCounters : undefined,
+    };
+    if (refreshTimewarpDescription(presentation, typeof value.round === "number" ? value.round : undefined)) {
+      card.description = presentation.description;
+    }
     if (definition.afterSpellcraftCast) {
       const rawProgress = isRecord(card.effectCounters) ? card.effectCounters.spellcraftCastProgress : undefined;
       const progress = typeof rawProgress === "number" && Number.isSafeInteger(rawProgress) && rawProgress >= 0
@@ -2564,6 +2586,10 @@ function repairTimewarpMetadata(value: Record<string, unknown>): boolean {
   };
   for (const player of value.players) {
     if (!isRecord(player)) continue;
+    for (const key of ["beastArmyAttackBonus", "beastArmyHealthBonus"]) {
+      if (player[key] === undefined) player[key] = 0;
+      if (typeof player[key] !== "number" || !Number.isSafeInteger(player[key]) || player[key] < 0) return false;
+    }
     for (const field of ["board", "hand", "shop", "ghostHand"]) {
       const cards = player[field];
       if (Array.isArray(cards)) cards.forEach(repair);

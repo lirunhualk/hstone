@@ -72,19 +72,19 @@ function acquireCandlestick(state: GameState, pool: "lesser" | "greater"): GameS
   return gameReducer(state, { type: "RESOLVE_INTERACTION", interactionId: "candlestick", optionInstanceId: d.id });
 }
 
-test("the complete Timewarp source registry survives while unsupported payloads are gated", () => {
+test("all 68 audited Timewarp minions have executable rules and their acquisition entries are restored", () => {
   assert.equal(TIMEWARP_COST_TWO_MINION_DEFINITIONS.lesser.length, 25);
   assert.equal(TIMEWARP_COST_TWO_MINION_DEFINITIONS.greater.length, 41);
   const all = Object.values(TIMEWARP_COST_TWO_MINION_DEFINITIONS).flat();
-  assert.equal(all.filter((d) => d.effectSupport === "complete").length, 28);
-  assert.equal(all.filter((d) => d.effectSupport === "partial").length, 38);
-  assert.equal(getMinionDefinition("BG34_Giant_031").effectSupport, "partial");
+  assert.equal(all.filter((d) => d.effectSupport === "complete").length, 66);
+  assert.equal(all.filter((d) => d.effectSupport === "partial").length, 0);
+  assert.equal(getMinionDefinition("BG34_Giant_031").effectSupport, "complete");
   assert.equal(getMinionDefinition("BG34_Giant_314").effectSupport, "complete");
   assert.ok(all.every((d) => d.collectible === false && d.goldenCardId === `${d.id}_G`));
   const frog = TRINKET_DEFINITIONS.find((d) => d.cardId === "BG35_MagicItem_870");
   assert.ok(frog);
-  assert.equal(trinketCanBeOfferedWithHeroPower(frog, null), false);
-  assert.ok(trinketsForTier("lesser").every((d) => d.id !== frog.id));
+  assert.equal(trinketCanBeOfferedWithHeroPower(frog, null), true);
+  assert.ok(trinketsForTier("lesser").some((d) => d.id === frog.id));
 });
 
 test("both Candlesticks generate only executable, active-type choices and do not reserve normal pool copies", () => {

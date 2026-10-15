@@ -45,6 +45,7 @@ function fishObservation(
             {
               definitionId: "scallywag",
               golden: options.learnedGolden === true,
+              count: 1,
             },
           ],
   };
@@ -214,8 +215,8 @@ test("planner and score are deterministic and validate search bounds", () => {
   );
 });
 
-test("planner v4 conservatively values learned Deathrattle trigger-equivalents", () => {
-  assert.equal(AI_RECRUIT_PLANNER_VERSION, 4);
+test("planner v5 conservatively values learned Deathrattle trigger-equivalents", () => {
+  assert.equal(AI_RECRUIT_PLANNER_VERSION, 5);
   const initial = new AiTrainingEnvironment(0x8b10, 0).observe();
   const template = structuredClone(initial.own.shop[0]) as unknown as
     AiTrainingMinionObservation;
@@ -327,4 +328,18 @@ test("planner refuses Combat instead of branching on hidden battle state", () =>
     () => planAiRecruitTurn(environment),
     /requires the Recruit phase/,
   );
+});
+
+test("planner values inherited Deathrattle stack counts as visible trigger-equivalents", () => {
+  const initial = new AiTrainingEnvironment(0x8b12, 0).observe();
+  const template = initial.own.shop[0] as AiTrainingMinionObservation;
+  assert.ok(template);
+  const empty = fishObservation(template, { learned: false });
+  const single = fishObservation(template);
+  const stacked = fishObservation(template);
+  stacked.learnedDeathrattles[0].count = 7;
+  const power = (minion: AiTrainingMinionObservation) =>
+    scoreAiRecruitObservation(observationWithBoard([minion])).boardPower;
+  const baseline = power(empty);
+  assert.ok(Math.abs((power(stacked) - baseline) - 7 * (power(single) - baseline)) < 1e-9);
 });
